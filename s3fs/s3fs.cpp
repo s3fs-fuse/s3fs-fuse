@@ -238,7 +238,6 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 		}
 	}
 	
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 
@@ -294,7 +293,6 @@ static int
 s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	cout << "mknod: path="<< path << endl;
 
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 	
@@ -322,7 +320,6 @@ static int
 s3fs_mkdir(const char *path, mode_t mode) {
 	cout << "mkdir: path=" << path << endl;
 	
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 	
@@ -351,7 +348,6 @@ static int
 s3fs_unlink(const char *path) {
 	cout << "unlink: path=" << path << endl;
 	
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 	
@@ -377,7 +373,6 @@ static int
 s3fs_rmdir(const char *path) {
 	cout << "unlink: path=" << path << endl;
 	
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 	
@@ -435,7 +430,6 @@ s3fs_truncate(const char *path, off_t size) {
 	
     cout << "truncate:" << " path=" << path << " size=" << size << endl;
 	
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 	
@@ -471,7 +465,6 @@ s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_fi
 	cout << "read:"<< " path="<< path << " size="<< size << " offset="<< offset << endl;
 
 	string responseText;
-	string host = "http://s3.amazonaws.com";
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 
@@ -538,7 +531,6 @@ s3fs_flush(const char *path, struct fuse_file_info *fi) {
 	if (fi->fh != 0) {
 		string* requestText = reinterpret_cast<string*>(fi->fh);
 		if ((*requestText).size() > 0) {
-			string host = "http://s3.amazonaws.com";
 			string resource = urlEncode("/"+bucket + path);
 			string url = host + resource;
 
