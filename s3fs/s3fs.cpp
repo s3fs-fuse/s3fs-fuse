@@ -167,13 +167,25 @@ get_date() {
  * @param resource e.g., "/pub"
  */
 string
-calc_signature(string method, string content_type, string date, string resource) {
+calc_signature(string method, string content_type, string date, curl_slist* headers, string resource) {
 	string Signature;
 	string StringToSign;
 	StringToSign += method + "\n";
-	StringToSign += "\n";
+	StringToSign += "\n"; // md5
 	StringToSign += content_type + "\n";
 	StringToSign += date + "\n";
+	int count = 0;
+	cout << "calc" << endl;
+	if (headers != 0) {
+		do {
+			cout << headers->data << endl;
+			if (strncmp(headers->data, "x-amz", 5) == 0) {
+				++count;
+				StringToSign += headers->data;
+				StringToSign += 10;
+			}
+		} while ((headers = headers->next) != 0);
+	}
 	StringToSign += resource;
 
 	const void* key = AWSSecretAccessKey.data();
@@ -199,6 +211,10 @@ calc_signature(string method, string content_type, string date, string resource)
 	  BIO_free_all(b64);
 
 	return Signature;
+}
+string
+calc_signature(string method, string content_type, string date, string resource) {
+	return calc_signature(method, content_type, date, 0, resource);
 }
 
 // libcurl callback
@@ -276,9 +292,9 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	double ContentLength;
 	if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
 		stbuf->st_size = static_cast<__off_t>(ContentLength);
-		
-	if (strcmp(ContentType, "application/x-directory") != 0)
-		stbuf->st_blocks = stbuf->st_size / 512 + 1;
+	
+	if (S_ISREG(stbuf->st_mode))
+		stbuf->st_blocks = stbuf->st_size / S_BLKSIZE + 1;
 
 	return 0;
 }
@@ -291,6 +307,8 @@ s3fs_readlink(const char *path, char *buf, size_t size) {
 
 static int
 s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
+	// see man 2 mknod
+	// If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
 	cout << "mknod: path="<< path << endl;
 
 	string resource = urlEncode("/"+bucket + path);
@@ -305,8 +323,9 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 
 	auto_curl_slist headers;
 	string date = get_date();
+	//###headers.append("x-amz-meta-qqq:qqq");
 	headers.append("Date: "+date);
-	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, resource));
+	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
 	headers.append("Content-Type: application/octet-stream");
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -403,6 +422,9 @@ s3fs_symlink(const char *from, const char *to) {
 static int
 s3fs_rename(const char *from, const char *to) {
     cout << "rename:" << " from=" << from << " to=" << to << endl;
+    // get file handle
+    // upload as new s3 object
+    // delete old s3 object
     return -EXDEV;
 }
 
@@ -658,7 +680,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 								strptime(LastModified.c_str(), "%Y-%m-%dT%H:%M:%SZ", &gmt);
 								st.st_mtime = timegm(&gmt);
 								// blocks
-								st.st_blocks = st.st_size / 512 + 1;
+								st.st_blocks = st.st_size / S_BLKSIZE + 1;
 								// if size is 0 then we don't know whether its a file or a directory...
 								// defer to getattr() to determine whether its a file or a directory from Content-Type
 								if (st.st_size > 0) {
