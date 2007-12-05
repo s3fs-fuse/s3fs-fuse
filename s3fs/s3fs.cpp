@@ -182,7 +182,7 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 			if (strncmp(headers->data, "x-amz", 5) == 0) {
 				++count;
 				StringToSign += headers->data;
-				StringToSign += 10;
+				StringToSign += 10; // linefeed
 			}
 		} while ((headers = headers->next) != 0);
 	}
@@ -212,6 +212,7 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 
 	return Signature;
 }
+
 string
 calc_signature(string method, string content_type, string date, string resource) {
 	return calc_signature(method, content_type, date, 0, resource);
@@ -232,6 +233,37 @@ static size_t
 writeCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr) {
   string* userString = static_cast<string*>(userPtr);
   (*userString).append(reinterpret_cast<const char*>(data), blockSize*numBlocks);
+  return blockSize*numBlocks;
+}
+
+// ### TODO replace this w/curl_easy_getopt
+static size_t headerCallback(void *data,
+                            size_t blockSize,
+                            size_t numBlocks,
+                            void *userPtr) {
+  struct stat* stbuf = reinterpret_cast<struct stat*>(userPtr);
+  string header(reinterpret_cast<char *>(data), blockSize*numBlocks);
+  cout << "header: " << header << endl;
+//  stringstream ss(header);
+//  string key;
+//  ss >> key;
+////  if (key == "Last-Modified:") {
+////	  string LastModified;
+////	  ss >> LastModified;
+////	  
+////	  cout << ">>>>>" << ss.str() << endl;
+////	  //time_t t = curl_getdate(LastModified.c_str(), 0);
+////	  stbuf->st_mtime = curl_getdate(LastModified.c_str(), 0);
+////  }
+//  if (key == "Content-Type:") {
+//	  string ContentType;
+//	  ss >> ContentType;
+//	  stbuf->st_mode = S_IFREG | 0755;
+//	  if (ContentType == "application/x-directory")
+//		  stbuf->st_mode = S_IFDIR | 0755;
+//  }
+//  if (key == "Content-Length:")
+//	  ss >> stbuf->st_size;
   return blockSize*numBlocks;
 }
 
@@ -263,6 +295,9 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
 	curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
+
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, stbuf);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
 
 	auto_curl_slist headers;
 	string date = get_date();
