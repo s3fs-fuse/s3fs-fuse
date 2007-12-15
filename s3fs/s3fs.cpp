@@ -41,8 +41,12 @@
 #include <stack>
 #include <string>
 #include <vector>
-
 using namespace std;
+
+#define Oof(result) if (true) { \
+	cout << __LINE__ << "###result=" << result << endl; \
+	return result; \
+}
 
 class auto_lock {
 	pthread_mutex_t& lock;
@@ -74,12 +78,26 @@ public:
 		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
 	}
 	~auto_curl() {
-		auto_lock lock(curl_handles_lock);
-		curl_handles.push(curl);
+		if (curl != 0) {
+			auto_lock lock(curl_handles_lock);
+			curl_handles.push(curl);
+		}
 	}
 	CURL* get() const {
 		return curl;
 	}
+//	CURL* release() {
+//		CURL* tmp = curl;
+//		curl = 0;
+//		return tmp;
+//	}
+//	void reset(CURL* curl) {
+//		if (curl != 0) {
+//			auto_lock lock(curl_handles_lock);
+//			curl_handles.push(curl);
+//		}
+//		this->curl = curl;
+//	}
 	operator CURL*() const {
 		return curl;
 	}
@@ -100,6 +118,36 @@ public:
 		slist = curl_slist_append(slist, s.c_str());
 	}
 };
+
+// ### TODO replace this with a plain 'ol function (or a method on auto_curl)
+#define MY_CURL_EASY_PERFORM(curl) \
+if (true) { \
+	CURLcode curlCode = curl_easy_perform(curl.get()); \
+	if (curlCode == CURLE_OPERATION_TIMEDOUT) \
+		curlCode = curl_easy_perform(curl.get()); \
+	if (curlCode != 0) { \
+		long responseCode; \
+		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
+			Oof(-EIO); \
+		if (responseCode == 400 || responseCode == 500) { \
+			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
+			cout << "retrying..." << endl; \
+			curlCode = curl_easy_perform(curl.get()); \
+			if (curlCode == CURLE_OPERATION_TIMEDOUT) \
+				curlCode = curl_easy_perform(curl.get()); \
+		} \
+		if (curlCode != 0) { \
+			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
+				Oof(-EIO); \
+			if (responseCode == 404) \
+				return -ENOENT; \
+			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
+			cout << "giving up..." << endl; \
+			char *p = 0; *p = 0; \
+			Oof(-EIO); \
+		} \
+	} \
+}
 
 static string bucket;
 static string AWSAccessKeyId;
@@ -139,6 +187,9 @@ urlEncode(const string &s) {
   return result;
 }
 
+// http headers
+typedef map<string, string> headers_t;
+
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
@@ -175,10 +226,9 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 	StringToSign += content_type + "\n";
 	StringToSign += date + "\n";
 	int count = 0;
-	cout << "calc" << endl;
 	if (headers != 0) {
 		do {
-			cout << headers->data << endl;
+			//###cout << headers->data << endl;
 			if (strncmp(headers->data, "x-amz", 5) == 0) {
 				++count;
 				StringToSign += headers->data;
@@ -241,11 +291,15 @@ static size_t headerCallback(void *data,
                             size_t blockSize,
                             size_t numBlocks,
                             void *userPtr) {
-  struct stat* stbuf = reinterpret_cast<struct stat*>(userPtr);
+  headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char *>(data), blockSize*numBlocks);
-  cout << "header: " << header << endl;
-//  stringstream ss(header);
-//  string key;
+  string key;
+  stringstream ss(header);
+  if (getline(ss, key, ' ')) {
+	  string value;
+	  getline(ss, value);
+	  (*headers)[key] = value;
+  }
 //  ss >> key;
 ////  if (key == "Last-Modified:") {
 ////	  string LastModified;
@@ -296,7 +350,8 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
 	curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
 
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, stbuf);
+	headers_t responseHeaders;
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
 
 	auto_curl_slist headers;
@@ -305,15 +360,8 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	if (curl_easy_perform(curl) != 0) {
-		long responseCode;
-		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
-			return -EIO;
-		if (responseCode == 404)
-			return -ENOENT;
-		return -EIO;
-	}
-	
+	MY_CURL_EASY_PERFORM((curl));
+    
 	stbuf->st_nlink = 1; // see fuse faq
 	
 	long LastModified;
@@ -344,7 +392,7 @@ static int
 s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	// see man 2 mknod
 	// If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
-	cout << "mknod: path="<< path << endl;
+	//###cout << "mknod: path="<< path << endl;
 
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
@@ -358,14 +406,12 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 
 	auto_curl_slist headers;
 	string date = get_date();
-	//###headers.append("x-amz-meta-qqq:qqq");
 	headers.append("Date: "+date);
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
 	headers.append("Content-Type: application/octet-stream");
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	if (curl_easy_perform(curl) != 0)
-		return -EIO;
+	MY_CURL_EASY_PERFORM((curl));
 
 	return 0;
 }
@@ -391,8 +437,7 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	headers.append("Content-Type: application/x-directory");
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	   
-	if (curl_easy_perform(curl) != 0)
-		return -EIO;
+	MY_CURL_EASY_PERFORM((curl));
 
 	return 0;
 }
@@ -417,8 +462,7 @@ s3fs_unlink(const char *path) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	
-	if (curl_easy_perform(curl) != 0)
-		return -EIO;
+	MY_CURL_EASY_PERFORM((curl));
 	
 	return 0;
 }
@@ -442,8 +486,7 @@ s3fs_rmdir(const char *path) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	
-	if (curl_easy_perform(curl) != 0)
-		return -EIO;
+	MY_CURL_EASY_PERFORM((curl));
 
 	return 0;
 }
@@ -457,7 +500,7 @@ s3fs_symlink(const char *from, const char *to) {
 static int
 s3fs_rename(const char *from, const char *to) {
     cout << "rename:" << " from=" << from << " to=" << to << endl;
-    // get file handle
+    // get local file handle
     // upload as new s3 object
     // delete old s3 object
     return -EXDEV;
@@ -472,12 +515,15 @@ s3fs_link(const char *from, const char *to) {
 static int
 s3fs_chmod(const char *path, mode_t mode) {
     cout << "###chmod: path=" << path << endl;
+    // get local file handle
+    // re-upload as new s3 object w/updated mode
     return 0;
 }
 
 static int
 s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     cout << "###chown: path=" << path << endl;
+    // hook this into s3's acl?!?
     return 0;
 }
 
@@ -485,7 +531,7 @@ static int
 s3fs_truncate(const char *path, off_t size) {
 	//###TODO honor size?!?
 	
-    cout << "truncate:" << " path=" << path << " size=" << size << endl;
+    //###cout << "truncate:" << " path=" << path << " size=" << size << endl;
 	
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
@@ -504,24 +550,86 @@ s3fs_truncate(const char *path, off_t size) {
 	headers.append("Content-Type: application/octet-stream");
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	   
-	if (curl_easy_perform(curl) != 0)
-		return -EIO;
+	MY_CURL_EASY_PERFORM((curl));
 	
 	return 0;
 }
 
+// fd -> flags
+typedef map<int, int> s3fs_descriptors_t;
+static s3fs_descriptors_t s3fs_descriptors;
+static pthread_mutex_t s3fs_descriptors_lock;
+
+// mkdir --parents
 static int
-s3fs_open(const char *path, struct fuse_file_info *fi) {
-    cout << "open:" << " path="<< path << endl;
-   	fi->fh = reinterpret_cast<uint64_t>(new string);
-    return 0;
+mkdirp(const string& path) {
+	string base;
+	string component;
+	stringstream ss(path);
+	while (getline(ss, component, '/')) {
+		base += "/" + component;
+		/*if (*/mkdir(base.c_str(), 0755)/* == -1);
+			return -1*/;
+	}
+	return 0;
+}
+
+#include <pwd.h>
+
+string
+expand_path(const string& path) {
+	if (path.length() == 0 || path[0] != '~')
+		return path;
+	const char *pfx= NULL;
+	string::size_type pos = path.find_first_of('/');
+	if (path.length() == 1 || pos == 1) {
+		pfx = getenv("HOME");
+		if (!pfx) {
+			// Punt. We're trying to expand ~/, but HOME isn't set
+			struct passwd *pw = getpwuid(getuid());
+			if (pw)
+				pfx = pw->pw_dir;
+		}
+	} else {
+		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
+		struct passwd *pw = getpwnam(user.c_str());
+		if (pw)
+			pfx = pw->pw_dir;
+	}
+	// if we failed to find an expansion, return the path unchanged.
+	if (!pfx)
+		return path;
+	string result(pfx);
+	if (pos == string::npos)
+		return result;
+	if (result.length() == 0 || result[result.length()-1] != '/')
+		result += '/';
+	result += path.substr(pos+1);
+	return result;
+}
+
+#include <openssl/md5.h>
+
+// safe variant of dirname
+static string
+mydirname(const string& path) {
+	return dirname(&string(path)[0]);
+}
+
+// safe variant of basename
+static string
+mybasename(const string& path) {
+	return basename(&string(path)[0]);
 }
 
 static int
-s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-	cout << "read:"<< " path="<< path << " size="<< size << " offset="<< offset << endl;
+s3fs_open(const char *path, struct fuse_file_info *fi) {
+    //###cout << "open:" << " path="<< path << " flags=" << fi->flags << endl;
+    
+	string baseName(basename(&string(path)[0]));
+	
+	string resolved_path(expand_path("~/.s3fs/"+bucket));
 
-	string responseText;
 	string resource = urlEncode("/"+bucket + path);
 	string url = host + resource;
 
@@ -529,47 +637,125 @@ s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_fi
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
+	curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
+
+	headers_t responseHeaders;
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
 
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
-	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, resource));
+	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	// tricky...
-	char range[100];
-	size_t x = offset;
-	size_t y = offset + size - 1;
-	sprintf(range, "%u-%u", x, y);
-	curl_easy_setopt(curl, CURLOPT_RANGE, range);
+	MY_CURL_EASY_PERFORM((curl));
+    
+	// at this point we know the file exists
 
-	if (curl_easy_perform(curl) != 0) {
-		long responseCode;
-		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
-			return -EIO;
-		if (responseCode == 404)
-			return -ENOENT;
-		return -EIO;
-	}
+	mode_t mode = 0755;
+	///###mode_t mode = atoi(row[0]);
 	
-	size_t count = min(size, responseText.size());
-	memcpy(buf, responseText.data(), count);
-	return count;
+	string cache_path(resolved_path + path);
+	
+	int fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
+    if (fd != -1) {
+		MD5_CTX c;
+		if (MD5_Init(&c) != 1)
+			Oof(-EIO);
+		int count;
+		char buf[1024];
+		while ((count = read(fd, buf, sizeof(buf))) > 0) {
+			if (MD5_Update(&c, buf, count) != 1)
+				Oof(-EIO);
+		}
+		unsigned char md[MD5_DIGEST_LENGTH];
+		if (MD5_Final(md, &c) != 1)
+			Oof(-EIO);
+		///###cout << md << endl;
+		
+		char localMd5[2*MD5_DIGEST_LENGTH+1];
+		sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+				md[0], md[1], md[2], md[3], md[4], md[5], md[6], md[7], md[8], md[9], md[10], md[11], md[12], md[13], md[14], md[15]);
+		
+		string remoteMd5(responseHeaders["ETag:"]);
+		remoteMd5 = remoteMd5.substr(1, 32); // strip " " 
+		
+		// md5 match?		
+		if (string(localMd5) != remoteMd5) {
+			// no! prepare to download
+			if (close(fd) == -1)
+				Oof(-errno);
+			fd = -1;
+		} 
+
+    }
+    // need to download?
+    if (fd == -1) {
+    	// yes!
+		/*if (*/mkdirp(resolved_path + mydirname(path))/* == -1)
+			return -errno*/;
+		fd = creat(cache_path.c_str(), mode);
+		if (fd == -1)
+			Oof(-errno);
+		///////////////////string responseText;
+		string resource = urlEncode("/"+bucket + path);
+		string url = host + resource;
+
+		auto_curl curl;
+		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+		curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+		
+		FILE* f = fdopen(fd, "wb");
+		if (f == 0)
+			Oof(-errno);
+		curl_easy_setopt(curl, CURLOPT_FILE, f);
+
+		auto_curl_slist headers;
+		string date = get_date();
+		headers.append("Date: "+date);
+		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, resource));
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+		cout << "downloading: " << path << endl;
+		MY_CURL_EASY_PERFORM((curl));
+		
+//		if (close(fd) == -1)
+//			Oof(-errno);
+		if (fclose(f) != 0)
+			Oof(-errno);
+	    fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
+		if (fd == -1)
+			Oof(-errno);
+    }
+    
+    fi->fh = fd;
+    
+    // remember flags...
+	auto_lock lock(s3fs_descriptors_lock);
+	s3fs_descriptors[fi->fh] = fi->flags;
+	
+    return 0;
+}
+
+static int
+s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+	//###cout << "read: " << path << endl;
+    int res = pread(fi->fh, buf, size, offset);
+    if (res == -1)
+		Oof(-errno);
+    return res;
 }
 
 static int
 s3fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-	cout << "write:"<< " path="<< path << " size="<< size << " offset="<< offset << endl;
-	// ### TODO lock?!?
-	// ### TODO some sort of scheme to detect a partial write and then do a complete read and then a complete write...
-	size_t off = offset;
-	string* str = reinterpret_cast<string*>(fi->fh);
-	if ((*str).size() < off+size)
-		(*str).resize(off+size);
-	memcpy(&(*str)[off], buf, size);
-    return size;
+	//###cout << "write: " << path << endl;
+    int res = pwrite(fi->fh, buf, size, offset);
+    if (res == -1)
+		Oof(-errno);
+    return res;
 }
 
 static int
@@ -582,12 +768,26 @@ s3fs_statfs(const char *path, struct statvfs *stbuf) {
     return 0;
 }
 
+static bool
+is_dirty(int fd) {
+	auto_lock lock(s3fs_descriptors_lock);
+	return (s3fs_descriptors[fd] & O_WRONLY) || (s3fs_descriptors[fd] & O_RDWR);
+}
+
 static int
 s3fs_flush(const char *path, struct fuse_file_info *fi) {
-	cout << "flush: path=" << path << endl;
-	if (fi->fh != 0) {
-		string* requestText = reinterpret_cast<string*>(fi->fh);
-		if ((*requestText).size() > 0) {
+	//###cout << "flush: path=" << path << endl;
+	// NOTE- fi->flags unavailable here
+	if (is_dirty(fi->fh)) {
+		
+		
+		struct stat st;
+		if (fstat(fi->fh, &st) == -1)
+			Oof(-errno);
+		
+		///###string* requestText = reinterpret_cast<string*>(fi->fh);
+		///###if ((*requestText).size() > 0)
+		{
 			string resource = urlEncode("/"+bucket + path);
 			string url = host + resource;
 
@@ -595,21 +795,32 @@ s3fs_flush(const char *path, struct fuse_file_info *fi) {
 			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 			curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+
+			string responseText;
+			curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+
 			curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-			curl_easy_setopt(curl, CURLOPT_INFILESIZE, (*requestText).size()); // Content-Length
-			curl_easy_setopt(curl, CURLOPT_READDATA, requestText);
-			curl_easy_setopt(curl, CURLOPT_READFUNCTION, readCallback);
+			curl_easy_setopt(curl, CURLOPT_INFILESIZE, st.st_size); // Content-Length
+			FILE* f = fdopen(fi->fh, "rb");
+			if (f == 0)
+				Oof(-errno);
+			//rewind(f);
+			curl_easy_setopt(curl, CURLOPT_INFILE, f);
+			///curl_easy_setopt(curl, CURLOPT_READFUNCTION, readCallback);
 			    
 			auto_curl_slist headers;
 			string date = get_date();
 			headers.append("Date: "+date);
 			headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, resource));
-			headers.append("Content-Type: application/octet-stream");
+			headers.append("Content-Type: application/octet-stream"); //###not necessary... app/octets is s3 default
 			curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 			
-			if (curl_easy_perform(curl) != 0)
-				return -EIO;
-
+			rewind(f);
+		
+			cout << "uploading: " << path << "### fd=" << fi->fh << endl;
+			MY_CURL_EASY_PERFORM((curl));
+			
 			return 0;
 		}
 	}
@@ -618,15 +829,15 @@ s3fs_flush(const char *path, struct fuse_file_info *fi) {
 
 static int
 s3fs_release(const char *path, struct fuse_file_info *fi) {
-	cout << "release:" << " path=" << path << endl;
-	string* requestText = reinterpret_cast<string*>(fi->fh);
-	delete requestText;
+	//###cout << "release: " << path << endl;
+	if (close(fi->fh) == -1)
+		Oof(-errno);
 	return 0;
 }
 
 static int
 s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-	cout << "readdir:"<< " path="<< path << endl;
+	//cout << "readdir:"<< " path="<< path << endl;
 
 	string NextMarker;
 	string IsTruncated("true");
@@ -651,6 +862,10 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
 
+		headers_t headersMap;
+	    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headersMap);
+	    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
+
 		auto_curl_slist headers;
 		string date = get_date();
 		headers.append("Date: "+date);
@@ -658,20 +873,8 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-		if (curl_easy_perform(curl) != 0) {
-			long responseCode;
-			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
-				return -EIO;
-			// ### TODO need to differentiate between no such bucket a little bit better here...
-			// need to parse response document and return -EIO if <Error><Code>NoSuchBucket</Code>
-			if (responseCode == 404) {
-				if (strcmp(path, "/") == 0)
-					return -EIO;
-				return -ENOENT;
-			}
-			return -EIO;
-		}
-		
+		MY_CURL_EASY_PERFORM((curl));
+
 		{
 			xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
 			if (doc != NULL&& doc->children != NULL) {
@@ -722,7 +925,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 									auto_lock lock(stat_cache_lock);
 									stat_cache["/"+Key] = st;
 								}
-								if (filler(buf, basename((char*)Key.c_str()), 0, 0))
+								if (filler(buf, mybasename(Key).c_str(), 0, 0))
 									break;
 							}
 						}
@@ -741,6 +944,7 @@ s3fs_init(struct fuse_conn_info *conn) {
 	printf("init\n");
 	pthread_mutex_init(&stat_cache_lock, NULL);
 	pthread_mutex_init(&curl_handles_lock, NULL);
+	pthread_mutex_init(&s3fs_descriptors_lock, NULL);
 	return 0;
 }
 
@@ -749,6 +953,7 @@ s3fs_destroy(void*) {
 	printf("destroy\n");
 	pthread_mutex_destroy(&stat_cache_lock);
 	pthread_mutex_destroy(&curl_handles_lock);
+	pthread_mutex_destroy(&s3fs_descriptors_lock);
 }
 
 static int
