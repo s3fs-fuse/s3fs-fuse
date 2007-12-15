@@ -129,7 +129,7 @@ if (true) { \
 		long responseCode; \
 		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
 			Oof(-EIO); \
-		if (responseCode == 400 || responseCode == 500) { \
+		if (responseCode == 500) { \
 			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
 			cout << "retrying..." << endl; \
 			curlCode = curl_easy_perform(curl.get()); \
