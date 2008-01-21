@@ -375,10 +375,10 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 
 	double ContentLength;
 	if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
-		stbuf->st_size = static_cast<__off_t>(ContentLength);
+		stbuf->st_size = static_cast<off_t>(ContentLength);
 	
 	if (S_ISREG(stbuf->st_mode))
-		stbuf->st_blocks = stbuf->st_size / S_BLKSIZE + 1;
+		stbuf->st_blocks = stbuf->st_size / 512 + 1;
 
 	return 0;
 }
@@ -836,6 +836,23 @@ s3fs_release(const char *path, struct fuse_file_info *fi) {
 	return 0;
 }
 
+time_t
+my_timegm (struct tm *tm) {
+                  time_t ret;
+                  char *tz;
+
+                  tz = getenv("TZ");
+                  setenv("TZ", "", 1);
+                  tzset();
+                  ret = mktime(tm);
+                  if (tz)
+                      setenv("TZ", tz, 1);
+                  else
+                      unsetenv("TZ");
+                  tzset();
+                  return ret;
+              }
+
 static int
 s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 	//cout << "readdir:"<< " path="<< path << endl;
@@ -917,9 +934,9 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 								// modified... something like "2005-12-31T23:59:59Z"
 								struct tm gmt;
 								strptime(LastModified.c_str(), "%Y-%m-%dT%H:%M:%SZ", &gmt);
-								st.st_mtime = timegm(&gmt);
+								st.st_mtime = my_timegm(&gmt);
 								// blocks
-								st.st_blocks = st.st_size / S_BLKSIZE + 1;
+								st.st_blocks = st.st_size / 512 + 1;
 								// if size is 0 then we don't know whether its a file or a directory...
 								// defer to getattr() to determine whether its a file or a directory from Content-Type
 								if (st.st_size > 0) {
