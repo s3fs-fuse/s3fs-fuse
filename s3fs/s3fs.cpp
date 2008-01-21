@@ -368,8 +368,9 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	if (curl_easy_getinfo(curl, CURLINFO_FILETIME, &LastModified) == 0)
 		stbuf->st_mtime = LastModified;
 
-	char* ContentType;
-	if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ContentType) == 0)
+	char* ContentType = 0;
+	stbuf->st_mode = S_IFREG|0755;
+	if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ContentType) == 0 && ContentType)
 		stbuf->st_mode = strcmp(ContentType, "application/x-directory")== 0 ? S_IFDIR | 0755 : S_IFREG | 0755;
 
 	double ContentLength;
