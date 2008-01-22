@@ -143,7 +143,6 @@ if (true) { \
 				return -ENOENT; \
 			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
 			cout << "giving up..." << endl; \
-			char *p = 0; *p = 0; \
 			Oof(-EIO); \
 		} \
 	} \
