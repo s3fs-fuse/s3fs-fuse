@@ -198,6 +198,7 @@ static string bucket;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static const string host = "http://s3.amazonaws.com";
+static mode_t root_mode = 0;
 
 // key=path
 typedef map<string, struct stat> stat_cache_t;
@@ -508,7 +509,7 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_nlink = 1; // see fuse faq
-		stbuf->st_mode = S_IFDIR | 0755;
+		stbuf->st_mode = root_mode | S_IFDIR;
 		return 0;
 	}
 	
@@ -984,6 +985,12 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 		if (bucket.size() == 0) {
 			bucket = arg;
 			return 0;
+		} else {
+			struct stat buf;
+			// its the mountpoint... what is its mode?
+			if (stat(arg, &buf) != -1) {
+				root_mode = buf.st_mode;
+			}
 		}
 	}
 	if (key == FUSE_OPT_KEY_OPT) {
