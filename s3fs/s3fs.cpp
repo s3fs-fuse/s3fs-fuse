@@ -611,7 +611,7 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
 
 		curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-		curl_easy_setopt(curl, CURLOPT_INFILESIZE, st.st_size); // Content-Length
+		curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length	
 		
 		FILE* f = fdopen(fd, "rb");
 		if (f == 0)
