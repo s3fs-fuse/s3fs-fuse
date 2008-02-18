@@ -997,9 +997,8 @@ s3fs_flush(const char *path, struct fuse_file_info *fi) {
 	int flags = get_flags(fd);	
 	if ((flags & O_RDWR) || (flags &  O_WRONLY)) {
 		headers_t meta;
-	    int result = get_headers(path, meta);
-	    if (result != 0)
-	    	return result;
+	    VERIFY(get_headers(path, meta));
+	    meta["x-amz-meta-mtime"]=stringificationizer(time(NULL));
 		return put_local_fd(path, meta, fd);
 	}
 	return 0;
