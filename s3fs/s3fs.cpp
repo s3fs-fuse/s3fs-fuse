@@ -200,11 +200,6 @@ static string AWSSecretAccessKey;
 static const string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
 
-// key=path
-typedef map<string, struct stat> stat_cache_t;
-static stat_cache_t stat_cache;
-static pthread_mutex_t stat_cache_lock;
-
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
 /**
@@ -511,16 +506,6 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 		stbuf->st_nlink = 1; // see fuse faq
 		stbuf->st_mode = root_mode | S_IFDIR;
 		return 0;
-	}
-	
-	{
-		auto_lock lock(stat_cache_lock);
-		stat_cache_t::iterator iter = stat_cache.find(path);
-		if (iter != stat_cache.end()) {
-			*stbuf = (*iter).second;
-			stat_cache.erase(path);
-			return 0;
-		}
 	}
 	
 	string resource = urlEncode("/"+bucket + path);
@@ -945,7 +930,6 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 static void*
 s3fs_init(struct fuse_conn_info *conn) {
 	printf("init\n");
-	pthread_mutex_init(&stat_cache_lock, NULL);
 	pthread_mutex_init(&curl_handles_lock, NULL);
 	pthread_mutex_init(&s3fs_descriptors_lock, NULL);
 	return 0;
@@ -954,7 +938,6 @@ s3fs_init(struct fuse_conn_info *conn) {
 static void
 s3fs_destroy(void*) {
 	printf("destroy\n");
-	pthread_mutex_destroy(&stat_cache_lock);
 	pthread_mutex_destroy(&curl_handles_lock);
 	pthread_mutex_destroy(&s3fs_descriptors_lock);
 }
