@@ -198,7 +198,6 @@ static string bucket;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static const string host = "http://s3.amazonaws.com";
-static bool enable_local_file_cache = false;
 
 // key=path
 typedef map<string, struct stat> stat_cache_t;
@@ -343,56 +342,6 @@ static size_t headerCallback(void *data,
   return blockSize*numBlocks;
 }
 
-// mkdir --parents
-static int
-mkdirp(const string& path, mode_t mode) {
-	string base;
-	string component;
-	stringstream ss(path);
-	while (getline(ss, component, '/')) {
-		base += "/" + component;
-		/*if (*/mkdir(base.c_str(), mode)/* == -1);
-			return -1*/;
-	}
-	return 0;
-}
-
-#include <pwd.h>
-
-string
-expand_path(const string& path) {
-	if (path.length() == 0 || path[0] != '~')
-		return path;
-	const char *pfx= NULL;
-	string::size_type pos = path.find_first_of('/');
-	if (path.length() == 1 || pos == 1) {
-		pfx = getenv("HOME");
-		if (!pfx) {
-			// Punt. We're trying to expand ~/, but HOME isn't set
-			struct passwd *pw = getpwuid(getuid());
-			if (pw)
-				pfx = pw->pw_dir;
-		}
-	} else {
-		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
-		struct passwd *pw = getpwnam(user.c_str());
-		if (pw)
-			pfx = pw->pw_dir;
-	}
-	// if we failed to find an expansion, return the path unchanged.
-	if (!pfx)
-		return path;
-	string result(pfx);
-	if (pos == string::npos)
-		return result;
-	if (result.length() == 0 || result[result.length()-1] != '/')
-		result += '/';
-	result += path.substr(pos+1);
-	return result;
-}
-
-#include <openssl/md5.h>
-
 // safe variant of dirname
 static string
 mydirname(string path) {
@@ -412,10 +361,7 @@ mybasename(string path) {
  */
 int
 get_headers(const char* path, headers_t& meta) {
-	string baseName = mybasename(path);
 	
-	string resolved_path(expand_path("~/.s3fs/"+bucket));
-
 	string resource(urlEncode("/"+bucket + path));
 	string url(host + resource);
 
@@ -453,95 +399,18 @@ get_headers(const char* path, headers_t& meta) {
 }
 
 /**
- * @param meta returns "x-amz-meta" headers as well as "Content-Type".
+ * get_local_fd
  */
 int
-get_local_fd(const char* path/*, headers_t& meta*/) {
-	string baseName = mybasename(path);
-	
-	string resolved_path(expand_path("~/.s3fs/"+bucket));
-
+get_local_fd(const char* path) {
 	string resource(urlEncode("/"+bucket + path));
 	string url(host + resource);
 
-//	auto_curl curl;
-//	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-//	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-//	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-//	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
-//	curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
-//
-	headers_t responseHeaders; // ### TODO only checked when using local file cache... for now, local file cache is disabled...
-//    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-//    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
-//
-//	auto_curl_slist headers;
-//	string date = get_date();
-//	headers.append("Date: "+date);
-//	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, headers.get(), resource));
-//	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-//
-//	MY_CURL_EASY_PERFORM((curl));
-    
-	// at this point we know the file exists in s3
-	
-//	for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
-//		string key = (*iter).first;
-//		string value = (*iter).second;
-//		if (key == "Content-Type")
-//			meta[key] = value;
-//		if (key.substr(0, 10) == "x-amz-meta")
-//			meta[key] = value;
-//	}
-
-	string cache_path(resolved_path + path);
-	
-	mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
-	
 	int fd = -1;
-	if (enable_local_file_cache) {
-		fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
-	    if (fd != -1) {
-			MD5_CTX c;
-			if (MD5_Init(&c) != 1)
-				Oof(-EIO);
-			int count;
-			char buf[1024];
-			while ((count = read(fd, buf, sizeof(buf))) > 0) {
-				if (MD5_Update(&c, buf, count) != 1)
-					Oof(-EIO);
-			}
-			unsigned char md[MD5_DIGEST_LENGTH];
-			if (MD5_Final(md, &c) != 1)
-				Oof(-EIO);
-			///###cout << md << endl;
-			
-			char localMd5[2*MD5_DIGEST_LENGTH+1];
-			sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-					md[0], md[1], md[2], md[3], md[4], md[5], md[6], md[7], md[8], md[9], md[10], md[11], md[12], md[13], md[14], md[15]);
-			
-			string remoteMd5(responseHeaders["ETag"]);
-			remoteMd5 = remoteMd5.substr(1, 32); // strip " " 
-			
-			// md5 match?		
-			if (string(localMd5) != remoteMd5) {
-				// no! prepare to download
-				if (close(fd) == -1)
-					Oof(-errno);
-				fd = -1;
-			} 
-	    }
-	}
     // need to download?
     if (fd == -1) {
     	// yes!
-    	if (enable_local_file_cache) {
-    		/*if (*/mkdirp(resolved_path + mydirname(path), mode)/* == -1)
-    			return -errno*/;
-    		fd = creat(cache_path.c_str(), mode);
-    	} else {
-    		fd = fileno(tmpfile());
-    	}
+   		fd = fileno(tmpfile());
 		if (fd == -1)
 			Oof(-errno);
 		///////////////////string responseText;
@@ -584,15 +453,6 @@ get_local_fd(const char* path/*, headers_t& meta*/) {
 static int
 put_local_fd(const char* path, headers_t meta, int fd) {
 	
-//	// merge given meta headers into existing meta headers...
-//	headers_t meta;
-//	get_headers(path, meta);
-//	for (headers_t::const_iterator iter = in_meta.begin(); iter != in_meta.end(); ++iter) {
-//		string key = (*iter).first;
-//		string value = (*iter).second;
-//		meta[key] = value;
-//	}
-		
 	struct stat st;
 	if (fstat(fd, &st) == -1)
 		Oof(-errno);
@@ -641,15 +501,6 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	
 	return 0;
 }
-
-//static int
-//put_local_fd(const char* path, int fd) {
-//	headers_t meta;
-//	int result = get_headers(path, meta);
-//	if (result != 0)
-//		return result;
-//	return put_local_fd(path, meta, fd);
-//}
 
 static int
 s3fs_getattr(const char *path, struct stat *stbuf) {
@@ -859,10 +710,6 @@ s3fs_rename(const char *from, const char *to) {
     
     return s3fs_unlink(from);
     
-    // get local file handle
-    // upload as new s3 object
-    // delete old s3 object
-    //return -EXDEV;
 }
 
 static int
@@ -899,29 +746,9 @@ s3fs_chown(const char *path, uid_t uid, gid_t gid) {
 static int
 s3fs_truncate(const char *path, off_t size) {
 	//###TODO honor size?!?
-	// ### TODO should doing a "get_headers" and preserving 'em across PUT
-	// ## # TODO in other words, mode and mtime get clobbered when truncate is called
 	
     cout << "truncate[path=" << path << "][size=" << size << "]" << endl;
 	
-//	string resource = urlEncode("/"+bucket + path);
-//	string url = host + resource;
-//	
-//	auto_curl curl;
-//	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-//	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-//	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-//	curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-//	curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
-//	
-//	auto_curl_slist headers;
-//	string date = get_date();
-//	headers.append("Date: "+date);
-//	headers.append("Content-Type: application/octet-stream");
-//	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
-//	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-//	   
-//	MY_CURL_EASY_PERFORM((curl));
 
     // preserve headers across truncate
 	headers_t meta;
@@ -1100,26 +927,6 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 								}
 							}
 							if (Key.size() > 0) {
-//								struct stat st;
-//								memset(&st, 0, sizeof(st));
-//								st.st_nlink = 1; // see fuse faq
-//								// mode
-//								st.st_mode = S_IFREG | 0755;
-//								// size
-//								stringstream tmp(Size);
-//								tmp >> st.st_size;
-//								// modified... something like "2005-12-31T23:59:59Z"
-//								struct tm gmt;
-//								strptime(LastModified.c_str(), "%Y-%m-%dT%H:%M:%SZ", &gmt);
-//								st.st_mtime = my_timegm(&gmt);
-//								// blocks
-//								st.st_blocks = st.st_size / 512 + 1;
-//								// if size is 0 then we don't know whether its a file or a directory...
-//								// defer to getattr() to determine whether its a file or a directory from Content-Type
-//								if (st.st_size > 0) {
-//									auto_lock lock(stat_cache_lock);
-//									//###stat_cache["/"+Key] = st;
-//								}
 								if (filler(buf, mybasename(Key).c_str(), 0, 0))
 									break;
 							}
