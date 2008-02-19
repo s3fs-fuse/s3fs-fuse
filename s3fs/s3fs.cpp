@@ -43,7 +43,7 @@
 #include <vector>
 using namespace std;
 
-#define Oof(result) if (true) { \
+#define Yikes(result) if (true) { \
 	cout << __LINE__ << "###result=" << result << endl; \
 	return result; \
 }
@@ -174,7 +174,7 @@ if (true) { \
 	if (curlCode != 0) { \
 		long responseCode; \
 		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-			Oof(-EIO); \
+			Yikes(-EIO); \
 		if (responseCode == 500) { \
 			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
 			cout << "retrying..." << endl; \
@@ -184,12 +184,12 @@ if (true) { \
 		} \
 		if (curlCode != 0) { \
 			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-				Oof(-EIO); \
+				Yikes(-EIO); \
 			if (responseCode == 404) \
 				return -ENOENT; \
 			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
 			cout << "giving up..." << endl; \
-			Oof(-EIO); \
+			Yikes(-EIO); \
 		} \
 	} \
 }
@@ -352,8 +352,59 @@ mybasename(string path) {
 	return basename(&path[0]);
 }
 
+// mkdir --parents
+static int
+mkdirp(const string& path, mode_t mode) {
+	string base;
+	string component;
+	stringstream ss(path);
+	while (getline(ss, component, '/')) {
+		base += "/" + component;
+		/*if (*/mkdir(base.c_str(), mode)/* == -1);
+			return -1*/;
+	}
+	return 0;
+}
+
+#include <pwd.h>
+
+string
+expand_path(const string& path) {
+	if (path.length() == 0 || path[0] != '~')
+		return path;
+	const char *pfx= NULL;
+	string::size_type pos = path.find_first_of('/');
+	if (path.length() == 1 || pos == 1) {
+		pfx = getenv("HOME");
+		if (!pfx) {
+			// Punt. We're trying to expand ~/, but HOME isn't set
+			struct passwd *pw = getpwuid(getuid());
+			if (pw)
+				pfx = pw->pw_dir;
+		}
+	} else {
+		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
+		struct passwd *pw = getpwnam(user.c_str());
+		if (pw)
+			pfx = pw->pw_dir;
+	}
+	// if we failed to find an expansion, return the path unchanged.
+	if (!pfx)
+		return path;
+	string result(pfx);
+	if (pos == string::npos)
+		return result;
+	if (result.length() == 0 || result[result.length()-1] != '/')
+		result += '/';
+	result += path.substr(pos+1);
+	return result;
+}
+
+#include <openssl/md5.h>
+
 /**
  * @return 0 if ok
+ * TODO make this return pair<int, headers_t>
  */
 int
 get_headers(const char* path, headers_t& meta) {
@@ -387,12 +438,16 @@ get_headers(const char* path, headers_t& meta) {
 		string value = (*iter).second;
 		if (key == "Content-Type")
 			meta[key] = value;
+		if (key == "ETag")
+			meta[key] = value;
 		if (key.substr(0, 10) == "x-amz-meta")
 			meta[key] = value;
 	}
 	
 	return 0;
 }
+
+static int use_local_file_cache = 0;
 
 /**
  * get_local_fd
@@ -402,16 +457,65 @@ get_local_fd(const char* path) {
 	string resource(urlEncode("/"+bucket + path));
 	string url(host + resource);
 
+	string baseName = mybasename(path);
+	string resolved_path(expand_path("~/.s3fs/"+bucket));
+
 	int fd = -1;
+
+	string cache_path(resolved_path + path);
+	
+	headers_t responseHeaders;
+
+	if (use_local_file_cache) {
+		
+		if (get_headers(path, responseHeaders) != 0)
+			Yikes(-ENOENT);
+			
+		fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
+		
+	    if (fd != -1) {
+			MD5_CTX c;
+			if (MD5_Init(&c) != 1)
+				Yikes(-EIO);
+			int count;
+			char buf[1024];
+			while ((count = read(fd, buf, sizeof(buf))) > 0) {
+				if (MD5_Update(&c, buf, count) != 1)
+					Yikes(-EIO);
+			}
+			unsigned char md[MD5_DIGEST_LENGTH];
+			if (MD5_Final(md, &c) != 1)
+				Yikes(-EIO);
+			///###cout << md << endl;
+			
+			char localMd5[2*MD5_DIGEST_LENGTH+1];
+			sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+					md[0], md[1], md[2], md[3], md[4], md[5], md[6], md[7], md[8], md[9], md[10], md[11], md[12], md[13], md[14], md[15]);
+			
+			string remoteMd5(trim(responseHeaders["ETag"], "\""));
+			
+			// md5 match?		
+			if (string(localMd5) != remoteMd5) {
+				// no! prepare to download
+				if (close(fd) == -1)
+					Yikes(-errno);
+				fd = -1;
+			} 
+	    }
+	}
     // need to download?
     if (fd == -1) {
     	// yes!
-   		fd = fileno(tmpfile());
+    	if (use_local_file_cache) {
+    		/*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
+    			return -errno*/;
+    		mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
+    		fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
+    	} else {
+    		fd = fileno(tmpfile());
+    	}
 		if (fd == -1)
-			Oof(-errno);
-		///////////////////string responseText;
-		string resource = urlEncode("/"+bucket + path);
-		string url = host + resource;
+			Yikes(-errno);
 
 		auto_curl curl;
 		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -420,7 +524,7 @@ get_local_fd(const char* path) {
 		
 		FILE* f = fdopen(fd, "w+");
 		if (f == 0)
-			Oof(-errno);
+			Yikes(-errno);
 		curl_easy_setopt(curl, CURLOPT_FILE, f);
 
 		auto_curl_slist headers;
@@ -437,7 +541,7 @@ get_local_fd(const char* path) {
 		fsync(fd);
 		
 		if (fd == -1)
-			Oof(-errno);
+			Yikes(-errno);
     }
     
     return fd;    
@@ -451,7 +555,7 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	
 	struct stat st;
 	if (fstat(fd, &st) == -1)
-		Oof(-errno);
+		Yikes(-errno);
 	
 	{
 		string resource = urlEncode("/"+bucket + path);
@@ -471,7 +575,7 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 		
 		FILE* f = fdopen(fd, "rb");
 		if (f == 0)
-			Oof(-errno);
+			Yikes(-errno);
 		curl_easy_setopt(curl, CURLOPT_INFILE, f);
 		
 		string ContentType = meta["Content-Type"];
@@ -480,8 +584,15 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 		string date = get_date();
 		headers.append("Date: "+date);
 
-		for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter)
-			headers.append((*iter).first+":"+(*iter).second);
+		for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
+			string key = (*iter).first;
+			string value = (*iter).second;
+			if (key == "Content-Type")
+				headers.append(key+":"+value);
+			if (key.substr(0,10) == "x-amz-meta")
+				headers.append(key+":"+value);
+			///////////////headers.append((*iter).first+":"+(*iter).second);
+		}
 		
 		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", ContentType, date, headers.get(), resource));
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
@@ -773,7 +884,7 @@ s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_fi
 	//###cout << "read: " << path << endl;
     int res = pread(fi->fh, buf, size, offset);
     if (res == -1)
-		Oof(-errno);
+		Yikes(-errno);
     return res;
 }
 
@@ -782,7 +893,7 @@ s3fs_write(const char *path, const char *buf, size_t size, off_t offset, struct 
 	//###cout << "write: " << path << endl;
     int res = pwrite(fi->fh, buf, size, offset);
     if (res == -1)
-		Oof(-errno);
+		Yikes(-errno);
     return res;
 }
 
@@ -822,7 +933,7 @@ s3fs_release(const char *path, struct fuse_file_info *fi) {
 	int fd = fi->fh;
 	cout << "release[path=" << path << "][fd=" << fd << "]" << endl;
 	if (close(fd) == -1)
-		Oof(-errno);
+		Yikes(-errno);
 	return 0;
 }
 
@@ -983,6 +1094,10 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 		}
 		if (strstr(arg, "secretAccessKey=") != 0) {
 			AWSSecretAccessKey = strchr(arg, '=') + 1;
+			return 0;
+		}
+		if (strstr(arg, "use_cache=") != 0) {
+			use_local_file_cache = atoi(strchr(arg, '=') + 1);
 			return 0;
 		}
 	}
