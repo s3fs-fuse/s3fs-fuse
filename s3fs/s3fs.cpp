@@ -366,39 +366,39 @@ mkdirp(const string& path, mode_t mode) {
 	return 0;
 }
 
-#include <pwd.h>
-
-string
-expand_path(const string& path) {
-	if (path.length() == 0 || path[0] != '~')
-		return path;
-	const char *pfx= NULL;
-	string::size_type pos = path.find_first_of('/');
-	if (path.length() == 1 || pos == 1) {
-		pfx = getenv("HOME");
-		if (!pfx) {
-			// Punt. We're trying to expand ~/, but HOME isn't set
-			struct passwd *pw = getpwuid(getuid());
-			if (pw)
-				pfx = pw->pw_dir;
-		}
-	} else {
-		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
-		struct passwd *pw = getpwnam(user.c_str());
-		if (pw)
-			pfx = pw->pw_dir;
-	}
-	// if we failed to find an expansion, return the path unchanged.
-	if (!pfx)
-		return path;
-	string result(pfx);
-	if (pos == string::npos)
-		return result;
-	if (result.length() == 0 || result[result.length()-1] != '/')
-		result += '/';
-	result += path.substr(pos+1);
-	return result;
-}
+//#include <pwd.h>
+//
+//string
+//expand_path(const string& path) {
+//	if (path.length() == 0 || path[0] != '~')
+//		return path;
+//	const char *pfx= NULL;
+//	string::size_type pos = path.find_first_of('/');
+//	if (path.length() == 1 || pos == 1) {
+//		pfx = getenv("HOME");
+//		if (!pfx) {
+//			// Punt. We're trying to expand ~/, but HOME isn't set
+//			struct passwd *pw = getpwuid(getuid());
+//			if (pw)
+//				pfx = pw->pw_dir;
+//		}
+//	} else {
+//		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
+//		struct passwd *pw = getpwnam(user.c_str());
+//		if (pw)
+//			pfx = pw->pw_dir;
+//	}
+//	// if we failed to find an expansion, return the path unchanged.
+//	if (!pfx)
+//		return path;
+//	string result(pfx);
+//	if (pos == string::npos)
+//		return result;
+//	if (result.length() == 0 || result[result.length()-1] != '/')
+//		result += '/';
+//	result += path.substr(pos+1);
+//	return result;
+//}
 
 #include <openssl/md5.h>
 
@@ -447,7 +447,7 @@ get_headers(const char* path, headers_t& meta) {
 	return 0;
 }
 
-static int use_local_file_cache = 0;
+static string use_cache;
 
 /**
  * get_local_fd
@@ -458,7 +458,7 @@ get_local_fd(const char* path) {
 	string url(host + resource);
 
 	string baseName = mybasename(path);
-	string resolved_path(expand_path("~/.s3fs/"+bucket));
+	string resolved_path(use_cache + "/" + bucket);
 
 	int fd = -1;
 
@@ -466,7 +466,7 @@ get_local_fd(const char* path) {
 	
 	headers_t responseHeaders;
 
-	if (use_local_file_cache) {
+	if (use_cache.size() > 0) {
 		
 		if (get_headers(path, responseHeaders) != 0)
 			Yikes(-ENOENT);
@@ -506,7 +506,7 @@ get_local_fd(const char* path) {
     // need to download?
     if (fd == -1) {
     	// yes!
-    	if (use_local_file_cache) {
+    	if (use_cache.size() > 0) {
     		/*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
     			return -errno*/;
     		mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
@@ -1097,7 +1097,7 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 			return 0;
 		}
 		if (strstr(arg, "use_cache=") != 0) {
-			use_local_file_cache = atoi(strchr(arg, '=') + 1);
+			use_cache = strchr(arg, '=') + 1;
 			return 0;
 		}
 	}
