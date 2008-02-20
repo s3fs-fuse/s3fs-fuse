@@ -129,7 +129,7 @@ public:
 		}
 		curl_easy_reset(curl);
 		long seconds = 10;
-		curl_easy_setopt(curl, CURLOPT_TIMEOUT, seconds);
+		//###curl_easy_setopt(curl, CURLOPT_TIMEOUT, seconds); // bad idea
 		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
 	}
 	~auto_curl() {
