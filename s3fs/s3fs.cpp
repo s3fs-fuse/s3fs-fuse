@@ -174,13 +174,16 @@ public:
 	}
 };
 
+// -oretries=3
+static int retries = 3;
+
 /**
  * @return fuse return code
  */
 static int
 my_curl_easy_perform(CURL* curl) {
-	int retries = 3;
-	while (retries-- > 0) {
+	int t = retries;
+	while (t-- > 0) {
 		CURLcode curlCode = curl_easy_perform(curl);
 		if (curlCode == 0)
 			return 0;
@@ -1081,6 +1084,10 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 		}
 		if (strstr(arg, "secretAccessKey=") != 0) {
 			AWSSecretAccessKey = strchr(arg, '=') + 1;
+			return 0;
+		}
+		if (strstr(arg, "retries=") != 0) {
+			retries = atoi(strchr(arg, '=') + 1);
 			return 0;
 		}
 		if (strstr(arg, "use_cache=") != 0) {
