@@ -174,15 +174,16 @@ public:
 	}
 };
 
-// -oretries=3
-static int retries = 3;
+// -oretries=2
+static int retries = 2;
 
 /**
  * @return fuse return code
  */
 static int
 my_curl_easy_perform(CURL* curl) {
-	int t = retries;
+	// 1 attempt + retries...
+	int t = 1+retries;
 	while (t-- > 0) {
 		CURLcode curlCode = curl_easy_perform(curl);
 		if (curlCode == 0)
