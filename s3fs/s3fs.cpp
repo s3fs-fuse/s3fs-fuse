@@ -22,6 +22,7 @@
 
 #include <fuse.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -41,7 +42,14 @@
 #include <stack>
 #include <string>
 #include <vector>
+
 using namespace std;
+
+#define VERIFY(s) if (true) { \
+	int result = (s); \
+	if (result != 0) \
+		return result; \
+}
 
 #define Yikes(result) if (true) { \
 	cout << __LINE__ << "###result=" << result << endl; \
@@ -121,6 +129,7 @@ public:
 		}
 		curl_easy_reset(curl);
 		long seconds = 10;
+		curl_easy_setopt(curl, CURLOPT_TIMEOUT, seconds);
 		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
 	}
 	~auto_curl() {
@@ -165,40 +174,72 @@ public:
 	}
 };
 
-// ### TODO replace this with a plain 'ol function (or a method on auto_curl)
-#define MY_CURL_EASY_PERFORM(curl) \
-if (true) { \
-	CURLcode curlCode = curl_easy_perform(curl.get()); \
-	if (curlCode == CURLE_OPERATION_TIMEDOUT) \
-		curlCode = curl_easy_perform(curl.get()); \
-	if (curlCode != 0) { \
-		long responseCode; \
-		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-			Yikes(-EIO); \
-		if (responseCode == 500) { \
-			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
-			cout << "retrying..." << endl; \
-			curlCode = curl_easy_perform(curl.get()); \
-			if (curlCode == CURLE_OPERATION_TIMEDOUT) \
-				curlCode = curl_easy_perform(curl.get()); \
-		} \
-		if (curlCode != 0) { \
-			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-				Yikes(-EIO); \
-			if (responseCode == 404) \
-				return -ENOENT; \
-			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
-			cout << "giving up..." << endl; \
-			Yikes(-EIO); \
-		} \
-	} \
+/**
+ * @return fuse return code
+ */
+static int
+my_curl_easy_perform(CURL* curl) {
+	int retries = 3;
+	while (retries-- > 0) {
+		CURLcode curlCode = curl_easy_perform(curl);
+		if (curlCode == 0)
+			return 0;
+		if (curlCode == CURLE_OPERATION_TIMEDOUT)
+			cout << "###timeout" << endl;
+		else if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
+			long responseCode;
+			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
+				return -EIO;
+			if (responseCode == 404)
+				return -ENOENT;
+			cout << "###" << responseCode << endl;
+			if (responseCode < 500)
+				return -EIO;
+		} else
+			cout << "###" << curl_easy_strerror(curlCode) << endl;
+		cout << "###retrying..." << endl;
+	}
+	cout << "###giving up..." << endl;
+	return -EIO;
 }
+
+//// ### TODO replace this with a plain 'ol function (or a method on auto_curl)
+//#define MY_CURL_EASY_PERFORM(curl) \
+//if (true) { \
+//	CURLcode curlCode = curl_easy_perform(curl.get()); \
+//	if (curlCode == CURLE_OPERATION_TIMEDOUT) \
+//		curlCode = curl_easy_perform(curl.get()); \
+//	if (curlCode != 0) { \
+//		long responseCode; \
+//		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
+//			Yikes(-EIO); \
+//		if (responseCode == 500) { \
+//			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
+//			cout << "retrying..." << endl; \
+//			curlCode = curl_easy_perform(curl.get()); \
+//			if (curlCode == CURLE_OPERATION_TIMEDOUT) \
+//				curlCode = curl_easy_perform(curl.get()); \
+//		} \
+//		if (curlCode != 0) { \
+//			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
+//				Yikes(-EIO); \
+//			if (responseCode == 404) \
+//				return -ENOENT; \
+//			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
+//			cout << "giving up..." << endl; \
+//			Yikes(-EIO); \
+//		} \
+//	} \
+//}
 
 static string bucket;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static const string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
+
+// if .size()==0 then local file cache is disabled
+static string use_cache;
 
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
@@ -366,48 +407,14 @@ mkdirp(const string& path, mode_t mode) {
 	return 0;
 }
 
-//#include <pwd.h>
-//
-//string
-//expand_path(const string& path) {
-//	if (path.length() == 0 || path[0] != '~')
-//		return path;
-//	const char *pfx= NULL;
-//	string::size_type pos = path.find_first_of('/');
-//	if (path.length() == 1 || pos == 1) {
-//		pfx = getenv("HOME");
-//		if (!pfx) {
-//			// Punt. We're trying to expand ~/, but HOME isn't set
-//			struct passwd *pw = getpwuid(getuid());
-//			if (pw)
-//				pfx = pw->pw_dir;
-//		}
-//	} else {
-//		string user(path, 1, (pos==string::npos) ? string::npos : pos-1);
-//		struct passwd *pw = getpwnam(user.c_str());
-//		if (pw)
-//			pfx = pw->pw_dir;
-//	}
-//	// if we failed to find an expansion, return the path unchanged.
-//	if (!pfx)
-//		return path;
-//	string result(pfx);
-//	if (pos == string::npos)
-//		return result;
-//	if (result.length() == 0 || result[result.length()-1] != '/')
-//		result += '/';
-//	result += path.substr(pos+1);
-//	return result;
-//}
-
 #include <openssl/md5.h>
 
 /**
- * @return 0 if ok
- * TODO make this return pair<int, headers_t>
+ * @return fuse return code
+ * TODO return pair<int, headers_t>?!?
  */
 int
-get_headers(const char* path, headers_t& meta) {
+get_headers(const char* path, headers_t& meta) {	
 	
 	string resource(urlEncode("/"+bucket + path));
 	string url(host + resource);
@@ -429,7 +436,7 @@ get_headers(const char* path, headers_t& meta) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform((curl.get())));
     
 	// at this point we know the file exists in s3
 	
@@ -446,8 +453,6 @@ get_headers(const char* path, headers_t& meta) {
 	
 	return 0;
 }
-
-static string use_cache;
 
 /**
  * get_local_fd
@@ -468,8 +473,7 @@ get_local_fd(const char* path) {
 
 	if (use_cache.size() > 0) {
 		
-		if (get_headers(path, responseHeaders) != 0)
-			Yikes(-ENOENT);
+		VERIFY(get_headers(path, responseHeaders));
 			
 		fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
 		
@@ -509,7 +513,8 @@ get_local_fd(const char* path) {
     	if (use_cache.size() > 0) {
     		/*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
     			return -errno*/;
-    		mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
+    		//###mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
+    		mode_t mode = strtol(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
     		fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
     	} else {
     		fd = fileno(tmpfile());
@@ -534,7 +539,8 @@ get_local_fd(const char* path) {
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
 		cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
-		MY_CURL_EASY_PERFORM((curl));
+		
+		VERIFY(my_curl_easy_perform(curl.get()));
 		
 		//only one of these is needed...
 		fflush(f);
@@ -549,62 +555,57 @@ get_local_fd(const char* path) {
 
 /**
  * create or update s3 object
+ * @return fuse return code
  */
 static int
 put_local_fd(const char* path, headers_t meta, int fd) {
-	
+	string resource = urlEncode("/"+bucket + path);
+	string url = host + resource;
+
 	struct stat st;
 	if (fstat(fd, &st) == -1)
+		Yikes(-errno);	
+
+	auto_curl curl;
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+
+	string responseText;
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+
+	curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
+	curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length	
+	
+	FILE* f = fdopen(fd, "rb");
+	if (f == 0)
 		Yikes(-errno);
+	curl_easy_setopt(curl, CURLOPT_INFILE, f);
 	
-	{
-		string resource = urlEncode("/"+bucket + path);
-		string url = host + resource;
+	string ContentType = meta["Content-Type"];
+	    
+	auto_curl_slist headers;
+	string date = get_date();
+	headers.append("Date: "+date);
 
-		auto_curl curl;
-		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-		curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-
-		string responseText;
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-
-		curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-		curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length	
-		
-		FILE* f = fdopen(fd, "rb");
-		if (f == 0)
-			Yikes(-errno);
-		curl_easy_setopt(curl, CURLOPT_INFILE, f);
-		
-		string ContentType = meta["Content-Type"];
-		    
-		auto_curl_slist headers;
-		string date = get_date();
-		headers.append("Date: "+date);
-
-		for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
-			string key = (*iter).first;
-			string value = (*iter).second;
-			if (key == "Content-Type")
-				headers.append(key+":"+value);
-			if (key.substr(0,10) == "x-amz-meta")
-				headers.append(key+":"+value);
-			///////////////headers.append((*iter).first+":"+(*iter).second);
-		}
-		
-		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", ContentType, date, headers.get(), resource));
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-		
-		rewind(f);
-	
-		cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
-		
-		MY_CURL_EASY_PERFORM((curl));
-		
-		return 0;
+	for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
+		string key = (*iter).first;
+		string value = (*iter).second;
+		if (key == "Content-Type")
+			headers.append(key+":"+value);
+		if (key.substr(0,10) == "x-amz-meta")
+			headers.append(key+":"+value);
 	}
+	
+	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", ContentType, date, headers.get(), resource));
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+	
+	rewind(f);
+
+	cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
+	
+	VERIFY(my_curl_easy_perform(curl.get()));
 	
 	return 0;
 }
@@ -639,19 +640,20 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform(curl.get()));
     
 	stbuf->st_nlink = 1; // see fuse faq
-	
-	stbuf->st_mtime = atol(responseHeaders["x-amz-meta-mtime"].c_str());
+
+	//stbuf->st_mtime = atol(responseHeaders["x-amz-meta-mtime"].c_str());
+	stbuf->st_mtime = strtol(responseHeaders["x-amz-meta-mtime"].c_str(), (char **)NULL, 10);
 	if (stbuf->st_mtime == 0) {
 		long LastModified;
 		if (curl_easy_getinfo(curl, CURLINFO_FILETIME, &LastModified) == 0)
 			stbuf->st_mtime = LastModified;
 	}
 	
-	stbuf->st_mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
-	
+	//stbuf->st_mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
+	stbuf->st_mode = strtol(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
 	char* ContentType = 0;
 	if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ContentType) == 0) {
 		if (ContentType)
@@ -699,7 +701,7 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform(curl.get()));
 
 	return 0;
 }
@@ -727,7 +729,7 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	   
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform(curl.get()));
 
 	return 0;
 }
@@ -752,7 +754,7 @@ s3fs_unlink(const char *path) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform(curl.get()));
 	
 	return 0;
 }
@@ -776,7 +778,7 @@ s3fs_rmdir(const char *path) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	
-	MY_CURL_EASY_PERFORM((curl));
+	VERIFY(my_curl_easy_perform(curl.get()));
 
 	return 0;
 }
@@ -797,9 +799,7 @@ s3fs_rename(const char *from, const char *to) {
     
     // preserve meta headers across rename
     headers_t meta;
-    result = get_headers(from, meta);
-    if (result != 0)
-    	return result;
+    VERIFY(get_headers(from, meta));
     
     result = put_local_fd(to, meta, fd.get());
     if (result != 0)
@@ -820,9 +820,7 @@ s3fs_chmod(const char *path, mode_t mode) {
     cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
     auto_fd fd(get_local_fd(path));
     headers_t meta;
-    int result = get_headers(path, meta);
-    if (result != 0)
-    	return result;
+    VERIFY(get_headers(path, meta));
     meta["x-amz-meta-mode"] = stringificationizer(mode);
     return put_local_fd(path, meta, fd.get());
 }
@@ -834,18 +832,11 @@ s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     return 0;
 }
 
-#define VERIFY(s) if (true) { \
-	int result = (s); \
-	if (result != 0) \
-		return result; \
-}
-
 static int
 s3fs_truncate(const char *path, off_t size) {
 	//###TODO honor size?!?
 	
     cout << "truncate[path=" << path << "][size=" << size << "]" << endl;
-	
 
     // preserve headers across truncate
 	headers_t meta;
@@ -867,10 +858,9 @@ s3fs_open(const char *path, struct fuse_file_info *fi) {
     cout << "open[path=" << path << "][flags=" << fi->flags << "]" <<  endl;
 
 	headers_t meta;
+	//###TODO check fi->fh here...
 	fi->fh = get_local_fd(path);
 	
-	//###TODO check fi->fh here...
-
     // remember flags and headers...
 	auto_lock lock(s3fs_descriptors_lock);
 	
@@ -992,7 +982,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-		MY_CURL_EASY_PERFORM((curl));
+		VERIFY(my_curl_easy_perform(curl.get()));
 
 		{
 			xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
@@ -1065,12 +1055,9 @@ s3fs_utimens(const char *path, const struct timespec ts[2]) {
     cout << "utimens[path=" << path << "][mtime=" << stringificationizer(ts[1].tv_sec) << "]" << endl;
     auto_fd fd(get_local_fd(path));
     headers_t meta;
-    int result = get_headers(path, meta);
-    if (result != 0)
-    	return result;
+    VERIFY(get_headers(path, meta));
     meta["x-amz-meta-mtime"] = stringificationizer(ts[1].tv_sec);
     return put_local_fd(path, meta, fd.get());
-    //return -EPERM;
 }
 
 static int
