@@ -207,35 +207,6 @@ my_curl_easy_perform(CURL* curl) {
 	return -EIO;
 }
 
-//// ### TODO replace this with a plain 'ol function (or a method on auto_curl)
-//#define MY_CURL_EASY_PERFORM(curl) \
-//if (true) { \
-//	CURLcode curlCode = curl_easy_perform(curl.get()); \
-//	if (curlCode == CURLE_OPERATION_TIMEDOUT) \
-//		curlCode = curl_easy_perform(curl.get()); \
-//	if (curlCode != 0) { \
-//		long responseCode; \
-//		if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-//			Yikes(-EIO); \
-//		if (responseCode == 500) { \
-//			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
-//			cout << "retrying..." << endl; \
-//			curlCode = curl_easy_perform(curl.get()); \
-//			if (curlCode == CURLE_OPERATION_TIMEDOUT) \
-//				curlCode = curl_easy_perform(curl.get()); \
-//		} \
-//		if (curlCode != 0) { \
-//			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) \
-//				Yikes(-EIO); \
-//			if (responseCode == 404) \
-//				return -ENOENT; \
-//			cout << __LINE__ << "###curlCode=" << curlCode << "(" << curl_easy_strerror(curlCode) << ")" << "###responseCode=" << responseCode << endl; \
-//			cout << "giving up..." << endl; \
-//			Yikes(-EIO); \
-//		} \
-//	} \
-//}
-
 static string bucket;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
