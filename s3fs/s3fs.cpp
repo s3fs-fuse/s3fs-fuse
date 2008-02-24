@@ -1158,21 +1158,19 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 			FD_ZERO(&write_fd_set);
 			FD_ZERO(&exc_fd_set);
 			
-			time_t milliseconds;
+			long milliseconds;
 			VERIFY(curl_multi_timeout(multi_handle.get(), &milliseconds));
 			
-			if (milliseconds != -1) {
-				if (milliseconds > 0) {
-					struct timeval timeout;
-					timeout.tv_sec = 0;
-					timeout.tv_usec = 1000*milliseconds;
+			if (milliseconds > 0) {
+				struct timeval timeout;
+				timeout.tv_sec = 1000*milliseconds/1000000;
+				timeout.tv_usec = 1000*milliseconds%1000000;
 
-					int max_fd;
-					VERIFY(curl_multi_fdset(multi_handle.get(), &read_fd_set, &write_fd_set, &exc_fd_set, &max_fd));
-					
-					if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1)
-						Yikes(-errno);
-				}
+				int max_fd;
+				VERIFY(curl_multi_fdset(multi_handle.get(), &read_fd_set, &write_fd_set, &exc_fd_set, &max_fd));
+				
+				if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1)
+					Yikes(-errno);
 			}
 
 			while (curl_multi_perform(multi_handle.get(), &running_handles) == CURLM_CALL_MULTI_PERFORM)
