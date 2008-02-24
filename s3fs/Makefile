@@ -1,5 +1,5 @@
 all:
-	g++ -Wall $(shell pkg-config fuse --cflags --libs) -lcurl $(shell xml2-config --cflags --libs) -lssl -ggdb s3fs.cpp -o s3fs
+	g++ -ggdb -Wall $(shell pkg-config fuse --cflags --libs) $(shell pkg-config libcurl --cflags --libs) $(shell xml2-config --cflags --libs) -lcrypto s3fs.cpp -o s3fs
 	@echo ok!
 
 clean:
