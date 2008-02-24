@@ -1147,7 +1147,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		int running_handles;
 
 		while (curl_multi_perform(multi_handle.get(), &running_handles) == CURLM_CALL_MULTI_PERFORM)
-			cout << "[1]" << endl;
+			;
 
 		while (running_handles) {
 			fd_set read_fd_set;
@@ -1176,7 +1176,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 			}
 
 			while (curl_multi_perform(multi_handle.get(), &running_handles) == CURLM_CALL_MULTI_PERFORM)
-				cout << "[2]" << endl;
+				;
 		}
 		
 	  int remaining_msgs = 1;
