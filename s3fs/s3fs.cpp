@@ -271,6 +271,9 @@ static mode_t root_mode = 0;
 // if .size()==0 then local file cache is disabled
 static string use_cache;
 
+// private, public-read, public-read-write, authenticated-read
+static string default_acl("private");
+
 // key=path
 typedef map<string, struct stat> stat_cache_t;
 static stat_cache_t stat_cache;
@@ -346,7 +349,7 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 	if (headers != 0) {
 		do {
 			//###cout << headers->data << endl;
-			if (strncmp(headers->data, "x-amz-meta", 10) == 0) {
+			if (strncmp(headers->data, "x-amz", 5) == 0) {
 				++count;
 				StringToSign += headers->data;
 				StringToSign += 10; // linefeed
@@ -482,7 +485,7 @@ get_headers(const char* path, headers_t& meta) {
 			meta[key] = value;
 		if (key == "ETag")
 			meta[key] = value;
-		if (key.substr(0, 10) == "x-amz-meta")
+		if (key.substr(0, 5) == "x-amz")
 			meta[key] = value;
 	}
 	
@@ -548,8 +551,7 @@ get_local_fd(const char* path) {
     	if (use_cache.size() > 0) {
     		/*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
     			return -errno*/;
-    		//###mode_t mode = atoi(responseHeaders["x-amz-meta-mode"].c_str());
-    		mode_t mode = strtol(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
+    		mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
     		fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
     	} else {
     		fd = fileno(tmpfile());
@@ -623,13 +625,15 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
+	
+	meta["x-amz-acl"] = default_acl;
 
 	for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
 		string key = (*iter).first;
 		string value = (*iter).second;
 		if (key == "Content-Type")
 			headers.append(key+":"+value);
-		if (key.substr(0,10) == "x-amz-meta")
+		if (key.substr(0,5) == "x-amz")
 			headers.append(key+":"+value);
 	}
 	
@@ -739,6 +743,8 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	string date = get_date();
 	headers.append("Date: "+date);
 	headers.append("Content-Type: application/octet-stream");
+	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
+	headers.append("x-amz-acl:"+default_acl);
 	headers.append("x-amz-meta-mode:"+stringificationizer(mode));
 	headers.append("x-amz-meta-mtime:"+stringificationizer(time(NULL)));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
@@ -767,6 +773,8 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	string date = get_date();
 	headers.append("Date: "+date);
 	headers.append("Content-Type: application/x-directory");
+	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
+	headers.append("x-amz-acl:"+default_acl);
 	headers.append("x-amz-meta-mode:"+stringificationizer(mode));
 	headers.append("x-amz-meta-mtime:"+stringificationizer(time(NULL)));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
@@ -1274,6 +1282,11 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 			AWSSecretAccessKey = strchr(arg, '=') + 1;
 			return 0;
 		}
+		if (strstr(arg, "default_acl=") != 0) {
+			default_acl = strchr(arg, '=') + 1;
+			return 0;
+		}
+		// ### TODO: prefix
 		if (strstr(arg, "retries=") != 0) {
 			retries = atoi(strchr(arg, '=') + 1);
 			return 0;
