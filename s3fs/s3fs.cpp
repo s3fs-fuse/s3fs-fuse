@@ -127,6 +127,8 @@ alloc_curl_handle() {
 		curl_handles.pop();
 	}
 	curl_easy_reset(curl);
+	long signal = 1;
+	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, signal);
 	long seconds = 10;
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
 	return curl;
