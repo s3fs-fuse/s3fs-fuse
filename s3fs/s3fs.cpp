@@ -236,10 +236,12 @@ static int retries = 2;
  * @return fuse return code
  */
 static int
-my_curl_easy_perform(CURL* curl) {
+my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 	// 1 attempt + retries...
 	int t = 1+retries;
 	while (t-- > 0) {
+		if (f)
+			rewind(f);
 		CURLcode curlCode = curl_easy_perform(curl);
 		if (curlCode == 0)
 			return 0;
@@ -577,7 +579,7 @@ get_local_fd(const char* path) {
 
 		cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
 		
-		VERIFY(my_curl_easy_perform(curl.get()));
+		VERIFY(my_curl_easy_perform(curl.get(), f));
 		
 		//only one of these is needed...
 		fflush(f);
@@ -642,11 +644,11 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", ContentType, date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	
-	rewind(f);
+	//###rewind(f);
 
 	cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 	
-	VERIFY(my_curl_easy_perform(curl.get()));
+	VERIFY(my_curl_easy_perform(curl.get(), f));
 	
 	return 0;
 }
