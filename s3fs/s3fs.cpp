@@ -633,7 +633,9 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 		string value = (*iter).second;
 		if (key == "Content-Type")
 			headers.append(key+":"+value);
-		if (key.substr(0,5) == "x-amz")
+		if (key.substr(0,9) == "x-amz-acl")
+			headers.append(key+":"+value);
+		if (key.substr(0,10) == "x-amz-meta")
 			headers.append(key+":"+value);
 	}
 	
