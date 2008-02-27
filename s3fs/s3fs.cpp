@@ -1231,23 +1231,64 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 	return 0;
 }
 
-static void*
-s3fs_init(struct fuse_conn_info *conn) {
-	printf("init\n");
-	curl_global_init(CURL_GLOBAL_ALL);
-	pthread_mutex_init(&curl_handles_lock, NULL);
-	pthread_mutex_init(&s3fs_descriptors_lock, NULL);
-	pthread_mutex_init(&stat_cache_lock, NULL);
-	return 0;
+static pthread_mutex_t *mutex_buf = NULL;
+
+/**
+ * OpenSSL locking function.
+ *
+ * @param    mode    lock mode
+ * @param    n        lock number
+ * @param    file    source file name
+ * @param    line    source file line number
+ * @return    none
+ */
+static void locking_function(int mode, int n, const char *file, int line)
+{
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&mutex_buf[n]);
+    } else {
+        pthread_mutex_unlock(&mutex_buf[n]);
+    }
 }
 
-static void
-s3fs_destroy(void*) {
-	printf("destroy\n");
-	curl_global_cleanup();
-	pthread_mutex_destroy(&curl_handles_lock);
-	pthread_mutex_destroy(&s3fs_descriptors_lock);
-	pthread_mutex_destroy(&stat_cache_lock);
+/**
+ * OpenSSL uniq id function.
+ *
+ * @return    thread id
+ */
+static unsigned long id_function(void)
+{
+    return ((unsigned long) pthread_self());
+}
+
+static void* s3fs_init(struct fuse_conn_info *conn) {
+  printf("init\n");
+  // openssl
+  mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
+  for (int i = 0; i < CRYPTO_num_locks(); i++)
+    pthread_mutex_init(&mutex_buf[i], NULL);
+  CRYPTO_set_locking_callback(locking_function);
+  CRYPTO_set_id_callback(id_function);
+  curl_global_init(CURL_GLOBAL_ALL);
+  pthread_mutex_init(&curl_handles_lock, NULL);
+  pthread_mutex_init(&s3fs_descriptors_lock, NULL);
+  pthread_mutex_init(&stat_cache_lock, NULL);
+  return 0;
+}
+
+static void s3fs_destroy(void*) {
+  printf("destroy\n");
+  // openssl
+  CRYPTO_set_id_callback(NULL);
+  CRYPTO_set_locking_callback(NULL);
+  for (int i = 0; i < CRYPTO_num_locks(); i++)
+    pthread_mutex_destroy(&mutex_buf[i]);
+  free(mutex_buf);
+  mutex_buf = NULL;
+  curl_global_cleanup();
+  pthread_mutex_destroy(&curl_handles_lock);
+  pthread_mutex_destroy(&s3fs_descriptors_lock);
+  pthread_mutex_destroy(&stat_cache_lock);
 }
 
 static int
