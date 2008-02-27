@@ -1234,6 +1234,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 static void*
 s3fs_init(struct fuse_conn_info *conn) {
 	printf("init\n");
+	curl_global_init(CURL_GLOBAL_ALL);
 	pthread_mutex_init(&curl_handles_lock, NULL);
 	pthread_mutex_init(&s3fs_descriptors_lock, NULL);
 	pthread_mutex_init(&stat_cache_lock, NULL);
@@ -1243,6 +1244,7 @@ s3fs_init(struct fuse_conn_info *conn) {
 static void
 s3fs_destroy(void*) {
 	printf("destroy\n");
+	curl_global_cleanup();
 	pthread_mutex_destroy(&curl_handles_lock);
 	pthread_mutex_destroy(&s3fs_descriptors_lock);
 	pthread_mutex_destroy(&stat_cache_lock);
