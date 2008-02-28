@@ -1051,6 +1051,8 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		if (NextMarker.size() > 0)
 			query += "&marker=" + urlEncode(NextMarker);
 
+		query += "&max-keys=20";
+		
 		string url = host + resource + "?"+ query;
 
 		{
@@ -1077,6 +1079,9 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		
 		auto_stuff curlMap;
 		auto_curl_multi multi_handle;
+		
+//		long max_connects = 5;
+//		curl_multi_setopt(multi_handle.get(), CURLMOPT_MAXCONNECTS, max_connects);
 		
 		{
 			xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
