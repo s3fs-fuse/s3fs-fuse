@@ -721,6 +721,9 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	if (S_ISREG(stbuf->st_mode))
 		stbuf->st_blocks = stbuf->st_size / 512 + 1;
 
+	stbuf->st_uid = getuid();
+	stbuf->st_gid = getgid();
+	
 	return 0;
 }
 
@@ -1226,6 +1229,9 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 	    		if (S_ISREG(st.st_mode))
 	    			st.st_blocks = st.st_size / 512 + 1;
 
+	    		st.st_uid = getuid();
+	    		st.st_gid = getgid();
+	    		
 	    		auto_lock lock(stat_cache_lock);
 	    		stat_cache[stuff.path] = st;
 	    	}
