@@ -34,6 +34,7 @@
 #include <curl/curl.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <syslog.h>
 
 #include <fstream>
 #include <iostream>
@@ -53,7 +54,7 @@ using namespace std;
 }
 
 #define Yikes(result) if (true) { \
-	cout << __LINE__ << "###result=" << result << endl; \
+	syslog(LOG_ERR,"%d###result=%d", __LINE__, result); \
 	return result; \
 }
 
@@ -63,7 +64,7 @@ public:
 	auto_fd(int fd): fd(fd) {
 	}
 	~auto_fd() {
-		cout << "close[fd=" << fd << "]" << endl;
+		///###cout << "close[fd=" << fd << "]" << endl;
 		close(fd);
 	}
 	int get() {
@@ -132,6 +133,8 @@ alloc_curl_handle() {
 	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, signal);
 	long seconds = 10;
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
+	// don't use CURLOPT_TIMEOUT... 
+	// e.g., what timeout would you choose for uploading a 5G file?!?
 	return curl;
 }
 
@@ -249,21 +252,21 @@ my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 		if (curlCode == 0)
 			return 0;
 		if (curlCode == CURLE_OPERATION_TIMEDOUT)
-			cout << "###timeout" << endl;
+		  syslog(LOG_ERR, "###timeout");
 		else if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
 			long responseCode;
 			if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
 				return -EIO;
 			if (responseCode == 404)
 				return -ENOENT;
-			cout << "###" << responseCode << endl;
+	    syslog(LOG_ERR, "###response=%ld", responseCode);
 			if (responseCode < 500)
 				return -EIO;
 		} else
-			cout << "###" << curl_easy_strerror(curlCode) << endl;
-		cout << "###retrying..." << endl;
+			syslog(LOG_ERR, "###%s", curl_easy_strerror(curlCode));;
+	  syslog(LOG_ERR, "###retrying...");
 	}
-	cout << "###giving up..." << endl;
+  syslog(LOG_ERR, "###giving up");
 	return -EIO;
 }
 
@@ -649,6 +652,7 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	
 	//###rewind(f);
 
+	syslog(LOG_INFO, "upload path=%s", path);
 	cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 	
 	VERIFY(my_curl_easy_perform(curl.get(), f));
@@ -1199,7 +1203,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 	    if (msg != NULL) {
 	    	CURLcode code =msg->data.result;
 	    	if (code != 0)
-	    		cout << "###" << code << curl_easy_strerror(code) << endl; 
+	    		syslog(LOG_ERR, "###%d %s", code, curl_easy_strerror(code)); 
 	    	if (code == 0) {
 	    		CURL* curl_handle = msg->easy_handle;
 	    		stuff_t stuff = curlMap.get()[curl_handle];
@@ -1274,7 +1278,7 @@ static unsigned long id_function(void)
 }
 
 static void* s3fs_init(struct fuse_conn_info *conn) {
-  printf("init\n");
+  syslog(LOG_INFO, "init");
   // openssl
   mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
   for (int i = 0; i < CRYPTO_num_locks(); i++)
@@ -1289,7 +1293,7 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
 }
 
 static void s3fs_destroy(void*) {
-  printf("destroy\n");
+  syslog(LOG_INFO, "destroy");
   // openssl
   CRYPTO_set_id_callback(NULL);
   CRYPTO_set_locking_callback(NULL);
