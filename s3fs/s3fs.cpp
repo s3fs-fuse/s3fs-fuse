@@ -520,7 +520,7 @@ get_local_fd(const char* path) {
 	if (use_cache.size() > 0) {
 		
 		VERIFY(get_headers(path, responseHeaders));
-			
+		
 		fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
 		
 	    if (fd != -1) {
@@ -557,10 +557,16 @@ get_local_fd(const char* path) {
     if (fd == -1) {
     	// yes!
     	if (use_cache.size() > 0) {
-    		/*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
-    			return -errno*/;
-    		mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
-    		fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
+    	  // only download files, not folders
+        mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
+        if (S_ISREG(mode)) {
+          /*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
+            return -errno*/;
+          fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
+        } else {
+          // its a folder; do *not* create anything in local cache... (###TODO do this in a better way)
+          fd = fileno(tmpfile());
+        }          
     	} else {
     		fd = fileno(tmpfile());
     	}
