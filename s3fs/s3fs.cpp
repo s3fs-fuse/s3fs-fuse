@@ -47,6 +47,9 @@
 
 using namespace std;
 
+static long connect_timeout = 2;
+static time_t read_write_timeout = 10;
+
 #define VERIFY(s) if (true) { \
 	int result = (s); \
 	if (result != 0) \
@@ -64,7 +67,6 @@ public:
 	auto_fd(int fd): fd(fd) {
 	}
 	~auto_fd() {
-		///###cout << "close[fd=" << fd << "]" << endl;
 		close(fd);
 	}
 	int get() {
@@ -74,7 +76,7 @@ public:
 
 template<typename T>
 string
-stringificationizer(T value) {
+str(T value) {
 	stringstream tmp;
 	tmp << value;
 	return tmp.str();
@@ -115,7 +117,41 @@ public:
 	}
 };
 
-stack<CURL*> curl_handles;
+typedef pair<double, double> progress_t;
+static map<CURL*, time_t> curl_times;
+static map<CURL*, progress_t> curl_progress;
+static pthread_mutex_t curl_progress_lock;
+
+static int
+my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
+  CURL* curl = static_cast<CURL*>(clientp);
+  
+  time_t now = time(0);
+  progress_t p(dlnow, ulnow);
+  
+  auto_lock lock(curl_progress_lock);
+  
+  // first time?
+  if (dlnow == 0 and ulnow == 0) {
+    curl_times.erase(curl);
+    curl_progress.erase(curl);
+  } else {
+    // any progress?
+    if (p != curl_progress[curl]) {
+      // yes!
+      curl_times[curl] = now;
+      curl_progress[curl] = p;
+    } else {
+      // timeout?
+      if (now - curl_times[curl] > read_write_timeout)
+        return CURLE_ABORTED_BY_CALLBACK;
+    }
+  }
+  
+  return 0;
+}
+
+static stack<CURL*> curl_handles;
 static pthread_mutex_t curl_handles_lock;
 
 static CURL*
@@ -131,10 +167,15 @@ alloc_curl_handle() {
 	curl_easy_reset(curl);
 	long signal = 1;
 	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, signal);
-	long seconds = 10;
-	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
-	// don't use CURLOPT_TIMEOUT... 
-	// e.g., what timeout would you choose for uploading a 5G file?!?
+	
+//	long timeout = 3600;
+//	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
+	
+	//###long seconds = 10;
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connect_timeout);
+
+  curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
 	return curl;
 }
 
@@ -765,8 +806,8 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	headers.append("Content-Type: application/octet-stream");
 	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
 	headers.append("x-amz-acl:"+default_acl);
-	headers.append("x-amz-meta-mode:"+stringificationizer(mode));
-	headers.append("x-amz-meta-mtime:"+stringificationizer(time(NULL)));
+	headers.append("x-amz-meta-mode:"+str(mode));
+	headers.append("x-amz-meta-mtime:"+str(time(NULL)));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -795,8 +836,8 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	headers.append("Content-Type: application/x-directory");
 	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
 	headers.append("x-amz-acl:"+default_acl);
-	headers.append("x-amz-meta-mode:"+stringificationizer(mode));
-	headers.append("x-amz-meta-mtime:"+stringificationizer(time(NULL)));
+	headers.append("x-amz-meta-mode:"+str(mode));
+	headers.append("x-amz-meta-mtime:"+str(time(NULL)));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	   
@@ -892,7 +933,7 @@ s3fs_chmod(const char *path, mode_t mode) {
     auto_fd fd(get_local_fd(path));
     headers_t meta;
     VERIFY(get_headers(path, meta));
-    meta["x-amz-meta-mode"] = stringificationizer(mode);
+    meta["x-amz-meta-mode"] = str(mode);
     return put_local_fd(path, meta, fd.get());
 }
 
@@ -983,7 +1024,7 @@ s3fs_flush(const char *path, struct fuse_file_info *fi) {
 	if ((flags & O_RDWR) || (flags &  O_WRONLY)) {
 		headers_t meta;
 	    VERIFY(get_headers(path, meta));
-	    meta["x-amz-meta-mtime"]=stringificationizer(time(NULL));
+	    meta["x-amz-meta-mtime"]=str(time(NULL));
 		return put_local_fd(path, meta, fd);
 	}
 	return 0;
@@ -1293,6 +1334,7 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   CRYPTO_set_id_callback(id_function);
   curl_global_init(CURL_GLOBAL_ALL);
   pthread_mutex_init(&curl_handles_lock, NULL);
+  pthread_mutex_init(&curl_progress_lock, NULL);
   pthread_mutex_init(&s3fs_descriptors_lock, NULL);
   pthread_mutex_init(&stat_cache_lock, NULL);
   return 0;
@@ -1309,6 +1351,7 @@ static void s3fs_destroy(void*) {
   mutex_buf = NULL;
   curl_global_cleanup();
   pthread_mutex_destroy(&curl_handles_lock);
+  pthread_mutex_destroy(&curl_progress_lock);
   pthread_mutex_destroy(&s3fs_descriptors_lock);
   pthread_mutex_destroy(&stat_cache_lock);
 }
@@ -1322,11 +1365,11 @@ s3fs_access(const char *path, int mask) {
 // aka touch
 static int
 s3fs_utimens(const char *path, const struct timespec ts[2]) {
-    cout << "utimens[path=" << path << "][mtime=" << stringificationizer(ts[1].tv_sec) << "]" << endl;
+    cout << "utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
     auto_fd fd(get_local_fd(path));
     headers_t meta;
     VERIFY(get_headers(path, meta));
-    meta["x-amz-meta-mtime"] = stringificationizer(ts[1].tv_sec);
+    meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
     return put_local_fd(path, meta, fd.get());
 }
 
@@ -1366,6 +1409,14 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 			use_cache = strchr(arg, '=') + 1;
 			return 0;
 		}
+    if (strstr(arg, "connect_timeout=") != 0) {
+      connect_timeout = strtol(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
+    if (strstr(arg, "read_write_timeout=") != 0) {
+      read_write_timeout = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
 	}
 	return 1;
 }
