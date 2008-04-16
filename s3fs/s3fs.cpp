@@ -48,7 +48,7 @@
 using namespace std;
 
 static long connect_timeout = 2;
-static time_t read_write_timeout = 10;
+static time_t readwrite_timeout = 10;
 
 #define VERIFY(s) if (true) { \
 	int result = (s); \
@@ -143,7 +143,7 @@ my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal, do
       curl_progress[curl] = p;
     } else {
       // timeout?
-      if (now - curl_times[curl] > read_write_timeout)
+      if (now - curl_times[curl] > readwrite_timeout)
         return CURLE_ABORTED_BY_CALLBACK;
     }
   }
@@ -1413,8 +1413,8 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
       connect_timeout = strtol(strchr(arg, '=') + 1, 0, 10);
       return 0;
     }
-    if (strstr(arg, "read_write_timeout=") != 0) {
-      read_write_timeout = strtoul(strchr(arg, '=') + 1, 0, 10);
+    if (strstr(arg, "readwrite_timeout=") != 0) {
+      readwrite_timeout = strtoul(strchr(arg, '=') + 1, 0, 10);
       return 0;
     }
 	}
