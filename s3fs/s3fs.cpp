@@ -314,7 +314,7 @@ my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 static string bucket;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
-static const string host = "http://s3.amazonaws.com";
+static string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
 
 // if .size()==0 then local file cache is disabled
@@ -559,12 +559,11 @@ get_local_fd(const char* path) {
 	headers_t responseHeaders;
 
 	if (use_cache.size() > 0) {
-		
 		VERIFY(get_headers(path, responseHeaders));
 		
 		fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
 		
-	    if (fd != -1) {
+    if (fd != -1) {
 			MD5_CTX c;
 			if (MD5_Init(&c) != 1)
 				Yikes(-EIO);
@@ -577,7 +576,6 @@ get_local_fd(const char* path) {
 			unsigned char md[MD5_DIGEST_LENGTH];
 			if (MD5_Final(md, &c) != 1)
 				Yikes(-EIO);
-			///###cout << md << endl;
 			
 			char localMd5[2*MD5_DIGEST_LENGTH+1];
 			sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
@@ -592,25 +590,26 @@ get_local_fd(const char* path) {
 					Yikes(-errno);
 				fd = -1;
 			} 
-	    }
+    }
 	}
-    // need to download?
-    if (fd == -1) {
-    	// yes!
-    	if (use_cache.size() > 0) {
-    	  // only download files, not folders
-        mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
-        if (S_ISREG(mode)) {
-          /*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
-            return -errno*/;
-          fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
-        } else {
-          // its a folder; do *not* create anything in local cache... (###TODO do this in a better way)
-          fd = fileno(tmpfile());
-        }          
-    	} else {
-    		fd = fileno(tmpfile());
-    	}
+  // need to download?
+  if (fd == -1) {
+  	// yes!
+  	if (use_cache.size() > 0) {
+  	  // only download files, not folders
+      mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
+      if (S_ISREG(mode)) {
+        /*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
+          return -errno*/;
+        fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
+      } else {
+        // its a folder; do *not* create anything in local cache... (###TODO do this in a better way)
+        fd = fileno(tmpfile());
+      }          
+  	} else {
+  		fd = fileno(tmpfile());
+  	}
+  	
 		if (fd == -1)
 			Yikes(-errno);
 
@@ -640,9 +639,9 @@ get_local_fd(const char* path) {
 		
 		if (fd == -1)
 			Yikes(-errno);
-    }
-    
-    return fd;    
+  }
+  
+  return fd;    
 }
 
 /**
@@ -699,7 +698,7 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	
 	//###rewind(f);
 
-	syslog(LOG_INFO, "upload path=%s", path);
+	syslog(LOG_INFO, "upload path=%s size=%llu", path, st.st_size);
 	cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 	
 	VERIFY(my_curl_easy_perform(curl.get(), f));
@@ -1415,6 +1414,10 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
     }
     if (strstr(arg, "readwrite_timeout=") != 0) {
       readwrite_timeout = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
+    if (strstr(arg, "url=") != 0) {
+      host = strchr(arg, '=') + 1;
       return 0;
     }
 	}
