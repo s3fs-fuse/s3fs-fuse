@@ -827,8 +827,8 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	if (S_ISREG(stbuf->st_mode))
 		stbuf->st_blocks = stbuf->st_size / 512 + 1;
 
-	stbuf->st_uid = getuid();
-	stbuf->st_gid = getgid();
+	stbuf->st_uid = strtoul(responseHeaders["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
+  stbuf->st_gid = strtoul(responseHeaders["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
 	
 	return 0;
 }
@@ -861,8 +861,10 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	headers.append("Content-Type: application/octet-stream");
 	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
 	headers.append("x-amz-acl:"+default_acl);
+  headers.append("x-amz-meta-gid:"+str(getgid()));
 	headers.append("x-amz-meta-mode:"+str(mode));
 	headers.append("x-amz-meta-mtime:"+str(time(NULL)));
+  headers.append("x-amz-meta-uid:"+str(getuid()));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -891,8 +893,10 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	headers.append("Content-Type: application/x-directory");
 	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
 	headers.append("x-amz-acl:"+default_acl);
+  headers.append("x-amz-meta-gid:"+str(getgid()));
 	headers.append("x-amz-meta-mode:"+str(mode));
 	headers.append("x-amz-meta-mtime:"+str(time(NULL)));
+  headers.append("x-amz-meta-uid:"+str(getuid()));
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 	   
@@ -991,11 +995,27 @@ s3fs_chmod(const char *path, mode_t mode) {
     return put_headers(path, meta);
 }
 
+#include <pwd.h>
+#include <grp.h>
+
 static int
 s3fs_chown(const char *path, uid_t uid, gid_t gid) {
-    cout << "###chown[path=" << path << "]" << endl;
-    // hook this into s3's acl?!?
-    return 0;
+  cout << "chown[path=" << path << "]" << endl;
+
+  headers_t meta;
+  VERIFY(get_headers(path, meta));
+  
+  struct passwd* aaa = getpwuid(uid);
+  if (aaa != 0)
+    meta["x-amz-meta-uid"] = str((*aaa).pw_uid);
+
+  struct group* bbb = getgrgid(gid);
+  if (bbb != 0)
+    meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
+
+  meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
+  meta["x-amz-metadata-directive"] = "REPLACE";
+  return put_headers(path, meta);
 }
 
 static int
@@ -1334,9 +1354,9 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 	    		if (S_ISREG(st.st_mode))
 	    			st.st_blocks = st.st_size / 512 + 1;
 
-	    		st.st_uid = getuid();
-	    		st.st_gid = getgid();
-	    		
+          st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
+          st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
+
 	    		auto_lock lock(stat_cache_lock);
 	    		stat_cache[stuff.path] = st;
 	    	}
