@@ -122,6 +122,7 @@ static map<CURL*, time_t> curl_times;
 static map<CURL*, progress_t> curl_progress;
 static pthread_mutex_t curl_progress_lock;
 
+// homegrown timeout mechanism
 static int
 my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
   CURL* curl = static_cast<CURL*>(clientp);
@@ -645,6 +646,61 @@ get_local_fd(const char* path) {
 }
 
 /**
+ * create or update s3 meta
+ * @return fuse return code
+ */
+static int
+put_headers(const char* path, headers_t meta) {
+  string resource = urlEncode("/"+bucket + path);
+  string url = host + resource;
+
+  auto_curl curl;
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+
+  string responseText;
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+
+  curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
+  curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length  
+
+  string ContentType = meta["Content-Type"];
+      
+  auto_curl_slist headers;
+  string date = get_date();
+  headers.append("Date: "+date);
+  
+  meta["x-amz-acl"] = default_acl;
+
+  for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if (key == "Content-Type")
+      headers.append(key+":"+value);
+    if (key.substr(0,9) == "x-amz-acl")
+      headers.append(key+":"+value);
+    if (key.substr(0,10) == "x-amz-meta")
+      headers.append(key+":"+value);
+    if (key == "x-amz-copy-source")
+      headers.append(key+":"+value);
+  }
+  
+  headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", ContentType, date, headers.get(), resource));
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+  
+  //###rewind(f);
+
+  syslog(LOG_INFO, "copy path=%s", path);
+  cout << "copying[path=" << path << "]" << endl;
+  
+  VERIFY(my_curl_easy_perform(curl.get()));
+  
+  return 0;
+}
+
+/**
  * create or update s3 object
  * @return fuse return code
  */
@@ -902,17 +958,15 @@ s3fs_symlink(const char *from, const char *to) {
 
 static int
 s3fs_rename(const char *from, const char *to) {
-	int result = 0;
-	
     cout << "rename[from=" << from << "][to=" << to << "]" << endl;
-    
-    auto_fd fd(get_local_fd(from));
-    
+
     // preserve meta headers across rename
     headers_t meta;
     VERIFY(get_headers(from, meta));
     
-    result = put_local_fd(to, meta, fd.get());
+    meta["x-amz-copy-source"] = urlEncode("/"+bucket + from);
+    
+    int result = put_headers(to, meta);
     if (result != 0)
     	return result;
     
@@ -929,11 +983,12 @@ s3fs_link(const char *from, const char *to) {
 static int
 s3fs_chmod(const char *path, mode_t mode) {
     cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
-    auto_fd fd(get_local_fd(path));
     headers_t meta;
     VERIFY(get_headers(path, meta));
     meta["x-amz-meta-mode"] = str(mode);
-    return put_local_fd(path, meta, fd.get());
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+    return put_headers(path, meta);
 }
 
 static int
@@ -1365,11 +1420,12 @@ s3fs_access(const char *path, int mask) {
 static int
 s3fs_utimens(const char *path, const struct timespec ts[2]) {
     cout << "utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
-    auto_fd fd(get_local_fd(path));
     headers_t meta;
     VERIFY(get_headers(path, meta));
     meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
-    return put_local_fd(path, meta, fd.get());
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+    return put_headers(path, meta);
 }
 
 static int
