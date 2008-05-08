@@ -839,6 +839,27 @@ s3fs_readlink(const char *path, char *buf, size_t size) {
     return -ENOENT;
 }
 
+typedef map<string, string> mimes_t;
+
+static mimes_t mimeTypes;
+
+/**
+ * @param s e.g., "index.html"
+ * @return e.g., "text/html"
+ */
+string
+lookupMimeType(string s) {
+  string result("application/octet-stream");
+  string::size_type pos = s.find_last_of('.');
+  if (pos != string::npos) {
+    s = s.substr(1+pos, string::npos);
+  }
+  mimes_t::const_iterator iter = mimeTypes.find(s);
+  if (iter != mimeTypes.end())
+    result = (*iter).second;
+  return result;
+}
+
 static int
 s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	// see man 2 mknod
@@ -858,14 +879,15 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
-	headers.append("Content-Type: application/octet-stream");
+	string contentType(lookupMimeType(path));
+	headers.append("Content-Type: "+contentType);
 	// x-amz headers: (a) alphabetical order and (b) no spaces after colon
 	headers.append("x-amz-acl:"+default_acl);
   headers.append("x-amz-meta-gid:"+str(getgid()));
 	headers.append("x-amz-meta-mode:"+str(mode));
 	headers.append("x-amz-meta-mtime:"+str(time(NULL)));
   headers.append("x-amz-meta-uid:"+str(getuid()));
-	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/octet-stream", date, headers.get(), resource));
+	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", contentType, date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
 	VERIFY(my_curl_easy_perform(curl.get()));
@@ -1411,6 +1433,23 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   pthread_mutex_init(&curl_progress_lock, NULL);
   pthread_mutex_init(&s3fs_descriptors_lock, NULL);
   pthread_mutex_init(&stat_cache_lock, NULL);
+  //
+  string line;
+  ifstream passwd("/etc/mime.types");
+  while (getline(passwd, line)) {
+    if (line[0]=='#')
+      continue;
+    stringstream tmp(line);
+    string mimeType;
+    tmp >> mimeType;
+    while (tmp) {
+      string ext;
+      tmp >> ext;
+      if (ext.size() == 0)
+        continue;
+      mimeTypes[ext] = mimeType; 
+    }
+  }
   return 0;
 }
 
