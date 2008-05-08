@@ -835,8 +835,28 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 
 static int
 s3fs_readlink(const char *path, char *buf, size_t size) {
-    cout << "###readlink[path=" << path << "]" << endl;
-    return -ENOENT;
+  
+  if (size > 0) {
+    --size; // reserve nil terminator
+    
+    cout << "readlink[path=" << path << "]" << endl;
+
+    auto_fd fd(get_local_fd(path));
+    
+    struct stat st;
+    if (fstat(fd.get(), &st) == -1)
+      Yikes(-errno);
+    
+    if (st.st_size < size)
+      size = st.st_size;
+
+    if (pread(fd.get(), buf, size, 0) == -1)
+      Yikes(-errno);
+    
+    buf[size] = 0;
+  }
+  
+  return 0;
 }
 
 typedef map<string, string> mimes_t;
@@ -979,7 +999,19 @@ s3fs_rmdir(const char *path) {
 static int
 s3fs_symlink(const char *from, const char *to) {
     cout << "symlink[from=" << from << "][to=" << to << "]" << endl;
-    return -EPERM;
+
+    headers_t headers;
+    headers["x-amz-meta-mode"] = str(S_IFLNK);
+    headers["x-amz-meta-mtime"] = str(time(NULL));
+
+    auto_fd fd(fileno(tmpfile()));
+    
+    if (pwrite(fd.get(), from, strlen(from), 0) == -1)
+      Yikes(-errno);
+
+    VERIFY(put_local_fd(to, headers, fd.get()));
+
+    return 0;
 }
 
 static int
