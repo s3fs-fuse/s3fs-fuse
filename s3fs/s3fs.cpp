@@ -44,6 +44,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <strings.h>
 
 using namespace std;
 
@@ -859,7 +860,13 @@ s3fs_readlink(const char *path, char *buf, size_t size) {
   return 0;
 }
 
-typedef map<string, string> mimes_t;
+struct case_insensitive_compare_func {
+  bool operator ()(const string &a, const string &b) {
+    return strcasecmp(a.c_str(), b.c_str()) < 0;
+  }
+};
+
+typedef map<string, string, case_insensitive_compare_func> mimes_t;
 
 static mimes_t mimeTypes;
 
