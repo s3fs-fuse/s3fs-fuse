@@ -1,8 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_INIT
- . $srcdir/version.sh
-AM_INIT_AUTOMAKE(s3fs,$VERSION_NUMBER)
+AM_INIT_AUTOMAKE(s3fs,1.0.0)
 
 AC_PROG_CC
 AC_PROG_CXX
