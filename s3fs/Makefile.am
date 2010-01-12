@@ -1,6 +1,0 @@
-
-LIBS = $(DEPS_LIBS)
-INCLUDES = $(DEPS_CFLAGS)
-
-bin_PROGRAMS = s3fs
-s3fs_SOURCES = s3fs.cpp
