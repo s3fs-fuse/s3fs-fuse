@@ -51,6 +51,9 @@ using namespace std;
 static long connect_timeout = 2;
 static time_t readwrite_timeout = 10;
 
+string
+urlEncode(const string &s);
+
 #define VERIFY(s) if (true) { \
 	int result = (s); \
 	if (result != 0) \
@@ -282,11 +285,34 @@ public:
 // -oretries=2
 static int retries = 2;
 
+static string bucket;
+
+static string prepare_url(const char* url){
+
+	syslog(LOG_DEBUG, "URL is %s", url);
+
+	string url_str = str(url);
+	string token =  str("/" + bucket);
+	int bucket_pos = url_str.find(token);
+	int bucket_size = token.size();
+
+	url_str = url_str.substr(0,7) + bucket + "." + url_str.substr(7,bucket_pos - 7)  + url_str.substr((bucket_pos + bucket_size));
+
+
+	syslog(LOG_DEBUG, "URL changed is %s", url_str.c_str());
+
+	return str(url_str);
+}
+
 /**
  * @return fuse return code
  */
 static int
 my_curl_easy_perform(CURL* curl, FILE* f = 0) {
+	char* url = new char[128];
+	curl_easy_getinfo( curl, CURLINFO_EFFECTIVE_URL , &url );
+	syslog(LOG_DEBUG, "connecting to URL %s", url);
+
 	// 1 attempt + retries...
 	int t = 1+retries;
 	while (t-- > 0) {
@@ -303,7 +329,8 @@ my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 				return -EIO;
 			if (responseCode == 404)
 				return -ENOENT;
-	    syslog(LOG_ERR, "###response=%ld", responseCode);
+		    syslog(LOG_ERR, "###response=%ld", responseCode);
+
 			if (responseCode < 500)
 				return -EIO;
 		} else
@@ -314,7 +341,7 @@ my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 	return -EIO;
 }
 
-static string bucket;
+
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static string host = "http://s3.amazonaws.com";
@@ -410,7 +437,6 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 		} while ((headers = headers->next) != 0);
 	}
 	StringToSign += resource;
-
 	const void* key = AWSSecretAccessKey.data();
 	int key_len = AWSSecretAccessKey.size();
 	const unsigned char* d = reinterpret_cast<const unsigned char*>(StringToSign.data());
@@ -511,7 +537,6 @@ get_headers(const char* path, headers_t& meta) {
 	string url(host + resource);
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
@@ -524,8 +549,12 @@ get_headers(const char* path, headers_t& meta) {
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
+	headers.append("Content-Type: ");
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
 	VERIFY(my_curl_easy_perform((curl.get())));
 
@@ -618,7 +647,6 @@ get_local_fd(const char* path) {
 			Yikes(-errno);
 
 		auto_curl curl;
-		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 		curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -629,11 +657,16 @@ get_local_fd(const char* path) {
 
 		auto_curl_slist headers;
 		string date = get_date();
+		syslog(LOG_INFO, "LOCAL FD");
 		headers.append("Date: "+date);
+  	        headers.append("Content-Type: ");
 		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, headers.get(), resource));
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
 		cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
+
+		string my_url = prepare_url(url.c_str());
+		curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
 		VERIFY(my_curl_easy_perform(curl.get(), f));
 
@@ -658,7 +691,6 @@ put_headers(const char* path, headers_t meta) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -698,6 +730,9 @@ put_headers(const char* path, headers_t meta) {
   syslog(LOG_INFO, "copy path=%s", path);
   cout << "copying[path=" << path << "]" << endl;
 
+  string my_url = prepare_url(url.c_str());
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
   VERIFY(my_curl_easy_perform(curl.get()));
 
   return 0;
@@ -717,7 +752,6 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 		Yikes(-errno);
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -760,6 +794,9 @@ put_local_fd(const char* path, headers_t meta, int fd) {
 	syslog(LOG_INFO, "upload path=%s size=%llu", path, st.st_size);
 	cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
 	VERIFY(my_curl_easy_perform(curl.get(), f));
 
 	return 0;
@@ -789,21 +826,23 @@ s3fs_getattr(const char *path, struct stat *stbuf) {
 	string url = host + resource;
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
 	curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
 
 	headers_t responseHeaders;
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+    	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
+    	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
 
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
+	headers.append("Content-Type: ");
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
 	VERIFY(my_curl_easy_perform(curl.get()));
 
@@ -899,7 +938,6 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	string url = host + resource;
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -919,6 +957,9 @@ s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", contentType, date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
 	VERIFY(my_curl_easy_perform(curl.get()));
 
 	return 0;
@@ -932,7 +973,6 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	string url = host + resource;
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -951,6 +991,9 @@ s3fs_mkdir(const char *path, mode_t mode) {
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
 	VERIFY(my_curl_easy_perform(curl.get()));
 
 	return 0;
@@ -965,7 +1008,6 @@ s3fs_unlink(const char *path) {
 	string url = host + resource;
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
@@ -973,8 +1015,12 @@ s3fs_unlink(const char *path) {
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
+	headers.append("Content-Type: ");
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
 	VERIFY(my_curl_easy_perform(curl.get()));
 
@@ -989,7 +1035,6 @@ s3fs_rmdir(const char *path) {
 	string url = host + resource;
 
 	auto_curl curl;
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
@@ -997,8 +1042,12 @@ s3fs_rmdir(const char *path) {
 	auto_curl_slist headers;
 	string date = get_date();
 	headers.append("Date: "+date);
+	headers.append("Content-Type: ");
 	headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("DELETE", "", date, headers.get(), resource));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+	string my_url = prepare_url(url.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
 	VERIFY(my_curl_easy_perform(curl.get()));
 
@@ -1139,7 +1188,7 @@ s3fs_write(const char *path, const char *buf, size_t size, off_t offset, struct 
 static int
 s3fs_statfs(const char *path, struct statvfs *stbuf) {
     // 256T
-	stbuf->f_bsize = 0X1000000;
+    stbuf->f_bsize = 0X1000000;
     stbuf->f_blocks = 0X1000000;
     stbuf->f_bfree = 0x1000000;
     stbuf->f_bavail = 0x1000000;
@@ -1249,7 +1298,9 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 
 		{
 		auto_curl curl;
-		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+		string my_url = prepare_url(url.c_str());
+
+		curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 		curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
@@ -1262,9 +1313,11 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 		auto_curl_slist headers;
 		string date = get_date();
 		headers.append("Date: "+date);
-		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, headers.get(), resource));
+		headers.append("ContentType: ");
+		headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, headers.get(), resource + "/"));
 
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
 
 		VERIFY(my_curl_easy_perform(curl.get()));
 		}
@@ -1304,6 +1357,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 									}
 								}
 							}
+
 							if (Key.size() > 0) {
 								if (filler(buf, mybasename(Key).c_str(), 0, 0))
 									break;
@@ -1317,7 +1371,8 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 								stuff.path = "/"+Key;
 
 								// libcurl 7.17 does deep copy of url... e.g., fc7 has libcurl 7.16... therefore, must deep copy "stable" url...
-								stuff.url = new string(url);
+								string my_url = prepare_url(url.c_str());
+								stuff.url = new string(my_url.c_str());
 								stuff.requestHeaders = 0;
 								stuff.responseHeaders = new headers_t;
 
@@ -1330,6 +1385,7 @@ s3fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, 
 								// requestHeaders
 								string date = get_date();
 								stuff.requestHeaders = curl_slist_append(stuff.requestHeaders, string("Date: "+date).c_str());
+								stuff.requestHeaders = curl_slist_append(stuff.requestHeaders, string("Content-Type: ").c_str());
 								stuff.requestHeaders = curl_slist_append(stuff.requestHeaders, string("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("HEAD", "", date, stuff.requestHeaders, resource)).c_str());
 								curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, stuff.requestHeaders);
 
