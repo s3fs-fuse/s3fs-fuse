@@ -464,16 +464,6 @@ calc_signature(string method, string content_type, string date, curl_slist* head
 
 // libcurl callback
 static size_t
-readCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
-  string *userString = static_cast<string *>(userPtr);
-  size_t count = min((*userString).size(), blockSize*numBlocks);
-  memcpy(data, (*userString).data(), count);
-  (*userString).erase(0, count);
-  return count;
-}
-
-// libcurl callback
-static size_t
 writeCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr) {
   string* userString = static_cast<string*>(userPtr);
   (*userString).append(reinterpret_cast<const char*>(data), blockSize*numBlocks);
