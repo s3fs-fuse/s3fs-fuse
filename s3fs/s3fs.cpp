@@ -908,13 +908,57 @@ static mimes_t mimeTypes;
 string
 lookupMimeType(string s) {
   string result("application/octet-stream");
-  string::size_type pos = s.find_last_of('.');
-  if (pos != string::npos) {
-    s = s.substr(1+pos, string::npos);
+  string::size_type last_pos = s.find_last_of('.');
+  string::size_type first_pos = s.find_first_of('.');
+  string prefix, ext, ext2;
+
+  // No dots in name, just return
+  if (last_pos == string::npos) {
+     return result;
   }
-  mimes_t::const_iterator iter = mimeTypes.find(s);
-  if (iter != mimeTypes.end())
+
+  // extract the last extension
+  if (last_pos != string::npos) {
+    ext = s.substr(1+last_pos, string::npos);
+  }
+
+   
+  if (last_pos != string::npos) {
+     // one dot was found, now look for another
+     if (first_pos != string::npos && first_pos < last_pos) {
+        prefix = s.substr(0, last_pos);
+        // Now get the second to last file extension
+        string::size_type next_pos = prefix.find_last_of('.');
+        if (next_pos != string::npos) {
+           ext2 = prefix.substr(1+next_pos, string::npos);
+        }
+     }
+  }
+
+  // if we get here, then we have an extension (ext)
+  mimes_t::const_iterator iter = mimeTypes.find(ext);
+  // if the last extension matches a mimeType, then return
+  // that mime type
+  if (iter != mimeTypes.end()) {
     result = (*iter).second;
+    return result;
+  }
+
+  // return with the default result if there isn't a second extension
+  if (first_pos == last_pos) {
+     return result;
+  }
+
+  // Didn't find a mime-type for the first extension
+  // Look for second extension in mimeTypes, return if found
+  iter = mimeTypes.find(ext2);
+  if (iter != mimeTypes.end()) {
+     result = (*iter).second;
+     return result;
+  }
+
+  // neither the last extension nor the second-to-last extension
+  // matched a mimeType, return the default mime type 
   return result;
 }
 
