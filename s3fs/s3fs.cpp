@@ -1647,7 +1647,7 @@ static struct fuse_operations s3fs_oper;
 
 int
 main(int argc, char *argv[]) {
-    memset(&s3fs_oper, sizeof(s3fs_oper), 0);
+    memset(&s3fs_oper, 0, sizeof(s3fs_oper));
 
     struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
     fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc);
