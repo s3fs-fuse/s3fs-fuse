@@ -10,7 +10,7 @@ install: all
 	cp -f s3fs /usr/bin
 	
 dist:
-	tar -cvzf s3fs-$(svnrev).tar.gz -C .. s3fs/COPYING s3fs/Makefile s3fs/s3fs.cpp
+	tar -cvzf s3fs-$(svnrev)-source.tar.gz -C .. s3fs/COPYING s3fs/Makefile s3fs/s3fs.cpp
 
 clean: 
 	rm -f s3fs s3fs.o
