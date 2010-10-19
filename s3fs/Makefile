@@ -1,3 +1,6 @@
+
+svnrev = $(shell svn log -q -l 1 | grep -e '^r[0-9]' | head -n 1 | awk '{print $$1}')
+
 all: s3fs
 
 s3fs : s3fs.cpp
@@ -6,8 +9,9 @@ s3fs : s3fs.cpp
 install: all
 	cp -f s3fs /usr/bin
 	
-dist: all
-	tar -cvzf s3fs.tar.gz -C .. s3fs/COPYING s3fs/Makefile s3fs/s3fs.cpp
-	
-clean:
+dist:
+	tar -cvzf s3fs-$(svnrev).tar.gz -C .. s3fs/COPYING s3fs/Makefile s3fs/s3fs.cpp
+
+clean: 
 	rm -f s3fs s3fs.o
+	rm -f s3fs-r*.tar.gz
