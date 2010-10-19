@@ -1733,6 +1733,14 @@ my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs
 	return 1;
 }
 
+string StringToLower(string strToConvert) {
+   //change each element of the string to lower case
+   for(unsigned int i = 0; i< strToConvert.length(); i++) {
+      strToConvert[i] = tolower(strToConvert[i]);
+   }
+   return strToConvert;
+}
+
 static struct fuse_operations s3fs_oper;
 
 int
@@ -1744,6 +1752,11 @@ main(int argc, char *argv[]) {
 
     if (bucket.size() == 0) {
     	cout << argv[0] << ": " << "missing bucket" << endl;
+    	exit(1);
+    }
+
+    if ( StringToLower(bucket) != bucket ) {
+    	cout << argv[0] << ": bucket \"" << bucket.c_str() << "\" - buckets with upper case characters in their names are not supported" << endl;
     	exit(1);
     }
 
