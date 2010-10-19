@@ -296,8 +296,11 @@ static string prepare_url(const char* url){
 	int bucket_pos = url_str.find(token);
 	int bucket_size = token.size();
 
-	url_str = url_str.substr(0,7) + bucket + "." + url_str.substr(7,bucket_pos - 7)  + url_str.substr((bucket_pos + bucket_size));
-
+        int clipBy = 7;
+        if(!strncasecmp(url_str.c_str(), "https://", 8)) {
+           clipBy = 8;
+        }
+        url_str = url_str.substr(0,clipBy) + bucket + "." + url_str.substr(clipBy,bucket_pos - clipBy)  + url_str.substr((bucket_pos + bucket_size));
 
 	syslog(LOG_DEBUG, "URL changed is %s", url_str.c_str());
 
