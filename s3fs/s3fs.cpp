@@ -1073,8 +1073,47 @@ s3fs_unlink(const char *path) {
 
 static int
 s3fs_rmdir(const char *path) {
-	cout << "unlink[path=" << path << "]" << endl;
+   cout << "rmdir[path=" << path << "]" << endl;
+ 
+   // need to check if the directory is empty
+   {
+      string responseText;
+      string resource = urlEncode(service_path + bucket);
+      string query = "delimiter=/&prefix=";
 
+      if (strcmp(path, "/") != 0)
+         query += urlEncode(string(path).substr(1) + "/");
+
+      query += "&max-keys=50";
+
+      string url = host + resource + "?"+ query;
+
+      auto_curl curl;
+      string my_url = prepare_url(url.c_str());
+      curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+      curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+
+      auto_curl_slist headers;
+      string date = get_date();
+      headers.append("Date: "+date);
+      headers.append("ContentType: ");
+      headers.append("Authorization: AWS "+AWSAccessKeyId+":"+calc_signature("GET", "", date, headers.get(), resource + "/"));
+
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+      VERIFY(my_curl_easy_perform(curl.get()));
+   
+      cout << endl << responseText << endl;
+      if (responseText.find ("<CommonPrefixes>") != std::string::npos || responseText.find ("<ETag>") != std::string::npos ) {
+         // directory is not empty
+         cout << "[path=" << path << "] not empty" << endl;
+         return -ENOTEMPTY;
+      }
+   }
+   // delete the directory
 	string resource = urlEncode(service_path + bucket + path);
 	string url = host + resource;
 
