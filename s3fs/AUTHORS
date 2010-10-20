@@ -1,0 +1,11 @@
+1. Randy Rizun <rrizun@gmail.com>
+
+Wrote from scratch the initial version of S3FS.
+
+2. Dan Moore <mooredan@suncup.net>
+
+Patches and improvements.
+
+3. Adrian Petrescu <apetresc@gmail.com>
+
+Converted the project to be autotools-based.
