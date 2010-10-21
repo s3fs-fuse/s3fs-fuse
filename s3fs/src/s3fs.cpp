@@ -1733,6 +1733,18 @@ string StringToLower(string strToConvert) {
 static struct fuse_operations s3fs_oper;
 
 int main(int argc, char *argv[]) {
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--version") == 0) {
+      cout << "Amazon Simple Storage Service File System  " << VERSION << endl;
+      cout << "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>" << endl;
+      cout << "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>" << endl;
+      cout << "This is free software: you are free to change and redistribute it." << endl;
+      cout << "There is NO WARRANTY, to the extent permitted by law." << endl;
+      exit(0);
+    }
+  }
+
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
 
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
