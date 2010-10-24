@@ -37,10 +37,11 @@
 
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <vector>
 #include <algorithm>
 #include <strings.h>
+
+#include "string_util.h"
 
 using namespace std;
 
@@ -58,31 +59,6 @@ class auto_fd {
  private:
   int fd;
 };
-
-template<typename T> string str(T value) {
-  stringstream tmp;
-  tmp << value;
-  return tmp.str();
-}
-
-inline string trim_left(const string& s, const string& t = SPACES) {
-  string d(s);
-  return d.erase(0, s.find_first_not_of(t)) ;
-}  // end of trim_left
-
-inline string trim_right(const string &s, const string &t = SPACES) {
-  string d(s);
-  string::size_type i(d.find_last_not_of(t));
-  if (i == string::npos)
-    return "";
-  else
-   return d.erase(d.find_last_not_of(t) + 1);
-}  // end of trim_right
-
-inline string trim(const string& s, const string& t = SPACES) {
-  string d(s);
-  return trim_left(trim_right(d, t), t);
-}  // end of trim
 
 class auto_lock {
  public:
@@ -1644,14 +1620,6 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
   return 1;
 }
 
-string StringToLower(string strToConvert) {
-  //change each element of the string to lower case
-  for(unsigned int i = 0; i< strToConvert.length(); i++) {
-     strToConvert[i] = tolower(strToConvert[i]);
-  }
-  return strToConvert;
-}
-
 int main(int argc, char *argv[]) {
 
   for (int i = 1; i < argc; ++i) {
@@ -1675,7 +1643,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  if ( StringToLower(bucket) != bucket ) {
+  if (lower(bucket) != bucket) {
     cout << argv[0] << ": bucket \"" << bucket.c_str() << 
         "\" - buckets with upper case characters in their names are not supported" << endl;
     exit(1);

@@ -31,8 +31,6 @@ using namespace std;
   return result; \
 }
 
-#define SPACES " \t\r\n"
-
 typedef pair<double, double> progress_t;
 
 static long connect_timeout = 2;
