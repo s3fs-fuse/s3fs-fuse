@@ -1624,7 +1624,7 @@ int main(int argc, char *argv[]) {
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--version") == 0) {
-      cout << "Amazon Simple Storage Service File System  " << VERSION << endl;
+      cout << "Amazon Simple Storage Service File System " << VERSION << endl;
       cout << "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>" << endl;
       cout << "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>" << endl;
       cout << "This is free software: you are free to change and redistribute it." << endl;
