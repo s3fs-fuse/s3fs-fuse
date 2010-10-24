@@ -18,9 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#define FUSE_USE_VERSION 26
+#include "s3fs.h"
 
-#include <fuse.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,39 +29,20 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <libgen.h>
-#include <pthread.h>
-#include <curl/curl.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <pwd.h>
+#include <grp.h>
 #include <syslog.h>
 
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <sstream>
-#include <stack>
-#include <string>
 #include <vector>
 #include <algorithm>
 #include <strings.h>
 
 using namespace std;
-
-static long connect_timeout = 2;
-static time_t readwrite_timeout = 10;
-
-string urlEncode(const string &s);
-
-#define VERIFY(s) if (true) { \
-  int result = (s); \
-  if (result != 0) \
-    return result; \
-}
-
-#define Yikes(result) if (true) { \
-  syslog(LOG_ERR,"%d###result=%d", __LINE__, result); \
-  return result; \
-}
 
 class auto_fd {
  public:
@@ -79,14 +59,11 @@ class auto_fd {
   int fd;
 };
 
-template<typename T>
-string str(T value) {
+template<typename T> string str(T value) {
   stringstream tmp;
   tmp << value;
   return tmp.str();
 }
-
-#define SPACES " \t\r\n"
 
 inline string trim_left(const string& s, const string& t = SPACES) {
   string d(s);
@@ -119,13 +96,6 @@ class auto_lock {
  private:
   pthread_mutex_t& lock;
 };
-
-static stack<CURL*> curl_handles;
-static pthread_mutex_t curl_handles_lock;
-
-typedef pair<double, double> progress_t;
-static map<CURL*, time_t> curl_times;
-static map<CURL*, progress_t> curl_progress;
 
 // homegrown timeout mechanism
 static int my_curl_progress(
@@ -279,11 +249,6 @@ class auto_curl_slist {
   struct curl_slist* slist;
 };
 
-// -oretries=2
-static int retries = 2;
-
-static string bucket;
-
 static string prepare_url(const char* url) {
   syslog(LOG_DEBUG, "URL is %s", url);
 
@@ -341,28 +306,6 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
   return -EIO;
 }
 
-
-static string AWSAccessKeyId;
-static string AWSSecretAccessKey;
-static string host = "http://s3.amazonaws.com";
-static mode_t root_mode = 0;
-static string service_path = "/";
-
-// if .size()==0 then local file cache is disabled
-static string use_cache;
-
-static string use_rrs;
-
-// private, public-read, public-read-write, authenticated-read
-static string default_acl("private");
-
-// key=path
-typedef map<string, struct stat> stat_cache_t;
-static stat_cache_t stat_cache;
-static pthread_mutex_t stat_cache_lock;
-
-static const char hexAlphabet[] = "0123456789ABCDEF";
-
 /**
  * urlEncode a fuse path,
  * taking into special consideration "/",
@@ -387,16 +330,6 @@ string urlEncode(const string &s) {
   }
   return result;
 }
-
-// http headers
-typedef map<string, string> headers_t;
-
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-
-static const EVP_MD* evp_md = EVP_sha1();
 
 /**
  * Returns the current date
@@ -507,8 +440,6 @@ static int mkdirp(const string& path, mode_t mode) {
   }
   return 0;
 }
-
-#include <openssl/md5.h>
 
 /**
  * @return fuse return code
@@ -869,7 +800,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
 }
 
 static int s3fs_readlink(const char *path, char *buf, size_t size) {
-
   if (size > 0) {
     --size; // reserve nil terminator
 
@@ -1181,8 +1111,6 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   return put_headers(path, meta);
 }
 
-#include <pwd.h>
-#include <grp.h>
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   cout << "chown[path=" << path << "]" << endl;
@@ -1218,11 +1146,6 @@ static int s3fs_truncate(const char *path, off_t size) {
   return 0;
 }
 
-// fd -> flags
-typedef map<int, int> s3fs_descriptors_t;
-static s3fs_descriptors_t s3fs_descriptors;
-static pthread_mutex_t s3fs_descriptors_lock;
-
 static int s3fs_open(const char *path, struct fuse_file_info *fi) {
     cout << "open[path=" << path << "][flags=" << fi->flags << "]" <<  endl;
 
@@ -1238,7 +1161,8 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
   return 0;
 }
 
-static int s3fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+static int s3fs_read(
+    const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   //###cout << "read: " << path << endl;
   int res = pread(fi->fh, buf, size, offset);
   if (res == -1)
@@ -1566,8 +1490,6 @@ static int s3fs_readdir(
   return 0;
 }
 
-static pthread_mutex_t *mutex_buf = NULL;
-
 /**
  * OpenSSL locking function.
  *
@@ -1729,8 +1651,6 @@ string StringToLower(string strToConvert) {
   }
   return strToConvert;
 }
-
-static struct fuse_operations s3fs_oper;
 
 int main(int argc, char *argv[]) {
 
