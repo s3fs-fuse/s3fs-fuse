@@ -21,12 +21,15 @@ Downloading & Compiling:
 In order to download s3fs, user the following command:
 svn checkout http://s3fs.googlecode.com/svn/trunk/ s3fs-read-only
 
-Go inside the directory that has been created (s3fs-read-only/s3fs) and run: make
+Go inside the directory that has been created (s3fs-read-only/s3fs) and run: ./autogen.sh
+This will generate a number of scripts in the project directory, including a configure script which you should run with: ./configure
+If configure succeeded, you can now run: make. If it didn't, make sure you meet the dependencies above.
 This should compile the code. If everything goes OK, you'll be greated with "ok!" at the end and you'll have a binary file called "s3fs"
+in the src/ directory.
 
-As root (you can use su, su -, sudo) do: "make inatall" -this will copy the "s3fs" binary to /usr/bin.
+As root (you can use su, su -, sudo) do: "make install" -this will copy the "s3fs" binary to /usr/bin.
 
-Congratulations. S3fs is now compiled and Installed.
+Congratulations. S3fs is now compiled and installed.
 
 Usage:
 ------
@@ -54,5 +57,5 @@ s3fs should be working fine with S3 storage. However, There are couple of limita
 * There is no full UID/GID support yet, everything looks as "root" and if you allow others to access the bucket, others can erase files. There is, however, permissions support built in.
 * Currently s3fs could hang the CPU if you have lots of time-outs. This is *NOT* a fault of s3fs but rather libcurl. This happends when you try to copy thousands of files in 1 session, it doesn't happend when you upload hundreds of files or less.
 * CentOS 4.x/RHEL 4.x users - if you use the kernel that shipped with your distribution and didn't upgrade to the latest kernel RedHat/CentOS gives, you might have a problem loading the "fuse" kernel. Please upgrade to the latest kernel (2.6.16 or above) and make sure "fuse" kernel module is compiled and loadable since FUSE requires this kernel module and s3fs requires it as well.
-* Moving/renaming/erasing files takes time since the whole file needs to be accessed first. A workaround could be touse s3fs's cache support with the use_cache option.
+* Moving/renaming/erasing files takes time since the whole file needs to be accessed first. A workaround could be to use s3fs's cache support with the use_cache option.
 
