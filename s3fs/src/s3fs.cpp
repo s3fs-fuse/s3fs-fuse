@@ -440,8 +440,10 @@ int get_headers(const char* path, headers_t& meta) {
   string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("HEAD", "", date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
@@ -551,8 +553,10 @@ int get_local_fd(const char* path) {
     syslog(LOG_INFO, "LOCAL FD");
     headers.append("Date: " + date);
     headers.append("Content-Type: ");
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+    if (public_bucket.substr(0,1) != "1") {
+      headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
         calc_signature("GET", "", date, headers.get(), resource));
+    }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
     cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
@@ -617,8 +621,10 @@ static int put_headers(const char* path, headers_t meta) {
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
   }
 
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", ContentType, date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   //###rewind(f);
@@ -685,8 +691,10 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
   }
   
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", ContentType, date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   //###rewind(f);
@@ -738,8 +746,10 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("HEAD", "", date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -894,8 +904,10 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time(NULL)));
   headers.append("x-amz-meta-uid:" + str(getuid()));
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", contentType, date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
@@ -928,8 +940,10 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time(NULL)));
   headers.append("x-amz-meta-uid:" + str(getuid()));
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
@@ -956,8 +970,10 @@ static int s3fs_unlink(const char *path) {
   string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("DELETE", "", date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
@@ -996,8 +1012,10 @@ static int s3fs_rmdir(const char *path) {
       string date = get_date();
       headers.append("Date: " + date);
       headers.append("ContentType: ");
-      headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      if (public_bucket.substr(0,1) != "1") {
+        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
           calc_signature("GET", "", date, headers.get(), resource + "/"));
+      }
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -1024,8 +1042,10 @@ static int s3fs_rmdir(const char *path) {
   string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
-  headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("DELETE", "", date, headers.get(), resource));
+  }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
@@ -1280,8 +1300,10 @@ static int s3fs_readdir(
       string date = get_date();
       headers.append("Date: " + date);
       headers.append("ContentType: ");
-      headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      if (public_bucket.substr(0,1) != "1") {
+        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
           calc_signature("GET", "", date, headers.get(), resource + "/"));
+      }
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -1361,9 +1383,11 @@ static int s3fs_readdir(
                     stuff.requestHeaders, string("Date: " + date).c_str());
                 stuff.requestHeaders = curl_slist_append(
                     stuff.requestHeaders, string("Content-Type: ").c_str());
-                stuff.requestHeaders = curl_slist_append(
+                if (public_bucket.substr(0,1) != "1") {
+                  stuff.requestHeaders = curl_slist_append(
                     stuff.requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
                         calc_signature("HEAD", "", date, stuff.requestHeaders, resource)).c_str());
+                }
                 curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, stuff.requestHeaders);
 
                 // responseHeaders
@@ -1596,6 +1620,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       use_rrs = strchr(arg, '=') + 1;
       return 0;
     }
+    if (strstr(arg, "public_bucket=") != 0) {
+      public_bucket = strchr(arg, '=') + 1;
+      return 0;
+    }
     if (strstr(arg, "host=") != 0) {
       host = strchr(arg, '=') + 1;
       return 0;
@@ -1649,6 +1677,8 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  // Need error checking of command line arguments
+
   if (AWSSecretAccessKey.size() == 0) {
     string line;
     ifstream passwd("/etc/passwd-s3fs");
@@ -1669,16 +1699,19 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (AWSAccessKeyId.size() == 0) {
-    cout << argv[0] << ": " <<
-        "missing accessKeyId.. see /etc/passwd-s3fs or use, e.g., -o accessKeyId=aaa" << endl;
-    exit(1);
-  }
-  if (AWSSecretAccessKey.size() == 0) {
-    cout << argv[0] << ": " <<
+  if (public_bucket.substr(0,1) != "1") {
+    if (AWSAccessKeyId.size() == 0) {
+      cout << argv[0] << ": " <<
+        "missing accessKeyId.. see /etc/passwd-s3fs or use, e.g., -o accessKeyId=aaa" <<
+        endl;
+      exit(1);
+    }
+    if (AWSSecretAccessKey.size() == 0) {
+      cout << argv[0] << ": " <<
         "missing secretAccessKey... see /etc/passwd-s3fs or use, e.g., -o secretAccessKey=bbb" <<
         endl;
-    exit(1);
+      exit(1);
+    }
   }
 
   s3fs_oper.getattr = s3fs_getattr;

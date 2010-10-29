@@ -53,6 +53,7 @@ static string service_path = "/";
 // if .size()==0 then local file cache is disabled
 static string use_cache;
 static string use_rrs;
+static string public_bucket;
 
 // TODO(apetresc): make this an enum
 // private, public-read, public-read-write, authenticated-read
