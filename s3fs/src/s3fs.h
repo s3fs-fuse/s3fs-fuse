@@ -44,11 +44,14 @@ static map<CURL*, progress_t> curl_progress;
 static int retries = 2;
 
 static string bucket;
+static string mountpoint;
+static string program_name;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
 static string service_path = "/";
+static string passwd_file = "";
 
 // if .size()==0 then local file cache is disabled
 static string use_cache;

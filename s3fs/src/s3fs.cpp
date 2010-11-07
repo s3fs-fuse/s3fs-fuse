@@ -34,6 +34,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <syslog.h>
+#include <getopt.h>
 
 #include <fstream>
 #include <iostream>
@@ -1580,16 +1581,264 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   return put_headers(path, meta);
 }
 
+// This function needs to be a little bit more
+// robust - add support for per bucket credentials
+static void read_passwd_file (void) {
+    string line;
+    ifstream PF(passwd_file.c_str());
+    if (PF.good()) {
+      while (getline(PF, line)) {
+        if (line[0]=='#')
+          continue;
+
+          size_t pos = line.find(':');
+          if (pos != string::npos) {
+            if (AWSAccessKeyId.size() == 0) {
+              AWSAccessKeyId = line.substr(0, pos);
+            }
+            if (AWSSecretAccessKey.size() == 0) {
+              if (line.substr(0, pos) == AWSAccessKeyId) {
+                AWSSecretAccessKey = line.substr(pos + 1, string::npos);
+              }
+            }
+          }
+        }
+      }
+  return;
+}
+
+/////////////////////////////////////////////////////////////
+// get_access_keys
+//
+// called only when were are not mounting a 
+// public bucket
+//
+// Here is the order precedence for getting the
+// keys:
+//
+// 1 - from the command line  (security risk)
+// 2 - from a password file specified on the command line
+// 3 - from environment variables
+// 4 - from the users ~/.passwd-s3fs
+// 5 - from /etc/passwd-s3fs
+/////////////////////////////////////////////////////////////
+static void get_access_keys (void) {
+
+  // should be redundant
+  if (public_bucket.substr(0,1) == "1") {
+     return;
+  }
+
+  // 1 - keys specified on the command line
+  if (AWSAccessKeyId.size() > 0 && AWSSecretAccessKey.size() > 0) {
+     return;
+  }
+
+  // 2 - was specified on the command line
+  if (passwd_file.size() > 0) {
+    ifstream PF(passwd_file.c_str());
+    if (PF.good()) {
+       PF.close();
+       read_passwd_file();
+       return;
+    } else {
+      fprintf(stderr, "%s: specified passwd_file is not readable\n",
+              program_name.c_str());
+      exit(1);
+    }
+  }
+
+  // 3  - environment variables
+  char * AWSACCESSKEYID;
+  char * AWSSECRETACCESSKEY;
+
+  AWSACCESSKEYID     = getenv("AWSACCESSKEYID");
+  AWSSECRETACCESSKEY = getenv("AWSSECRETACCESSKEY");
+  if (AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL) {
+    if ((AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
+        (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
+
+      fprintf(stderr, "%s: if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too\n",
+              program_name.c_str());
+      exit(1);
+    }
+    AWSAccessKeyId.assign(AWSACCESSKEYID);
+    AWSSecretAccessKey.assign(AWSSECRETACCESSKEY);
+    return;
+  }
+
+  // 4 - from the default location in the users home directory
+  char * HOME;
+  HOME = getenv ("HOME");
+  if (HOME != NULL) {
+     passwd_file.assign(HOME);
+     passwd_file.append("/.passwd-s3fs");
+     ifstream PF(passwd_file.c_str());
+     if (PF.good()) {
+       PF.close();
+       read_passwd_file();
+       return;
+     }
+   }
+
+  // 5 - from the system default location
+  passwd_file.assign("/etc/passwd-s3fs"); 
+  ifstream PF(passwd_file.c_str());
+  if (PF.good()) {
+    PF.close();
+    read_passwd_file();
+    return;
+  }
+  
+  fprintf(stderr, "%s: could not determine how to establish security credentials\n",
+           program_name.c_str());
+  exit(1);
+}
+
+static void show_usage (void) {
+  printf("Usage: %s BUCKET MOUNTPOINT [OPTION]...\n",
+    program_name.c_str());
+}
+
+static void show_help (void) {
+  show_usage();
+  printf( 
+    "\n"
+    "Mount an Amazon S3 bucket as a file system.\n"
+    "\n"
+    "   General forms for s3fs and FUSE/mount options:\n"
+    "      -o opt[,opt...]\n"
+    "      -o opt [-o opt] ...\n"
+    "\n"
+    "s3fs Options:\n"
+    "\n"
+    "   All s3fs options must given in the form where \"opt\" is:\n"
+    "\n"
+    "             <option_name>=<option_value>\n"
+    "\n"
+    "   accessKeyId\n"
+    "   secretAccessKey\n"
+    "      - command line over-rides of these settings\n"
+    "\n"
+    "   default_acl (default=\"private\")\n"
+    "     - the default canned acl to apply to all written s3 objects\n"
+    "          see http://aws.amazon.com/documentation/s3/ for the \n"
+    "          full list of canned acls\n"
+    "\n"
+    "   retries (default=\"2\")\n"
+    "      - number of times to retry a failed s3 transaction\n"
+    "\n"
+    "   use_cache (default=\"\" which means disabled)\n"
+    "      - local folder to use for local file cache\n"
+    "\n"
+    "   use_rrs (default=\"\" which means diabled)\n"
+    "      - use Amazon's Reduced Redundancy Storage when set to 1\n"
+    "\n"
+    "   public_bucket (default=\"\" which means disabled)\n"
+    "      - anonymously mount a public bucket when set to 1\n"
+    "\n"
+    "   passwd_file (default=\"\")\n"
+    "      - specify which s3fs password file to use\n"
+    "\n"
+    "   connect_timeout (default=\"2\" seconds)\n"
+    "      - time to wait for connection before giving up\n"
+    "\n"
+    "   readwrite_timeout (default=\"10\" seconds)\n"
+    "      - time to wait between read/write activity before giving up\n"
+    "\n"
+    "   url (default=\"http://s3.amazonaws.com\")\n"
+    "      - sets the url to use to access amazon s3\n"
+    "\n"
+    "FUSE/mount Options:\n"
+    "\n"
+    "   Most of the generic mount options described in 'man mount' are\n"
+    "   supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime,\n"
+    "   noatime, sync async, dirsync).  Filesystems are mounted with\n"
+    "   '-onodev,nosuid' by default, which can only be overridden by a\n"
+    "   privileged user.\n"
+    "   \n"
+    "   There are many FUSE specific mount options that can be specified.\n"
+    "   e.g. allow_other  See the FUSE's README for the full set.\n"
+    "\n"
+    "Miscellaneous Options:\n"
+    "\n"
+    " -h, --help        Output this help.\n"
+    "     --version     Output version info.\n"
+    "\n"
+    "\n"
+    "Report bugs to <s3fs-devel@googlegroups.com>\n"
+    "s3fs home page: <http://code.google.com/p/s3fs/>\n"
+  );
+  exit(0);
+}
+
+static void show_version(void) {
+  printf(
+  "Amazon Simple Storage Service File System %s\n"
+  "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>\n"
+  "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>\n"
+  "This is free software: you are free to change and redistribute it.\n"
+  "There is NO WARRANTY, to the extent permitted by law.\n",
+  VERSION );
+  exit(0);
+}
+
+// This function gets called repeatedly by the
+// fuse option parser
 static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs) {
+
   if (key == FUSE_OPT_KEY_NONOPT) {
+    // tricky way to set the bucket name
+    // the first plain option is assumed to be
+    // the bucket
     if (bucket.size() == 0) {
       bucket = arg;
       return 0;
     } else {
       struct stat buf;
-      // its the mountpoint... what is its mode?
+      if (mountpoint.size() != 0) {
+         fprintf(stderr, "%s: argument MOUNTPOINT %s was all ready provided, %s is an invalid option\n",
+                 program_name.c_str(), mountpoint.c_str(), arg);
+         show_usage();
+         exit(1);
+      }
+      // record the mountpoint
+      mountpoint = arg;
+      // it is the mountpoint...do some error checking, fuse will do more for us later
       if (stat(arg, &buf) != -1) {
+        int isempty = 1;
+        // record mode for later usage
         root_mode = buf.st_mode;
+        
+        if (!(S_ISDIR( buf.st_mode ))) {
+          fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
+                  program_name.c_str(), mountpoint.c_str());
+          exit(1);
+        } else {
+          struct dirent *ent;
+          DIR *dp = opendir(mountpoint.c_str());
+          if (dp == NULL) {
+            fprintf(stderr, "%s: failed to open MOUNTPOINT: %s for reading, error: %s\n", 
+                    program_name.c_str(), mountpoint.c_str(), strerror(errno));
+            exit(1); 
+          }
+          while ((ent = readdir(dp)) != NULL) {
+            if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+              isempty = 0;
+              break;
+            }
+          }
+          closedir(dp);
+          if (!isempty) {
+            fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty\n", 
+                    program_name.c_str(), mountpoint.c_str());
+            exit(1);
+          }
+        }
+      } else {
+         fprintf(stderr, "%s: accessing MOUNTPOINT %s had an error: %s\n", 
+                 program_name.c_str(), mountpoint.c_str(), strerror(errno));
+         exit(1);
       }
     }
   }
@@ -1618,11 +1867,29 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "use_rrs=") != 0) {
       use_rrs = strchr(arg, '=') + 1;
+      if (strcmp(use_rrs.c_str(), "1") == 0 || 
+          strcmp(use_rrs.c_str(), "")  == 0 ) {
+        return 0;
+      } else {
+         fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
+                 program_name.c_str());
+         exit(1);
+      }
+    }
+    if (strstr(arg, "passwd_file=") != 0) {
+      passwd_file = strchr(arg, '=') + 1;
       return 0;
     }
     if (strstr(arg, "public_bucket=") != 0) {
       public_bucket = strchr(arg, '=') + 1;
-      return 0;
+      if (strcmp(public_bucket.c_str(), "1") == 0 || 
+          strcmp(public_bucket.c_str(), "")  == 0 ) {
+        return 0;
+      } else {
+         fprintf(stderr, "%s: poorly formed argument to option: public_bucket\n", 
+                 program_name.c_str());
+         exit(1);
+      }
     }
     if (strstr(arg, "host=") != 0) {
       host = strchr(arg, '=') + 1;
@@ -1648,71 +1915,112 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
   return 1;
 }
 
+
+
 int main(int argc, char *argv[]) {
 
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--version") == 0) {
-      cout << "Amazon Simple Storage Service File System " << VERSION << endl;
-      cout << "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>" << endl;
-      cout << "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>" << endl;
-      cout << "This is free software: you are free to change and redistribute it." << endl;
-      cout << "There is NO WARRANTY, to the extent permitted by law." << endl;
-      exit(0);
-    }
-  }
+  int ch;
+  int option_index = 0; 
 
+  static const struct option long_opts[] = {
+    {"help",    no_argument, NULL, 'h'},
+    {"version", no_argument, 0, 0},
+    {0, 0, 0, 0}};
+
+   // get progam name - emulate basename 
+   size_t found;
+   program_name.assign(argv[0]);
+   found = program_name.find_last_of("/");
+   if(found != string::npos) {
+      program_name.replace(0, found+1, "");
+   }
+
+   while ((ch = getopt_long(argc, argv, "ho:", long_opts, &option_index)) != -1) {
+     switch (ch) {
+     case 0:
+       if (strcmp(long_opts[option_index].name, "version") == 0) {
+          show_version();
+       }
+       break;
+
+     case 'h':
+       show_help();
+       break;
+
+     case 'o':
+       break;
+
+     default:
+       exit(1);
+     }
+   }
+
+  // clear this structure
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
 
+  // This is the fuse-style parser for the arguments
+  // after which the bucket name and mountpoint names
+  // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc);
 
+  // The first plain argument is the bucket
   if (bucket.size() == 0) {
-    cout << argv[0] << ": " << "missing bucket" << endl;
+    fprintf(stderr, "%s: missing BUCKET argument\n", program_name.c_str());
+    show_usage();
     exit(1);
   }
 
+  // bucket names cannot contain upper case characters
   if (lower(bucket) != bucket) {
-    cout << argv[0] << ": bucket \"" << bucket.c_str() << 
-        "\" - buckets with upper case characters in their names are not supported" << endl;
+    fprintf(stderr, "%s: BUCKET %s, upper case characters are not supported\n",
+      program_name.c_str(), bucket.c_str());
     exit(1);
   }
 
-  // Need error checking of command line arguments
-
-  if (AWSSecretAccessKey.size() == 0) {
-    string line;
-    ifstream passwd("/etc/passwd-s3fs");
-    while (getline(passwd, line)) {
-      if (line[0]=='#')
-        continue;
-      size_t pos = line.find(':');
-      if (pos != string::npos) {
-        // is accessKeyId missing?
-        if (AWSAccessKeyId.size() == 0)
-          AWSAccessKeyId = line.substr(0, pos);
-        // is secretAccessKey missing?
-        if (AWSSecretAccessKey.size() == 0) {
-          if (line.substr(0, pos) == AWSAccessKeyId)
-            AWSSecretAccessKey = line.substr(pos + 1, string::npos);
-        }
-      }
-    }
+  // The second plain argument is the mountpoint
+  // if the option was given, we all ready checked for a
+  // readable, non-empty directory, this checks determines
+  // if the mountpoint option was ever supplied
+  if (mountpoint.size() == 0) {
+    fprintf(stderr, "%s: missing MOUNTPOINT argument\n", program_name.c_str());
+    show_usage();
+    exit(1);
   }
 
+  // error checking of command line arguments for compatability
+  if ((AWSSecretAccessKey.size() > 0 && AWSAccessKeyId.size() == 0) ||
+      (AWSSecretAccessKey.size() == 0 && AWSAccessKeyId.size() > 0)) {
+    fprintf(stderr, "%s: if one access key is specified, both keys need to be specified\n",
+      program_name.c_str());
+    exit(1);
+  }
+
+  if (public_bucket.substr(0,1) == "1" && 
+       (AWSSecretAccessKey.size() > 0 || AWSAccessKeyId.size() > 0)) {
+    fprintf(stderr, "%s: specifying both public_bucket and the access keys options is invalid\n",
+      program_name.c_str());
+    exit(1);
+  }
+
+  if (passwd_file.size() > 0 && 
+       (AWSSecretAccessKey.size() > 0 || AWSAccessKeyId.size() > 0)) {
+    fprintf(stderr, "%s: specifying both passwd_file and the access keys options is invalid\n",
+      program_name.c_str());
+    exit(1);
+  }
+  
   if (public_bucket.substr(0,1) != "1") {
-    if (AWSAccessKeyId.size() == 0) {
-      cout << argv[0] << ": " <<
-        "missing accessKeyId.. see /etc/passwd-s3fs or use, e.g., -o accessKeyId=aaa" <<
-        endl;
-      exit(1);
-    }
-    if (AWSSecretAccessKey.size() == 0) {
-      cout << argv[0] << ": " <<
-        "missing secretAccessKey... see /etc/passwd-s3fs or use, e.g., -o secretAccessKey=bbb" <<
-        endl;
-      exit(1);
-    }
+     get_access_keys();
+     if(AWSSecretAccessKey.size() == 0 || AWSAccessKeyId.size() == 0) {
+        fprintf(stderr, "%s: could not establish security credentials, check documentation\n",
+         program_name.c_str());
+        exit(1);
+     }
   }
+
+  // There's room for more command line error checking
+
 
   s3fs_oper.getattr = s3fs_getattr;
   s3fs_oper.readlink = s3fs_readlink;
@@ -1738,5 +2046,6 @@ int main(int argc, char *argv[]) {
   s3fs_oper.access = s3fs_access;
   s3fs_oper.utimens = s3fs_utimens;
 
+  // now passing things off to fuse, fuse will finish evaluating the command line args
   return fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
 }
