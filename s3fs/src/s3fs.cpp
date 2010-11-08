@@ -1581,29 +1581,84 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   return put_headers(path, meta);
 }
 
-// This function needs to be a little bit more
-// robust - add support for per bucket credentials
+//////////////////////////////////////////////////////////////////
+// read_passwd_file
+//
+// Support for per bucket credentials
+// 
+// Format for the credentials file:
+// [bucket:]AccessKeyId:SecretAccessKey
+// 
+// Lines beginning with # are considered comments
+// and ignored, as are empty lines
+//
+// Uncommented lines without the ":" character are flagged as
+// an error, so are lines with spaces or tabs
+//
+// only one default key pair is allowed, but not required
+//////////////////////////////////////////////////////////////////
 static void read_passwd_file (void) {
-    string line;
-    ifstream PF(passwd_file.c_str());
-    if (PF.good()) {
-      while (getline(PF, line)) {
-        if (line[0]=='#')
-          continue;
+  string line;
+  string field1, field2, field3;
+  size_t first_pos = string::npos;
+  size_t last_pos = string::npos;
+  bool default_found = 0;
 
-          size_t pos = line.find(':');
-          if (pos != string::npos) {
-            if (AWSAccessKeyId.size() == 0) {
-              AWSAccessKeyId = line.substr(0, pos);
-            }
-            if (AWSSecretAccessKey.size() == 0) {
-              if (line.substr(0, pos) == AWSAccessKeyId) {
-                AWSSecretAccessKey = line.substr(pos + 1, string::npos);
-              }
-            }
-          }
-        }
+  ifstream PF(passwd_file.c_str());
+  if (PF.good()) {
+    while (getline(PF, line)) {
+      if (line[0]=='#') {
+        continue;
       }
+      if (line.size() == 0) {
+        continue;
+      }
+
+      first_pos = line.find_first_of(" \t");
+      if (first_pos != string::npos) {
+        printf ("%s: invalid line in passwd file, found whitespace character\n", 
+           program_name.c_str());
+        exit(1);
+      }
+
+      first_pos = line.find_first_of(":");
+      if (first_pos == string::npos) {
+        printf ("%s: invalid line in passwd file, no \":\" separator found\n", 
+           program_name.c_str());
+        exit(1);
+      }
+      last_pos = line.find_last_of(":");
+
+      if (first_pos != last_pos) {
+        // bucket specified
+        field1 = line.substr(0,first_pos);
+        field2 = line.substr(first_pos + 1, last_pos - first_pos - 1);
+        field3 = line.substr(last_pos + 1, string::npos);
+      } else {
+        // no bucket specified - original style - found default key
+        if (default_found == 1) {
+          printf ("%s: more than one default key pair found in passwd file\n", 
+            program_name.c_str());
+          exit(1);
+        }
+        default_found = 1;
+        field1.assign("");
+        field2 = line.substr(0,first_pos);
+        field3 = line.substr(first_pos + 1, string::npos);
+        AWSAccessKeyId = field2;
+        AWSSecretAccessKey = field3;
+      }
+
+      // does the bucket we are mounting match this passwd file entry?
+      // if so, use that key pair, otherwise use the default key, if found,
+      // will be used
+      if (field1.size() != 0 && field1 == bucket) {
+         AWSAccessKeyId = field2;
+         AWSSecretAccessKey = field3;
+         break;
+      }
+    }
+  }
   return;
 }
 
@@ -1677,7 +1732,12 @@ static void get_access_keys (void) {
      if (PF.good()) {
        PF.close();
        read_passwd_file();
-       return;
+       // It is possible that the user's file was there but
+       // contained no key pairs i.e. commented out
+       // in that case, go look in the final location
+       if (AWSAccessKeyId.size() > 0 && AWSSecretAccessKey.size() > 0) {
+          return;
+       }
      }
    }
 
@@ -2017,10 +2077,11 @@ int main(int argc, char *argv[]) {
          program_name.c_str());
         exit(1);
      }
+     // More error checking on the access key pair can be done
+     // like checking for appropriate lengths and characters  
   }
 
   // There's room for more command line error checking
-
 
   s3fs_oper.getattr = s3fs_getattr;
   s3fs_oper.readlink = s3fs_readlink;
