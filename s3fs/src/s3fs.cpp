@@ -1582,6 +1582,55 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
 }
 
 //////////////////////////////////////////////////////////////////
+// check_passwd_file_perms
+// 
+// expect that global passwd_file variable contains
+// a non-empty value and is readable by the current user
+//
+// Check for too permissive access to the file
+// help save users from themselves via a security hole
+//
+// only two options: return or error out
+//////////////////////////////////////////////////////////////////
+static void check_passwd_file_perms (void) {
+
+  struct stat info;
+
+  // let's get the file info
+  if (stat(passwd_file.c_str(), &info) != 0) {
+    fprintf (stderr, "%s: unexpected error from stat(%s, ) \n", 
+        program_name.c_str(), passwd_file.c_str());
+    exit(1);
+  } 
+
+  // return error if any file has others permissions 
+  if ((info.st_mode & S_IROTH) ||
+      (info.st_mode & S_IWOTH) || 
+      (info.st_mode & S_IXOTH))  {
+    fprintf (stderr, "%s: credentials file %s should not have others permissions\n", 
+        program_name.c_str(), passwd_file.c_str());
+    exit(1);
+  }
+
+  // Any local file should not have any group permissions 
+  if (passwd_file != "/etc/passwd-s3fs") {
+    if ((info.st_mode & S_IRGRP) ||
+        (info.st_mode & S_IWGRP) || 
+        (info.st_mode & S_IXGRP))  {
+      fprintf (stderr, "%s: credentials file %s should not have group permissions\n", 
+        program_name.c_str(), passwd_file.c_str());
+      exit(1);
+    }
+  }
+
+  // check for owner execute permissions?
+
+  // /etc/passwd-s3fs can have group permissions 
+
+  return;
+}
+
+//////////////////////////////////////////////////////////////////
 // read_passwd_file
 //
 // Support for per bucket credentials
@@ -1603,6 +1652,11 @@ static void read_passwd_file (void) {
   size_t first_pos = string::npos;
   size_t last_pos = string::npos;
   bool default_found = 0;
+
+  // if you got here, the password file
+  // exists and is readable by the
+  // current user, check for permissions
+  check_passwd_file_perms();
 
   ifstream PF(passwd_file.c_str());
   if (PF.good()) {
