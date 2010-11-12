@@ -227,7 +227,7 @@ class auto_curl_slist {
 };
 
 static string prepare_url(const char* url) {
-  syslog(LOG_DEBUG, "URL is %s", url);
+  if(debug) syslog(LOG_DEBUG, "URL is %s", url);
 
   string url_str = str(url);
   string token =  str("/" + bucket);
@@ -241,7 +241,7 @@ static string prepare_url(const char* url) {
   url_str = url_str.substr(0, clipBy) + bucket + "." + url_str.substr(clipBy, bucket_pos - clipBy)
       + url_str.substr((bucket_pos + bucket_size));
 
-  syslog(LOG_DEBUG, "URL changed is %s", url_str.c_str());
+  if(debug) syslog(LOG_DEBUG, "URL changed is %s", url_str.c_str());
 
   return str(url_str);
 }
@@ -252,7 +252,7 @@ static string prepare_url(const char* url) {
 static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
   char* url = new char[128];
   curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &url);
-  syslog(LOG_DEBUG, "connecting to URL %s", url);
+  if(debug) syslog(LOG_DEBUG, "connecting to URL %s", url);
 
   // 1 attempt + retries...
   int t = retries + 1;
@@ -1878,6 +1878,8 @@ static void show_help (void) {
     "\n"
     " -h, --help        Output this help.\n"
     "     --version     Output version info.\n"
+    " -d  --debug       Turn on DEBUG messages to syslog. Specifying -d\n"
+    "                   twice turns on FUSE debug messages to STDOUT.\n"
     "\n"
     "\n"
     "Report bugs to <s3fs-devel@googlegroups.com>\n"
@@ -2025,6 +2027,26 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       host = strchr(arg, '=') + 1;
       return 0;
     }
+    // debug option
+    //
+    // The first -d (or --debug) enables s3fs debug
+    // the second -d option is passed to fuse to turn on its
+    // debug output
+    if ( (strcmp(arg, "-d") == 0) || (strcmp(arg, "--debug") == 0) ) {
+      if (!debug) {
+        debug = 1;
+        return 0;
+      } else {
+         // fuse doesn't understand "--debug", but it 
+         // understands -d, but we can't pass -d back
+         // to fuse, in this case just ignore the
+         // second --debug if is was provided.  If we
+         // do not ignore this, fuse emits an error
+         if(strcmp(arg, "--debug") == 0) {
+            return 0;
+         } 
+      }
+    }
   }
   return 1;
 }
@@ -2039,6 +2061,7 @@ int main(int argc, char *argv[]) {
   static const struct option long_opts[] = {
     {"help",    no_argument, NULL, 'h'},
     {"version", no_argument, 0, 0},
+    {"debug",   no_argument, NULL, 'd'},
     {0, 0, 0, 0}};
 
    // get progam name - emulate basename 
@@ -2049,7 +2072,7 @@ int main(int argc, char *argv[]) {
       program_name.replace(0, found+1, "");
    }
 
-   while ((ch = getopt_long(argc, argv, "ho:", long_opts, &option_index)) != -1) {
+   while ((ch = getopt_long(argc, argv, "dho:", long_opts, &option_index)) != -1) {
      switch (ch) {
      case 0:
        if (strcmp(long_opts[option_index].name, "version") == 0) {
@@ -2062,6 +2085,9 @@ int main(int argc, char *argv[]) {
        break;
 
      case 'o':
+       break;
+
+     case 'd':
        break;
 
      default:

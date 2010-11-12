@@ -52,6 +52,7 @@ static string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
 static string service_path = "/";
 static string passwd_file = "";
+static bool debug = 0;
 
 // if .size()==0 then local file cache is disabled
 static string use_cache;
