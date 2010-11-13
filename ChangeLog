@@ -1,0 +1,10 @@
+ChangeLog for S3FS
+------------------
+
+Version 1.1 -- Mon Oct 18 2010
+
+Dan Moore reopens the project and fixes various issues that had accumulated in the tracker. Adrian Petrescu converts the project to autotools and posts it to GitHub.
+
+Version 1.0 -- 2008
+
+Randy Rizun releases a basic version of S3FS on Google Code.
