@@ -1880,6 +1880,7 @@ static void show_help (void) {
     "     --version     Output version info.\n"
     " -d  --debug       Turn on DEBUG messages to syslog. Specifying -d\n"
     "                   twice turns on FUSE debug messages to STDOUT.\n"
+    " -f                FUSE foreground option - do not run as daemon.\n"
     "\n"
     "\n"
     "Report bugs to <s3fs-devel@googlegroups.com>\n"
@@ -2072,7 +2073,7 @@ int main(int argc, char *argv[]) {
       program_name.replace(0, found+1, "");
    }
 
-   while ((ch = getopt_long(argc, argv, "dho:", long_opts, &option_index)) != -1) {
+   while ((ch = getopt_long(argc, argv, "dho:f", long_opts, &option_index)) != -1) {
      switch (ch) {
      case 0:
        if (strcmp(long_opts[option_index].name, "version") == 0) {
@@ -2088,6 +2089,9 @@ int main(int argc, char *argv[]) {
        break;
 
      case 'd':
+       break;
+
+     case 'f':
        break;
 
      default:
