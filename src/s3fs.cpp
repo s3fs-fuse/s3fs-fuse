@@ -1581,6 +1581,192 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   return put_headers(path, meta);
 }
 
+///////////////////////////////////////////////////////////
+// s3fs_check_service
+//
+// Preliminary check on credentials and bucket
+// If the network is up when s3fs is started and the
+// bucket is not a public bucket, then connect to S3 service
+// with the bucket's credentials.  This will indicate if
+// the credentials are valid or not.  If the connection
+// is successful, then check the list of available buckets
+// against the bucket name that we are trying to mount.
+//
+// This function either just returns (in cases where the
+// network is unavailable, a public bucket, etc...) of
+// exits with an error message (where the connection is
+// successful, but returns an error code or if the bucket
+// isn't found in the service).
+////////////////////////////////////////////////////////////
+static void s3fs_check_service(void) {
+  // cout << "s3fs_check_service" << endl;
+
+  string responseText;
+  long responseCode;
+  
+  string resource = "/";
+  string url = host + resource;
+
+  auto_curl curl;
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+
+  auto_curl_slist headers;
+  string date = get_date();
+  headers.append("Date: " + date);
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      calc_signature("GET", "", date, headers.get(), resource));
+  } else {
+     // This operation is only valid if done by an authenticated sender
+     return;
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+  // Need to know if the curl response is just a timeout possibly
+  // indicating the the network is down or if the connection was
+  // acutally made - my_curl_easy_perform doesn't differentiate
+  // between the two
+
+  CURLcode curlCode;
+
+  int t = retries + 1;
+  while (t-- > 0) {
+    curlCode = curl_easy_perform(curl.get());
+    if (curlCode == 0) {
+      break;
+    }
+    if (curlCode != CURLE_OPERATION_TIMEDOUT) {
+      if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
+         break;
+      } else {
+         // Unknown error - log it and return
+         syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));;
+         return;
+      }
+    }
+  }
+ 
+  // We get here under three conditions:
+  //  - too many timeouts
+  //  - connection, but a HTTP error
+  //  - success
+
+  if(debug) 
+    syslog(LOG_DEBUG, "curlCode: %i   msg: %s\n", 
+           curlCode, curl_easy_strerror(curlCode));
+
+  // network is down
+  if (curlCode == CURLE_OPERATION_TIMEDOUT) {
+     return;
+  }
+
+  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+  if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", responseCode);
+
+  // Connection was made, but there is a HTTP error
+  if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
+     if (responseCode == 403) {
+       fprintf (stderr, "%s: HTTP: 403 Forbidden - it is likely that your credentials are invalid\n", 
+         program_name.c_str());
+       exit(1);
+     }
+     fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
+       program_name.c_str(), responseCode);
+     exit(1);
+  }
+
+  // Success
+  if (responseCode != 200) {
+     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", responseCode);
+     return;
+  }
+
+  // Parse the return info and see if the bucket is available  
+
+  xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+  if (doc == NULL) {
+     return;
+  } 
+  if (doc->children == NULL) {
+     xmlFreeDoc(doc);
+     return;
+  }
+
+
+  bool bucketFound = 0;
+  bool matchFound = 0;
+
+  // Parse the XML looking for the bucket names
+
+  for (xmlNodePtr cur_node = doc->children->children; 
+                  cur_node != NULL; 
+                  cur_node = cur_node->next) {
+
+    string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+
+    if (cur_node_name == "Buckets") {
+      if (cur_node->children != NULL) {
+        for (xmlNodePtr sub_node = cur_node->children;
+                        sub_node != NULL;
+                        sub_node = sub_node->next) {
+
+          if (sub_node->type == XML_ELEMENT_NODE) {
+            string elementName = reinterpret_cast<const char*>(sub_node->name);
+
+            if (elementName == "Bucket") { 
+               string Name;
+
+              for (xmlNodePtr b_node = sub_node->children;
+                              b_node != NULL;
+                              b_node = b_node->next) {
+
+                if (b_node->type == XML_ELEMENT_NODE) {
+                  string elementName = reinterpret_cast<const char*>(b_node->name);
+                  if (b_node->children != NULL) {
+                    if (b_node->children->type == XML_TEXT_NODE) {
+                      if (elementName == "Name") {
+                        Name = reinterpret_cast<const char *>(b_node->children->content);
+                        bucketFound = 1; 
+                        if(Name == bucket) {
+                           matchFound = 1;
+                        }
+                      }
+                    }
+                  }
+                }
+              } // for (xmlNodePtr b_node = sub_node->children;
+            }
+          }
+        } // for (xmlNodePtr sub_node = cur_node->children;
+      }
+    }
+  } // for (xmlNodePtr cur_node = doc->children->children; 
+
+  xmlFreeDoc(doc);
+
+  if (bucketFound == 0) {
+    fprintf (stderr, "%s: the service specified by the credentials does not contain any buckets\n", 
+        program_name.c_str());
+    exit(1);
+  }
+
+  if (matchFound == 0) {
+    fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
+        program_name.c_str(), bucket.c_str());
+    exit(1);
+  }
+
+  // cout << "responseText: " << responseText << endl;
+
+  return;
+}
+
 //////////////////////////////////////////////////////////////////
 // check_passwd_file_perms
 // 
@@ -2166,6 +2352,18 @@ int main(int argc, char *argv[]) {
   }
 
   // There's room for more command line error checking
+
+
+
+  // Does the bucket exist?
+  // if the network is up, check for valid
+  // credentials and if the bucket exixts
+  // skip check if mounting a public bucket
+  if (public_bucket.substr(0,1) != "1") {
+     s3fs_check_service();
+  }
+
+
 
   s3fs_oper.getattr = s3fs_getattr;
   s3fs_oper.readlink = s3fs_readlink;
