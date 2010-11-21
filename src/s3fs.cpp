@@ -1667,7 +1667,7 @@ static void s3fs_check_service(void) {
   }
 
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
-  if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", responseCode);
+  if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
 
   // Connection was made, but there is a HTTP error
   if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
@@ -1677,13 +1677,13 @@ static void s3fs_check_service(void) {
        exit(1);
      }
      fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
-       program_name.c_str(), responseCode);
+       program_name.c_str(), (int)responseCode);
      exit(1);
   }
 
   // Success
   if (responseCode != 200) {
-     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", responseCode);
+     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
      return;
   }
 
@@ -2016,10 +2016,6 @@ static void show_help (void) {
     "\n"
     "             <option_name>=<option_value>\n"
     "\n"
-    "   accessKeyId\n"
-    "   secretAccessKey\n"
-    "      - command line over-rides of these settings\n"
-    "\n"
     "   default_acl (default=\"private\")\n"
     "     - the default canned acl to apply to all written s3 objects\n"
     "          see http://aws.amazon.com/documentation/s3/ for the \n"
@@ -2148,12 +2144,14 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
 
   if (key == FUSE_OPT_KEY_OPT) {
     if (strstr(arg, "accessKeyId=") != 0) {
-      AWSAccessKeyId = strchr(arg, '=') + 1;
-      return 0;
+      fprintf(stderr, "%s: option accessKeyId is no longer supported\n", 
+              program_name.c_str());
+      exit(1);
     }
     if (strstr(arg, "secretAccessKey=") != 0) {
-      AWSSecretAccessKey = strchr(arg, '=') + 1;
-      return 0;
+      fprintf(stderr, "%s: option secretAccessKey is no longer supported\n", 
+              program_name.c_str());
+      exit(1);
     }
     if (strstr(arg, "default_acl=") != 0) {
       default_acl = strchr(arg, '=') + 1;
