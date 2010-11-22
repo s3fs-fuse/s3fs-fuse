@@ -1532,19 +1532,25 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   pthread_mutex_init(&stat_cache_lock, NULL);
   //
   string line;
-  ifstream passwd("/etc/mime.types");
-  while (getline(passwd, line)) {
-    if (line[0]=='#')
-      continue;
-    stringstream tmp(line);
-    string mimeType;
-    tmp >> mimeType;
-    while (tmp) {
-      string ext;
-      tmp >> ext;
-      if (ext.size() == 0)
+  ifstream MT("/etc/mime.types");
+  if (MT.good()) {
+    while (getline(MT, line)) {
+      if (line[0]=='#') {
         continue;
-      mimeTypes[ext] = mimeType;
+      }
+      if (line.size() == 0) {
+        continue;
+      }
+      stringstream tmp(line);
+      string mimeType;
+      tmp >> mimeType;
+      while (tmp) {
+        string ext;
+        tmp >> ext;
+        if (ext.size() == 0)
+          continue;
+        mimeTypes[ext] = mimeType;
+      }
     }
   }
   return 0;
