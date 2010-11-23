@@ -1022,7 +1022,7 @@ static int s3fs_rmdir(const char *path) {
 
       VERIFY(my_curl_easy_perform(curl.get()));
 
-      cout << endl << responseText << endl;
+      // cout << endl << responseText << endl;
       if (responseText.find ("<CommonPrefixes>") != std::string::npos ||
           responseText.find ("<ETag>") != std::string::npos ) {
         // directory is not empty
@@ -1077,6 +1077,29 @@ static int s3fs_symlink(const char *from, const char *to) {
 static int s3fs_rename(const char *from, const char *to) {
   cout << "rename[from=" << from << "][to=" << to << "]" << endl;
 
+  // renaming (moving) directories is not supported at this time
+  // if the first argument is a directory, report the limitation
+  // and do nothing, this prevents the directory's children
+  // from just disappearing
+  //
+  // TODO: support directory renaming
+
+  struct stat buf;
+  int result;
+  string fullpath;
+
+  fullpath = mountpoint;
+  fullpath.append(from);
+
+  result = stat(fullpath.c_str(), &buf);
+  if (result == -1) {
+    syslog(LOG_ERR, "###file: %s  code:%d   error:%s", from, result, strerror(errno));
+  } else {
+    if (S_ISDIR( buf.st_mode )) {
+      return -ENOTSUP;
+    }
+  }
+
   // preserve meta headers across rename
   headers_t meta;
   VERIFY(get_headers(from, meta));
@@ -1086,7 +1109,7 @@ static int s3fs_rename(const char *from, const char *to) {
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
 
-  int result = put_headers(to, meta);
+  result = put_headers(to, meta);
   if (result != 0)
     return result;
 
