@@ -1674,9 +1674,20 @@ static void s3fs_check_service(void) {
       if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
          break;
       } else {
-         // Unknown error - log it and return
-         syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));;
-         return;
+        syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
+        switch (curlCode) {
+          case CURLE_SSL_CACERT:
+            fprintf (stderr, "%s: curlCode: %i -- %s\n", 
+               program_name.c_str(),
+               curlCode,
+               curl_easy_strerror(curlCode));
+               exit(1);
+            break;
+          default:
+            // Unknown error - return
+            return;
+        }
       }
     }
   }
