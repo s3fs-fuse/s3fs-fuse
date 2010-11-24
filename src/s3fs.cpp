@@ -1890,6 +1890,13 @@ static void read_passwd_file (void) {
         exit(1);
       }
 
+      first_pos = line.find_first_of("[");
+      if (first_pos != string::npos && first_pos == 0) {
+        printf ("%s: invalid line in passwd file, found a bracket \"[\" character\n", 
+           program_name.c_str());
+        exit(1);
+      }
+
       first_pos = line.find_first_of(":");
       if (first_pos == string::npos) {
         printf ("%s: invalid line in passwd file, no \":\" separator found\n", 
