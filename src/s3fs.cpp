@@ -363,6 +363,7 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
              exit(1);
         break;
 
+#ifdef CURLE_PEER_FAILED_VERIFICATION
         case CURLE_PEER_FAILED_VERIFICATION:
           first_pos = bucket.find_first_of(".");
           if (first_pos != string::npos) {
@@ -379,6 +380,7 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
           }
           exit(1);
         break;
+#endif
            
         default:
           // Unknown error - return
@@ -1815,6 +1817,7 @@ static void s3fs_check_service(void) {
                exit(1);
             break;
 
+#ifdef CURLE_PEER_FAILED_VERIFICATION
           case CURLE_PEER_FAILED_VERIFICATION:
             fprintf (stderr, "%s: s3fs_check_service: curlCode: %i -- %s\n", 
                program_name.c_str(),
@@ -1822,6 +1825,7 @@ static void s3fs_check_service(void) {
                curl_easy_strerror(curlCode));
                exit(1);
           break;
+#endif
 
           default:
             // Unknown error - return
@@ -2010,6 +2014,7 @@ static void s3fs_check_service(void) {
                exit(1);
             break;
 
+#ifdef CURLE_PEER_FAILED_VERIFICATION
             case CURLE_PEER_FAILED_VERIFICATION:
               first_pos = bucket.find_first_of(".");
               if (first_pos != string::npos) {
@@ -2026,6 +2031,7 @@ static void s3fs_check_service(void) {
               }
               exit(1);
             break;
+#endif
 
           default:
             // Unknown error - return
