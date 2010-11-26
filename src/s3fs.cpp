@@ -246,6 +246,62 @@ static string prepare_url(const char* url) {
   return str(url_str);
 }
 
+////////////////////////////////////////////////////////////
+// locate_bundle
+////////////////////////////////////////////////////////////
+static void locate_bundle(void) {
+
+  // See if environment variable CURL_CA_BUNDLE is set
+  // if so, check it, if it is a good path, then set the
+  // curl_ca_bundle variable to it
+  char * CURL_CA_BUNDLE; 
+
+  if (curl_ca_bundle.size() == 0) {
+    CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
+    if (CURL_CA_BUNDLE != NULL)  {
+      // check for existance and readability of the file
+      ifstream BF(CURL_CA_BUNDLE);
+      if (BF.good()) {
+         BF.close();
+         curl_ca_bundle.assign(CURL_CA_BUNDLE); 
+      } else {
+        fprintf(stderr, "%s: file specified by CURL_CA_BUNDLE environment variable is not readable\n",
+                program_name.c_str());
+        exit(1);
+      }
+      return;
+    }
+  }
+
+  // not set by Environment Variable
+  // look in likely locations
+
+  ///////////////////////////////////////////
+  // from curl's (7.21.2) acinclude.m4 file
+  ///////////////////////////////////////////
+  // dnl CURL_CHECK_CA_BUNDLE
+  // dnl -------------------------------------------------
+  // dnl Check if a default ca-bundle should be used
+  // dnl
+  // dnl regarding the paths this will scan:
+  // dnl /etc/ssl/certs/ca-certificates.crt Debian systems
+  // dnl /etc/pki/tls/certs/ca-bundle.crt Redhat and Mandriva
+  // dnl /usr/share/ssl/certs/ca-bundle.crt old(er) Redhat
+  // dnl /usr/local/share/certs/ca-root.crt FreeBSD
+  // dnl /etc/ssl/cert.pem OpenBSD
+  // dnl /etc/ssl/certs/ (ca path) SUSE
+
+  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
+  if (BF.good()) {
+     BF.close();
+     curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
+     return;
+  }
+
+  return;
+}
+
+
 /**
  * @return fuse return code
  */
@@ -253,6 +309,10 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
   char* url = new char[128];
   curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &url);
   if(debug) syslog(LOG_DEBUG, "connecting to URL %s", url);
+
+  if (curl_ca_bundle.size() != 0) {
+    curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+  } 
 
   // 1 attempt + retries...
   int t = retries + 1;
@@ -275,7 +335,32 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
       if (responseCode < 500)
         return -EIO;
     } else {
-      syslog(LOG_ERR, "###%s", curl_easy_strerror(curlCode));;
+      switch (curlCode) {
+        case CURLE_SSL_CACERT:
+          // try to locate cert, if successful, then set the
+          // option and continue
+          if (curl_ca_bundle.size() == 0) {
+             locate_bundle();
+             if (curl_ca_bundle.size() != 0) {
+                t++;
+                curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+                continue;
+             }
+          }
+          syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+             curl_easy_strerror(curlCode));;
+          fprintf (stderr, "%s: curlCode: %i -- %s\n", 
+             program_name.c_str(),
+             curlCode,
+             curl_easy_strerror(curlCode));
+             exit(1);
+          break;
+          default:
+            // Unknown error - return
+            syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
+            break;
+      }
     }
     syslog(LOG_ERR, "###retrying...");
   }
@@ -1400,6 +1485,9 @@ static int s3fs_readdir(
                 curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
                 curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
                 curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
+                if (curl_ca_bundle.size() != 0) {
+                   curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+                } 
 
                 // requestHeaders
                 string date = get_date();
@@ -1674,10 +1762,20 @@ static void s3fs_check_service(void) {
       if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
          break;
       } else {
-        syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
         switch (curlCode) {
           case CURLE_SSL_CACERT:
+            // try to locate cert, if successful, then set the
+            // option and continue
+            if (curl_ca_bundle.size() == 0) {
+               locate_bundle();
+               if (curl_ca_bundle.size() != 0) {
+                  t++;
+                  curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+                  continue;
+               }
+            }
+            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
             fprintf (stderr, "%s: curlCode: %i -- %s\n", 
                program_name.c_str(),
                curlCode,
@@ -1686,6 +1784,8 @@ static void s3fs_check_service(void) {
             break;
           default:
             // Unknown error - return
+            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
             return;
         }
       }

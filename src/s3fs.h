@@ -49,6 +49,7 @@ static string program_name;
 static string AWSAccessKeyId;
 static string AWSSecretAccessKey;
 static string host = "http://s3.amazonaws.com";
+static string curl_ca_bundle;
 static mode_t root_mode = 0;
 static string service_path = "/";
 static string passwd_file = "";
