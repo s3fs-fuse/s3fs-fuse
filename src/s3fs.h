@@ -58,6 +58,7 @@ static bool debug = 0;
 // if .size()==0 then local file cache is disabled
 static string use_cache;
 static string use_rrs;
+static string ssl_verify_hostname = "1";
 static string public_bucket;
 
 // TODO(apetresc): make this an enum

@@ -310,9 +310,16 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
   curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &url);
   if(debug) syslog(LOG_DEBUG, "connecting to URL %s", url);
 
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  if (ssl_verify_hostname.substr(0,1) == "0") {
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+  }
+
   if (curl_ca_bundle.size() != 0) {
     curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
   } 
+
+  size_t first_pos = string::npos;
 
   // 1 attempt + retries...
   int t = retries + 1;
@@ -354,12 +361,31 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
              curlCode,
              curl_easy_strerror(curlCode));
              exit(1);
-          break;
-          default:
-            // Unknown error - return
-            syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
-            break;
+        break;
+
+        case CURLE_PEER_FAILED_VERIFICATION:
+          first_pos = bucket.find_first_of(".");
+          if (first_pos != string::npos) {
+            fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
+            fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
+            fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
+            fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
+            fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
+          } else {
+            fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
+               program_name.c_str(),
+               curlCode,
+               curl_easy_strerror(curlCode));
+          }
+          exit(1);
+        break;
+           
+        default:
+          // Unknown error - return
+          syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
+             curl_easy_strerror(curlCode));;
+          exit(1);
+        break;
       }
     }
     syslog(LOG_ERR, "###retrying...");
@@ -1485,6 +1511,9 @@ static int s3fs_readdir(
                 curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
                 curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
                 curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
+                if (ssl_verify_hostname.substr(0,1) == "0") {
+                  curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0);
+                }
                 if (curl_ca_bundle.size() != 0) {
                    curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
                 } 
@@ -1732,6 +1761,9 @@ static void s3fs_check_service(void) {
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
+  if (ssl_verify_hostname.substr(0,1) == "0") {
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+  }
 
   auto_curl_slist headers;
   string date = get_date();
@@ -1782,6 +1814,15 @@ static void s3fs_check_service(void) {
                curl_easy_strerror(curlCode));
                exit(1);
             break;
+
+          case CURLE_PEER_FAILED_VERIFICATION:
+            fprintf (stderr, "%s: s3fs_check_service: curlCode: %i -- %s\n", 
+               program_name.c_str(),
+               curlCode,
+               curl_easy_strerror(curlCode));
+               exit(1);
+          break;
+
           default:
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
@@ -1902,7 +1943,135 @@ static void s3fs_check_service(void) {
     exit(1);
   }
 
-  // cout << "responseText: " << responseText << endl;
+  // once we arrive here, that means that our preliminary connection
+  // worked and the bucket matches the credentials provided
+  // now check for bucket location using the virtual host name
+  // this should expose the certificate mismatch that may occur
+  // when using https:// (SSL) and a bucket name that contains periods
+  resource = urlEncode(service_path + bucket);
+  url = host + resource + "?location";
+
+  // printf("resource: %s\n", resource.c_str());
+  // printf("bucket: %s\n", bucket.c_str());
+  // printf("service_path: %s\n", service_path.c_str());
+  // printf("url: %s\n", url.c_str());
+  // printf("host: %s\n", host.c_str());
+
+  string my_url = prepare_url(url.c_str());
+
+  // printf("my_url: %s\n", my_url.c_str());
+
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  auto_curl_slist new_headers;
+  date = get_date();
+  new_headers.append("Date: " + date);
+  new_headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      calc_signature("GET", "", date, new_headers.get(), resource + "/?location"));
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, new_headers.get());
+
+  // Need to know if the curl response is just a timeout possibly
+  // indicating the the network is down or if the connection was
+  // acutally made - my_curl_easy_perform doesn't differentiate
+  // between the two
+  responseText.clear();
+
+  size_t first_pos = string::npos;
+
+  t = retries + 1;
+  while (t-- > 0) {
+    curlCode = curl_easy_perform(curl.get());
+    if (curlCode == 0) {
+      break;
+    }
+    if (curlCode != CURLE_OPERATION_TIMEDOUT) {
+      if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
+         break;
+      } else {
+        switch (curlCode) {
+          case CURLE_SSL_CACERT:
+            // try to locate cert, if successful, then set the
+            // option and continue
+            if (curl_ca_bundle.size() == 0) {
+               locate_bundle();
+               if (curl_ca_bundle.size() != 0) {
+                  t++;
+                  curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+                  continue;
+               }
+            }
+            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
+            fprintf (stderr, "%s: curlCode: %i -- %s\n", 
+               program_name.c_str(),
+               curlCode,
+               curl_easy_strerror(curlCode));
+               exit(1);
+            break;
+
+            case CURLE_PEER_FAILED_VERIFICATION:
+              first_pos = bucket.find_first_of(".");
+              if (first_pos != string::npos) {
+                fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
+                fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
+                fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
+                fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
+                fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
+              } else {
+                fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
+                   program_name.c_str(),
+                   curlCode,
+                   curl_easy_strerror(curlCode));
+              }
+              exit(1);
+            break;
+
+          default:
+            // Unknown error - return
+            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+               curl_easy_strerror(curlCode));;
+            return;
+        }
+      }
+    }
+  }
+
+  // We get here under three conditions:
+  //  - too many timeouts
+  //  - connection, but a HTTP error
+  //  - success
+
+  if(debug) {
+    syslog(LOG_DEBUG, "curlCode: %i   msg: %s\n", 
+           curlCode, curl_easy_strerror(curlCode));
+  }
+
+  // network is down
+  if (curlCode == CURLE_OPERATION_TIMEDOUT) {
+     return;
+  }
+
+  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+  if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+
+  // Connection was made, but there is a HTTP error
+  if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
+     if (responseCode == 403) {
+       fprintf (stderr, "%s: HTTP: 403 Forbidden - it is likely that your credentials are invalid\n", 
+         program_name.c_str());
+       exit(1);
+     }
+     fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
+       program_name.c_str(), (int)responseCode);
+     exit(1);
+  }
+
+  // Success
+  if (responseCode != 200) {
+     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+     return;
+  }
 
   return;
 }
@@ -2324,6 +2493,17 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
          exit(1);
       }
     }
+    if (strstr(arg, "ssl_verify_hostname=") != 0) {
+      ssl_verify_hostname = strchr(arg, '=') + 1;
+      if (strcmp(ssl_verify_hostname.c_str(), "1") == 0 || 
+          strcmp(ssl_verify_hostname.c_str(), "0") == 0 ) { 
+        return 0;
+      } else {
+         fprintf(stderr, "%s: poorly formed argument to option: ssl_verify_hostname\n", 
+                 program_name.c_str());
+         exit(1);
+      }
+    }
     if (strstr(arg, "passwd_file=") != 0) {
       passwd_file = strchr(arg, '=') + 1;
       return 0;
@@ -2397,7 +2577,7 @@ int main(int argc, char *argv[]) {
     {0, 0, 0, 0}};
 
    // get progam name - emulate basename 
-   size_t found;
+   size_t found = string::npos;
    program_name.assign(argv[0]);
    found = program_name.find_last_of("/");
    if(found != string::npos) {
@@ -2498,6 +2678,31 @@ int main(int argc, char *argv[]) {
 
   // There's room for more command line error checking
 
+  // Check to see if the bucket name contains periods and https (SSL) is
+  // being used. This is a known limitation:
+  // http://docs.amazonwebservices.com/AmazonS3/latest/dev/
+  // The Developers Guide suggests that either use HTTP of for us to write
+  // our own certificate verification logic.
+  // For now, this will be unsupported unless we get a request for it to
+  // be supported. In that case, we have a couple of options:
+  // - implement a command line option that bypasses the verify host 
+  //   but doesn't bypass verifying the certificate
+  // - write our own host verification (this might be complex)
+  // See issue #128
+  
+  /* 
+  if (ssl_verify_hostname.substr(0,1) == "1") {
+    found = bucket.find_first_of(".");
+    if(found != string::npos) {
+      found = host.find("https:");
+      if(found != string::npos) {
+        fprintf(stderr, "%s: Using https and a bucket name with periods is unsupported.\n",
+          program_name.c_str());
+        exit(1);
+      }
+    }
+  }
+  */
 
 
   // Does the bucket exist?
