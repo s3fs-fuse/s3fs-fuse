@@ -664,7 +664,7 @@ int get_local_fd(const char* path) {
 
     auto_curl_slist headers;
     string date = get_date();
-    syslog(LOG_INFO, "LOCAL FD");
+    if(debug) syslog(LOG_DEBUG, "LOCAL FD");
     headers.append("Date: " + date);
     headers.append("Content-Type: ");
     if (public_bucket.substr(0,1) != "1") {
@@ -743,7 +743,7 @@ static int put_headers(const char* path, headers_t meta) {
 
   //###rewind(f);
 
-  syslog(LOG_INFO, "copy path=%s", path);
+  if(debug) syslog(LOG_DEBUG, "copy path=%s", path);
   cout << "copying[path=" << path << "]" << endl;
 
   string my_url = prepare_url(url.c_str());
@@ -813,7 +813,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 
   //###rewind(f);
 
-  syslog(LOG_INFO, "upload path=%s size=%llu", path, st.st_size);
+  if(debug) syslog(LOG_DEBUG, "upload path=%s size=%llu", path, st.st_size);
   cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 
   string my_url = prepare_url(url.c_str());
@@ -1699,7 +1699,7 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
 }
 
 static void s3fs_destroy(void*) {
-  syslog(LOG_INFO, "destroy");
+  if(debug) syslog(LOG_DEBUG, "destroy");
   // openssl
   CRYPTO_set_id_callback(NULL);
   CRYPTO_set_locking_callback(NULL);
@@ -2385,6 +2385,8 @@ static void show_help (void) {
     " -d  --debug       Turn on DEBUG messages to syslog. Specifying -d\n"
     "                   twice turns on FUSE debug messages to STDOUT.\n"
     " -f                FUSE foreground option - do not run as daemon.\n"
+    " -s                FUSE singlethread option\n"
+    "                   disable multi-threaded operation\n"
     "\n"
     "\n"
     "Report bugs to <s3fs-devel@googlegroups.com>\n"
@@ -2590,7 +2592,7 @@ int main(int argc, char *argv[]) {
       program_name.replace(0, found+1, "");
    }
 
-   while ((ch = getopt_long(argc, argv, "dho:f", long_opts, &option_index)) != -1) {
+   while ((ch = getopt_long(argc, argv, "dho:fs", long_opts, &option_index)) != -1) {
      switch (ch) {
      case 0:
        if (strcmp(long_opts[option_index].name, "version") == 0) {
@@ -2609,6 +2611,9 @@ int main(int argc, char *argv[]) {
        break;
 
      case 'f':
+       break;
+
+     case 's':
        break;
 
      default:
