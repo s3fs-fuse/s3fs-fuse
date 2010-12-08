@@ -1751,6 +1751,8 @@ static void s3fs_check_service(void) {
 
   string responseText;
   long responseCode;
+  xmlDocPtr doc;
+  xmlNodePtr cur_node;
   
   string resource = "/";
   string url = host + resource;
@@ -1784,7 +1786,7 @@ static void s3fs_check_service(void) {
   // acutally made - my_curl_easy_perform doesn't differentiate
   // between the two
 
-  CURLcode curlCode;
+  CURLcode curlCode, ccode;
 
   int t = retries + 1;
   while (t-- > 0) {
@@ -1856,13 +1858,43 @@ static void s3fs_check_service(void) {
 
   // Connection was made, but there is a HTTP error
   if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-     if (responseCode == 403) {
-       fprintf (stderr, "%s: HTTP: 403 Forbidden - it is likely that your credentials are invalid\n", 
-         program_name.c_str());
-       exit(1);
+     // Try again, but this time grab the data
+     curl_easy_setopt(curl, CURLOPT_FAILONERROR, false);
+     ccode = curl_easy_perform(curl.get());
+
+     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+
+    
+     fprintf (stderr, "%s: CURLE_HTTP_RETURNED_ERROR\n", program_name.c_str());
+     fprintf (stderr, "%s: HTTP Error Code: %i\n", program_name.c_str(), (int)responseCode);
+
+     // Parse the return info
+     doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+     if (doc == NULL) {
+        exit(1);
+
+     } 
+     if (doc->children == NULL) {
+        xmlFreeDoc(doc);
+        exit(1);
      }
-     fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
-       program_name.c_str(), (int)responseCode);
+
+     for ( cur_node = doc->children->children; 
+           cur_node != NULL; 
+           cur_node = cur_node->next) {
+   
+       string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+
+       if (cur_node_name == "Code") {
+          string content = reinterpret_cast<const char *>(cur_node->children->content);
+          fprintf (stderr, "%s: AWS Error Code: %s\n", program_name.c_str(), content.c_str());
+       }
+       if (cur_node_name == "Message") {
+          string content = reinterpret_cast<const char *>(cur_node->children->content);
+          fprintf (stderr, "%s: AWS Message: %s\n", program_name.c_str(), content.c_str());
+       }
+     }
+     xmlFreeDoc(doc);
      exit(1);
   }
 
@@ -1874,7 +1906,8 @@ static void s3fs_check_service(void) {
 
   // Parse the return info and see if the bucket is available  
 
-  xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+
+  doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
   if (doc == NULL) {
      return;
   } 
@@ -1889,9 +1922,9 @@ static void s3fs_check_service(void) {
 
   // Parse the XML looking for the bucket names
 
-  for (xmlNodePtr cur_node = doc->children->children; 
-                  cur_node != NULL; 
-                  cur_node = cur_node->next) {
+  for ( cur_node = doc->children->children; 
+        cur_node != NULL; 
+        cur_node = cur_node->next) {
 
     string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
 
