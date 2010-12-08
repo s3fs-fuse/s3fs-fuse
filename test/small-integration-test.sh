@@ -20,6 +20,11 @@ $S3FS $TEST_BUCKET_1 $TEST_BUCKET_MOUNT_POINT_1 -o passwd_file=$S3FS_CREDENTIALS
 CUR_DIR=`pwd`
 cd $TEST_BUCKET_MOUNT_POINT_1
 
+if [ -e $TEST_TEXT_FILE ]
+then
+  rm -f $TEST_TEXT_FILE
+fi
+
 # Write a small test file
 for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
 do
