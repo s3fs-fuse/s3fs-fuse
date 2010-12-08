@@ -324,77 +324,89 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
   // 1 attempt + retries...
   int t = retries + 1;
   while (t-- > 0) {
-    if (f)
+    if (f) {
       rewind(f);
+    }
     CURLcode curlCode = curl_easy_perform(curl);
-    if (curlCode == 0)
-      return 0;
-    if (curlCode == CURLE_OPERATION_TIMEDOUT) {
-      syslog(LOG_ERR, "###timeout");
-    } else if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-      long responseCode;
-      if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0)
-        return -EIO;
-      if (responseCode == 404)
-        return -ENOENT;
-        syslog(LOG_ERR, "###response=%ld", responseCode);
 
-      if (responseCode < 500)
-        return -EIO;
-    } else {
-      switch (curlCode) {
-        case CURLE_SSL_CACERT:
-          // try to locate cert, if successful, then set the
-          // option and continue
-          if (curl_ca_bundle.size() == 0) {
-             locate_bundle();
-             if (curl_ca_bundle.size() != 0) {
-                t++;
-                curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-                continue;
-             }
-          }
-          syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-             curl_easy_strerror(curlCode));;
-          fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-             program_name.c_str(),
-             curlCode,
-             curl_easy_strerror(curlCode));
-             exit(1);
+    switch (curlCode) {
+      case CURLE_OK:
+        return 0;
+
+      case CURLE_OPERATION_TIMEDOUT:
+        syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
+        break; 
+
+      case CURLE_COULDNT_CONNECT:
+        syslog(LOG_ERR, "### CURLE_COULDNT_CONNECT");
+        sleep(10);
+        break; 
+
+      case CURLE_HTTP_RETURNED_ERROR:
+        long responseCode;
+        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
+          return -EIO;
+        }
+        if (responseCode == 404) {
+          return -ENOENT;
+        }
+        syslog(LOG_ERR, "###response=%ld", responseCode);
+        if (responseCode < 500) {
+          return -EIO;
+        }
+        break;
+
+      case CURLE_SSL_CACERT:
+        // try to locate cert, if successful, then set the
+        // option and continue
+        if (curl_ca_bundle.size() == 0) {
+           locate_bundle();
+           if (curl_ca_bundle.size() != 0) {
+              t++;
+              curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+              continue;
+           }
+        }
+        syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
+           curl_easy_strerror(curlCode));;
+        fprintf (stderr, "%s: curlCode: %i -- %s\n", 
+           program_name.c_str(),
+           curlCode,
+           curl_easy_strerror(curlCode));
+        exit(1);
         break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
-        case CURLE_PEER_FAILED_VERIFICATION:
-          first_pos = bucket.find_first_of(".");
-          if (first_pos != string::npos) {
-            fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-            fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-            fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-            fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-            fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-          } else {
-            fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
-               program_name.c_str(),
-               curlCode,
-               curl_easy_strerror(curlCode));
-          }
-          exit(1);
+      case CURLE_PEER_FAILED_VERIFICATION:
+        first_pos = bucket.find_first_of(".");
+        if (first_pos != string::npos) {
+          fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
+          fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
+          fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
+          fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
+          fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
+        } else {
+          fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
+             program_name.c_str(),
+             curlCode,
+             curl_easy_strerror(curlCode));
+        }
+        exit(1);
         break;
 #endif
-           
-        default:
-          // Unknown error - return
-          syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
-             curl_easy_strerror(curlCode));;
-          exit(1);
+      default:
+        // Unknown error - return
+        syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
+           curl_easy_strerror(curlCode));;
+        exit(1);
         break;
-      }
     }
     syslog(LOG_ERR, "###retrying...");
   }
   syslog(LOG_ERR, "###giving up");
   return -EIO;
 }
+           
 
 /**
  * urlEncode a fuse path,
