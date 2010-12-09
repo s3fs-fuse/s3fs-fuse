@@ -342,15 +342,30 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
         sleep(10);
         break; 
 
+      case CURLE_GOT_NOTHING:
+        syslog(LOG_ERR, "### CURLE_GOT_NOTHING");
+        sleep(10);
+        break; 
+
+      case CURLE_ABORTED_BY_CALLBACK:
+        syslog(LOG_ERR, "### CURLE_ABORTED_BY_CALLBACK");
+        sleep(10);
+        break; 
+
       case CURLE_HTTP_RETURNED_ERROR:
+        syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
+
         long responseCode;
+
         if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
           return -EIO;
         }
+
+        syslog(LOG_ERR, "###response=%ld", responseCode);
+
         if (responseCode == 404) {
           return -ENOENT;
         }
-        syslog(LOG_ERR, "###response=%ld", responseCode);
         if (responseCode < 500) {
           return -EIO;
         }
