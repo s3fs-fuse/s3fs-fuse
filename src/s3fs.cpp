@@ -352,6 +352,11 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
         sleep(10);
         break; 
 
+      case CURLE_PARTIAL_FILE:
+        syslog(LOG_ERR, "### CURLE_PARTIAL_FILE");
+        sleep(10);
+        break; 
+
       case CURLE_HTTP_RETURNED_ERROR:
         syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
 
@@ -700,7 +705,8 @@ int get_local_fd(const char* path) {
     }
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-    cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
+    if(foreground) 
+      cout << "downloading[path=" << path << "][fd=" << fd << "]" << endl;
 
     string my_url = prepare_url(url.c_str());
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -771,7 +777,9 @@ static int put_headers(const char* path, headers_t meta) {
   //###rewind(f);
 
   if(debug) syslog(LOG_DEBUG, "copy path=%s", path);
-  cout << "copying[path=" << path << "]" << endl;
+
+  if(foreground) 
+    cout << "copying[path=" << path << "]" << endl;
 
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -841,7 +849,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   //###rewind(f);
 
   if(debug) syslog(LOG_DEBUG, "upload path=%s size=%llu", path, st.st_size);
-  cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
+
+  if(foreground) 
+    cout << "uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
 
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -852,7 +862,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 }
 
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
-  cout << "getattr[path=" << path << "]" << endl;
+  if(foreground) 
+    cout << "getattr[path=" << path << "]" << endl;
+
   memset(stbuf, 0, sizeof(struct stat));
   if (strcmp(path, "/") == 0) {
     stbuf->st_nlink = 1; // see fuse faq
@@ -930,7 +942,8 @@ static int s3fs_readlink(const char *path, char *buf, size_t size) {
   if (size > 0) {
     --size; // reserve nil terminator
 
-    cout << "readlink[path=" << path << "]" << endl;
+    if(foreground) 
+      cout << "readlink[path=" << path << "]" << endl;
 
     auto_fd fd(get_local_fd(path));
 
@@ -1023,7 +1036,8 @@ string lookupMimeType(string s) {
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   // see man 2 mknod
   // If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
-  cout << "mknod[path=" << path << "][mode=" << mode << "]" << endl;
+  if(foreground) 
+    cout << "mknod[path=" << path << "][mode=" << mode << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
@@ -1060,7 +1074,8 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 }
 
 static int s3fs_mkdir(const char *path, mode_t mode) {
-  cout << "mkdir[path=" << path << "][mode=" << mode << "]" << endl;
+  if(foreground) 
+    cout << "mkdir[path=" << path << "][mode=" << mode << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
@@ -1097,7 +1112,8 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
 
 // aka rm
 static int s3fs_unlink(const char *path) {
-  cout << "unlink[path=" << path << "]" << endl;
+  if(foreground) 
+    cout << "unlink[path=" << path << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
@@ -1126,7 +1142,8 @@ static int s3fs_unlink(const char *path) {
 }
 
 static int s3fs_rmdir(const char *path) {
-   cout << "rmdir[path=" << path << "]" << endl;
+  if(foreground) 
+    cout << "rmdir[path=" << path << "]" << endl;
  
    // need to check if the directory is empty
    {
@@ -1166,7 +1183,10 @@ static int s3fs_rmdir(const char *path) {
       if (responseText.find ("<CommonPrefixes>") != std::string::npos ||
           responseText.find ("<ETag>") != std::string::npos ) {
         // directory is not empty
+
+      if(foreground) 
         cout << "[path=" << path << "] not empty" << endl;
+
         return -ENOTEMPTY;
       }
    }
@@ -1198,7 +1218,8 @@ static int s3fs_rmdir(const char *path) {
 }
 
 static int s3fs_symlink(const char *from, const char *to) {
-  cout << "symlink[from=" << from << "][to=" << to << "]" << endl;
+  if(foreground) 
+    cout << "symlink[from=" << from << "][to=" << to << "]" << endl;
 
   headers_t headers;
   headers["x-amz-meta-mode"] = str(S_IFLNK);
@@ -1215,7 +1236,8 @@ static int s3fs_symlink(const char *from, const char *to) {
 }
 
 static int s3fs_rename(const char *from, const char *to) {
-  cout << "rename[from=" << from << "][to=" << to << "]" << endl;
+  if(foreground) 
+    cout << "rename[from=" << from << "][to=" << to << "]" << endl;
 
   // renaming (moving) directories is not supported at this time
   // if the first argument is a directory, report the limitation
@@ -1257,12 +1279,14 @@ static int s3fs_rename(const char *from, const char *to) {
 }
 
 static int s3fs_link(const char *from, const char *to) {
-  cout << "link[from=" << from << "][to=" << to << "]" << endl;
+  if(foreground) 
+    cout << "link[from=" << from << "][to=" << to << "]" << endl;
   return -EPERM;
 }
 
 static int s3fs_chmod(const char *path, mode_t mode) {
-  cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
+  if(foreground) 
+    cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
   headers_t meta;
   VERIFY(get_headers(path, meta));
   meta["x-amz-meta-mode"] = str(mode);
@@ -1273,7 +1297,8 @@ static int s3fs_chmod(const char *path, mode_t mode) {
 
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
-  cout << "chown[path=" << path << "]" << endl;
+  if(foreground) 
+    cout << "chown[path=" << path << "]" << endl;
 
   headers_t meta;
   VERIFY(get_headers(path, meta));
@@ -1294,7 +1319,8 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
 static int s3fs_truncate(const char *path, off_t size) {
   //###TODO honor size?!?
 
-  cout << "truncate[path=" << path << "][size=" << size << "]" << endl;
+  if(foreground) 
+    cout << "truncate[path=" << path << "][size=" << size << "]" << endl;
 
   // preserve headers across truncate
   headers_t meta;
@@ -1307,6 +1333,7 @@ static int s3fs_truncate(const char *path, off_t size) {
 }
 
 static int s3fs_open(const char *path, struct fuse_file_info *fi) {
+  if(foreground) 
     cout << "open[path=" << path << "][flags=" << fi->flags << "]" <<  endl;
 
   headers_t meta;
@@ -1356,7 +1383,10 @@ static int get_flags(int fd) {
 
 static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int fd = fi->fh;
-  cout << "flush[path=" << path << "][fd=" << fd << "]" << endl;
+
+  if(foreground) 
+    cout << "flush[path=" << path << "][fd=" << fd << "]" << endl;
+
   // NOTE- fi->flags is not available here
   int flags = get_flags(fd);
   if ((flags & O_RDWR) || (flags &  O_WRONLY)) {
@@ -1370,7 +1400,10 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
 
 static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   int fd = fi->fh;
-  cout << "release[path=" << path << "][fd=" << fd << "]" << endl;
+
+  if(foreground) 
+    cout << "release[path=" << path << "][fd=" << fd << "]" << endl;
+
   if (close(fd) == -1)
     Yikes(-errno);
   return 0;
@@ -1426,7 +1459,9 @@ private:
 
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-  //cout << "readdir:"<< " path="<< path << endl;
+
+  if(foreground) 
+    cout << "readdir:"<< " path="<< path << endl;
 
   string NextMarker;
   string IsTruncated("true");
@@ -1747,7 +1782,9 @@ static int s3fs_access(const char *path, int mask) {
 
 // aka touch
 static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
-  cout << "utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
+  if(foreground) 
+    cout << "utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
+
   headers_t meta;
   VERIFY(get_headers(path, meta));
   meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
@@ -1774,7 +1811,8 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
 // isn't found in the service).
 ////////////////////////////////////////////////////////////
 static void s3fs_check_service(void) {
-  // cout << "s3fs_check_service" << endl;
+  if(foreground) 
+    cout << "s3fs_check_service" << endl;
 
   string responseText;
   long responseCode;
@@ -2671,6 +2709,7 @@ int main(int argc, char *argv[]) {
        break;
 
      case 'f':
+       foreground = 1;
        break;
 
      case 's':
