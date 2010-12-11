@@ -305,7 +305,7 @@ static void locate_bundle(void) {
 /**
  * @return fuse return code
  */
-static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
+static int my_curl_easy_perform(CURL* curl, string* responseText = 0, FILE* f = 0) {
   char* url = new char[128];
   curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &url);
   if(debug) syslog(LOG_DEBUG, "connecting to URL %s", url);
@@ -319,7 +319,9 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
     curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
   } 
 
+
   size_t first_pos = string::npos;
+  long responseCode;
 
   // 1 attempt + retries...
   int t = retries + 1;
@@ -331,7 +333,41 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
 
     switch (curlCode) {
       case CURLE_OK:
-        return 0;
+        // Need to look at the HTTP response code
+
+        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
+          syslog(LOG_ERR, "curl_easy_getinfo failed while trying to retrieve HTTP response code");
+          return -EIO;
+        }
+        
+        if(debug) syslog(LOG_DEBUG, "HTTP response code %ld", responseCode);
+
+        if (responseCode < 400) {
+          return 0;
+        }
+
+        if (responseCode >= 500) {
+          syslog(LOG_ERR, "###HTTP response=%ld", responseCode);
+          sleep(10);
+          break; 
+        }
+
+        // Service response codes which are >= 400 && < 500
+
+        switch(responseCode) {
+
+          case 404:
+            return -ENOENT;
+
+          default:
+            syslog(LOG_ERR, "###response=%ld", responseCode);
+            printf("responseCode %ld\n", responseCode);
+            if(responseText) {
+              printf("responseText %s\n", (*responseText).c_str());
+            }
+            return -EIO;
+        }
+        break;
 
       case CURLE_OPERATION_TIMEDOUT:
         syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
@@ -356,25 +392,6 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
         syslog(LOG_ERR, "### CURLE_PARTIAL_FILE");
         sleep(10);
         break; 
-
-      case CURLE_HTTP_RETURNED_ERROR:
-        syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
-
-        long responseCode;
-
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
-          return -EIO;
-        }
-
-        syslog(LOG_ERR, "###response=%ld", responseCode);
-
-        if (responseCode == 404) {
-          return -ENOENT;
-        }
-        if (responseCode < 500) {
-          return -EIO;
-        }
-        break;
 
       case CURLE_SSL_CACERT:
         // try to locate cert, if successful, then set the
@@ -414,8 +431,28 @@ static int my_curl_easy_perform(CURL* curl, FILE* f = 0) {
         exit(1);
         break;
 #endif
+
+      // This should be invalid since curl option HTTP FAILONERROR is now off
+      case CURLE_HTTP_RETURNED_ERROR:
+        syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
+
+        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
+          return -EIO;
+        }
+        syslog(LOG_ERR, "###response=%ld", responseCode);
+
+        // Let's try to retrieve the 
+
+        if (responseCode == 404) {
+          return -ENOENT;
+        }
+        if (responseCode < 500) {
+          return -EIO;
+        }
+        break;
+
+      // Unknown CURL return code
       default:
-        // Unknown error - return
         syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
            curl_easy_strerror(curlCode));;
         exit(1);
@@ -573,7 +610,7 @@ int get_headers(const char* path, headers_t& meta) {
   string url(host + resource);
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
@@ -686,7 +723,7 @@ int get_local_fd(const char* path) {
       Yikes(-errno);
 
     auto_curl curl;
-    curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+    // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
     FILE* f = fdopen(fd, "w+");
@@ -711,7 +748,7 @@ int get_local_fd(const char* path) {
     string my_url = prepare_url(url.c_str());
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-    VERIFY(my_curl_easy_perform(curl.get(), f));
+    VERIFY(my_curl_easy_perform(curl.get(), NULL, f));
 
     //only one of these is needed...
     fflush(f);
@@ -733,7 +770,7 @@ static int put_headers(const char* path, headers_t meta) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
   string responseText;
@@ -784,7 +821,7 @@ static int put_headers(const char* path, headers_t meta) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  VERIFY(my_curl_easy_perform(curl.get(), &responseText));
 
   return 0;
 }
@@ -802,7 +839,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
     Yikes(-errno);
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
   string responseText;
@@ -856,7 +893,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get(), f));
+  VERIFY(my_curl_easy_perform(curl.get(), &responseText, f));
 
   return 0;
 }
@@ -886,7 +923,10 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  string responseText;
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
@@ -907,7 +947,7 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  VERIFY(my_curl_easy_perform(curl.get(), &responseText));
 
   stbuf->st_nlink = 1; // see fuse faq
 
@@ -1043,7 +1083,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
@@ -1081,7 +1121,7 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
@@ -1119,7 +1159,7 @@ static int s3fs_unlink(const char *path) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 
@@ -1161,7 +1201,7 @@ static int s3fs_rmdir(const char *path) {
       auto_curl curl;
       string my_url = prepare_url(url.c_str());
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+      // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
@@ -1177,7 +1217,7 @@ static int s3fs_rmdir(const char *path) {
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-      VERIFY(my_curl_easy_perform(curl.get()));
+      VERIFY(my_curl_easy_perform(curl.get(), &responseText));
 
       // cout << endl << responseText << endl;
       if (responseText.find ("<CommonPrefixes>") != std::string::npos ||
@@ -1195,7 +1235,7 @@ static int s3fs_rmdir(const char *path) {
   string url = host + resource;
 
   auto_curl curl;
-  curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 
@@ -1350,8 +1390,9 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
 
 static int s3fs_read(
     const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-  //###cout << "read: " << path << endl;
   int res = pread(fi->fh, buf, size, offset);
+  if(foreground) 
+    cout << "read[path=" << path << "]" << endl;
   if (res == -1)
     Yikes(-errno);
   return res;
@@ -1360,8 +1401,9 @@ static int s3fs_read(
 static int s3fs_write(
     const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
 
-  //###cout << "write: " << path << endl;
   int res = pwrite(fi->fh, buf, size, offset);
+  if(foreground) 
+    cout << "write[path=" << path << "]" << endl;
   if (res == -1)
     Yikes(-errno);
   return res;
@@ -1461,7 +1503,7 @@ static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 
   if(foreground) 
-    cout << "readdir:"<< " path="<< path << endl;
+    cout << "readdir[path=" << path << "]" << endl;
 
   string NextMarker;
   string IsTruncated("true");
@@ -1486,7 +1528,7 @@ static int s3fs_readdir(
       string my_url = prepare_url(url.c_str());
 
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+      // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
@@ -1507,7 +1549,7 @@ static int s3fs_readdir(
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
 
-      VERIFY(my_curl_easy_perform(curl.get()));
+      VERIFY(my_curl_easy_perform(curl.get(), &responseText));
     }
 
     auto_stuff curlMap;
@@ -1571,7 +1613,7 @@ static int s3fs_readdir(
                 stuff.responseHeaders = new headers_t;
 
                 curl_easy_setopt(curl_handle, CURLOPT_URL, stuff.url->c_str());
-                curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, true);
+                // curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, true);
                 curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
                 curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
                 curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
@@ -1776,7 +1818,8 @@ static void s3fs_destroy(void*) {
 }
 
 static int s3fs_access(const char *path, int mask) {
-  //###cout << "###access[path=" << path << "]" <<  endl;
+  if(foreground) 
+    cout << "access[path=" << path << "]" <<  endl;
   return 0;
 }
 
