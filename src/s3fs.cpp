@@ -74,6 +74,13 @@ class auto_lock {
   pthread_mutex_t& lock;
 };
 
+// Memory structure for the alternate
+// write memory callback used with curl_easy_perform
+struct BodyStruct {
+  char *text;    
+  size_t size;
+};
+
 // homegrown timeout mechanism
 static int my_curl_progress(
     void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
@@ -305,10 +312,16 @@ static void locate_bundle(void) {
 /**
  * @return fuse return code
  */
-static int my_curl_easy_perform(CURL* curl, string* responseText = 0, FILE* f = 0) {
-  char* url = new char[128];
-  curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &url);
-  if(debug) syslog(LOG_DEBUG, "connecting to URL %s", url);
+static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0) {
+  // char* url = new char[128];
+  char url[256];
+  char* ptr_url = url;
+  // char* url = (char *)malloc(256);
+  // if (url) {
+     curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
+     if(debug) syslog(LOG_DEBUG, "connecting to URL %s", ptr_url);
+     // if(url) free(url);
+  // }
 
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   if (ssl_verify_hostname.substr(0,1) == "0") {
@@ -355,15 +368,33 @@ static int my_curl_easy_perform(CURL* curl, string* responseText = 0, FILE* f = 
         // Service response codes which are >= 400 && < 500
 
         switch(responseCode) {
+          case 403:
+            if(debug) syslog(LOG_ERR, "HTTP response code 403 was returned");
+            if(body) {
+              if(body->size && debug) {
+                syslog(LOG_ERR, "Body Text: %s", body->text);
+              }
+            }
+            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
+            return -EIO;
 
           case 404:
+            if(debug) syslog(LOG_DEBUG, "HTTP response code 404 was returned");
+            if(body) {
+              if(body->size && debug) {
+                syslog(LOG_DEBUG, "Body Text: %s", body->text);
+              }
+            }
+            if(debug) syslog(LOG_DEBUG, "Now returning ENOENT");
             return -ENOENT;
 
           default:
             syslog(LOG_ERR, "###response=%ld", responseCode);
             printf("responseCode %ld\n", responseCode);
-            if(responseText) {
-              printf("responseText %s\n", (*responseText).c_str());
+            if(body) {
+              if(body->size) {
+                printf("Body Text %s\n", body->text);
+              }
             }
             return -EIO;
         }
@@ -556,10 +587,25 @@ string calc_signature(
 }
 
 // libcurl callback
-static size_t writeCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr) {
-  string* userString = static_cast<string*>(userPtr);
-  (*userString).append(reinterpret_cast<const char*>(data), blockSize*numBlocks);
-  return blockSize * numBlocks;
+// another write callback as shown by example
+// http://curl.haxx.se/libcurl/c/getinmemory.html
+
+static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data) {
+  size_t realsize = blockSize * numBlocks;
+  struct BodyStruct *mem = (struct BodyStruct *)data;
+ 
+  mem->text = (char *)realloc(mem->text, mem->size + realsize + 1);
+  if (mem->text == NULL) {
+    /* out of memory! */ 
+    fprintf(stderr, "not enough memory (realloc returned NULL)\n");
+    exit(EXIT_FAILURE);
+  }
+ 
+  memcpy(&(mem->text[mem->size]), ptr, realsize);
+  mem->size += realsize;
+  mem->text[mem->size] = 0;
+ 
+  return realsize;
 }
 
 static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
@@ -606,6 +652,8 @@ static int mkdirp(const string& path, mode_t mode) {
  */
 int get_headers(const char* path, headers_t& meta) {
 
+  if(debug) syslog(LOG_DEBUG, "get_headers called path=%s", path);
+
   string resource(urlEncode(service_path + bucket + path));
   string url(host + resource);
 
@@ -632,7 +680,9 @@ int get_headers(const char* path, headers_t& meta) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
+  if(debug) syslog(LOG_DEBUG, "get_headers: now calling my_curl_easy_perform");
   VERIFY(my_curl_easy_perform((curl.get())));
+  if(debug) syslog(LOG_DEBUG, "get_headers: now returning from my_curl_easy_perform");
 
   // at this point we know the file exists in s3
 
@@ -646,6 +696,8 @@ int get_headers(const char* path, headers_t& meta) {
     if (key.substr(0, 5) == "x-amz")
       meta[key] = value;
   }
+
+  if(debug) syslog(LOG_DEBUG, "returning from get_headers, path=%s", path);
 
   return 0;
 }
@@ -769,13 +821,17 @@ static int put_headers(const char* path, headers_t meta) {
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
+  struct BodyStruct body;
+  int result;
+  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
+  body.size = 0;    /* no data at this point */ 
+
   auto_curl curl;
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
-  string responseText;
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length
@@ -821,7 +877,15 @@ static int put_headers(const char* path, headers_t meta) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get(), &responseText));
+  result = my_curl_easy_perform(curl.get(), &body);
+
+  if(body.text) {
+    free(body.text);
+  }
+
+  if(result != 0) {
+     return result;
+  }
 
   return 0;
 }
@@ -834,6 +898,11 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
+  struct BodyStruct body;
+  int result;
+  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
+  body.size = 0;    /* no data at this point */ 
+
   struct stat st;
   if (fstat(fd, &st) == -1)
     Yikes(-errno);
@@ -842,9 +911,8 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
-  string responseText;
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
@@ -893,7 +961,15 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get(), &responseText, f));
+  result = my_curl_easy_perform(curl.get(), &body, f);
+
+  if(body.text) {
+    free(body.text);
+  }
+
+  if(result != 0) {
+    return result;
+  }
 
   return 0;
 }
@@ -901,6 +977,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
   if(foreground) 
     cout << "getattr[path=" << path << "]" << endl;
+
+  struct BodyStruct body;
+  int result;
 
   memset(stbuf, 0, sizeof(struct stat));
   if (strcmp(path, "/") == 0) {
@@ -919,14 +998,16 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     }
   }
 
+  body.text = (char *)malloc(1);
+  body.size = 0;
+
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
   auto_curl curl;
-  string responseText;
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
@@ -947,7 +1028,13 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get(), &responseText));
+  result = my_curl_easy_perform(curl.get(), &body);
+  if (result != 0) {
+    if(body.text) {
+      free(body.text);
+    }
+    return result; \
+  }
 
   stbuf->st_nlink = 1; // see fuse faq
 
@@ -974,6 +1061,10 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
 
   stbuf->st_uid = strtoul(responseHeaders["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
   stbuf->st_gid = strtoul(responseHeaders["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
+
+  if(body.text) {
+    free(body.text);
+  }
 
   return 0;
 }
@@ -1185,9 +1276,13 @@ static int s3fs_rmdir(const char *path) {
   if(foreground) 
     cout << "rmdir[path=" << path << "]" << endl;
  
+  struct BodyStruct body;
+  int result;
+  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
+  body.size = 0;    /* no data at this point */ 
+
    // need to check if the directory is empty
    {
-      string responseText;
       string resource = urlEncode(service_path + bucket);
       string query = "delimiter=/&prefix=";
 
@@ -1203,8 +1298,8 @@ static int s3fs_rmdir(const char *path) {
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
       // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
       auto_curl_slist headers;
       string date = get_date();
@@ -1217,17 +1312,25 @@ static int s3fs_rmdir(const char *path) {
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-      VERIFY(my_curl_easy_perform(curl.get(), &responseText));
+      result = my_curl_easy_perform(curl.get(), &body);
+      if(result != 0) {
+        if(body.text) {
+          free(body.text);
+        }
+        return result;
+      }
 
-      // cout << endl << responseText << endl;
-      if (responseText.find ("<CommonPrefixes>") != std::string::npos ||
-          responseText.find ("<ETag>") != std::string::npos ) {
+      if(strstr(body.text, "<CommonPrefixes>") != NULL ||
+         strstr(body.text, "<ETag>") != NULL ) {
         // directory is not empty
 
-      if(foreground) 
-        cout << "[path=" << path << "] not empty" << endl;
+        if(foreground) 
+          cout << "[path=" << path << "] not empty" << endl;
 
-        return -ENOTEMPTY;
+          if(body.text) {
+            free(body.text);
+          }
+          return -ENOTEMPTY;
       }
    }
    // delete the directory
@@ -1254,6 +1357,10 @@ static int s3fs_rmdir(const char *path) {
 
   VERIFY(my_curl_easy_perform(curl.get()));
 
+  if(body.text) {
+    free(body.text);
+  }
+
   return 0;
 }
 
@@ -1279,6 +1386,8 @@ static int s3fs_rename(const char *from, const char *to) {
   if(foreground) 
     cout << "rename[from=" << from << "][to=" << to << "]" << endl;
 
+  if(debug) syslog(LOG_DEBUG, "rename [from=%s] [to=%s]", from, to);
+
   // renaming (moving) directories is not supported at this time
   // if the first argument is a directory, report the limitation
   // and do nothing, this prevents the directory's children
@@ -1293,7 +1402,12 @@ static int s3fs_rename(const char *from, const char *to) {
   fullpath = mountpoint;
   fullpath.append(from);
 
+  if(debug) syslog(LOG_DEBUG, "   rename: calling stat on fullpath: %s", fullpath.c_str());
+
   result = stat(fullpath.c_str(), &buf);
+
+  if(debug) syslog(LOG_DEBUG, " rename: return from stat result: %i", result);
+
   if (result == -1) {
     syslog(LOG_ERR, "###file: %s  code:%d   error:%s", from, result, strerror(errno));
   } else {
@@ -1304,7 +1418,9 @@ static int s3fs_rename(const char *from, const char *to) {
 
   // preserve meta headers across rename
   headers_t meta;
+  if(debug) syslog(LOG_DEBUG, "   rename: calling get_headers....");
   VERIFY(get_headers(from, meta));
+  if(debug) syslog(LOG_DEBUG, "   rename: returning from get_headers....");
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
 
@@ -1505,11 +1621,15 @@ static int s3fs_readdir(
   if(foreground) 
     cout << "readdir[path=" << path << "]" << endl;
 
+  struct BodyStruct body;
+  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
+  body.size = 0;    /* no data at this point */ 
+
   string NextMarker;
   string IsTruncated("true");
 
   while (IsTruncated == "true") {
-    string responseText;
+
     string resource = urlEncode(service_path + bucket); // this is what gets signed
     string query = "delimiter=/&prefix=";
 
@@ -1527,11 +1647,17 @@ static int s3fs_readdir(
       auto_curl curl;
       string my_url = prepare_url(url.c_str());
 
+      if(body.text) {
+        free(body.text);
+        body.size = 0;
+        body.text = (char *)malloc(1);
+      }
+
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
       // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
 //    headers_t responseHeaders;
 //      curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
@@ -1548,8 +1674,15 @@ static int s3fs_readdir(
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-
-      VERIFY(my_curl_easy_perform(curl.get(), &responseText));
+      int result;
+      
+      result = my_curl_easy_perform(curl.get(), &body);
+      if(result != 0) {
+        if(body.text) {
+          free(body.text);
+        }
+        return result;
+      }
     }
 
     auto_stuff curlMap;
@@ -1559,7 +1692,7 @@ static int s3fs_readdir(
 //    curl_multi_setopt(multi_handle.get(), CURLMOPT_MAXCONNECTS, max_connects);
 
     {
-      xmlDocPtr doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+      xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
       if (doc != NULL && doc->children != NULL) {
         for (xmlNodePtr cur_node = doc->children->children;
              cur_node != NULL;
@@ -1734,6 +1867,10 @@ static int s3fs_readdir(
 
   } // IsTruncated
 
+  if(body.text) {
+    free(body.text);
+  }
+
   return 0;
 }
 
@@ -1857,7 +1994,10 @@ static void s3fs_check_service(void) {
   if(foreground) 
     cout << "s3fs_check_service" << endl;
 
-  string responseText;
+  struct BodyStruct body;
+  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
+  body.size = 0;    /* no data at this point */ 
+
   long responseCode;
   xmlDocPtr doc;
   xmlNodePtr cur_node;
@@ -1869,8 +2009,8 @@ static void s3fs_check_service(void) {
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseText);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
   if (ssl_verify_hostname.substr(0,1) == "0") {
@@ -1885,6 +2025,9 @@ static void s3fs_check_service(void) {
       calc_signature("GET", "", date, headers.get(), resource));
   } else {
      // This operation is only valid if done by an authenticated sender
+     if(body.text) {
+       free(body.text);
+     }
      return;
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
@@ -1941,6 +2084,9 @@ static void s3fs_check_service(void) {
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
                curl_easy_strerror(curlCode));;
+            if(body.text) {
+              free(body.text);
+            }
             return;
         }
       }
@@ -1958,7 +2104,10 @@ static void s3fs_check_service(void) {
 
   // network is down
   if (curlCode == CURLE_OPERATION_TIMEDOUT) {
-     return;
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   }
 
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
@@ -1977,7 +2126,7 @@ static void s3fs_check_service(void) {
      fprintf (stderr, "%s: HTTP Error Code: %i\n", program_name.c_str(), (int)responseCode);
 
      // Parse the return info
-     doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+     doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
      if (doc == NULL) {
         exit(1);
 
@@ -2008,20 +2157,29 @@ static void s3fs_check_service(void) {
 
   // Success
   if (responseCode != 200) {
-     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-     return;
+    if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   }
 
   // Parse the return info and see if the bucket is available  
 
 
-  doc = xmlReadMemory(responseText.c_str(), responseText.size(), "", NULL, 0);
+  doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
   if (doc == NULL) {
-     return;
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   } 
   if (doc->children == NULL) {
-     xmlFreeDoc(doc);
-     return;
+    xmlFreeDoc(doc);
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   }
 
 
@@ -2120,7 +2278,9 @@ static void s3fs_check_service(void) {
   // indicating the the network is down or if the connection was
   // acutally made - my_curl_easy_perform doesn't differentiate
   // between the two
-  responseText.clear();
+
+  strcpy(body.text, "");
+  body.size = 0;
 
   size_t first_pos = string::npos;
 
@@ -2178,6 +2338,9 @@ static void s3fs_check_service(void) {
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
                curl_easy_strerror(curlCode));;
+            if(body.text) {
+              free(body.text);
+            }
             return;
         }
       }
@@ -2196,7 +2359,10 @@ static void s3fs_check_service(void) {
 
   // network is down
   if (curlCode == CURLE_OPERATION_TIMEDOUT) {
-     return;
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   }
 
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
@@ -2216,10 +2382,16 @@ static void s3fs_check_service(void) {
 
   // Success
   if (responseCode != 200) {
-     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-     return;
+    if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+    if(body.text) {
+      free(body.text);
+    }
+    return;
   }
 
+  if(body.text) {
+    free(body.text);
+  }
   return;
 }
 
