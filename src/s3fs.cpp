@@ -46,33 +46,6 @@
 
 using namespace std;
 
-class auto_fd {
- public:
-  auto_fd(int fd): fd(fd) { }
-  ~auto_fd() {
-    close(fd);
-  }
-
-  int get() {
-    return fd;
-  }
-
- private:
-  int fd;
-};
-
-class auto_lock {
- public:
-  auto_lock(pthread_mutex_t& lock) : lock(lock) {
-    pthread_mutex_lock(&lock);
-  }
-  ~auto_lock() {
-    pthread_mutex_unlock(&lock);
-  }
-
- private:
-  pthread_mutex_t& lock;
-};
 
 class auto_curl_slist {
  public:
@@ -88,7 +61,6 @@ class auto_curl_slist {
  private:
   struct curl_slist* slist;
 };
-
 
 
 
@@ -123,7 +95,8 @@ static int my_curl_progress(
 
   //###cout << "/dlnow=" << dlnow << "/ulnow=" << ulnow << endl;
 
-  auto_lock lock(curl_handles_lock);
+  pthread_mutex_lock( &curl_handles_lock );
+
 
   // any progress?
   if (p != curl_progress[curl]) {
@@ -132,10 +105,13 @@ static int my_curl_progress(
     curl_progress[curl] = p;
   } else {
     // timeout?
-    if (now - curl_times[curl] > readwrite_timeout)
+    if (now - curl_times[curl] > readwrite_timeout) {
+      pthread_mutex_unlock( &curl_handles_lock );
       return CURLE_ABORTED_BY_CALLBACK;
+    }
   }
 
+  pthread_mutex_unlock( &curl_handles_lock );
   return 0;
 }
 
@@ -144,6 +120,8 @@ CURL *create_curl_handle(void) {
   long signal;
   time_t now;
   CURL *curl_handle;
+
+  pthread_mutex_lock( &curl_handles_lock );
 
   curl_handle = curl_easy_init();
 
@@ -162,21 +140,20 @@ CURL *create_curl_handle(void) {
   curl_progress[curl_handle] = progress_t(-1, -1);
   ///////////////////////////////////////////////////////////
 
-  // should we make sure that the curl_handle is unique?
+  pthread_mutex_unlock( &curl_handles_lock );
   return curl_handle;
 }
 
 void destroy_curl_handle(CURL *curl_handle) {
   if(curl_handle != NULL) {
 
-    // what does this do, what is is for, is it necessary?
-    // auto_lock lock(curl_handles_lock);
-    // curl_handles.push(curl_handle);
+    pthread_mutex_lock( &curl_handles_lock );
 
     curl_times.erase(curl_handle);
     curl_progress.erase(curl_handle);
 
     curl_easy_cleanup(curl_handle);
+    pthread_mutex_unlock( &curl_handles_lock );
   }
   return;
 }
@@ -682,23 +659,29 @@ int get_local_fd(const char* path) {
   headers_t responseHeaders;
 
   if (use_cache.size() > 0) {
-    VERIFY(get_headers(path, responseHeaders));
+    result = get_headers(path, responseHeaders);
+    if(result != 0) {
+       return -result;
+    }
 
     fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
 
     if (fd != -1) {
       MD5_CTX c;
-      if (MD5_Init(&c) != 1)
-        Yikes(-EIO);
+      if (MD5_Init(&c) != 1) {
+        YIKES(-EIO);
+      }
       int count;
       char buf[1024];
       while ((count = read(fd, buf, sizeof(buf))) > 0) {
-        if (MD5_Update(&c, buf, count) != 1)
-          Yikes(-EIO);
+        if (MD5_Update(&c, buf, count) != 1) {
+          YIKES(-EIO);
+        }
       }
       unsigned char md[MD5_DIGEST_LENGTH];
-      if (MD5_Final(md, &c) != 1)
-        Yikes(-EIO);
+      if (MD5_Final(md, &c) != 1) {
+        YIKES(-EIO);
+      }
 
       char localMd5[2 * MD5_DIGEST_LENGTH+1];
       sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
@@ -710,8 +693,9 @@ int get_local_fd(const char* path) {
       // md5 match?
       if (string(localMd5) != remoteMd5) {
         // no! prepare to download
-        if (close(fd) == -1)
-          Yikes(-errno);
+        if (close(fd) == -1) {
+          YIKES(-errno);
+        }
         fd = -1;
       }
     }
@@ -734,16 +718,18 @@ int get_local_fd(const char* path) {
       fd = fileno(tmpfile());
     }
 
-    if (fd == -1)
-      Yikes(-errno);
+    if (fd == -1) {
+      YIKES(-errno);
+    }
 
     curl = create_curl_handle();
     // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
     FILE* f = fdopen(fd, "w+");
-    if (f == 0)
-      Yikes(-errno);
+    if (f == 0) {
+      YIKES(-errno);
+    }
     curl_easy_setopt(curl, CURLOPT_FILE, f);
 
     auto_curl_slist headers;
@@ -765,15 +751,16 @@ int get_local_fd(const char* path) {
 
     result = my_curl_easy_perform(curl, NULL, f);
     if (result != 0) {
-       return result;
+       return -result;
     }
 
     //only one of these is needed...
     fflush(f);
     fsync(fd);
 
-    if (fd == -1)
-      Yikes(-errno);
+    if (fd == -1) {
+      YIKES(-errno);
+    }
   }
 
   destroy_curl_handle(curl);
@@ -877,8 +864,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   body.size = 0;    /* no data at this point */ 
 
   struct stat st;
-  if (fstat(fd, &st) == -1)
-    Yikes(-errno);
+  if (fstat(fd, &st) == -1) {
+    YIKES(-errno);
+  }
 
   curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
@@ -891,8 +879,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
 
   FILE* f = fdopen(fd, "rb");
-  if (f == 0)
-    Yikes(-errno);
+  if (f == 0) {
+    YIKES(-errno);
+  }
   curl_easy_setopt(curl, CURLOPT_INFILE, f);
 
   string ContentType = meta["Content-Type"];
@@ -967,13 +956,15 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   }
 
   {
-    auto_lock lock(stat_cache_lock);
+    pthread_mutex_lock( &stat_cache_lock );
     stat_cache_t::iterator iter = stat_cache.find(path);
     if (iter != stat_cache.end()) {
       *stbuf = (*iter).second;
       stat_cache.erase(path);
+      pthread_mutex_unlock( &stat_cache_lock );
       return 0;
     }
+    pthread_mutex_unlock( &stat_cache_lock );
   }
 
   body.text = (char *)malloc(1);
@@ -1007,7 +998,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  // result = my_curl_easy_perform(curl.get(), &body);
   result = my_curl_easy_perform(curl, &body);
   if (result != 0) {
     if(body.text) {
@@ -1052,27 +1042,41 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
 }
 
 static int s3fs_readlink(const char *path, char *buf, size_t size) {
+  int fd = -1;
   if (size > 0) {
     --size; // reserve nil terminator
 
     if(foreground) 
       cout << "readlink[path=" << path << "]" << endl;
 
-    auto_fd fd(get_local_fd(path));
+    fd = get_local_fd(path);
+    if(fd < 0) {
+      syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
+      return -EIO;
+    }
 
     struct stat st;
-    if (fstat(fd.get(), &st) == -1)
-      Yikes(-errno);
 
-    if (st.st_size < size)
+    if (fstat(fd, &st) == -1) {
+      syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+      if(fd > 0) close(fd);
+      return -errno;
+    }
+
+    if (st.st_size < size) {
       size = st.st_size;
+    }
 
-    if (pread(fd.get(), buf, size, 0) == -1)
-      Yikes(-errno);
+    if (pread(fd, buf, size, 0) == -1) {
+      syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+      if(fd > 0) close(fd);
+      return -errno;
+    }
 
     buf[size] = 0;
   }
 
+  if(fd > 0) close(fd);
   return 0;
 }
 
@@ -1383,6 +1387,9 @@ static int s3fs_rmdir(const char *path) {
 }
 
 static int s3fs_symlink(const char *from, const char *to) {
+  int result;
+  int fd = -1;
+
   if(foreground) 
     cout << "symlink[from=" << from << "][to=" << to << "]" << endl;
 
@@ -1390,13 +1397,25 @@ static int s3fs_symlink(const char *from, const char *to) {
   headers["x-amz-meta-mode"] = str(S_IFLNK);
   headers["x-amz-meta-mtime"] = str(time(NULL));
 
-  auto_fd fd(fileno(tmpfile()));
+  fd = fileno(tmpfile());
+  if(fd == -1) {
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+    return -errno;
+  }
 
-  if (pwrite(fd.get(), from, strlen(from), 0) == -1)
-    Yikes(-errno);
+  if (pwrite(fd, from, strlen(from), 0) == -1) {
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+    if(fd > 0) close(fd);
+    return -errno;
+  }
 
-  VERIFY(put_local_fd(to, headers, fd.get()));
+  result = put_local_fd(to, headers, fd);
+  if (result != 0) {
+    if(fd > 0) close(fd);
+    return result;
+  }
 
+  if(fd > 0) close(fd);
   return 0;
 }
 
@@ -1436,18 +1455,24 @@ static int s3fs_rename(const char *from, const char *to) {
 
   // preserve meta headers across rename
   headers_t meta;
+
   if(debug) syslog(LOG_DEBUG, "   rename: calling get_headers....");
-  VERIFY(get_headers(from, meta));
+
+  result = get_headers(from, meta);
+  if(result != 0) {
+     return result;
+  }
+
   if(debug) syslog(LOG_DEBUG, "   rename: returning from get_headers....");
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
-
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
 
   result = put_headers(to, meta);
-  if (result != 0)
+  if (result != 0) {
     return result;
+  }
 
   return s3fs_unlink(from);
 }
@@ -1459,10 +1484,16 @@ static int s3fs_link(const char *from, const char *to) {
 }
 
 static int s3fs_chmod(const char *path, mode_t mode) {
+  int result;
   if(foreground) 
     cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
   headers_t meta;
-  VERIFY(get_headers(path, meta));
+
+  result = get_headers(path, meta);
+  if(result != 0) {
+     return result;
+  }
+
   meta["x-amz-meta-mode"] = str(mode);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
   meta["x-amz-metadata-directive"] = "REPLACE";
@@ -1471,11 +1502,15 @@ static int s3fs_chmod(const char *path, mode_t mode) {
 
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
+  int result;
   if(foreground) 
     cout << "chown[path=" << path << "]" << endl;
 
   headers_t meta;
-  VERIFY(get_headers(path, meta));
+  result = get_headers(path, meta);
+  if(result != 0) {
+     return result;
+  }
 
   struct passwd* aaa = getpwuid(uid);
   if (aaa != 0)
@@ -1491,6 +1526,8 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
 }
 
 static int s3fs_truncate(const char *path, off_t size) {
+  int fd = -1;
+  int result;
   //###TODO honor size?!?
 
   if(foreground) 
@@ -1498,10 +1535,25 @@ static int s3fs_truncate(const char *path, off_t size) {
 
   // preserve headers across truncate
   headers_t meta;
-  VERIFY(get_headers(path, meta));
-  auto_fd fd(fileno(tmpfile()));
-  //###verify fd here?!?
-  VERIFY(put_local_fd(path, meta, fd.get()));
+
+  result = get_headers(path, meta);
+  if(result != 0) {
+     return result;
+  }
+
+  fd = fileno(tmpfile());
+  if(fd == -1) {
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+    return -errno;
+  }
+  
+  result = put_local_fd(path, meta, fd);
+  if(result != 0) {
+     if(fd > 0) close(fd);
+     return result;
+  }
+
+  if(fd > 0) close(fd);
 
   return 0;
 }
@@ -1515,9 +1567,9 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
   fi->fh = get_local_fd(path);
 
   // remember flags and headers...
-  auto_lock lock(s3fs_descriptors_lock);
-
+  pthread_mutex_lock( &s3fs_descriptors_lock );
   s3fs_descriptors[fi->fh] = fi->flags;
+  pthread_mutex_unlock( &s3fs_descriptors_lock );
 
   return 0;
 }
@@ -1527,8 +1579,9 @@ static int s3fs_read(
   int res = pread(fi->fh, buf, size, offset);
   if(foreground) 
     cout << "read[path=" << path << "]" << endl;
-  if (res == -1)
-    Yikes(-errno);
+  if (res == -1) {
+    YIKES(-errno);
+  }
   return res;
 }
 
@@ -1538,8 +1591,9 @@ static int s3fs_write(
   int res = pwrite(fi->fh, buf, size, offset);
   if(foreground) 
     cout << "write[path=" << path << "]" << endl;
-  if (res == -1)
-    Yikes(-errno);
+  if (res == -1) {
+    YIKES(-errno);
+  }
   return res;
 }
 
@@ -1553,11 +1607,15 @@ static int s3fs_statfs(const char *path, struct statvfs *stbuf) {
 }
 
 static int get_flags(int fd) {
-  auto_lock lock(s3fs_descriptors_lock);
-  return s3fs_descriptors[fd];
+  int flags;
+  pthread_mutex_lock( &s3fs_descriptors_lock );
+  flags = s3fs_descriptors[fd];
+  pthread_mutex_unlock( &s3fs_descriptors_lock );
+  return flags;
 }
 
 static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
+  int result;
   int fd = fi->fh;
 
   if(foreground) 
@@ -1567,7 +1625,10 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int flags = get_flags(fd);
   if ((flags & O_RDWR) || (flags &  O_WRONLY)) {
     headers_t meta;
-    VERIFY(get_headers(path, meta));
+    result = get_headers(path, meta);
+    if(result != 0) {
+       return result;
+    }
     meta["x-amz-meta-mtime"] = str(time(NULL));
     return put_local_fd(path, meta, fd);
   }
@@ -1580,8 +1641,9 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "release[path=" << path << "][fd=" << fd << "]" << endl;
 
-  if (close(fd) == -1)
-    Yikes(-errno);
+  if (close(fd) == -1) {
+    YIKES(-errno);
+  }
   return 0;
 }
 
@@ -1639,8 +1701,6 @@ private:
 /////////////////////////////////////////////////
 // Multi CURL stuff
 /////////////////////////////////////////////////
-
-
 
 CURLHLL *create_h_element(CURL *handle) {
   CURLHLL *p;
@@ -2067,8 +2127,9 @@ static int s3fs_readdir(
           return -EIO;
         }
 
-        if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1)
-          Yikes(-errno);
+        if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1) {
+          YIKES(-errno);
+        }
       }
 
       while (curl_multi_perform(current_multi_handle, &running_handles) == CURLM_CALL_MULTI_PERFORM);
@@ -2122,8 +2183,9 @@ static int s3fs_readdir(
             st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
             st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
 
-            auto_lock lock(stat_cache_lock);
+            pthread_mutex_lock( &stat_cache_lock );
             stat_cache[stuff.path] = st;
+            pthread_mutex_unlock( &stat_cache_lock );
         } // if (code == 0)
       } // if (msg != NULL) {
     } // while (remaining_msgs)
@@ -2227,11 +2289,15 @@ static int s3fs_access(const char *path, int mask) {
 
 // aka touch
 static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
+  int result;
   if(foreground) 
     cout << "utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
 
   headers_t meta;
-  VERIFY(get_headers(path, meta));
+  result = get_headers(path, meta);
+  if(result != 0) {
+     return result;
+  }
   meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
   meta["x-amz-metadata-directive"] = "REPLACE";

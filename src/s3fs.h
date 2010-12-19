@@ -4,7 +4,6 @@
 #define FUSE_USE_VERSION 26
 
 #include <map>
-#include <stack>
 #include <string>
 
 #include <curl/curl.h>
@@ -20,13 +19,7 @@
 
 using namespace std;
 
-#define VERIFY(s) if (true) { \
-  int result = (s); \
-  if (result != 0) \
-    return result; \
-}
-
-#define Yikes(result) if (true) { \
+#define YIKES(result) if (true) { \
   syslog(LOG_ERR, "%d###result=%d", __LINE__, result); \
   return result; \
 }
