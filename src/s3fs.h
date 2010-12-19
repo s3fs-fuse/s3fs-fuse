@@ -33,10 +33,10 @@ using namespace std;
 
 typedef pair<double, double> progress_t;
 
-static long connect_timeout = 2;
+static long connect_timeout = 3;
 static time_t readwrite_timeout = 10;
 
-static stack<CURL*> curl_handles;
+// static stack<CURL*> curl_handles;
 static pthread_mutex_t curl_handles_lock;
 static map<CURL*, time_t> curl_times;
 static map<CURL*, progress_t> curl_progress;

@@ -74,12 +74,44 @@ class auto_lock {
   pthread_mutex_t& lock;
 };
 
+class auto_curl_slist {
+ public:
+  auto_curl_slist() : slist(0) { }
+  ~auto_curl_slist() { curl_slist_free_all(slist); }
+
+  struct curl_slist* get() const { return slist; }
+
+  void append(const string& s) {
+    slist = curl_slist_append(slist, s.c_str());
+  }
+
+ private:
+  struct curl_slist* slist;
+};
+
+
+
+
 // Memory structure for the alternate
 // write memory callback used with curl_easy_perform
 struct BodyStruct {
   char *text;    
   size_t size;
 };
+
+typedef struct curlhll {
+  CURL *handle;
+  struct curlhll *next;
+} CURLHLL;
+
+typedef struct curlmhll {
+   CURLM *handle;
+   struct curlhll *curlhll_head;
+   struct curlmhll * next;
+} CURLMHLL;
+
+
+
 
 // homegrown timeout mechanism
 static int my_curl_progress(
@@ -107,131 +139,49 @@ static int my_curl_progress(
   return 0;
 }
 
-static CURL* alloc_curl_handle() {
-  CURL* curl;
-  auto_lock lock(curl_handles_lock);
-  if (curl_handles.size() == 0) {
-    curl = curl_easy_init();
-  } else {
-    curl = curl_handles.top();
-    curl_handles.pop();
-  }
-  curl_easy_reset(curl);
-  long signal = 1;
-  curl_easy_setopt(curl, CURLOPT_NOSIGNAL, signal);
 
-//  long timeout = 3600;
-//  curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
+CURL *create_curl_handle(void) {
+  long signal;
+  time_t now;
+  CURL *curl_handle;
 
-  //###long seconds = 10;
-  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connect_timeout);
+  curl_handle = curl_easy_init();
 
-  curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
-  curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
-  curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, curl);
-  time_t now = time(0);
-  curl_times[curl] = now;
-  curl_progress[curl] = progress_t(-1, -1);
-  return curl;
+  ///////////////////////////////////////////////////////////
+  // was part of alloc_curl_handle  
+  ///////////////////////////////////////////////////////////
+  curl_easy_reset(curl_handle);
+  signal = 1;
+  curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, signal);
+  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, connect_timeout);
+  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
+  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
+  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
+  now = time(0);
+  curl_times[curl_handle] = now;
+  curl_progress[curl_handle] = progress_t(-1, -1);
+  ///////////////////////////////////////////////////////////
+
+  // should we make sure that the curl_handle is unique?
+  return curl_handle;
 }
 
-static void return_curl_handle(CURL* curl_handle) {
-  if (curl_handle != 0) {
-    auto_lock lock(curl_handles_lock);
-    curl_handles.push(curl_handle);
+void destroy_curl_handle(CURL *curl_handle) {
+  if(curl_handle != NULL) {
+
+    // what does this do, what is is for, is it necessary?
+    // auto_lock lock(curl_handles_lock);
+    // curl_handles.push(curl_handle);
+
     curl_times.erase(curl_handle);
     curl_progress.erase(curl_handle);
+
+    curl_easy_cleanup(curl_handle);
   }
+  return;
 }
 
-class auto_curl {
- public:
-  auto_curl() : curl_handle(alloc_curl_handle()) { }
 
-//  auto_curl(CURL* curl): curl(curl) {
-////    auto_lock lock(curl_handles_lock);
-////    if (curl_handles.size() == 0)
-////      curl = curl_easy_init();
-////    else {
-////      curl = curl_handles.top();
-////      curl_handles.pop();
-////    }
-////    curl_easy_reset(curl);
-////    long seconds = 10;
-////    //###curl_easy_setopt(curl, CURLOPT_TIMEOUT, seconds); // bad idea
-////    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, seconds);
-//  }
-  ~auto_curl() {
-    if (curl_handle != 0) {
-      return_curl_handle(curl_handle);
-//      auto_lock lock(curl_handles_lock);
-//      curl_handles.push(curl);
-    }
-  }
-
-  CURL* get() const { return curl_handle; }
-//  CURL* release() {
-//    CURL* tmp = curl;
-//    curl = 0;
-//    return tmp;
-//  }
-//  void reset(CURL* curl) {
-//    if (curl != 0) {
-//      auto_lock lock(curl_handles_lock);
-//      curl_handles.push(curl);
-//    }
-//    this->curl = curl;
-//  }
-  operator CURL*() const { return curl_handle; }
-
- private:
-  CURL* curl_handle;
-};
-
-struct curl_multi_remove_handle_functor {
-  CURLM* multi_handle;
-  curl_multi_remove_handle_functor(CURLM* multi_handle) : multi_handle(multi_handle) { }
-
-  void operator()(CURL* curl_handle) {
-    curl_multi_remove_handle(multi_handle, curl_handle);
-    return_curl_handle(curl_handle);
-  }
-};
-
-class auto_curl_multi {
- public:
-  auto_curl_multi(): multi_handle(curl_multi_init()) { }
-  ~auto_curl_multi() {
-    curl_multi_cleanup(for_each(curl_handles.begin(), curl_handles.end(),
-        curl_multi_remove_handle_functor(multi_handle)).multi_handle);
-  }
-
-  CURLM* get() const { return multi_handle; }
-
-  void add_curl(CURL* curl_handle) {
-    curl_handles.push_back(curl_handle);
-    curl_multi_add_handle(multi_handle, curl_handle);
-  }
-
- private:
-  CURLM* multi_handle;
-  vector<CURL*> curl_handles;
-};
-
-class auto_curl_slist {
- public:
-  auto_curl_slist() : slist(0) { }
-  ~auto_curl_slist() { curl_slist_free_all(slist); }
-
-  struct curl_slist* get() const { return slist; }
-
-  void append(const string& s) {
-    slist = curl_slist_append(slist, s.c_str());
-  }
-
- private:
-  struct curl_slist* slist;
-};
 
 static string prepare_url(const char* url) {
   if(debug) syslog(LOG_DEBUG, "URL is %s", url);
@@ -402,6 +352,7 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
 
       case CURLE_OPERATION_TIMEDOUT:
         syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
+        sleep(2);
         break; 
 
       case CURLE_COULDNT_CONNECT:
@@ -652,12 +603,15 @@ static int mkdirp(const string& path, mode_t mode) {
  */
 int get_headers(const char* path, headers_t& meta) {
 
+  CURL *curl;
+  int result;
+
   if(debug) syslog(LOG_DEBUG, "get_headers called path=%s", path);
 
   string resource(urlEncode(service_path + bucket + path));
   string url(host + resource);
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
@@ -681,7 +635,14 @@ int get_headers(const char* path, headers_t& meta) {
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   if(debug) syslog(LOG_DEBUG, "get_headers: now calling my_curl_easy_perform");
-  VERIFY(my_curl_easy_perform((curl.get())));
+  result = my_curl_easy_perform(curl);
+
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+     return result;
+  }
+
   if(debug) syslog(LOG_DEBUG, "get_headers: now returning from my_curl_easy_perform");
 
   // at this point we know the file exists in s3
@@ -706,6 +667,8 @@ int get_headers(const char* path, headers_t& meta) {
  * get_local_fd
  */
 int get_local_fd(const char* path) {
+  CURL *curl = NULL;
+  int result;
   string resource(urlEncode(service_path + bucket + path));
   string url(host + resource);
 
@@ -774,7 +737,7 @@ int get_local_fd(const char* path) {
     if (fd == -1)
       Yikes(-errno);
 
-    auto_curl curl;
+    curl = create_curl_handle();
     // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -800,7 +763,10 @@ int get_local_fd(const char* path) {
     string my_url = prepare_url(url.c_str());
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-    VERIFY(my_curl_easy_perform(curl.get(), NULL, f));
+    result = my_curl_easy_perform(curl, NULL, f);
+    if (result != 0) {
+       return result;
+    }
 
     //only one of these is needed...
     fflush(f);
@@ -810,6 +776,8 @@ int get_local_fd(const char* path) {
       Yikes(-errno);
   }
 
+  destroy_curl_handle(curl);
+
   return fd;
 }
 
@@ -818,6 +786,8 @@ int get_local_fd(const char* path) {
  * @return fuse return code
  */
 static int put_headers(const char* path, headers_t meta) {
+  CURL *curl = NULL;
+  
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
@@ -826,7 +796,7 @@ static int put_headers(const char* path, headers_t meta) {
   body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
   body.size = 0;    /* no data at this point */ 
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -877,11 +847,13 @@ static int put_headers(const char* path, headers_t meta) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl.get(), &body);
+  result = my_curl_easy_perform(curl, &body);
 
   if(body.text) {
     free(body.text);
   }
+ 
+  destroy_curl_handle(curl);
 
   if(result != 0) {
      return result;
@@ -895,6 +867,7 @@ static int put_headers(const char* path, headers_t meta) {
  * @return fuse return code
  */
 static int put_local_fd(const char* path, headers_t meta, int fd) {
+  CURL *curl = NULL;
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
@@ -907,7 +880,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   if (fstat(fd, &st) == -1)
     Yikes(-errno);
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
@@ -961,11 +934,13 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl.get(), &body, f);
+  result = my_curl_easy_perform(curl, &body, f);
 
   if(body.text) {
     free(body.text);
   }
+
+  destroy_curl_handle(curl);
 
   if(result != 0) {
     return result;
@@ -975,11 +950,14 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 }
 
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
-  if(foreground) 
-    cout << "getattr[path=" << path << "]" << endl;
+
 
   struct BodyStruct body;
   int result;
+  CURL *curl;
+
+  if(foreground) 
+    cout << "getattr[path=" << path << "]" << endl;
 
   memset(stbuf, 0, sizeof(struct stat));
   if (strcmp(path, "/") == 0) {
@@ -1004,7 +982,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
-  auto_curl curl;
+  curl = create_curl_handle();
+
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -1028,11 +1007,13 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl.get(), &body);
+  // result = my_curl_easy_perform(curl.get(), &body);
+  result = my_curl_easy_perform(curl, &body);
   if (result != 0) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return result; \
   }
 
@@ -1065,6 +1046,7 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   if(body.text) {
     free(body.text);
   }
+  destroy_curl_handle(curl);
 
   return 0;
 }
@@ -1165,6 +1147,8 @@ string lookupMimeType(string s) {
 }
 
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
+  CURL *curl = NULL;
+  int result;
   // see man 2 mknod
   // If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
   if(foreground) 
@@ -1173,7 +1157,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -1199,19 +1183,29 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  result = my_curl_easy_perform(curl);
+
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+     return result;
+  }
 
   return 0;
 }
 
 static int s3fs_mkdir(const char *path, mode_t mode) {
+
+  CURL *curl = NULL;
+  int result;
+
   if(foreground) 
     cout << "mkdir[path=" << path << "][mode=" << mode << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -1236,20 +1230,28 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  result = my_curl_easy_perform(curl);
+ 
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+     return result;
+  }
 
   return 0;
 }
 
 // aka rm
 static int s3fs_unlink(const char *path) {
+  CURL *curl = NULL;
+  int result;
   if(foreground) 
     cout << "unlink[path=" << path << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
@@ -1267,12 +1269,20 @@ static int s3fs_unlink(const char *path) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  result = my_curl_easy_perform(curl);
+
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+     return result;
+  }
 
   return 0;
 }
 
 static int s3fs_rmdir(const char *path) {
+  CURL *curl = NULL;
+  CURL *curl_handle = NULL;
   if(foreground) 
     cout << "rmdir[path=" << path << "]" << endl;
  
@@ -1293,7 +1303,7 @@ static int s3fs_rmdir(const char *path) {
 
       string url = host + resource + "?"+ query;
 
-      auto_curl curl;
+      curl = create_curl_handle();
       string my_url = prepare_url(url.c_str());
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
       // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
@@ -1312,11 +1322,12 @@ static int s3fs_rmdir(const char *path) {
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-      result = my_curl_easy_perform(curl.get(), &body);
+      result = my_curl_easy_perform(curl, &body);
       if(result != 0) {
         if(body.text) {
           free(body.text);
         }
+        destroy_curl_handle(curl);
         return result;
       }
 
@@ -1330,6 +1341,7 @@ static int s3fs_rmdir(const char *path) {
           if(body.text) {
             free(body.text);
           }
+          destroy_curl_handle(curl);
           return -ENOTEMPTY;
       }
    }
@@ -1337,10 +1349,10 @@ static int s3fs_rmdir(const char *path) {
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
-  auto_curl curl;
+  curl_handle = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+  curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "DELETE");
 
   auto_curl_slist headers;
   string date = get_date();
@@ -1350,15 +1362,21 @@ static int s3fs_rmdir(const char *path) {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("DELETE", "", date, headers.get(), resource));
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers.get());
 
   string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+  curl_easy_setopt(curl_handle, CURLOPT_URL, my_url.c_str());
 
-  VERIFY(my_curl_easy_perform(curl.get()));
+  result = my_curl_easy_perform(curl_handle);
 
   if(body.text) {
     free(body.text);
+  }
+  destroy_curl_handle(curl);
+  destroy_curl_handle(curl_handle);
+
+  if(result != 0) {
+    return result;
   }
 
   return 0;
@@ -1615,11 +1633,210 @@ private:
   stuffMap_t stuffMap;
 };
 
+
+
+
+/////////////////////////////////////////////////
+// Multi CURL stuff
+/////////////////////////////////////////////////
+
+
+
+CURLHLL *create_h_element(CURL *handle) {
+  CURLHLL *p;
+  p = (CURLHLL *) malloc(sizeof(CURLHLL));
+  if (p == NULL) {
+     printf("create_h_element: could not allocation memory\n");
+     exit(1);
+  }
+  p->handle = handle;
+  p->next = NULL;
+  return p;
+}
+
+void add_h_element(CURLHLL *head, CURL *handle) {
+  CURLHLL *p;
+  CURLHLL *p_new;
+
+  p_new = create_h_element(handle);
+
+  for (p = head; p->next != NULL; p = p->next);
+    ;
+
+  p->next = p_new;
+  return;
+}
+
+
+CURLMHLL *create_mh_element(CURLM *handle) {
+  CURLMHLL *p;
+  p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
+  if (p == NULL) {
+     printf("create_mh_element: could not allocation memory\n");
+     exit(1);
+  }
+  p->handle = handle;
+  p->curlhll_head = NULL;
+  p->next = NULL;
+  return p;
+}
+
+CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle) {
+  CURLMHLL *p;
+  CURLMHLL *p_new;
+
+  p_new = create_mh_element(handle);
+
+  for (p = head; p->next != NULL; p = p->next);
+    ;
+
+  p->next = p_new;
+  return p_new;
+}
+
+void add_h_to_mh(CURL *h, CURLMHLL *mh) {
+   CURLHLL *h_head;
+
+   h_head = mh->curlhll_head;
+   if(h_head == NULL) {
+      h_head = create_h_element(h);
+      mh->curlhll_head = h_head;
+   } else {
+      add_h_element(h_head, h);
+   }
+   return;
+}
+
+void cleanup_multi_stuff(CURLMHLL *mhhead) {
+  // move this to it's own cleanup function  
+
+  CURLMHLL *my_mhhead;
+  CURLMHLL *pnext;
+  CURLHLL *cnext;
+  CURLHLL *chhead;
+  CURLMcode curlm_code;
+
+  CURL *curl_handle;
+  CURLM *curl_multi_handle;
+
+  if(mhhead == NULL) {
+     return;
+  }
+
+  // Remove all of the easy handles from its multi handle
+
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+
+      curl_multi_handle = my_mhhead->handle;
+      curl_handle = chhead->handle;
+
+      curlm_code = curl_multi_remove_handle(curl_multi_handle, curl_handle);
+      if(curlm_code != CURLM_OK) {
+        syslog(LOG_ERR, "curl_multi_remove_handle code: %d msg: %s", 
+           curlm_code, curl_multi_strerror(curlm_code));
+      }
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  // now clean up the easy handles
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+      destroy_curl_handle(chhead->handle);
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  // now cleanup the multi handles
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+
+ 
+  do {
+    pnext = my_mhhead->next;
+  
+    curlm_code = curl_multi_cleanup(my_mhhead->handle);
+    if(curlm_code != CURLM_OK) {
+       syslog(LOG_ERR, "curl_multi_cleanup code: %d msg: %s", 
+          curlm_code, curl_multi_strerror(curlm_code));
+    }
+
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+
+
+  // Now free the memory structures
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+      free(chhead);
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    free(my_mhhead);
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  return;
+}
+
+
+
+
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 
+  int result;
+
+  CURLMHLL *mhhead = NULL;
+  CURLMHLL *mhcurrent = NULL;
+
+  CURLM *current_multi_handle = NULL;
+
+  CURLMcode curlm_code;
+
+  CURL *curl;
+  long signal = 1;
+  time_t now;
+
   if(foreground) 
     cout << "readdir[path=" << path << "]" << endl;
+
 
   struct BodyStruct body;
   body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
@@ -1644,7 +1861,8 @@ static int s3fs_readdir(
     string url = host + resource + "?" + query;
 
     {
-      auto_curl curl;
+      curl = create_curl_handle();
+
       string my_url = prepare_url(url.c_str());
 
       if(body.text) {
@@ -1654,7 +1872,6 @@ static int s3fs_readdir(
       }
 
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -1673,10 +1890,11 @@ static int s3fs_readdir(
       }
 
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-      int result;
       
-      result = my_curl_easy_perform(curl.get(), &body);
+      result = my_curl_easy_perform(curl, &body);
+
+      destroy_curl_handle(curl);
+
       if(result != 0) {
         if(body.text) {
           free(body.text);
@@ -1686,7 +1904,14 @@ static int s3fs_readdir(
     }
 
     auto_stuff curlMap;
-    auto_curl_multi multi_handle;
+    current_multi_handle = curl_multi_init();
+
+    if (mhhead == NULL) {
+       mhhead = create_mh_element(current_multi_handle);
+       mhcurrent = mhhead;
+    } else {
+       mhcurrent = add_mh_element(mhhead, current_multi_handle);
+    }
 
 //    long max_connects = 5;
 //    curl_multi_setopt(multi_handle.get(), CURLMOPT_MAXCONNECTS, max_connects);
@@ -1728,10 +1953,11 @@ static int s3fs_readdir(
               }
 
               if (Key.size() > 0) {
-                if (filler(buf, mybasename(Key).c_str(), 0, 0))
+                if (filler(buf, mybasename(Key).c_str(), 0, 0)) {
                   break;
+                }
 
-                CURL* curl_handle = alloc_curl_handle();
+                CURL* curl_handle = create_curl_handle();
 
                 string resource = urlEncode(service_path + bucket + "/" + Key);
                 string url = host + resource;
@@ -1775,7 +2001,14 @@ static int s3fs_readdir(
                 curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_callback);
 
                 curlMap.get()[curl_handle] = stuff;
-                multi_handle.add_curl(curl_handle);
+
+                curlm_code = curl_multi_add_handle(current_multi_handle, curl_handle);
+                if(curlm_code != CURLM_OK) {
+                  syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
+                       curlm_code, curl_multi_strerror(curlm_code));
+                  return -EIO;
+                }
+                add_h_to_mh(curl_handle, mhcurrent);
               }
             }
           }
@@ -1785,8 +2018,19 @@ static int s3fs_readdir(
     }
 
     int running_handles;
+    running_handles = 0;
 
-    while (curl_multi_perform(multi_handle.get(), &running_handles) == CURLM_CALL_MULTI_PERFORM);
+    CURLMcode curlm_code = CURLM_CALL_MULTI_PERFORM;
+    while(curlm_code == CURLM_CALL_MULTI_PERFORM) {
+       curlm_code = curl_multi_perform(current_multi_handle, &running_handles);
+    }
+    // Error check
+    if(curlm_code != CURLM_OK) {
+       syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
+                       curlm_code, curl_multi_strerror(curlm_code));
+       return -EIO;
+    }
+
 
     while (running_handles) {
       fd_set read_fd_set;
@@ -1798,7 +2042,14 @@ static int s3fs_readdir(
       FD_ZERO(&exc_fd_set);
 
       long milliseconds;
-      VERIFY(curl_multi_timeout(multi_handle.get(), &milliseconds));
+
+      curlm_code = curl_multi_timeout(current_multi_handle, &milliseconds);
+      if (curlm_code != CURLM_OK) {
+        syslog(LOG_ERR, "readdir: curl_multi_timeout code: %d msg: %s", 
+                       curlm_code, curl_multi_strerror(curlm_code));
+        return -EIO;
+      }
+
       if (milliseconds < 0)
         milliseconds = 50;
       if (milliseconds > 0) {
@@ -1807,24 +2058,32 @@ static int s3fs_readdir(
         timeout.tv_usec = 1000 * milliseconds % 1000000;
 
         int max_fd;
-        VERIFY(curl_multi_fdset(
-            multi_handle.get(), &read_fd_set, &write_fd_set, &exc_fd_set, &max_fd));
+
+        curlm_code = curl_multi_fdset(current_multi_handle, &read_fd_set, 
+                                  &write_fd_set, &exc_fd_set, &max_fd);
+        if (curlm_code != CURLM_OK) {
+          syslog(LOG_ERR, "readdir: curl_multi_fdset code: %d msg: %s", 
+                       curlm_code, curl_multi_strerror(curlm_code));
+          return -EIO;
+        }
 
         if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1)
           Yikes(-errno);
       }
 
-      while (curl_multi_perform(multi_handle.get(), &running_handles) == CURLM_CALL_MULTI_PERFORM);
+      while (curl_multi_perform(current_multi_handle, &running_handles) == CURLM_CALL_MULTI_PERFORM);
     }
 
     int remaining_msgs = 1;
     while (remaining_msgs) {
       // this next line pegs cpu for directories w/lotsa files
-      CURLMsg* msg = curl_multi_info_read(multi_handle.get(), &remaining_msgs);
+      CURLMsg* msg = curl_multi_info_read(current_multi_handle, &remaining_msgs);
         if (msg != NULL) {
           CURLcode code =msg->data.result;
-          if (code != 0)
-            syslog(LOG_ERR, "###%d %s", code, curl_easy_strerror(code));
+          if (code != 0) {
+            syslog(LOG_ERR, "readdir: remaining_msgs: %i code: %d  msg: %s", 
+                             remaining_msgs, code, curl_easy_strerror(code));
+          }
           if (code == 0) {
             CURL* curl_handle = msg->easy_handle;
             stuff_t stuff = curlMap.get()[curl_handle];
@@ -1837,39 +2096,45 @@ static int s3fs_readdir(
                 (*stuff.responseHeaders)["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
             char* ContentType = 0;
             if (curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_TYPE, &ContentType) == 0) {
-              if (ContentType)
+              if (ContentType) {
                 st.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
+              }
             }
             // mtime
             st.st_mtime = strtoul
                 ((*stuff.responseHeaders)["x-amz-meta-mtime"].c_str(), (char **)NULL, 10);
             if (st.st_mtime == 0) {
               long LastModified;
-              if (curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0)
+              if (curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0) {
                 st.st_mtime = LastModified;
+              }
             }
             // size
             double ContentLength;
-            if (curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
+            if (curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0) {
               st.st_size = static_cast<off_t>(ContentLength);
+            }
             // blocks
-            if (S_ISREG(st.st_mode))
+            if (S_ISREG(st.st_mode)) {
               st.st_blocks = st.st_size / 512 + 1;
+            }
 
             st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
             st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
 
             auto_lock lock(stat_cache_lock);
             stat_cache[stuff.path] = st;
-        }
-      }
-    }
+        } // if (code == 0)
+      } // if (msg != NULL) {
+    } // while (remaining_msgs)
+  } // while (IsTruncated == "true") {
 
-  } // IsTruncated
 
   if(body.text) {
     free(body.text);
   }
+
+  cleanup_multi_stuff(mhhead);
 
   return 0;
 }
@@ -1991,6 +2256,9 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
 // isn't found in the service).
 ////////////////////////////////////////////////////////////
 static void s3fs_check_service(void) {
+
+  CURL *curl = NULL;
+
   if(foreground) 
     cout << "s3fs_check_service" << endl;
 
@@ -2005,7 +2273,7 @@ static void s3fs_check_service(void) {
   string resource = "/";
   string url = host + resource;
 
-  auto_curl curl;
+  curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
@@ -2041,7 +2309,7 @@ static void s3fs_check_service(void) {
 
   int t = retries + 1;
   while (t-- > 0) {
-    curlCode = curl_easy_perform(curl.get());
+    curlCode = curl_easy_perform(curl);
     if (curlCode == 0) {
       break;
     }
@@ -2110,16 +2378,16 @@ static void s3fs_check_service(void) {
     return;
   }
 
-  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
   if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
 
   // Connection was made, but there is a HTTP error
   if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
      // Try again, but this time grab the data
      curl_easy_setopt(curl, CURLOPT_FAILONERROR, false);
-     ccode = curl_easy_perform(curl.get());
+     ccode = curl_easy_perform(curl);
 
-     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
     
      fprintf (stderr, "%s: CURLE_HTTP_RETURNED_ERROR\n", program_name.c_str());
@@ -2161,6 +2429,7 @@ static void s3fs_check_service(void) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return;
   }
 
@@ -2172,6 +2441,7 @@ static void s3fs_check_service(void) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return;
   } 
   if (doc->children == NULL) {
@@ -2179,6 +2449,7 @@ static void s3fs_check_service(void) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return;
   }
 
@@ -2286,7 +2557,7 @@ static void s3fs_check_service(void) {
 
   t = retries + 1;
   while (t-- > 0) {
-    curlCode = curl_easy_perform(curl.get());
+    curlCode = curl_easy_perform(curl);
     if (curlCode == 0) {
       break;
     }
@@ -2341,6 +2612,7 @@ static void s3fs_check_service(void) {
             if(body.text) {
               free(body.text);
             }
+            destroy_curl_handle(curl);
             return;
         }
       }
@@ -2362,10 +2634,11 @@ static void s3fs_check_service(void) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return;
   }
 
-  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &responseCode);
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
   if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
 
   // Connection was made, but there is a HTTP error
@@ -2386,12 +2659,14 @@ static void s3fs_check_service(void) {
     if(body.text) {
       free(body.text);
     }
+    destroy_curl_handle(curl);
     return;
   }
 
   if(body.text) {
     free(body.text);
   }
+  destroy_curl_handle(curl);
   return;
 }
 
@@ -2671,7 +2946,7 @@ static void show_help (void) {
     "   passwd_file (default=\"\")\n"
     "      - specify which s3fs password file to use\n"
     "\n"
-    "   connect_timeout (default=\"2\" seconds)\n"
+    "   connect_timeout (default=\"3\" seconds)\n"
     "      - time to wait for connection before giving up\n"
     "\n"
     "   readwrite_timeout (default=\"10\" seconds)\n"
