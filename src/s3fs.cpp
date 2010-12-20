@@ -471,6 +471,11 @@ string get_date() {
 string calc_signature(
     string method, string content_type, string date, curl_slist* headers, string resource) {
 
+  int ret;
+  int bytes_written;
+  int offset;
+  int write_attempts = 0;
+
   string Signature;
   string StringToSign;
   StringToSign += method + "\n";
@@ -501,9 +506,60 @@ string calc_signature(
   BIO* b64 = BIO_new(BIO_f_base64());
   BIO* bmem = BIO_new(BIO_s_mem());
   b64 = BIO_push(b64, bmem);
-  BIO_write(b64, md, md_len);
-  BIO_flush(b64);
+
+  offset = 0;
+  for (;;) {
+    bytes_written = BIO_write(b64, &(md[offset]), md_len);
+    write_attempts++;
+    //  -1 indicates that an error occurred, or a temporary error, such as
+    //  the server is busy, occurred and we need to retry later.
+    //  BIO_write can do a short write, this code addresses this condition
+    if (bytes_written <= 0) {
+      //  Indicates whether a temporary error occurred or a failure to
+      //  complete the operation occurred
+      if ((ret = BIO_should_retry(b64))) {
+  
+        // Wait until the write can be accomplished
+        if(write_attempts <= 10) {
+          continue;
+        } else {
+          // Too many write attempts
+          syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+          BIO_free_all(b64);
+          Signature.clear();
+          return Signature;
+        }
+      } else {
+        // If not a retry then it is an error
+        syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+        BIO_free_all(b64);
+        Signature.clear();
+        return Signature;
+      }
+    }
+  
+    // The write request succeeded in writing some Bytes
+    offset += bytes_written;
+    md_len -= bytes_written;
+  
+    // If there is no more data to write, the request sending has been
+    // completed
+    if (md_len <= 0) {
+      break;
+    }
+  }
+
+  // Flush the data
+  ret = BIO_flush(b64);
+  if ( ret <= 0) { 
+    syslog(LOG_ERR, "Failure during BIO_flush, returning null String");  
+    BIO_free_all(b64);
+    Signature.clear();
+    return Signature;
+  } 
+
   BUF_MEM *bptr;
+
   BIO_get_mem_ptr(b64, &bptr);
 
   Signature.resize(bptr->length - 1);
@@ -513,6 +569,10 @@ string calc_signature(
 
   return Signature;
 }
+
+
+
+
 
 // libcurl callback
 // another write callback as shown by example
@@ -2142,7 +2202,7 @@ static int s3fs_readdir(
         if (msg != NULL) {
           CURLcode code =msg->data.result;
           if (code != 0) {
-            syslog(LOG_ERR, "readdir: remaining_msgs: %i code: %d  msg: %s", 
+            syslog(LOG_DEBUG, "readdir: remaining_msgs: %i code: %d  msg: %s", 
                              remaining_msgs, code, curl_easy_strerror(code));
           }
           if (code == 0) {
