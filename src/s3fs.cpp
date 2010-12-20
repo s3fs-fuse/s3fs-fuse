@@ -83,6 +83,40 @@ typedef struct curlmhll {
 } CURLMHLL;
 
 
+// All this "stuff" stuff is kinda ugly... it works though... needs cleanup
+struct stuff_t {
+  // default ctor works
+  string path;
+  string* url;
+  struct curl_slist* requestHeaders;
+  headers_t* responseHeaders;
+};
+
+typedef map<CURL*, stuff_t> stuffMap_t;
+
+struct cleanup_stuff {
+  void operator()(pair<CURL*, stuff_t> qqq) {
+    stuff_t stuff = qqq.second;
+    delete stuff.url;
+    curl_slist_free_all(stuff.requestHeaders);
+    delete stuff.responseHeaders;
+  }
+};
+
+class auto_stuff {
+ public:
+  auto_stuff() { }
+  ~auto_stuff() {
+    for_each(stuffMap.begin(), stuffMap.end(), cleanup_stuff());
+  }
+
+  stuffMap_t& get() { return stuffMap; }
+
+private:
+  stuffMap_t stuffMap;
+};
+
+
 
 
 // homegrown timeout mechanism
@@ -157,6 +191,203 @@ void destroy_curl_handle(CURL *curl_handle) {
   }
   return;
 }
+
+
+time_t my_timegm (struct tm *tm) {
+  time_t ret;
+  char *tz;
+
+  tz = getenv("TZ");
+  setenv("TZ", "", 1);
+  tzset();
+  ret = mktime(tm);
+  if (tz)
+    setenv("TZ", tz, 1);
+  else
+    unsetenv("TZ");
+  tzset();
+  return ret;
+}
+
+
+
+/////////////////////////////////////////////////
+// Multi CURL stuff
+/////////////////////////////////////////////////
+
+CURLHLL *create_h_element(CURL *handle) {
+  CURLHLL *p;
+  p = (CURLHLL *) malloc(sizeof(CURLHLL));
+  if (p == NULL) {
+     printf("create_h_element: could not allocation memory\n");
+     exit(1);
+  }
+  p->handle = handle;
+  p->next = NULL;
+  return p;
+}
+
+void add_h_element(CURLHLL *head, CURL *handle) {
+  CURLHLL *p;
+  CURLHLL *p_new;
+
+  p_new = create_h_element(handle);
+
+  for (p = head; p->next != NULL; p = p->next);
+    ;
+
+  p->next = p_new;
+  return;
+}
+
+
+CURLMHLL *create_mh_element(CURLM *handle) {
+  CURLMHLL *p;
+  p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
+  if (p == NULL) {
+     printf("create_mh_element: could not allocation memory\n");
+     exit(1);
+  }
+  p->handle = handle;
+  p->curlhll_head = NULL;
+  p->next = NULL;
+  return p;
+}
+
+CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle) {
+  CURLMHLL *p;
+  CURLMHLL *p_new;
+
+  p_new = create_mh_element(handle);
+
+  for (p = head; p->next != NULL; p = p->next);
+    ;
+
+  p->next = p_new;
+  return p_new;
+}
+
+void add_h_to_mh(CURL *h, CURLMHLL *mh) {
+   CURLHLL *h_head;
+
+   h_head = mh->curlhll_head;
+   if(h_head == NULL) {
+      h_head = create_h_element(h);
+      mh->curlhll_head = h_head;
+   } else {
+      add_h_element(h_head, h);
+   }
+   return;
+}
+
+void cleanup_multi_stuff(CURLMHLL *mhhead) {
+  // move this to it's own cleanup function  
+
+  CURLMHLL *my_mhhead;
+  CURLMHLL *pnext;
+  CURLHLL *cnext;
+  CURLHLL *chhead;
+  CURLMcode curlm_code;
+
+  CURL *curl_handle;
+  CURLM *curl_multi_handle;
+
+  if(mhhead == NULL) {
+     return;
+  }
+
+  // Remove all of the easy handles from its multi handle
+
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+
+      curl_multi_handle = my_mhhead->handle;
+      curl_handle = chhead->handle;
+
+      curlm_code = curl_multi_remove_handle(curl_multi_handle, curl_handle);
+      if(curlm_code != CURLM_OK) {
+        syslog(LOG_ERR, "curl_multi_remove_handle code: %d msg: %s", 
+           curlm_code, curl_multi_strerror(curlm_code));
+      }
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  // now clean up the easy handles
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+      destroy_curl_handle(chhead->handle);
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  // now cleanup the multi handles
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+
+ 
+  do {
+    pnext = my_mhhead->next;
+  
+    curlm_code = curl_multi_cleanup(my_mhhead->handle);
+    if(curlm_code != CURLM_OK) {
+       syslog(LOG_ERR, "curl_multi_cleanup code: %d msg: %s", 
+          curlm_code, curl_multi_strerror(curlm_code));
+    }
+
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+
+
+  // Now free the memory structures
+  my_mhhead = mhhead;
+  pnext = NULL;
+  cnext = NULL;
+  chhead = NULL;
+ 
+  do {
+    chhead = my_mhhead->curlhll_head;
+
+    while(chhead != NULL) {
+      cnext = chhead->next; 
+      free(chhead);
+      chhead = cnext;
+    }
+
+    pnext = my_mhhead->next;
+    free(my_mhhead);
+    my_mhhead = pnext;
+  } while(my_mhhead != NULL);
+
+  return;
+}
+
 
 
 
@@ -1479,18 +1710,221 @@ static int s3fs_symlink(const char *from, const char *to) {
   return 0;
 }
 
+static int rename_object( const char *from, const char *to) {
+  int result;
+  headers_t meta;
+
+  if(foreground) {
+    cout << "rename_object[from=" << from << "][to=" << to << "]" << endl; 
+  }
+  if(debug) syslog(LOG_DEBUG, "rename_object [from=%s] [to=%s]", from, to);
+
+
+  if(debug) syslog(LOG_DEBUG, "   rename_object: calling get_headers....");
+  result = get_headers(from, meta);
+  if(debug) syslog(LOG_DEBUG, "   rename_object: returning from get_headers....");
+  if(result != 0) {
+     return result;
+  }
+
+  meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
+  meta["Content-Type"] = lookupMimeType(to);
+  meta["x-amz-metadata-directive"] = "REPLACE";
+
+  result = put_headers(to, meta);
+  if (result != 0) {
+    return result;
+  }
+
+  result = s3fs_unlink(from);
+
+  return result;
+}
+
+static int rename_directory( const char *from, const char *to) {
+  int result;
+  mode_t mode;
+  headers_t meta;
+  int num_keys = 0;
+
+  if(foreground) 
+    cout << "rename_directory[from=" << from << "][to=" << to << "]" << endl;
+
+  if(debug) syslog(LOG_DEBUG, "rename_directory [from=%s] [to=%s]", from, to);
+
+  CURL *curl;
+  struct BodyStruct body;
+  string NextMarker;
+  string IsTruncated("true");
+
+  // How to determine mode?
+  mode = 493;
+
+
+  body.text = (char *)malloc(1);
+  body.size = 0;
+
+  while (IsTruncated == "true") {
+
+    string resource = urlEncode(service_path + bucket);
+    string query = "delimiter=/&prefix=";
+
+    if (strcmp(from, "/") != 0)
+      query += urlEncode(string(from).substr(1) + "/");
+
+    if (NextMarker.size() > 0)
+      query += "&marker=" + urlEncode(NextMarker);
+
+    query += "&max-keys=50";
+
+    string url = host + resource + "?" + query;
+
+    {
+      curl = create_curl_handle();
+
+      string my_url = prepare_url(url.c_str());
+
+      if(body.text) {
+        free(body.text);
+        body.size = 0;
+        body.text = (char *)malloc(1);
+      }
+
+      curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+      auto_curl_slist headers;
+      string date = get_date();
+      headers.append("Date: " + date);
+      headers.append("ContentType: ");
+      if (public_bucket.substr(0,1) != "1") {
+        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+          calc_signature("GET", "", date, headers.get(), resource + "/"));
+      }
+
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+      
+      result = my_curl_easy_perform(curl, &body);
+
+      destroy_curl_handle(curl);
+
+      if(result != 0) {
+        if(body.text) {
+          free(body.text);
+        }
+        return result;
+      }
+    }
+
+    printf("body.size: %i\n", body.size);
+
+    {
+      xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
+      if (doc != NULL && doc->children != NULL) {
+        for (xmlNodePtr cur_node = doc->children->children;
+             cur_node != NULL;
+             cur_node = cur_node->next) {
+
+          string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+          if (cur_node_name == "IsTruncated") {
+            IsTruncated = reinterpret_cast<const char *>(cur_node->children->content);
+          }
+          if (cur_node_name == "NextMarker") {
+            NextMarker = reinterpret_cast<const char *>(cur_node->children->content);
+          }
+          if (cur_node_name == "Contents") {
+            if (cur_node->children != NULL) {
+              string Key;
+              string LastModified;
+              string Size;
+              for (xmlNodePtr sub_node = cur_node->children;
+                   sub_node != NULL;
+                   sub_node = sub_node->next) {
+
+                if (sub_node->type == XML_ELEMENT_NODE) {
+                  string elementName = reinterpret_cast<const char*>(sub_node->name);
+                  if (sub_node->children != NULL) {
+                    if (sub_node->children->type == XML_TEXT_NODE) {
+                      if (elementName == "Key") {
+                        Key = reinterpret_cast<const char *>(sub_node->children->content);
+                      }
+                      if (elementName == "LastModified") {
+                        LastModified = reinterpret_cast<const char *>(sub_node->children->content);
+                      }
+                      if (elementName == "Size") {
+                        Size = reinterpret_cast<const char *>(sub_node->children->content);
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (Key.size() > 0) {
+                 num_keys++;
+                 printf("Key: %s\n", Key.c_str());
+              }
+
+            } // if (cur_node->children != NULL) {
+          } // if (cur_node_name == "Contents") {
+        } // for (xmlNodePtr cur_node = doc->children->children;
+      } // if (doc != NULL && doc->children != NULL) {
+      xmlFreeDoc(doc);
+    }
+
+  } // while (IsTruncated == "true") {
+
+  if(body.text) {
+    free(body.text);
+  }
+
+
+  // Fow now, only move directories which are empty
+  // I know, but its a step in the right direction
+
+  if (num_keys > 0) {
+    result = -ENOTSUP; // directory rename is not supported ... yet
+  } else {
+    // create the new directory
+    result = s3fs_mkdir(to, mode);
+    if ( result != 0) {
+      return result;
+    }
+
+    // and transfer its attributes
+    result = get_headers(from, meta);
+    if(result != 0) {
+       return result;
+    }
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+
+    result = put_headers(to, meta);
+    if (result != 0) {
+      return result;
+    }
+
+    result = s3fs_unlink(from);
+    if(result != 0) {
+       return result;
+    }
+
+   // return result  
+   result = 0;
+  }
+
+  return result;
+}
+
+
+
+
 static int s3fs_rename(const char *from, const char *to) {
   if(foreground) 
     cout << "rename[from=" << from << "][to=" << to << "]" << endl;
 
   if(debug) syslog(LOG_DEBUG, "rename [from=%s] [to=%s]", from, to);
-
-  // renaming (moving) directories is not supported at this time
-  // if the first argument is a directory, report the limitation
-  // and do nothing, this prevents the directory's children
-  // from just disappearing
-  //
-  // TODO: support directory renaming
 
   struct stat buf;
   int result;
@@ -1507,34 +1941,18 @@ static int s3fs_rename(const char *from, const char *to) {
 
   if (result == -1) {
     syslog(LOG_ERR, "###file: %s  code:%d   error:%s", from, result, strerror(errno));
+    return -errno; 
+  }
+ 
+  // Is is a directory or a different type of file 
+  if (S_ISDIR( buf.st_mode )) {
+    result = -ENOTSUP; // directory rename is not supported ... yet
+    // result = rename_directory(from, to);
   } else {
-    if (S_ISDIR( buf.st_mode )) {
-      return -ENOTSUP;
-    }
+    result = rename_object(from, to);
   }
 
-  // preserve meta headers across rename
-  headers_t meta;
-
-  if(debug) syslog(LOG_DEBUG, "   rename: calling get_headers....");
-
-  result = get_headers(from, meta);
-  if(result != 0) {
-     return result;
-  }
-
-  if(debug) syslog(LOG_DEBUG, "   rename: returning from get_headers....");
-
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
-  meta["Content-Type"] = lookupMimeType(to);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-
-  result = put_headers(to, meta);
-  if (result != 0) {
-    return result;
-  }
-
-  return s3fs_unlink(from);
+  return result;
 }
 
 static int s3fs_link(const char *from, const char *to) {
@@ -1706,236 +2124,6 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   }
   return 0;
 }
-
-time_t my_timegm (struct tm *tm) {
-  time_t ret;
-  char *tz;
-
-  tz = getenv("TZ");
-  setenv("TZ", "", 1);
-  tzset();
-  ret = mktime(tm);
-  if (tz)
-    setenv("TZ", tz, 1);
-  else
-    unsetenv("TZ");
-  tzset();
-  return ret;
-}
-
-// All this "stuff" stuff is kinda ugly... it works though... needs cleanup
-struct stuff_t {
-  // default ctor works
-  string path;
-  string* url;
-  struct curl_slist* requestHeaders;
-  headers_t* responseHeaders;
-};
-typedef map<CURL*, stuff_t> stuffMap_t;
-
-struct cleanup_stuff {
-  void operator()(pair<CURL*, stuff_t> qqq) {
-    stuff_t stuff = qqq.second;
-    delete stuff.url;
-    curl_slist_free_all(stuff.requestHeaders);
-    delete stuff.responseHeaders;
-  }
-};
-
-class auto_stuff {
- public:
-  auto_stuff() { }
-  ~auto_stuff() {
-    for_each(stuffMap.begin(), stuffMap.end(), cleanup_stuff());
-  }
-
-  stuffMap_t& get() { return stuffMap; }
-
-private:
-  stuffMap_t stuffMap;
-};
-
-
-
-
-/////////////////////////////////////////////////
-// Multi CURL stuff
-/////////////////////////////////////////////////
-
-CURLHLL *create_h_element(CURL *handle) {
-  CURLHLL *p;
-  p = (CURLHLL *) malloc(sizeof(CURLHLL));
-  if (p == NULL) {
-     printf("create_h_element: could not allocation memory\n");
-     exit(1);
-  }
-  p->handle = handle;
-  p->next = NULL;
-  return p;
-}
-
-void add_h_element(CURLHLL *head, CURL *handle) {
-  CURLHLL *p;
-  CURLHLL *p_new;
-
-  p_new = create_h_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return;
-}
-
-
-CURLMHLL *create_mh_element(CURLM *handle) {
-  CURLMHLL *p;
-  p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
-  if (p == NULL) {
-     printf("create_mh_element: could not allocation memory\n");
-     exit(1);
-  }
-  p->handle = handle;
-  p->curlhll_head = NULL;
-  p->next = NULL;
-  return p;
-}
-
-CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle) {
-  CURLMHLL *p;
-  CURLMHLL *p_new;
-
-  p_new = create_mh_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return p_new;
-}
-
-void add_h_to_mh(CURL *h, CURLMHLL *mh) {
-   CURLHLL *h_head;
-
-   h_head = mh->curlhll_head;
-   if(h_head == NULL) {
-      h_head = create_h_element(h);
-      mh->curlhll_head = h_head;
-   } else {
-      add_h_element(h_head, h);
-   }
-   return;
-}
-
-void cleanup_multi_stuff(CURLMHLL *mhhead) {
-  // move this to it's own cleanup function  
-
-  CURLMHLL *my_mhhead;
-  CURLMHLL *pnext;
-  CURLHLL *cnext;
-  CURLHLL *chhead;
-  CURLMcode curlm_code;
-
-  CURL *curl_handle;
-  CURLM *curl_multi_handle;
-
-  if(mhhead == NULL) {
-     return;
-  }
-
-  // Remove all of the easy handles from its multi handle
-
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-
-      curl_multi_handle = my_mhhead->handle;
-      curl_handle = chhead->handle;
-
-      curlm_code = curl_multi_remove_handle(curl_multi_handle, curl_handle);
-      if(curlm_code != CURLM_OK) {
-        syslog(LOG_ERR, "curl_multi_remove_handle code: %d msg: %s", 
-           curlm_code, curl_multi_strerror(curlm_code));
-      }
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now clean up the easy handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      destroy_curl_handle(chhead->handle);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now cleanup the multi handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
- 
-  do {
-    pnext = my_mhhead->next;
-  
-    curlm_code = curl_multi_cleanup(my_mhhead->handle);
-    if(curlm_code != CURLM_OK) {
-       syslog(LOG_ERR, "curl_multi_cleanup code: %d msg: %s", 
-          curlm_code, curl_multi_strerror(curlm_code));
-    }
-
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-
-
-  // Now free the memory structures
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      free(chhead);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    free(my_mhhead);
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  return;
-}
-
-
 
 
 static int s3fs_readdir(
