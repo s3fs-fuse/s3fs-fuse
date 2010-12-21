@@ -82,6 +82,13 @@ typedef struct curlmhll {
    struct curlmhll * next;
 } CURLMHLL;
 
+typedef struct mvnode {
+   char *old_path;
+   char *new_path;
+   bool is_dir;
+   struct mvnode *prev;
+   struct mvnode *next;
+} MVNODE;
 
 // All this "stuff" stuff is kinda ugly... it works though... needs cleanup
 struct stuff_t {
@@ -208,6 +215,86 @@ time_t my_timegm (struct tm *tm) {
   tzset();
   return ret;
 }
+
+MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
+  MVNODE *p;
+  char *p_old_path;
+  char *p_new_path;
+
+  p = (MVNODE *) malloc(sizeof(MVNODE));
+  if (p == NULL) {
+     printf("create_mvnode: could not allocation memory for p\n");
+     exit(1);
+  }
+
+  p_old_path = (char *)malloc(strlen(old_path)+1); 
+  if (p_old_path == NULL) {
+    printf("create_mvnode: could not allocation memory for p_old_path\n");
+    exit(1);
+  }
+
+  strcpy(p_old_path, old_path);
+ 
+  p_new_path = (char *)malloc(strlen(new_path)+1); 
+  if (p_new_path == NULL) {
+    printf("create_mvnode: could not allocation memory for p_new_path\n");
+    exit(1);
+  }
+
+  strcpy(p_new_path, new_path);
+
+  p->old_path = p_old_path;
+  p->new_path = p_new_path;
+  p->is_dir = is_dir;
+  p->prev = NULL;
+  p->next = NULL;
+  return p;
+}
+
+MVNODE *add_mvnode(MVNODE *head, char *old_path, char *new_path, bool is_dir) {
+  MVNODE *p;
+  MVNODE *tail;
+
+  tail = create_mvnode(old_path, new_path, is_dir);
+
+  for (p = head; p->next != NULL; p = p->next);
+    ;
+
+  p->next = tail;
+  tail->prev = p;
+  return tail;
+}
+
+
+void free_mvnodes(MVNODE *head) {
+
+  MVNODE *my_head;
+  MVNODE *next;
+  char *p_old_path;
+  char *p_new_path;
+
+  if(head == NULL) {
+     return;
+  }
+
+  my_head = head;
+  next = NULL;
+ 
+  do {
+    next = my_head->next;
+    p_old_path = my_head->old_path;
+    p_new_path = my_head->new_path;
+
+    free(p_old_path);
+    free(p_new_path);
+    free(my_head);
+
+    my_head = next;
+  } while(my_head != NULL);
+
+  return;
+}
+
 
 
 
@@ -1489,6 +1576,69 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   return 0;
 }
 
+
+//     int (*create) (const char *, mode_t, struct fuse_file_info *);
+
+static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+  CURL *curl = NULL;
+  int result;
+  headers_t meta;
+
+  // see man 2 mknod
+  // If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
+  if(foreground) 
+    cout << "create[path=" << path << "][mode=" << mode << "]" << "[flags=" << fi->flags << "]" <<  endl;
+
+  string resource = urlEncode(service_path + bucket + path);
+  string url = host + resource;
+
+  curl = create_curl_handle();
+  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
+  curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+
+  auto_curl_slist headers;
+  string date = get_date();
+  headers.append("Date: " + date);
+  string contentType(lookupMimeType(path));
+  headers.append("Content-Type: " + contentType);
+  // x-amz headers: (a) alphabetical order and (b) no spaces after colon
+  headers.append("x-amz-acl:" + default_acl);
+  headers.append("x-amz-meta-gid:" + str(getgid()));
+  headers.append("x-amz-meta-mode:" + str(mode));
+  headers.append("x-amz-meta-mtime:" + str(time(NULL)));
+  headers.append("x-amz-meta-uid:" + str(getuid()));
+  if (public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      calc_signature("PUT", contentType, date, headers.get(), resource));
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+  string my_url = prepare_url(url.c_str());
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  result = my_curl_easy_perform(curl);
+
+  destroy_curl_handle(curl);
+
+  // Object is now made, now open it
+
+  // ??? get_headers now? ... retry if not there yet?
+
+
+  //###TODO check fi->fh here...
+  fi->fh = get_local_fd(path);
+
+  // remember flags and headers...
+  pthread_mutex_lock( &s3fs_descriptors_lock );
+  s3fs_descriptors[fi->fh] = fi->flags;
+  pthread_mutex_unlock( &s3fs_descriptors_lock );
+
+  return 0;
+}
+
+
 static int s3fs_mkdir(const char *path, mode_t mode) {
 
   CURL *curl = NULL;
@@ -1741,11 +1891,88 @@ static int rename_object( const char *from, const char *to) {
   return result;
 }
 
+
+static int rename_directory_object( const char *from, const char *to) {
+  int result;
+  mode_t mode;
+  headers_t meta;
+
+  // How to determine mode?
+  mode = 493;
+
+  // create the new directory object
+  result = s3fs_mkdir(to, mode);
+  if ( result != 0) {
+    return result;
+  }
+
+  // and transfer its attributes
+  result = get_headers(from, meta);
+  if(result != 0) {
+     return result;
+  }
+
+  meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
+  meta["x-amz-metadata-directive"] = "REPLACE";
+
+  result = put_headers(to, meta);
+  if (result != 0) {
+    return result;
+  }
+
+  result = s3fs_unlink(from);
+  if(result != 0) {
+     return result;
+  }
+
+  return 0;
+}
+
+static int clone_directory_object( const char *from, const char *to) {
+  int result;
+  mode_t mode;
+  headers_t meta;
+
+  // How to determine mode?
+  mode = 493;
+
+  // create the new directory object
+  result = s3fs_mkdir(to, mode);
+  if ( result != 0) {
+    return result;
+  }
+
+  // and transfer its attributes
+  result = get_headers(from, meta);
+  if(result != 0) {
+     return result;
+  }
+
+  meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
+  meta["x-amz-metadata-directive"] = "REPLACE";
+
+  result = put_headers(to, meta);
+  if (result != 0) {
+    return result;
+  }
+
+  return 0;
+}
+
+
+
 static int rename_directory( const char *from, const char *to) {
   int result;
   mode_t mode;
   headers_t meta;
   int num_keys = 0;
+  int max_keys = 50;
+  string path;
+  string new_path;
+  string to_path;
+  string from_path;
+  MVNODE *head = NULL;
+  MVNODE *tail = NULL;
 
   if(foreground) 
     cout << "rename_directory[from=" << from << "][to=" << to << "]" << endl;
@@ -1756,18 +1983,32 @@ static int rename_directory( const char *from, const char *to) {
   struct BodyStruct body;
   string NextMarker;
   string IsTruncated("true");
-
-  // How to determine mode?
-  mode = 493;
+  string object_type;
+  string Key;
+  bool is_dir;
 
 
   body.text = (char *)malloc(1);
   body.size = 0;
 
+
+  // create the head/tail of the linked list
+  from_path.assign(from);
+  to_path.assign(to);
+  is_dir = 1;
+
+  // printf("calling create_mvnode\n");
+  // head = create_mvnode((char *)from, (char *)to, is_dir);
+  head = create_mvnode((char *)from_path.c_str(), (char *)to_path.c_str(), is_dir);
+  tail = head;
+  // printf("back from create_mvnode\n");
+
+
   while (IsTruncated == "true") {
 
     string resource = urlEncode(service_path + bucket);
-    string query = "delimiter=/&prefix=";
+    // string query = "delimiter=/&prefix=";
+    string query = "prefix=";
 
     if (strcmp(from, "/") != 0)
       query += urlEncode(string(from).substr(1) + "/");
@@ -1775,7 +2016,8 @@ static int rename_directory( const char *from, const char *to) {
     if (NextMarker.size() > 0)
       query += "&marker=" + urlEncode(NextMarker);
 
-    query += "&max-keys=50";
+    query += "&max-keys=";
+    query.append(IntToStr(max_keys));
 
     string url = host + resource + "?" + query;
 
@@ -1789,6 +2031,8 @@ static int rename_directory( const char *from, const char *to) {
         body.size = 0;
         body.text = (char *)malloc(1);
       }
+
+      // printf("url: %s\n", my_url.c_str());
 
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
@@ -1814,13 +2058,15 @@ static int rename_directory( const char *from, const char *to) {
         if(body.text) {
           free(body.text);
         }
+        free_mvnodes(head);
         return result;
       }
     }
 
-    printf("body.size: %i\n", body.size);
+    // printf("body.size: %i\n", body.size);
+    // printf("body.text: %s\n", body.text);
 
-    {
+    // {
       xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
       if (doc != NULL && doc->children != NULL) {
         for (xmlNodePtr cur_node = doc->children->children;
@@ -1830,13 +2076,16 @@ static int rename_directory( const char *from, const char *to) {
           string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
           if (cur_node_name == "IsTruncated") {
             IsTruncated = reinterpret_cast<const char *>(cur_node->children->content);
+            // printf("IsTruncated: %s\n", IsTruncated.c_str()); 
           }
+/*
           if (cur_node_name == "NextMarker") {
             NextMarker = reinterpret_cast<const char *>(cur_node->children->content);
+            printf("NextMarker: %s\n", NextMarker.c_str()); 
           }
+*/
           if (cur_node_name == "Contents") {
             if (cur_node->children != NULL) {
-              string Key;
               string LastModified;
               string Size;
               for (xmlNodePtr sub_node = cur_node->children;
@@ -1863,7 +2112,37 @@ static int rename_directory( const char *from, const char *to) {
 
               if (Key.size() > 0) {
                  num_keys++;
-                 printf("Key: %s\n", Key.c_str());
+                 // printf("Key: %s\n", Key.c_str());
+                 path = "/" + Key;
+                 new_path = path;
+                 new_path.replace(0, from_path.size(), to_path);
+                 // process the Key appropriately
+                 // if it is a directory move the directory object
+                 result = get_headers(path.c_str(), meta);
+                 if(result != 0) {
+                   free_mvnodes(head);
+                   if(body.text) {
+                     free(body.text);
+                   }
+                   return result;
+                 }
+
+                 object_type = meta["Content-Type"];
+                 if(object_type.compare("application/x-directory") == 0) {
+                    is_dir = 1;
+                    // printf(" ... is a directory\n");
+                 } else {
+                    is_dir = 0;
+                    // printf(" ... is NOT a directory\n");
+                 }
+                 // cout << "   path: " << path << endl;
+                 // cout << "   new_path: " << new_path << endl;
+                 // cout << "   dir: " << is_dir << endl;
+
+                 // push this one onto the stack
+                 tail = add_mvnode(head, (char *)path.c_str(), (char *)new_path.c_str(), is_dir);
+
+
               }
 
             } // if (cur_node->children != NULL) {
@@ -1871,7 +2150,12 @@ static int rename_directory( const char *from, const char *to) {
         } // for (xmlNodePtr cur_node = doc->children->children;
       } // if (doc != NULL && doc->children != NULL) {
       xmlFreeDoc(doc);
+    // }
+
+    if (IsTruncated == "true") {
+       NextMarker = Key;
     }
+
 
   } // while (IsTruncated == "true") {
 
@@ -1879,42 +2163,79 @@ static int rename_directory( const char *from, const char *to) {
     free(body.text);
   }
 
+  // iterate over the list - clone directories first - top down
 
-  // Fow now, only move directories which are empty
-  // I know, but its a step in the right direction
-
-  if (num_keys > 0) {
-    result = -ENOTSUP; // directory rename is not supported ... yet
-  } else {
-    // create the new directory
-    result = s3fs_mkdir(to, mode);
-    if ( result != 0) {
-      return result;
-    }
-
-    // and transfer its attributes
-    result = get_headers(from, meta);
-    if(result != 0) {
-       return result;
-    }
-    meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
-    meta["x-amz-metadata-directive"] = "REPLACE";
-
-    result = put_headers(to, meta);
-    if (result != 0) {
-      return result;
-    }
-
-    result = s3fs_unlink(from);
-    if(result != 0) {
-       return result;
-    }
-
-   // return result  
-   result = 0;
+  if(head == NULL) {
+     return 0;
   }
 
-  return result;
+  MVNODE *my_head;
+  MVNODE *my_tail;
+  MVNODE *next;
+  MVNODE *prev;
+  my_head = head;
+  my_tail = tail;
+  next = NULL;
+  prev = NULL;
+ 
+  do {
+    // printf("old_path: %s\n", my_head->old_path);
+    // printf("new_path: %s\n", my_head->new_path);
+    // printf("is_dir: %i\n", my_head->is_dir);
+    if(my_head->is_dir) {
+      result = clone_directory_object( my_head->old_path, my_head->new_path);
+      if(result != 0) {
+         free_mvnodes(head);
+         syslog(LOG_ERR, "clone_directory_object returned an error");
+         return -EIO;
+      }
+    }
+    next = my_head->next;
+    my_head = next;
+  } while(my_head != NULL);
+
+  // iterate over the list - copy the files with rename_object
+  // does a safe copy - copies first and then deletes old
+  my_head = head;
+  next = NULL;
+ 
+  do {
+    // printf("old_path: %s\n", my_head->old_path);
+    // printf("new_path: %s\n", my_head->new_path);
+    // printf("is_dir: %i\n", my_head->is_dir);
+    if(my_head->is_dir != 1) {
+      result = rename_object( my_head->old_path, my_head->new_path);
+      if(result != 0) {
+         free_mvnodes(head);
+         syslog(LOG_ERR, "rename_dir: rename_object returned an error");
+         return -EIO;
+      }
+    }
+    next = my_head->next;
+    my_head = next;
+  } while(my_head != NULL);
+
+
+  // Iterate over old the directories, bottoms up and remove
+  do {
+    // printf("old_path: %s\n", my_tail->old_path);
+    // printf("new_path: %s\n", my_tail->new_path);
+    // printf("is_dir: %i\n", my_tail->is_dir);
+    if(my_tail->is_dir) {
+      result = s3fs_unlink( my_tail->old_path);
+      if(result != 0) {
+         free_mvnodes(head);
+         syslog(LOG_ERR, "rename_dir: s3fs_unlink returned an error");
+         return -EIO;
+      }
+    }
+    prev = my_tail->prev;
+    my_tail = prev;
+  } while(my_tail != NULL);
+
+  free_mvnodes(head);
+
+  return 0;
 }
 
 
@@ -1946,8 +2267,8 @@ static int s3fs_rename(const char *from, const char *to) {
  
   // Is is a directory or a different type of file 
   if (S_ISDIR( buf.st_mode )) {
-    result = -ENOTSUP; // directory rename is not supported ... yet
-    // result = rename_directory(from, to);
+    // result = -ENOTSUP;
+    result = rename_directory(from, to);
   } else {
     result = rename_object(from, to);
   }
@@ -3652,6 +3973,9 @@ int main(int argc, char *argv[]) {
   s3fs_oper.destroy = s3fs_destroy;
   s3fs_oper.access = s3fs_access;
   s3fs_oper.utimens = s3fs_utimens;
+  s3fs_oper.create = s3fs_create;
+  
+
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
   return fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);

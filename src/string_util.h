@@ -37,5 +37,7 @@ inline string trim(const string &s, const string &t = SPACES) {
 }
 
 string lower(string s);
+string IntToStr(int);
+
 
 #endif // S3FS_STRING_UTIL_H_

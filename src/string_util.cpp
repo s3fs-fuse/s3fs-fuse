@@ -28,3 +28,9 @@ string lower(string s) {
   return s;
 }
 
+string IntToStr(int n) {
+  stringstream result;
+  result << n;
+  return result.str();
+}
+
