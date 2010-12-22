@@ -1528,19 +1528,21 @@ string lookupMimeType(string s) {
   return result;
 }
 
-static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
+
+////////////////////////////////////////////////////////
+// common function for creation of a plain object
+////////////////////////////////////////////////////////
+static int create_file_object(const char *path, mode_t mode) {
   CURL *curl = NULL;
   int result;
-  // see man 2 mknod
-  // If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
+
   if(foreground) 
-    cout << "mknod[path=" << path << "][mode=" << mode << "]" << endl;
+    cout << "create_file_object[path=" << path << "][mode=" << mode << "]" << endl;
 
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
 
   curl = create_curl_handle();
-  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
@@ -1577,55 +1579,45 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 }
 
 
-//     int (*create) (const char *, mode_t, struct fuse_file_info *);
 
-static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-  CURL *curl = NULL;
+////////////////////////////////////////////////////////
+// s3fs_mknod 
+////////////////////////////////////////////////////////
+static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int result;
-  headers_t meta;
+  if(foreground) 
+    cout << "mknod[path=" << path << "][mode=" << mode << "]" << endl;
 
   // see man 2 mknod
   // If pathname already exists, or is a symbolic link, this call fails with an EEXIST error.
+
+  result = create_file_object(path, mode);
+
+  if(result != 0) {
+     return result;
+  }
+
+  return 0;
+}
+
+
+////////////////////////////////////////////////////////////
+//  s3fs_create
+////////////////////////////////////////////////////////////
+static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+  int result;
+  headers_t meta;
+
   if(foreground) 
     cout << "create[path=" << path << "][mode=" << mode << "]" << "[flags=" << fi->flags << "]" <<  endl;
 
-  string resource = urlEncode(service_path + bucket + path);
-  string url = host + resource;
+  result = create_file_object(path, mode);
 
-  curl = create_curl_handle();
-  // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-  curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
-
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  string contentType(lookupMimeType(path));
-  headers.append("Content-Type: " + contentType);
-  // x-amz headers: (a) alphabetical order and (b) no spaces after colon
-  headers.append("x-amz-acl:" + default_acl);
-  headers.append("x-amz-meta-gid:" + str(getgid()));
-  headers.append("x-amz-meta-mode:" + str(mode));
-  headers.append("x-amz-meta-mtime:" + str(time(NULL)));
-  headers.append("x-amz-meta-uid:" + str(getuid()));
-  if (public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", contentType, date, headers.get(), resource));
+  if(result != 0) {
+     return result;
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-  string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl);
-
-  destroy_curl_handle(curl);
 
   // Object is now made, now open it
-
-  // ??? get_headers now? ... retry if not there yet?
-
 
   //###TODO check fi->fh here...
   fi->fh = get_local_fd(path);
