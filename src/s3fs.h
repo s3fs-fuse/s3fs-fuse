@@ -81,6 +81,7 @@ static pthread_mutex_t *mutex_buf = NULL;
 static struct fuse_operations s3fs_oper;
 
 string urlEncode(const string &s);
+string lookupMimeType(string);
 
 static int s3fs_getattr(const char *path, struct stat *stbuf);
 static int s3fs_readlink(const char *path, char *buf, size_t size);
@@ -108,5 +109,6 @@ static int s3fs_access(const char *path, int mask);
 static int s3fs_utimens(const char *path, const struct timespec ts[2]);
 static void* s3fs_init(struct fuse_conn_info *conn);
 static void s3fs_destroy(void*);
+
 
 #endif // S3FS_S3_H_

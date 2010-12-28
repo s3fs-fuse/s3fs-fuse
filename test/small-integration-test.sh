@@ -29,14 +29,17 @@ fi
 # Write a small test file
 for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
 do
-	echo $TEST_TEXT >> $TEST_TEXT_FILE
+   echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
+   echo $TEST_TEXT >> $TEST_TEXT_FILE
 done
 
 # Verify contents of file
+echo "Verifying length of test file"
 FILE_LENGTH=`wc -l $TEST_TEXT_FILE | awk '{print $1}'`
 if [ "$FILE_LENGTH" -ne "$TEST_TEXT_FILE_LENGTH" ]
 then
-	exit 1
+   echo "error: expected $TEST_TEXT_FILE_LENGTH , got $FILE_LENGTH"
+   exit 1
 fi
 
 # Delete the test file
