@@ -158,8 +158,8 @@ static int my_curl_progress(
     if (now - curl_times[curl] > readwrite_timeout) {
       pthread_mutex_unlock( &curl_handles_lock );
 
-      syslog(LOG_ERR, "timeout  now: %i  curl_times[curl]: %i  readwrite_timeout: %i",
-                      now, curl_times[curl], readwrite_timeout);
+      syslog(LOG_ERR, "timeout  now: %li  curl_times[curl]: %lil  readwrite_timeout: %li",
+                      (long int)now, curl_times[curl], (long int)readwrite_timeout);
 
       return CURLE_ABORTED_BY_CALLBACK;
     }
@@ -503,6 +503,7 @@ static string prepare_url(const char* url) {
   if(!strncasecmp(url_str.c_str(), "https://", 8)) {
     clipBy = 8;
   }
+
   url_str = url_str.substr(0, clipBy) + bucket + "." + url_str.substr(clipBy, bucket_pos - clipBy)
       + url_str.substr((bucket_pos + bucket_size));
 
@@ -592,7 +593,6 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
   } 
 
 
-  size_t first_pos = string::npos;
   long responseCode;
 
   // 1 attempt + retries...
@@ -627,6 +627,16 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
         // Service response codes which are >= 400 && < 500
 
         switch(responseCode) {
+          case 400:
+            if(debug) syslog(LOG_ERR, "HTTP response code 400 was returned");
+            if(body) {
+              if(body->size && debug) {
+                syslog(LOG_ERR, "Body Text: %s", body->text);
+              }
+            }
+            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
+            return -EIO;
+
           case 403:
             if(debug) syslog(LOG_ERR, "HTTP response code 403 was returned");
             if(body) {
@@ -1226,7 +1236,7 @@ static int put_headers(const char* path, headers_t meta) {
   curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
 
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -1393,24 +1403,26 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   string ETag;
   int result;
   unsigned long lSize;
+  int partfd = -1;
   FILE* pSourceFile;
   FILE* pPartFile;
   char * buffer;
   unsigned long lBufferSize = 0;
   size_t bytesRead;
   size_t bytesWritten;
-  char * partFileName;
+  // char * partFileName;
   int partNumber;
   string date;
   string expires;
   string raw_date;
   string auth;
   string my_url;
-  const char * UploadId;
+  // const char * UploadId;
   string uploadId;
   struct curl_slist *slist=NULL;
   vector <string> etags;
   int i;
+  char partFileName[17] = "";
 
   if(foreground) 
     cout << "   put_local_fd_big_file[path=" << path << "][fd=" << fd << "]" << endl;
@@ -1443,7 +1455,6 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   resource = urlEncode(service_path + bucket + path);
   resource.append("?uploads");
   url = host + resource;
-  // url.append("?uploads");
   my_url = prepare_url(url.c_str());
 
   curl = create_curl_handle();
@@ -1460,10 +1471,6 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   date.append(raw_date);
   slist = curl_slist_append(slist, date.c_str());
 
-  // expires.assign("Expires: ");
-  // expires.append(get_day_after_tomorrow());
-  // slist = curl_slist_append(slist, expires.c_str());
-
   slist = curl_slist_append(slist, "Accept:");
   slist = curl_slist_append(slist, "Content-Length:");
 
@@ -1472,26 +1479,19 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   string ctype_data;
   ctype_data.assign(lookupMimeType(path));
   ContentType.append(ctype_data);
-  // slist = curl_slist_append(slist, "Content-Type:");
   slist = curl_slist_append(slist, ContentType.c_str());
 
   // x-amz headers: (a) alphabetical order and (b) no spaces after colon
 
-  // meta["x-amz-acl"] = default_acl;
   string acl;
   acl.assign("x-amz-acl:");
   acl.append(default_acl);
   slist = curl_slist_append(slist, acl.c_str());
   
 
-  // printf("ContentType: %s\n", (meta["Content-Type"]).c_str());
-  // printf("default_acl: %s\n", default_acl.c_str());
-
    for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
      string key = (*iter).first;
      string value = (*iter).second;
-// 
-    // printf("key: %s   value: %s\n", key.c_str(), value.c_str());
 
     if (key.substr(0,10) == "x-amz-meta") {
       string entry;
@@ -1511,7 +1511,6 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
      auth.assign("Authorization: AWS ");
      auth.append(AWSAccessKeyId);
      auth.append(":");
-     // auth.append(calc_signature("POST", "", raw_date, slist, resource));
      auth.append(calc_signature("POST", ctype_data, raw_date, slist, resource));
     slist = curl_slist_append(slist, auth.c_str());
   }
@@ -1520,7 +1519,6 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
 
   result = my_curl_easy_perform(curl, &body);
 
-  // printf("body.text:\n%s\n", body.text);
   curl_slist_free_all(slist);
   destroy_curl_handle(curl);
 
@@ -1609,7 +1607,8 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
 
   // Does is match stat's info?
   if (lSize != st.st_size) {
-    syslog(LOG_ERR, "%d ### Sizes do not match lSize: %i  st_size: %u\n", __LINE__, lSize, st.st_size);
+    syslog(LOG_ERR, "%d ### Sizes do not match lSize: %lu  st_size: %lu\n", __LINE__, 
+            lSize, (unsigned long)st.st_size);
     // if(pSourceFile != NULL) fclose(pSourceFile);
     // return(-EIO);
   }
@@ -1640,7 +1639,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     // copy the file portion into the buffer:
     bytesRead = fread (buffer, 1, lBufferSize, pSourceFile);
     if (bytesRead != lBufferSize) {
-      syslog(LOG_ERR, "%d ### bytesRead:%i  does not match lBufferSize: %i\n", 
+      syslog(LOG_ERR, "%d ### bytesRead:%i  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesRead, lBufferSize);
 
       if(buffer) free(buffer);
@@ -1652,16 +1651,25 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     // source file portion is now in memory
     // open a temporary file for upload
 
-    partFileName = tmpnam (NULL);
-    if(partFileName == NULL) {
+    // partFileName = tmpnam (NULL);
+    strncpy(partFileName, "/tmp/s3fs.XXXXXX", sizeof partFileName);
+    partfd = mkstemp(partFileName);
+    if(partfd == -1) {
       syslog(LOG_ERR, "%d ### Could not create temporary file\n", __LINE__);
       if(buffer) free(buffer);
       return(-errno);
     }
 
+
+    // if(partFileName == NULL) {
+      // syslog(LOG_ERR, "%d ### Could not create temporary file\n", __LINE__);
+      // if(buffer) free(buffer);
+      // return(-errno);
+    // }
+
     // printf ("Tempfile created: %s\n", partFileName);
 
-    pPartFile = fopen(partFileName, "wb");
+    pPartFile = fdopen(partfd, "wb");
     if(pPartFile == NULL) {
       syslog(LOG_ERR, "%d ### Could not open temporary file: errno %i\n", 
                       __LINE__, errno);
@@ -1672,9 +1680,16 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     // printf ("Tempfile opened: %s\n", partFileName);
 
     // Copy buffer to tmpfile
+   
+    // printf("bufferSize: %lu\n", lBufferSize);
+
     bytesWritten = fwrite (buffer, 1, (size_t)lBufferSize, pPartFile);
+
+    // printf("bytesWritten: %u\n", bytesWritten);
+
+
     if (bytesWritten != lBufferSize) {
-      syslog(LOG_ERR, "%d ### bytesWritten:%i  does not match lBufferSize: %i\n", 
+      syslog(LOG_ERR, "%d ### bytesWritten:%i  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesWritten, lBufferSize);
 
       fclose(pPartFile);
@@ -1733,7 +1748,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   // printf("got curl handle\n");
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
@@ -1769,9 +1784,9 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   destroy_curl_handle(curl);
   fclose(pPartFile);
 
-  if( result != 0 && body.size !=0 ) {
-     printf("body.text:\n%s\n", body.text);
-  }
+  // if( result != 0 && body.size !=0 ) {
+     // printf("body.text:\n%s\n", body.text);
+  // }
 
   if(result != 0) {
     if(body.text) free(body.text);
@@ -1869,7 +1884,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   curl = create_curl_handle();
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_POST, true);
@@ -1966,12 +1981,18 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   // If file is > 20MB, then multipart will kick in
   /////////////////////////////////////////////////////////////
 
-  if(st.st_size > 2147000000) { // ~2GB
+  if(st.st_size > 2147483647) { // 2GB - 1
      // close f ?
      return -ENOTSUP;
   }
 
-  if(st.st_size > 20971520) { // 20MB
+  if(st.st_size >= 20971520) { // 20MB
+
+     // Additional time is needed for large files
+     if(readwrite_timeout < 120) {
+        readwrite_timeout = 120;
+     }
+
      result = put_local_fd_big_file(path, meta, fd); 
   } else {
      result = put_local_fd_small_file(path, meta, fd); 
@@ -2549,7 +2570,7 @@ static int rename_object( const char *from, const char *to) {
   return result;
 }
 
-
+/*
 static int rename_directory_object( const char *from, const char *to) {
   int result;
   mode_t mode;
@@ -2585,6 +2606,7 @@ static int rename_directory_object( const char *from, const char *to) {
 
   return 0;
 }
+*/
 
 static int clone_directory_object( const char *from, const char *to) {
   int result;
@@ -2621,7 +2643,7 @@ static int clone_directory_object( const char *from, const char *to) {
 
 static int rename_directory( const char *from, const char *to) {
   int result;
-  mode_t mode;
+  // mode_t mode;
   headers_t meta;
   int num_keys = 0;
   int max_keys = 50;
@@ -3118,8 +3140,6 @@ static int s3fs_readdir(
   CURLMcode curlm_code;
 
   CURL *curl;
-  long signal = 1;
-  time_t now;
 
   if(foreground) 
     cout << "readdir[path=" << path << "]" << endl;
@@ -3542,6 +3562,120 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
 }
 
 ///////////////////////////////////////////////////////////
+// List Multipart Uploads for bucket
+///////////////////////////////////////////////////////////
+static int list_multipart_uploads(void) {
+  CURL *curl = NULL;
+
+
+   printf("List Multipart Uploads\n");
+
+  // struct stat st;
+  string resource;
+  string url;
+  struct BodyStruct body;
+  // struct BodyStruct header;
+  // string ETag;
+  int result;
+  // unsigned long lSize;
+  // FILE* pSourceFile;
+  // FILE* pPartFile;
+  // char * buffer;
+  // unsigned long lBufferSize = 0;
+  // size_t bytesRead;
+  // size_t bytesWritten;
+  // char * partFileName;
+  // int partNumber;
+  string date;
+  // string expires;
+  string raw_date;
+  string auth;
+  string my_url;
+  // const char * UploadId;
+  // string uploadId;
+  struct curl_slist *slist=NULL;
+  // vector <string> etags;
+  // int i;
+
+
+  // Initialization of variables
+  body.text = (char *)malloc(1);
+  body.size = 0; 
+
+  curl = NULL;
+
+//////////////////////////////////////////
+//  Syntax:
+//
+//    GET /?uploads HTTP/1.1
+//    Host: BucketName.s3.amazonaws.com
+//    Date: Date
+//    Authorization: Signature			
+//////////////////////////////////////////
+
+  // printf("service_path: %s\n", service_path.c_str());
+
+  // resource = urlEncode(service_path);
+  resource = urlEncode(service_path + bucket + "/");
+  // printf("resource: %s\n", resource.c_str());
+  resource.append("?uploads");
+  // printf("resource: %s\n", resource.c_str());
+
+
+  url = host + resource;
+  // printf("url: %s\n", url.c_str());
+
+
+
+  my_url = prepare_url(url.c_str());
+  // printf("my_url: %s\n", my_url.c_str());
+
+  curl = create_curl_handle();
+
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+  date.assign("Date: ");
+  raw_date = get_date();
+  date.append(raw_date);
+  slist = curl_slist_append(slist, date.c_str());
+
+  slist = curl_slist_append(slist, "Accept:");
+
+  if (public_bucket.substr(0,1) != "1") {
+     auth.assign("Authorization: AWS ");
+     auth.append(AWSAccessKeyId);
+     auth.append(":");
+     auth.append(calc_signature("GET", "", raw_date, slist, resource));
+    slist = curl_slist_append(slist, auth.c_str());
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  result = my_curl_easy_perform(curl, &body);
+
+  curl_slist_free_all(slist);
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+    if(body.size > 0) {
+      printf("body.text:\n%s\n", body.text);
+    }
+    if(body.text) free(body.text);
+    return result;
+  }
+
+  if(body.size > 0) {
+    printf("body.text:\n%s\n", body.text);
+  }
+
+  result = 0;
+  return result;
+}
+
+///////////////////////////////////////////////////////////
 // s3fs_check_service
 //
 // Preliminary check on credentials and bucket
@@ -3856,7 +3990,7 @@ static void s3fs_check_service(void) {
   strcpy(body.text, "");
   body.size = 0;
 
-  size_t first_pos = string::npos;
+  // size_t first_pos = string::npos;
 
   t = retries + 1;
   while (t-- > 0) {
@@ -4249,10 +4383,10 @@ static void show_help (void) {
     "   passwd_file (default=\"\")\n"
     "      - specify which s3fs password file to use\n"
     "\n"
-    "   connect_timeout (default=\"3\" seconds)\n"
+    "   connect_timeout (default=\"10\" seconds)\n"
     "      - time to wait for connection before giving up\n"
     "\n"
-    "   readwrite_timeout (default=\"10\" seconds)\n"
+    "   readwrite_timeout (default=\"30\" seconds)\n"
     "      - time to wait between read/write activity before giving up\n"
     "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
@@ -4483,7 +4617,7 @@ int main(int argc, char *argv[]) {
       program_name.replace(0, found+1, "");
    }
 
-   while ((ch = getopt_long(argc, argv, "dho:fs", long_opts, &option_index)) != -1) {
+   while ((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1) {
      switch (ch) {
      case 0:
        if (strcmp(long_opts[option_index].name, "version") == 0) {
@@ -4506,6 +4640,10 @@ int main(int argc, char *argv[]) {
        break;
 
      case 's':
+       break;
+
+     case 'u':
+       utility_mode = 1;
        break;
 
      default:
@@ -4540,10 +4678,12 @@ int main(int argc, char *argv[]) {
   // if the option was given, we all ready checked for a
   // readable, non-empty directory, this checks determines
   // if the mountpoint option was ever supplied
-  if (mountpoint.size() == 0) {
-    fprintf(stderr, "%s: missing MOUNTPOINT argument\n", program_name.c_str());
-    show_usage();
-    exit(1);
+  if (utility_mode == 0) {
+    if (mountpoint.size() == 0) {
+      fprintf(stderr, "%s: missing MOUNTPOINT argument\n", program_name.c_str());
+      show_usage();
+      exit(1);
+    }
   }
 
   // error checking of command line arguments for compatability
@@ -4614,6 +4754,13 @@ int main(int argc, char *argv[]) {
   // skip check if mounting a public bucket
   if (public_bucket.substr(0,1) != "1") {
      s3fs_check_service();
+  }
+
+  if (utility_mode) {
+     printf("Utility Mode\n");
+     int result;
+     result = list_multipart_uploads();
+     exit(0);
   }
 
 

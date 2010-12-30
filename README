@@ -9,7 +9,7 @@ In order to compile s3fs, You'll need the following requirements:
 * CURL-devel packages (or compile curl from sources at: curl.haxx.se/ use 7.15.X)
 * GCC, GCC-C++
 * pkgconfig
-* FUSE (2.7.x)
+* FUSE (>= 2.8.4)
 * FUSE Kernel module installed and running (RHEL 4.x/CentOS 4.x users - read below)
 * OpenSSL-devel (0.9.8)
 * Subversion
@@ -27,7 +27,7 @@ If configure succeeded, you can now run: make. If it didn't, make sure you meet 
 This should compile the code. If everything goes OK, you'll be greated with "ok!" at the end and you'll have a binary file called "s3fs"
 in the src/ directory.
 
-As root (you can use su, su -, sudo) do: "make install" -this will copy the "s3fs" binary to /usr/bin.
+As root (you can use su, su -, sudo) do: "make install" -this will copy the "s3fs" binary to /usr/local/bin.
 
 Congratulations. S3fs is now compiled and installed.
 
@@ -36,7 +36,7 @@ Usage:
 In order to use s3fs, make sure you have the Access Key and the Secret Key handy.
 First, create a directory where to mount the S3 bucket you want to use.
 Example (as root): mkdir -p /mnt/s3
-Then run: s3fs mybucket -o accessKeyId=aaa -o secretAccessKey=bbb /mnt/s3
+Then run: s3fs mybucket /mnt/s3
 
 This will mount your bucket to /mnt/s3. You can do a simple "ls -l /mnt/s3" to see the content of your bucket.
 
@@ -44,7 +44,7 @@ If you want to allow other people access the same bucket in the same machine, yo
 
 You can add a fixed mount point in /etc/fstab, here's an example:
 
-s3fs#mybucket /mnt/s3 fuse allow_other,accessKeyId=XXX ,secretAccessKey=YYY 0 0
+s3fs#mybucket /mnt/s3 fuse allow_other 0 0
 
 This will mount upon reboot (or by launching: mount -a) your bucket on your machine.
 

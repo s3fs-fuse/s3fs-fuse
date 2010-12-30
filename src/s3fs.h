@@ -26,8 +26,8 @@ using namespace std;
 
 typedef pair<double, double> progress_t;
 
-static long connect_timeout = 3;
-static time_t readwrite_timeout = 10;
+static long connect_timeout = 10;
+static time_t readwrite_timeout = 30;
 
 // static stack<CURL*> curl_handles;
 static pthread_mutex_t curl_handles_lock;
@@ -48,6 +48,7 @@ static string service_path = "/";
 static string passwd_file = "";
 static bool debug = 0;
 static bool foreground = 0;
+static bool utility_mode = 0;
 
 // if .size()==0 then local file cache is disabled
 static string use_cache;
