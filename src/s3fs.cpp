@@ -1748,7 +1748,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   // printf("got curl handle\n");
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
@@ -1884,7 +1884,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   curl = create_curl_handle();
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_POST, true);
@@ -3042,6 +3042,16 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
     cout << "open[path=" << path << "][flags=" << fi->flags << "]" <<  endl;
 
   headers_t meta;
+  int result;
+
+  // Go do the truncation if called for
+  if ((unsigned int)fi->flags & O_TRUNC) {
+     result = s3fs_truncate(path, 0);
+     if (result != 0) {
+        return result;
+     }
+  }
+
   //###TODO check fi->fh here...
   fi->fh = get_local_fd(path);
 
@@ -3510,6 +3520,13 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
       }
     }
   }
+
+  // Investigate system capabilities
+  if ( (unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC) {
+     // so let's set the bit
+     conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
+  }
+
   return 0;
 }
 
@@ -3633,7 +3650,7 @@ static int list_multipart_uploads(void) {
   curl = create_curl_handle();
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 

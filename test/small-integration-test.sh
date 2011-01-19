@@ -9,6 +9,7 @@ source $REQUIRE_ROOT
 # Configuration
 TEST_TEXT="HELLO WORLD"
 TEST_TEXT_FILE=test-s3fs.txt
+TEST_DIR=testdir
 ALT_TEST_TEXT_FILE=test-s3fs-ALT.txt
 TEST_TEXT_FILE_LENGTH=15
 
@@ -101,6 +102,85 @@ then
    echo "Could not cleanup file ${ALT_TEST_TEXT_FILE}, it still exists"
    exit 1
 fi
+
+
+###################################################################
+# test redirects > and >>
+###################################################################
+echo "Testing redirects ..."
+
+echo ABCDEF > $TEST_TEXT_FILE
+if [ ! -e $TEST_TEXT_FILE ]
+then
+   echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
+   exit 1
+fi
+
+CONTENT=`cat $TEST_TEXT_FILE`
+
+if [ ${CONTENT} != "ABCDEF" ]; then
+   echo "CONTENT read is unexpected, got ${CONTENT}, expected ABCDEF"
+   exit 1
+fi
+
+echo XYZ > $TEST_TEXT_FILE
+
+CONTENT=`cat $TEST_TEXT_FILE`
+
+if [ ${CONTENT} != "XYZ" ]; then
+   echo "CONTENT read is unexpected, got ${CONTENT}, expected XYZ"
+   exit 1
+fi
+
+echo 123456 >> $TEST_TEXT_FILE
+
+LINE1=`sed -n '1,1p' $TEST_TEXT_FILE`
+LINE2=`sed -n '2,2p' $TEST_TEXT_FILE`
+
+if [ ${LINE1} != "XYZ" ]; then
+   echo "LINE1 was not as expected, got ${LINE1}, expected XYZ"
+   exit 1
+fi
+
+if [ ${LINE2} != "123456" ]; then
+   echo "LINE2 was not as expected, got ${LINE2}, expected 123456"
+   exit 1
+fi
+
+
+# clean up
+rm $TEST_TEXT_FILE
+
+if [ -e $TEST_TEXT_FILE ]
+then
+   echo "Could not cleanup file ${TEST_TEXT_FILE}, it still exists"
+   exit 1
+fi
+
+#####################################################################
+# Simple directory test mkdir/rmdir
+#####################################################################
+echo "Testing creation/removal of a directory"
+
+if [ -e $TEST_DIR ]; then
+   echo "Unexpected, this file/directory exists: ${TEST_DIR}"
+   exit 1
+fi
+
+mkdir ${TEST_DIR}
+
+if [ ! -d ${TEST_DIR} ]; then
+   echo "Directory ${TEST_DIR} was not created"
+   exit 1
+fi
+
+rmdir ${TEST_DIR}
+if [ -e $TEST_DIR ]; then
+   echo "Could not remove the test directory, it still exists: ${TEST_DIR}"
+   exit 1
+fi
+
+
 
 
 #####################################################################
