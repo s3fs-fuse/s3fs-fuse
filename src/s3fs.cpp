@@ -1367,7 +1367,7 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   //###rewind(f);
 
-  if(debug) syslog(LOG_DEBUG, "upload path=%s size=%llu", path, st.st_size);
+  // if(debug) syslog(LOG_DEBUG, "upload path=%s size=%zu", path, st.st_size);
 
   if(foreground) 
     cout << "      uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
@@ -1403,6 +1403,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   string ETag;
   int result;
   unsigned long lSize;
+  // long lSize;
   int partfd = -1;
   FILE* pSourceFile;
   FILE* pPartFile;
@@ -1639,7 +1640,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     // copy the file portion into the buffer:
     bytesRead = fread (buffer, 1, lBufferSize, pSourceFile);
     if (bytesRead != lBufferSize) {
-      syslog(LOG_ERR, "%d ### bytesRead:%i  does not match lBufferSize: %lu\n", 
+      syslog(LOG_ERR, "%d ### bytesRead:%zu  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesRead, lBufferSize);
 
       if(buffer) free(buffer);
@@ -1689,7 +1690,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
 
 
     if (bytesWritten != lBufferSize) {
-      syslog(LOG_ERR, "%d ### bytesWritten:%i  does not match lBufferSize: %lu\n", 
+      syslog(LOG_ERR, "%d ### bytesWritten:%zu  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesWritten, lBufferSize);
 
       fclose(pPartFile);
@@ -1974,14 +1975,14 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   //  - minimum size of parts is 5MB (expect for the last part)
   //
   // For our application, we will define part size to be 10MB (10 * 2^20 Bytes)
-  // maximum file size will be ~2 GB - 2 ** 31 
+  // maximum file size will be ~64 GB - 2 ** 36 
   //
   // Initially uploads will be done serially
   //
   // If file is > 20MB, then multipart will kick in
   /////////////////////////////////////////////////////////////
 
-  if(st.st_size > 2147483647) { // 2GB - 1
+  if(st.st_size > 68719476735LL ) { // 64GB - 1
      // close f ?
      return -ENOTSUP;
   }
@@ -2125,7 +2126,7 @@ static int s3fs_readlink(const char *path, char *buf, size_t size) {
       return -errno;
     }
 
-    if (st.st_size < size) {
+    if (st.st_size < (off_t)size) {
       size = st.st_size;
     }
 
