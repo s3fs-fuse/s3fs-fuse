@@ -1402,8 +1402,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   struct BodyStruct header;
   string ETag;
   int result;
-  unsigned long lSize;
-  // long lSize;
+  off_t lSize;
   int partfd = -1;
   FILE* pSourceFile;
   FILE* pPartFile;
@@ -1602,22 +1601,23 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
 
   // error check this
 
-  fseek (pSourceFile , 0 , SEEK_END);
-  lSize = ftell (pSourceFile);
-  rewind (pSourceFile);
+  // fseek (pSourceFile , 0 , SEEK_END);
+  // lSize = (off_t) ftell (pSourceFile);
+  // rewind (pSourceFile);
 
   // Does is match stat's info?
-  if (lSize != st.st_size) {
-    syslog(LOG_ERR, "%d ### Sizes do not match lSize: %lu  st_size: %lu\n", __LINE__, 
-            lSize, (unsigned long)st.st_size);
+  // if (lSize != st.st_size) {
+    // syslog(LOG_ERR, "%d ### Sizes do not match lSize: %llu  st_size: %llu\n", __LINE__, 
+            // lSize, st.st_size);
     // if(pSourceFile != NULL) fclose(pSourceFile);
     // return(-EIO);
-  }
+  // }
 
   // printf("lSize: %i\n", lSize);
   // printf("st_size: %i\n", st.st_size);
 
-  lSize = (unsigned long)st.st_size;
+  // lSize = (unsigned long)st.st_size;
+  lSize = st.st_size;
 
   lBufferSize = 0;
   partNumber = 0;
