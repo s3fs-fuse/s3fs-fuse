@@ -3713,6 +3713,8 @@ static int list_multipart_uploads(void) {
 static void s3fs_check_service(void) {
 
   CURL *curl = NULL;
+  CURLcode curlCode = CURLE_OK;
+  CURLcode ccode = CURLE_OK;
 
   if(foreground) 
     cout << "s3fs_check_service" << endl;
@@ -3759,8 +3761,6 @@ static void s3fs_check_service(void) {
   // indicating the the network is down or if the connection was
   // acutally made - my_curl_easy_perform doesn't differentiate
   // between the two
-
-  CURLcode curlCode, ccode;
 
   int t = retries + 1;
   while (t-- > 0) {
