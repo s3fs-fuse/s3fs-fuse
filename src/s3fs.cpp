@@ -189,6 +189,7 @@ CURL *create_curl_handle(void) {
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
+  curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
   now = time(0);
   curl_times[curl_handle] = now;
   curl_progress[curl_handle] = progress_t(-1, -1);
@@ -671,6 +672,11 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
 
       case CURLE_OPERATION_TIMEDOUT:
         syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
+        sleep(2);
+        break; 
+
+      case CURLE_COULDNT_RESOLVE_HOST:
+        syslog(LOG_ERR, "### CURLE_COULDNT_RESOLVE_HOST");
         sleep(2);
         break; 
 
@@ -3174,7 +3180,7 @@ static int s3fs_readdir(
     if (NextMarker.size() > 0)
       query += "&marker=" + urlEncode(NextMarker);
 
-    query += "&max-keys=50";
+    query += "&max-keys=500";
 
     string url = host + resource + "?" + query;
 
