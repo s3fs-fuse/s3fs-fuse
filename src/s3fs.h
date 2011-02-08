@@ -84,6 +84,8 @@ static struct fuse_operations s3fs_oper;
 string urlEncode(const string &s);
 string lookupMimeType(string);
 
+static void delete_stat_cache_entry(const char *path);
+
 static int s3fs_getattr(const char *path, struct stat *stbuf);
 static int s3fs_readlink(const char *path, char *buf, size_t size);
 static int s3fs_mknod(const char* path, mode_t mode, dev_t rdev);

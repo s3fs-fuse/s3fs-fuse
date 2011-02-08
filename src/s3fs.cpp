@@ -2029,7 +2029,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     stat_cache_t::iterator iter = stat_cache.find(path);
     if (iter != stat_cache.end()) {
       *stbuf = (*iter).second;
-      stat_cache.erase(path);
       pthread_mutex_unlock( &stat_cache_lock );
       return 0;
     }
@@ -2106,6 +2105,11 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     free(body.text);
   }
   destroy_curl_handle(curl);
+
+  // update stat cache
+  pthread_mutex_lock(&stat_cache_lock);
+  stat_cache[path] = *stbuf;
+  pthread_mutex_unlock(&stat_cache_lock);
 
   return 0;
 }
@@ -2476,6 +2480,7 @@ static int s3fs_rmdir(const char *path) {
           return -ENOTEMPTY;
       }
    }
+
    // delete the directory
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
@@ -2509,6 +2514,9 @@ static int s3fs_rmdir(const char *path) {
   if(result != 0) {
     return result;
   }
+
+  // delete cache entry
+  delete_stat_cache_entry(path);
 
   return 0;
 }
@@ -2674,10 +2682,8 @@ static int rename_directory( const char *from, const char *to) {
   string Key;
   bool is_dir;
 
-
   body.text = (char *)malloc(1);
   body.size = 0;
-
 
   // create the head/tail of the linked list
   from_path.assign(from);
@@ -2925,9 +2931,6 @@ static int rename_directory( const char *from, const char *to) {
   return 0;
 }
 
-
-
-
 static int s3fs_rename(const char *from, const char *to) {
   if(foreground) 
     cout << "rename[from=" << from << "][to=" << to << "]" << endl;
@@ -2959,6 +2962,8 @@ static int s3fs_rename(const char *from, const char *to) {
   } else {
     result = rename_object(from, to);
   }
+
+  delete_stat_cache_entry(from);
 
   return result;
 }
@@ -3463,6 +3468,12 @@ static int s3fs_readdir(
   cleanup_multi_stuff(mhhead);
 
   return 0;
+}
+
+static void delete_stat_cache_entry(const char *path) {
+  pthread_mutex_lock(&stat_cache_lock);
+  stat_cache.erase(stat_cache.find(path));
+  pthread_mutex_unlock(&stat_cache_lock);
 }
 
 /**
