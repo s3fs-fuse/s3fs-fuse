@@ -1150,6 +1150,7 @@ int get_local_fd(const char* path) {
       }
     }
   }
+
   // need to download?
   if (fd == -1) {
     // yes!
@@ -2008,8 +2009,6 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 }
 
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
-
-
   struct BodyStruct body;
   int result;
   CURL *curl;
@@ -2028,6 +2027,9 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     pthread_mutex_lock( &stat_cache_lock );
     stat_cache_t::iterator iter = stat_cache.find(path);
     if (iter != stat_cache.end()) {
+      if(foreground)
+        cout << "\tstat cache hit" << endl;
+
       *stbuf = (*iter).second;
       pthread_mutex_unlock( &stat_cache_lock );
       return 0;
@@ -2327,7 +2329,6 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 
 static int s3fs_mkdir(const char *path, mode_t mode) {
-
   CURL *curl = NULL;
   int result;
 
@@ -2412,6 +2413,8 @@ static int s3fs_unlink(const char *path) {
      return result;
   }
 
+  delete_stat_cache_entry(path);
+
   return 0;
 }
 
@@ -2424,7 +2427,7 @@ static int s3fs_rmdir(const char *path) {
   struct BodyStruct body;
   int result;
   body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
-  body.size = 0;    /* no data at this point */ 
+  body.size = 0;                  /* no data at this point */ 
 
    // need to check if the directory is empty
    {
@@ -2459,9 +2462,9 @@ static int s3fs_rmdir(const char *path) {
 
       result = my_curl_easy_perform(curl, &body);
       if(result != 0) {
-        if(body.text) {
+        if(body.text)
           free(body.text);
-        }
+
         destroy_curl_handle(curl);
         return result;
       }
@@ -2473,11 +2476,11 @@ static int s3fs_rmdir(const char *path) {
         if(foreground) 
           cout << "[path=" << path << "] not empty" << endl;
 
-          if(body.text) {
-            free(body.text);
-          }
-          destroy_curl_handle(curl);
-          return -ENOTEMPTY;
+        if(body.text)
+          free(body.text);
+
+        destroy_curl_handle(curl);
+        return -ENOTEMPTY;
       }
    }
 
@@ -2939,31 +2942,14 @@ static int s3fs_rename(const char *from, const char *to) {
 
   struct stat buf;
   int result;
-  string fullpath;
 
-  fullpath = mountpoint;
-  fullpath.append(from);
-
-  if(debug) syslog(LOG_DEBUG, "   rename: calling stat on fullpath: %s", fullpath.c_str());
-
-  result = stat(fullpath.c_str(), &buf);
-
-  if(debug) syslog(LOG_DEBUG, " rename: return from stat result: %i", result);
-
-  if (result == -1) {
-    syslog(LOG_ERR, "###file: %s  code:%d   error:%s", from, result, strerror(errno));
-    return -errno; 
-  }
+  s3fs_getattr(from, &buf);
  
-  // Is is a directory or a different type of file 
-  if (S_ISDIR( buf.st_mode )) {
-    // result = -ENOTSUP;
+  // is a directory or a different type of file 
+  if(S_ISDIR( buf.st_mode ))
     result = rename_directory(from, to);
-  } else {
+  else
     result = rename_object(from, to);
-  }
-
-  delete_stat_cache_entry(from);
 
   return result;
 }
@@ -3145,6 +3131,9 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   if (close(fd) == -1) {
     YIKES(-errno);
   }
+
+  delete_stat_cache_entry(path);
+
   return 0;
 }
 
@@ -3472,7 +3461,13 @@ static int s3fs_readdir(
 
 static void delete_stat_cache_entry(const char *path) {
   pthread_mutex_lock(&stat_cache_lock);
-  stat_cache.erase(stat_cache.find(path));
+  stat_cache_t::iterator iter = stat_cache.find(path);
+  if(iter != stat_cache.end()) {
+    if(foreground)
+      cout << "\tremoving \"" << path << "\" from stat cache" << endl;
+
+    stat_cache.erase(iter);
+  }
   pthread_mutex_unlock(&stat_cache_lock);
 }
 

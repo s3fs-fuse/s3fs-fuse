@@ -103,6 +103,34 @@ then
    exit 1
 fi
 
+##########################################################
+# Rename test (individual directory)
+##########################################################
+echo "Testing directory mv directory function ..."
+if [ -e $TEST_DIR ]; then
+   echo "Unexpected, this file/directory exists: ${TEST_DIR}"
+   exit 1
+fi
+
+mkdir ${TEST_DIR}
+
+if [ ! -d ${TEST_DIR} ]; then
+   echo "Directory ${TEST_DIR} was not created"
+   exit 1
+fi
+
+mv ${TEST_DIR} ${TEST_DIR}_rename
+
+if [ ! -d "${TEST_DIR}_rename" ]; then
+   echo "Directory ${TEST_DIR} was not renamed"
+   exit 1
+fi
+
+rmdir ${TEST_DIR}_rename
+if [ -e "${TEST_DIR}_rename" ]; then
+   echo "Could not remove the test directory, it still exists: ${TEST_DIR}_rename"
+   exit 1
+fi
 
 ###################################################################
 # test redirects > and >>
@@ -179,9 +207,6 @@ if [ -e $TEST_DIR ]; then
    echo "Could not remove the test directory, it still exists: ${TEST_DIR}"
    exit 1
 fi
-
-
-
 
 #####################################################################
 # Tests are finished
