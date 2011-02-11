@@ -3276,7 +3276,19 @@ static int s3fs_readdir(
                 }
               }
 
-              if (Key.size() > 0) {
+              bool in_stat_cache = false;
+              pthread_mutex_lock(&stat_cache_lock);
+              stat_cache_t::iterator iter = stat_cache.find("/" + Key);
+              if(iter != stat_cache.end()) {
+                // in stat cache, skip http request
+                if(filler(buf, mybasename(Key).c_str(), 0, 0))
+                  break;
+
+                in_stat_cache = true;
+              }
+              pthread_mutex_unlock(&stat_cache_lock);
+
+              if (Key.size() > 0 && !in_stat_cache) {
                 if (filler(buf, mybasename(Key).c_str(), 0, 0)) {
                   break;
                 }
