@@ -208,6 +208,39 @@ if [ -e $TEST_DIR ]; then
    exit 1
 fi
 
+##########################################################
+# File permissions test (individual file)
+##########################################################
+echo "Testing chmod file function ..."
+
+# create the test file again
+echo $TEST_TEXT > $TEST_TEXT_FILE
+if [ ! -e $TEST_TEXT_FILE ]
+then
+   echo "Could not create file ${TEST_TEXT_FILE}"
+   exit 1
+fi
+
+ORIGINAL_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
+
+chmod 777 $TEST_TEXT_FILE;
+
+# if they're the same, we have a problem.
+if [ $(stat --format=%a $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
+then
+  echo "Could not modify $TEST_TEXT_FILE permissions"
+  exit 1
+fi
+
+# clean up
+rm $TEST_TEXT_FILE
+
+if [ -e $TEST_TEXT_FILE ]
+then
+   echo "Could not cleanup file ${TEST_TEXT_FILE}"
+   exit 1
+fi
+
 #####################################################################
 # Tests are finished
 #####################################################################

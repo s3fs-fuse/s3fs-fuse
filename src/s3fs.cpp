@@ -2974,6 +2974,9 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   meta["x-amz-meta-mode"] = str(mode);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
   meta["x-amz-metadata-directive"] = "REPLACE";
+
+  delete_stat_cache_entry(path);
+
   return put_headers(path, meta);
 }
 
@@ -2999,6 +3002,9 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
   meta["x-amz-metadata-directive"] = "REPLACE";
+
+  delete_stat_cache_entry(path);
+
   return put_headers(path, meta);
 }
 
