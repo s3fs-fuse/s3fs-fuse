@@ -1,0 +1,98 @@
+.TH S3FS "1" "February 2011" "S3FS" "User Commands"
+.SH NAME
+S3FS \- FUSE-based file system backed by Amazon S3
+.SH SYNOPSIS
+.SS mounting
+.TP
+\fBs3fs bucket mountpoint \fP [options]
+.SS unmounting
+.TP
+\fBumount mountpoint
+.SH DESCRIPTION
+s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
+.SH AUTHENTICATION
+The s3fs password file has this format (use this format if you have only one set of credentials):
+.RS 4
+\fBaccessKeyId\fP:\fBsecretAccessKey\fP
+.RE
+
+If you have more than one set of credentials, this syntax is also recognized:
+.RS 4
+\fBbucketName\fP:\fBaccessKeyId\fP:\fBsecretAccessKey\fP
+.RE
+.PP
+Password files can be stored in two locations:
+.RS 4
+ \fB/etc/passwd-s3fs\fP     [0600]
+ \fB$HOME/.passwd-s3fs\fP   [0640]
+.RE
+.SH OPTIONS
+.SS "general options"
+.TP
+\fB\-h\fR   \fB\-\-help\fR
+print help
+.TP
+\fB\  \fR   \fB\-\-version\fR
+print version
+.TP
+\fB\-f\fR
+FUSE foreground option - do not run as daemon.
+.TP
+\fB\-s\fR
+FUSE singlethreaded option (disables multi-threaded operation)
+.SS "mount options"
+.TP
+All s3fs options must given in the form where "opt" is:
+ <option_name>=<option_value>
+.TP
+\fB\-o\fR default_acl (default="private")
+the default canned acl to apply to all written S3 objects, e.g., "public-read".
+Any created files will have this canned acl.
+Any updated files will also have this canned acl applied!
+.TP
+\fB\-o\fR prefix (default="") (coming soon!)
+a prefix to append to all S3 objects.
+.TP
+\fB\-o\fR retries (default="2")
+number of times to retry a failed S3 transaction.
+.TP
+\fB\-o\fR use_cache (default="" which means disabled)
+local folder to use for local file cache.
+.TP
+\fB\-o\fR use_rrs (default="" which means disabled)
+use Amazon's Reduced Redundancy Storage.
+.TP
+\fB\-o\fR passwd_file (default="")
+specify the path to the password file, which which takes precedence over the password in $HOME/.passwd-s3fs and /etc/passwd-s3fs
+.TP
+\fB\-o\fR public_bucket (default="" which means disabled)
+anonymously mount a public bucket when set to 1, ignores the $HOME/.passwd-s3fs and /etc/passwd-s3fs files.
+.TP
+\fB\-o\fR connect_timeout (default="10" seconds)
+time to wait for connection before giving up.
+.TP
+\fB\-o\fR readwrite_timeout (default="30" seconds)j
+time to wait between read/write activity before giving up.
+.TP
+\fB\-o\fR url (default="http://s3.amazonaws.com")
+sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
+.SH FUSE/MOUNT OPTIONS
+.TP
+Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '-onodev,nosuid' by default, which can only be overridden by a privileged user.
+.TP
+There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
+.SH NOTES
+.TP
+Maximum file size=64GB (limited by s3fs, not Amazon).
+.TP
+If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses md5 checksums to minimize downloads from S3.
+.TP
+The folder specified by use_cache is just a local cache. It can be deleted at any time. s3fs rebuilds it on demand.
+.TP
+Local file caching works by calculating and comparing md5 checksums (ETag HTTP header).
+.TP
+s3fs leverages /etc/mime.types to "guess" the "correct" content-type based on file name extension. This means that you can copy a website to S3 and serve it up directly from S3 with correct content-types!
+.SH BUGS
+Due to S3's "eventual consistency" limitations, file creation can and will occasionally fail. Even after a successful create, subsequent reads can fail for an indeterminate time, even after one or more successful reads. Create and read enough files and you will eventually encounter this failure. This is not a flaw in s3fs and it is not something a FUSE wrapper like s3fs can work around. The retries option does not address this issue. Your application must either tolerate or compensate for these failures, for example by retrying creates or reads.
+.SH AUTHOR
+s3fs has been written by Randy Rizun <rrizun@gmail.com>.
