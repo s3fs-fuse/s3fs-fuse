@@ -2024,17 +2024,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   }
 
   {
-    pthread_mutex_lock( &stat_cache_lock );
-    stat_cache_t::iterator iter = stat_cache.find(path);
-    if (iter != stat_cache.end()) {
-      if(foreground)
-        cout << "\tstat cache hit" << endl;
-
-      *stbuf = (*iter).second;
-      pthread_mutex_unlock( &stat_cache_lock );
+    if(get_stat_cache_entry(path, stbuf) == 0)
       return 0;
-    }
-    pthread_mutex_unlock( &stat_cache_lock );
   }
 
   body.text = (char *)malloc(1);
@@ -2109,9 +2100,7 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   destroy_curl_handle(curl);
 
   // update stat cache
-  pthread_mutex_lock(&stat_cache_lock);
-  stat_cache[path] = *stbuf;
-  pthread_mutex_unlock(&stat_cache_lock);
+  add_stat_cache_entry(path, stbuf);
 
   return 0;
 }
@@ -3277,16 +3266,13 @@ static int s3fs_readdir(
               }
 
               bool in_stat_cache = false;
-              pthread_mutex_lock(&stat_cache_lock);
-              stat_cache_t::iterator iter = stat_cache.find("/" + Key);
-              if(iter != stat_cache.end()) {
-                // in stat cache, skip http request
+              string path = '/' + Key;
+              if(get_stat_cache_entry(path.c_str(), NULL) == 0) {
                 if(filler(buf, mybasename(Key).c_str(), 0, 0))
                   break;
 
                 in_stat_cache = true;
               }
-              pthread_mutex_unlock(&stat_cache_lock);
 
               if (Key.size() > 0 && !in_stat_cache) {
                 if (filler(buf, mybasename(Key).c_str(), 0, 0)) {
@@ -3458,10 +3444,6 @@ static int s3fs_readdir(
 
             st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
             st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
-
-            pthread_mutex_lock( &stat_cache_lock );
-            stat_cache[stuff.path] = st;
-            pthread_mutex_unlock( &stat_cache_lock );
         } // if (code == 0)
       } // if (msg != NULL) {
     } // while (remaining_msgs)
@@ -3477,16 +3459,70 @@ static int s3fs_readdir(
   return 0;
 }
 
-static void delete_stat_cache_entry(const char *path) {
+static int get_stat_cache_entry(const char *path, struct stat *buf) {
   pthread_mutex_lock(&stat_cache_lock);
   stat_cache_t::iterator iter = stat_cache.find(path);
   if(iter != stat_cache.end()) {
     if(foreground)
-      cout << "\tremoving \"" << path << "\" from stat cache" << endl;
+      cout << "    stat cache hit [path=" << path << "]"
+           << " [hit count=" << (*iter).second.hit_count << "]" << endl;
 
-    stat_cache.erase(iter);
+    if(buf != NULL)
+      *buf = (*iter).second.stbuf;
+
+    (*iter).second.hit_count++;
+    pthread_mutex_unlock(&stat_cache_lock);
+    return 0;
   }
   pthread_mutex_unlock(&stat_cache_lock);
+
+  return -1;
+}
+
+static void add_stat_cache_entry(const char *path, struct stat *st) {
+  if(foreground)
+    cout << "    add_stat_cache_entry[path=" << path << "]" << endl;
+
+  if(stat_cache.size() > max_stat_cache_size)
+    truncate_stat_cache(); 
+
+  pthread_mutex_lock(&stat_cache_lock);
+  stat_cache[path].stbuf = *st;
+  pthread_mutex_unlock(&stat_cache_lock);
+}
+
+static void delete_stat_cache_entry(const char *path) {
+  if(foreground)
+    cout << "    delete_stat_cache_entry[path=" << path << "]" << endl;
+
+  pthread_mutex_lock(&stat_cache_lock);
+  stat_cache_t::iterator iter = stat_cache.find(path);
+  if(iter != stat_cache.end())
+    stat_cache.erase(iter);
+  pthread_mutex_unlock(&stat_cache_lock);
+}
+
+static void truncate_stat_cache() {
+  string path_to_delete;
+  unsigned int hit_count = 0;
+  unsigned int lowest_hit_count;
+
+  pthread_mutex_lock(&stat_cache_lock);
+  stat_cache_t::iterator iter;
+  for(iter = stat_cache.begin(); iter != stat_cache.end(); iter++) {
+    hit_count = (* iter).second.hit_count;
+
+    if(!lowest_hit_count)
+      lowest_hit_count = hit_count;
+
+    if(lowest_hit_count > hit_count)
+      path_to_delete = (* iter).first;
+  }
+
+  stat_cache.erase(path_to_delete);
+  pthread_mutex_unlock(&stat_cache_lock);
+
+  cout << "    purged " << path_to_delete << " from the stat cache" << endl;
 }
 
 /**
@@ -4641,13 +4677,13 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       }
     }
   }
+
   return 1;
 }
 
 
 
 int main(int argc, char *argv[]) {
-
   int ch;
   int option_index = 0; 
 

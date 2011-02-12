@@ -49,6 +49,7 @@ static string passwd_file = "";
 static bool debug = 0;
 static bool foreground = 0;
 static bool utility_mode = 0;
+static unsigned long max_stat_cache_size = 10000;
 
 // if .size()==0 then local file cache is disabled
 static string use_cache;
@@ -60,8 +61,14 @@ static string public_bucket;
 // private, public-read, public-read-write, authenticated-read
 static string default_acl("private");
 
+struct stat_cache_entry {
+  struct stat stbuf;
+  unsigned long hit_count;
+
+  stat_cache_entry() : hit_count(0) {}
+};
 // key=path
-typedef map<string, struct stat> stat_cache_t;
+typedef map<string, struct stat_cache_entry> stat_cache_t;
 static stat_cache_t stat_cache;
 static pthread_mutex_t stat_cache_lock;
 
@@ -84,7 +91,10 @@ static struct fuse_operations s3fs_oper;
 string urlEncode(const string &s);
 string lookupMimeType(string);
 
+static int get_stat_cache_entry(const char *path, struct stat *buf);
+static void add_stat_cache_entry(const char *path, struct stat *st);
 static void delete_stat_cache_entry(const char *path);
+static void truncate_stat_cache();
 
 static int s3fs_getattr(const char *path, struct stat *stbuf);
 static int s3fs_readlink(const char *path, char *buf, size_t size);
