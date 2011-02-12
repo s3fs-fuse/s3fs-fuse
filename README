@@ -1,3 +1,5 @@
+THIS README CONTAINS OUTDATED INFORMATION - please refer to the wiki or --help
+
 S3FS-Fuse
 
 S3FS is FUSE (File System in User Space) based solution to mount/unmount an Amazon S3 storage buckets and use system commands with S3 just like it was another Hard Disk.
@@ -33,7 +35,7 @@ Congratulations. S3fs is now compiled and installed.
 
 Usage:
 ------
-In order to use s3fs, make sure you have the Access Key and the Secret Key handy.
+In order to use s3fs, make sure you have the Access Key and the Secret Key handy. (refer to the wiki)
 First, create a directory where to mount the S3 bucket you want to use.
 Example (as root): mkdir -p /mnt/s3
 Then run: s3fs mybucket /mnt/s3

@@ -4473,6 +4473,9 @@ static void show_help (void) {
     "   readwrite_timeout (default=\"30\" seconds)\n"
     "      - time to wait between read/write activity before giving up\n"
     "\n"
+    "   max_stat_cache_size (default=\"10000\" entries (about 4MB))\n"
+    "      - maximum number of entries in the stat cache\n"
+    "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"
     "\n"
@@ -4650,6 +4653,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "readwrite_timeout=") != 0) {
       readwrite_timeout = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
+    if (strstr(arg, "max_stat_cache_size=") != 0) {
+      max_stat_cache_size = strtoul(strchr(arg, '=') + 1, 0, 10);
       return 0;
     }
     if (strstr(arg, "url=") != 0) {
