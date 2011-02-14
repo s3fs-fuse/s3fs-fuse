@@ -3444,6 +3444,8 @@ static int s3fs_readdir(
 
             st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
             st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
+
+            add_stat_cache_entry(stuff.path.c_str(), &st);
         } // if (code == 0)
       } // if (msg != NULL) {
     } // while (remaining_msgs)
