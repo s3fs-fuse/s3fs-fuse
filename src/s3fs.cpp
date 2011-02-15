@@ -31,6 +31,7 @@
 #include <libgen.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <openssl/md5.h>
 #include <pwd.h>
 #include <grp.h>
 #include <syslog.h>
@@ -1400,257 +1401,75 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 }
 
 static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
-
-  CURL *curl = NULL;
   struct stat st;
-  string resource;
-  string url;
-  struct BodyStruct body;
-  struct BodyStruct header;
-  string ETag;
   int result;
   off_t lSize;
   int partfd = -1;
   FILE* pSourceFile;
   FILE* pPartFile;
-  char * buffer;
+  char *buffer;
   unsigned long lBufferSize = 0;
   size_t bytesRead;
   size_t bytesWritten;
-  // char * partFileName;
-  int partNumber;
-  string date;
-  string expires;
-  string raw_date;
-  string auth;
-  string my_url;
-  // const char * UploadId;
+  unsigned int partNumber;
   string uploadId;
-  struct curl_slist *slist=NULL;
   vector <string> etags;
-  int i;
   char partFileName[17] = "";
 
   if(foreground) 
     cout << "   put_local_fd_big_file[path=" << path << "][fd=" << fd << "]" << endl;
 
-
   // Initialization of variables
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-
-  curl = NULL;
-
   etags.clear();
 
-  if (fstat(fd, &st) == -1) {
+  if(fstat(fd, &st) == -1)
     YIKES(-errno);
-  }
 
-  ///////////////////////////////
-  // Initiate Multipart Upload
-  ///////////////////////////////
-  // Example :
-  //
-  //   POST /example-object?uploads HTTP/1.1
-  //   Host: example-bucket.s3.amazonaws.com
-  //   Date: Mon, 1 Nov 2010 20:34:56 GMT
-  //   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
-  if(foreground) 
-    cout << "      initiate multipart upload [path=" << path << "][size=" << st.st_size << "]" << endl;
-
-  resource = urlEncode(service_path + bucket + path);
-  resource.append("?uploads");
-  url = host + resource;
-  my_url = prepare_url(url.c_str());
-
-  curl = create_curl_handle();
-
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_POST, true);
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
-
-  date.assign("Date: ");
-  raw_date = get_date();
-  date.append(raw_date);
-  slist = curl_slist_append(slist, date.c_str());
-
-  slist = curl_slist_append(slist, "Accept:");
-  slist = curl_slist_append(slist, "Content-Length:");
-
-  string ContentType;
-  ContentType.assign("Content-Type: ");
-  string ctype_data;
-  ctype_data.assign(lookupMimeType(path));
-  ContentType.append(ctype_data);
-  slist = curl_slist_append(slist, ContentType.c_str());
-
-  // x-amz headers: (a) alphabetical order and (b) no spaces after colon
-
-  string acl;
-  acl.assign("x-amz-acl:");
-  acl.append(default_acl);
-  slist = curl_slist_append(slist, acl.c_str());
-  
-
-   for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
-     string key = (*iter).first;
-     string value = (*iter).second;
-
-    if (key.substr(0,10) == "x-amz-meta") {
-      string entry;
-      entry.assign(key);
-      entry.append(":");
-      entry.append(value);
-      slist = curl_slist_append(slist, entry.c_str());
-    }
-   }
-
-
-  if (use_rrs.substr(0,1) == "1") {
-    slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
-  }
-
-  if (public_bucket.substr(0,1) != "1") {
-     auth.assign("Authorization: AWS ");
-     auth.append(AWSAccessKeyId);
-     auth.append(":");
-     auth.append(calc_signature("POST", ctype_data, raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl, &body);
-
-  curl_slist_free_all(slist);
-  destroy_curl_handle(curl);
-
-  if(result != 0) {
-    printf("body.text:\n%s\n", body.text);
-    if(body.text) free(body.text);
-    return result;
-  }
-
-  // XML returns UploadId
-  // Parse XML body for UploadId
-
-      uploadId.clear();
-
-      xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
-      if (doc != NULL && doc->children != NULL) {
-        for (xmlNodePtr cur_node = doc->children->children;
-             cur_node != NULL;
-             cur_node = cur_node->next) {
-
-          // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-          // printf("cur_node_name: %s\n", cur_node_name.c_str());
-
-          if (cur_node->type == XML_ELEMENT_NODE) {
-            string elementName = reinterpret_cast<const char*>(cur_node->name);
-            // printf("elementName: %s\n", elementName.c_str());
-            if (cur_node->children != NULL) {
-              if (cur_node->children->type == XML_TEXT_NODE) {
-
-                if (elementName == "UploadId") {
-                  uploadId = reinterpret_cast<const char *>(cur_node->children->content);
-                }
-              }
-            }
-          } 
-        } // for (xmlNodePtr cur_node = doc->children->children;
-      } // if (doc != NULL && doc->children != NULL) {
-      xmlFreeDoc(doc);
-
-      // printf("uploadId: %s\n", uploadId.c_str());
-
-  // clean up
-  if(body.text) free(body.text);
-  body.size = 0;
-
-  curl = NULL;
-
+  uploadId = initiate_multipart_upload(path, st.st_size, meta);
   if(uploadId.size() == 0) {
     syslog(LOG_ERR, "Could not determine UploadId");
     return(-EIO);
   }
 
-  ///////////////////////////////
-  // Upload Parts
-  ///////////////////////////////
-  //  PUT /my-movie.m2ts?partNumber=1&uploadId=VCVsb2FkIElEIGZvciBlbZZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZR
-  //  HTTP/1.1
-  //  Host: example-bucket.s3.amazonaws.com
-  //  Date:  Mon, 1 Nov 2010 20:34:56 GMT
-  //  Content-Length: 10485760
-  //  Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
-  //  Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
-  //  
-  //  ***part data omitted***
-
-  // CURLOPT_UPLOAD to be used
-
-  // cycle through open fd, pulling off 10MB chunks at a time
-
-
   // Open the source file
   pSourceFile = fdopen(fd, "rb");
-  if (pSourceFile == NULL) {
+  if(pSourceFile == NULL) {
     syslog(LOG_ERR, "%d###result=%d", __LINE__, errno); \
     return(-errno);
   }
 
   // Source sucessfully opened
   // obtain file size:
-
-  // error check this
-
-  // fseek (pSourceFile , 0 , SEEK_END);
-  // lSize = (off_t) ftell (pSourceFile);
-  // rewind (pSourceFile);
-
-  // Does is match stat's info?
-  // if (lSize != st.st_size) {
-    // syslog(LOG_ERR, "%d ### Sizes do not match lSize: %llu  st_size: %llu\n", __LINE__, 
-            // lSize, st.st_size);
-    // if(pSourceFile != NULL) fclose(pSourceFile);
-    // return(-EIO);
-  // }
-
-  // printf("lSize: %i\n", lSize);
-  // printf("st_size: %i\n", st.st_size);
-
-  // lSize = (unsigned long)st.st_size;
   lSize = st.st_size;
 
   lBufferSize = 0;
   partNumber = 0;
   
+  // cycle through open fd, pulling off 10MB chunks at a time
   while(lSize > 0) {
     partNumber++;
-    if(lSize >= 10485760) {
+    if(lSize >= 10485760) // 10MB
        lBufferSize = 10485760;
-    } else {
+    else
        lBufferSize = lSize;
-    }
+
     lSize = lSize - lBufferSize;
       
-    buffer = (char*) malloc (sizeof(char)*lBufferSize);
-    if (buffer == NULL) {
-      syslog(LOG_CRIT, "Could not allocation memory for buffer\n");
+    buffer = (char*) malloc(sizeof(char) * lBufferSize);
+    if(buffer == NULL) {
+      syslog(LOG_CRIT, "Could not allocate memory for buffer\n");
       exit(1);
     }
 
     // copy the file portion into the buffer:
-    bytesRead = fread (buffer, 1, lBufferSize, pSourceFile);
-    if (bytesRead != lBufferSize) {
+    bytesRead = fread(buffer, 1, lBufferSize, pSourceFile);
+    if(bytesRead != lBufferSize) {
       syslog(LOG_ERR, "%d ### bytesRead:%zu  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesRead, lBufferSize);
 
-      if(buffer) free(buffer);
+      if(buffer)
+        free(buffer);
+
       return(-EIO);
     } 
 
@@ -1658,318 +1477,76 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
 
     // source file portion is now in memory
     // open a temporary file for upload
-
-    // partFileName = tmpnam (NULL);
     strncpy(partFileName, "/tmp/s3fs.XXXXXX", sizeof partFileName);
     partfd = mkstemp(partFileName);
     if(partfd == -1) {
       syslog(LOG_ERR, "%d ### Could not create temporary file\n", __LINE__);
-      if(buffer) free(buffer);
+      if(buffer) 
+        free(buffer);
+
       return(-errno);
     }
-
-
-    // if(partFileName == NULL) {
-      // syslog(LOG_ERR, "%d ### Could not create temporary file\n", __LINE__);
-      // if(buffer) free(buffer);
-      // return(-errno);
-    // }
-
-    // printf ("Tempfile created: %s\n", partFileName);
 
     pPartFile = fdopen(partfd, "wb");
     if(pPartFile == NULL) {
       syslog(LOG_ERR, "%d ### Could not open temporary file: errno %i\n", 
                       __LINE__, errno);
-      if(buffer) free(buffer);
+      if(buffer)
+        free(buffer);
+
       return(-errno);
     }
 
     // printf ("Tempfile opened: %s\n", partFileName);
-
     // Copy buffer to tmpfile
-   
     // printf("bufferSize: %lu\n", lBufferSize);
 
-    bytesWritten = fwrite (buffer, 1, (size_t)lBufferSize, pPartFile);
-
+    bytesWritten = fwrite(buffer, 1, (size_t)lBufferSize, pPartFile);
     // printf("bytesWritten: %u\n", bytesWritten);
 
-
-    if (bytesWritten != lBufferSize) {
+    if(bytesWritten != lBufferSize) {
       syslog(LOG_ERR, "%d ### bytesWritten:%zu  does not match lBufferSize: %lu\n", 
                       __LINE__, bytesWritten, lBufferSize);
 
       fclose(pPartFile);
-      if(buffer) free(buffer);
+      if(buffer)
+        free(buffer);
+
       return(-EIO);
     } 
    
     // printf ("Tempfile written: %s\n", partFileName);
     fclose(pPartFile);
-    if(buffer) free(buffer);
+    if(buffer)
+      free(buffer);  
     
-    // Now upload the file as the nth part, need upload ID!
+    etags.push_back(upload_part(path, partFileName, partNumber, uploadId));
 
-  
-    // printf("now upload part %i  filename: %s   size: %i\n", partNumber, partFileName, bytesWritten);
-    if(foreground) 
-      cout << "      multipart upload [path=" << path << "][part=" << partNumber << "][bytes=" << bytesWritten << "]" << endl;
-
-
-      // PUT /ObjectName?partNumber=PartNumber&uploadId=UploadId HTTP/1.1
-      // Host: BucketName.s3.amazonaws.com
-      // Date: date
-      // Content-Length: Size
-      // Authorization: Signature
-
-      // PUT /my-movie.m2ts?partNumber=1&uploadId=VCVsb2FkIElEIGZvciBlbZZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZR HTTP/1.1
-      // Host: example-bucket.s3.amazonaws.com
-      // Date:  Mon, 1 Nov 2010 20:34:56 GMT
-      // Content-Length: 10485760
-      // Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
-      // Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
-
-  pPartFile = fopen(partFileName, "rb");
-  if (pPartFile == NULL) {
-    YIKES(-errno);
-  }
-
-  resource = urlEncode(service_path + bucket + path);
-  resource.append("?partNumber=");
-  resource.append(IntToStr(partNumber));
-  resource.append("&uploadId=");
-  resource.append(uploadId);
-  url = host + resource;
-  my_url = prepare_url(url.c_str());
-
-  // printf("my_url: %s\n", my_url.c_str());
-
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-
-  header.text = (char *)malloc(1);
-  header.size = 0; 
-
-  curl = create_curl_handle();
-
-  // printf("got curl handle\n");
-
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
-  curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(bytesWritten)); // Content-Length
-  curl_easy_setopt(curl, CURLOPT_INFILE, pPartFile);
-
-
-  date.assign("Date: ");
-  raw_date = get_date();
-  date.append(raw_date);
-  slist = NULL;
-  slist = curl_slist_append(slist, date.c_str());
-  slist = curl_slist_append(slist, "Accept:");
-
-  // printf("now got slist\n");
-
-  if (public_bucket.substr(0,1) != "1") {
-     auth.assign("Authorization: AWS ");
-     auth.append(AWSAccessKeyId);
-     auth.append(":");
-     auth.append(calc_signature("PUT", "", raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-
-  result = my_curl_easy_perform(curl, &body, pPartFile);
-
-  curl_slist_free_all(slist);
-  destroy_curl_handle(curl);
-  fclose(pPartFile);
-
-  // if( result != 0 && body.size !=0 ) {
-     // printf("body.text:\n%s\n", body.text);
-  // }
-
-  if(result != 0) {
-    if(body.text) free(body.text);
-    return result;
-  }
-
-  // printf("BEGIN header.text:\n%s\nEND header.text\n", header.text);
-
-  // Error check this section
-  char *ptr1;
-  char *ptr2;
-  
-  ptr1 = strstr(header.text, "ETag:");
-  ptr2 = strstr(header.text, "Content-Length:");
-  ptr1 = ptr1 + 6;
-
-  ETag.assign(ptr1, (size_t)(ptr2 - ptr1 - 2));
-
-  // printf("ETag: %s\n", ETag.c_str());
-
-  // Got the ETag, now store
-  etags.push_back(ETag);
-
-
-    // Clean up
-    if(body.text) free(body.text);
-    if(header.text) free(header.text);
-
+    // delete temporary part file
     result = remove(partFileName);
-    if (result != 0) {
+    if(result != 0) {
       syslog(LOG_ERR, "Could not remove temporary file: %s  errno: %i\n", 
                       partFileName, errno);
+
       return(-errno);
     }
-    
+  } // while(lSize > 0)
 
-  } // while(lSize > 0) {
-
-
-  ///////////////////////////////
-  // Complete Multipart Upload
-  ///////////////////////////////
-
-  if(foreground) 
-    cout << "      complete multipart upload [path=" << path <<  "]" << endl;
-
-
-  string postContent;
-
-  postContent.clear();
-  postContent.append("<CompleteMultipartUpload>\n");
-  for (i = 0; i < partNumber; i++) {
-     postContent.append("  <Part>\n");
-     postContent.append("    <PartNumber>");
-     postContent.append(IntToStr(i+1));
-     postContent.append("</PartNumber>\n");
-     postContent.append("    <ETag>");
-     postContent.append(etags[i]);
-     postContent.append("</ETag>\n");
-     postContent.append("  </Part>\n");
-  }  
-  postContent.append("</CompleteMultipartUpload>\n");
-
-  // printf("%s", postContent.c_str());
-
-  // printf("size: %i\n", postContent.size());
-
-  char *pData;
-  struct WriteThis pooh;
-
-  // error check pData  
-  pData = (char *)malloc( postContent.size() + 1);
-
-  pooh.readptr = pData;
-  // pooh.sizeleft = strlen(pData);
-  pooh.sizeleft = postContent.size();
-
-  strcpy(pData, postContent.c_str());
-
-  postContent.clear();
-
-
-  // printf("%s", pData);
-
-
-  resource = urlEncode(service_path + bucket + path);
-  resource.append("?uploadId=");
-  resource.append(uploadId);
-  url = host + resource;
-  my_url = prepare_url(url.c_str());
-
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-
-  curl = create_curl_handle();
-
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_POST, true);
-  // curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (curl_off_t)pooh.sizeleft);
-  curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
-  curl_easy_setopt(curl, CURLOPT_READDATA, &pooh);
-
-
-  date.assign("Date: ");
-  raw_date = get_date();
-  date.append(raw_date);
-  slist = NULL;
-  slist = curl_slist_append(slist, date.c_str());
-
-  slist = curl_slist_append(slist, "Accept:");
-  slist = curl_slist_append(slist, "Content-Type:");
-  // slist = curl_slist_append(slist, "Content-Length:");
-
-  // if (use_rrs.substr(0,1) == "1") {
-    // slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
-  // }
-
-  if (public_bucket.substr(0,1) != "1") {
-    auth.assign("Authorization: AWS ");
-    auth.append(AWSAccessKeyId);
-    auth.append(":");
-    auth.append(calc_signature("POST", "", raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl, &body);
-
-  // printf("body.text:\n%s\n", body.text);
-  curl_slist_free_all(slist);
-  destroy_curl_handle(curl);
-
-  free(pData);
-
-  if(result != 0) {
-    if(body.text) free(body.text);
-    return result;
-  }
-
- /* 
-  result=put_headers(path, meta);
-  if(result != 0) {
-     return result;
-  }
-*/
-
-  // Abort Multipart Upload ??
-
-  // if(body.text) {
-    // free(body.text);
-  // }
-
-  return 0;
+  return complete_multipart_upload(path, uploadId, partNumber, etags);
 }
-
-
 
 /**
  * create or update s3 object
  * @return fuse return code
  */
 static int put_local_fd(const char* path, headers_t meta, int fd) {
-
   if(foreground) 
     cout << "   put_local_fd[path=" << path << "][fd=" << fd << "]" << endl;
 
   int result;
 
   struct stat st;
-  if (fstat(fd, &st) == -1) {
+  if(fstat(fd, &st) == -1) {
     YIKES(-errno);
   }
 
@@ -1995,17 +1572,420 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   }
 
   if(st.st_size >= 20971520) { // 20MB
-
      // Additional time is needed for large files
-     if(readwrite_timeout < 120) {
+     if(readwrite_timeout < 120)
         readwrite_timeout = 120;
-     }
 
      result = put_local_fd_big_file(path, meta, fd); 
   } else {
      result = put_local_fd_small_file(path, meta, fd); 
   }
   return result;
+}
+
+/*
+ * initiate_multipart_upload
+ *
+ * Example :
+ *   POST /example-object?uploads HTTP/1.1
+ *   Host: example-bucket.s3.amazonaws.com
+ *   Date: Mon, 1 Nov 2010 20:34:56 GMT
+ *   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
+ */
+string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
+  CURL *curl = NULL;
+  int result;
+  string auth;
+  string acl;
+  string url;
+  string my_url;
+  string date;
+  string raw_date;
+  string resource;
+  string upload_id = "";
+  string ContentType;
+  struct BodyStruct body;
+  struct curl_slist *slist=NULL;
+
+  if(foreground) 
+    cout << "      initiate_multipart_upload [path=" << path << "][size=" << size << "]" << endl;
+  
+  // Initialization of variables
+  body.text = (char *)malloc(1);
+  body.size = 0; 
+
+  resource = urlEncode(service_path + bucket + path);
+  resource.append("?uploads");
+  url = host + resource;
+  my_url = prepare_url(url.c_str());
+
+  curl = create_curl_handle();
+
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl, CURLOPT_POST, true);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
+
+  date.assign("Date: ");
+  raw_date = get_date();
+  date.append(raw_date);
+  slist = curl_slist_append(slist, date.c_str());
+
+  slist = curl_slist_append(slist, "Accept:");
+  slist = curl_slist_append(slist, "Content-Length:");
+
+  ContentType.assign("Content-Type: ");
+  string ctype_data;
+  ctype_data.assign(lookupMimeType(path));
+  ContentType.append(ctype_data);
+  slist = curl_slist_append(slist, ContentType.c_str());
+
+  // x-amz headers: (a) alphabetical order and (b) no spaces after colon
+  acl.assign("x-amz-acl:");
+  acl.append(default_acl);
+  slist = curl_slist_append(slist, acl.c_str());
+
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
+    string key = (*iter).first;
+    string value = (*iter).second;
+
+    if(key.substr(0,10) == "x-amz-meta") {
+      string entry;
+      entry.assign(key);
+      entry.append(":");
+      entry.append(value);
+      slist = curl_slist_append(slist, entry.c_str());
+    }
+  }
+
+  if(use_rrs.substr(0,1) == "1")
+    slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
+
+  if(public_bucket.substr(0,1) != "1") {
+     auth.assign("Authorization: AWS ");
+     auth.append(AWSAccessKeyId);
+     auth.append(":");
+     auth.append(calc_signature("POST", ctype_data, raw_date, slist, resource));
+    slist = curl_slist_append(slist, auth.c_str());
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  result = my_curl_easy_perform(curl, &body);
+
+  curl_slist_free_all(slist);
+  destroy_curl_handle(curl);
+
+  if(result != 0) {
+    if(body.text) 
+      free(body.text);
+
+    return upload_id;
+  }
+
+  // XML returns UploadId
+  // Parse XML body for UploadId
+  upload_id.clear();
+  xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
+  if(doc != NULL && doc->children != NULL) {
+    for(xmlNodePtr cur_node = doc->children->children;
+         cur_node != NULL;
+         cur_node = cur_node->next) {
+
+      // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+      // printf("cur_node_name: %s\n", cur_node_name.c_str());
+
+      if(cur_node->type == XML_ELEMENT_NODE) {
+        string elementName = reinterpret_cast<const char*>(cur_node->name);
+        // printf("elementName: %s\n", elementName.c_str());
+        if(cur_node->children != NULL) {
+          if(cur_node->children->type == XML_TEXT_NODE) {
+            if(elementName == "UploadId") {
+              upload_id = reinterpret_cast<const char *>(cur_node->children->content);
+            }
+          }
+        }
+      } 
+    } // for (xmlNodePtr cur_node = doc->children->children;
+  } // if (doc != NULL && doc->children != NULL)
+  xmlFreeDoc(doc);
+
+  // clean up
+  if(body.text)
+    free(body.text);
+
+  body.size = 0;
+
+  return upload_id;
+}
+
+static int complete_multipart_upload(const char *path, string upload_id, 
+                                     int n_parts, vector <string> etags) {
+  CURL *curl = NULL;
+  char *pData;
+  int result;
+  int i;
+  string auth;
+  string date;
+  string raw_date;
+  string url;
+  string my_url;
+  string resource;
+  string postContent;
+  struct BodyStruct body;
+  struct WriteThis pooh;
+  struct curl_slist *slist = NULL;
+
+  if(foreground) 
+    cout << "      complete_multipart_upload [path=" << path <<  "]" << endl;
+
+  // initialization of variables
+  body.text = (char *)malloc(1);
+  body.size = 0; 
+  curl = NULL;
+  etags.clear();
+
+  postContent.clear();
+  postContent.append("<CompleteMultipartUpload>\n");
+  for(i = 0; i < n_parts; i++) {
+     postContent.append("  <Part>\n");
+     postContent.append("    <PartNumber>");
+     postContent.append(IntToStr(i+1));
+     postContent.append("</PartNumber>\n");
+     postContent.append("    <ETag>");
+     postContent.append(etags[i]);
+     postContent.append("</ETag>\n");
+     postContent.append("  </Part>\n");
+  }  
+  postContent.append("</CompleteMultipartUpload>\n");
+
+  // error check pData  
+  pData = (char *)malloc( postContent.size() + 1);
+
+  pooh.readptr = pData;
+  pooh.sizeleft = postContent.size();
+
+  strcpy(pData, postContent.c_str());
+
+  postContent.clear();
+
+  resource = urlEncode(service_path + bucket + path);
+  resource.append("?uploadId=");
+  resource.append(upload_id);
+  url = host + resource;
+  my_url = prepare_url(url.c_str());
+
+  body.text = (char *)malloc(1);
+  body.size = 0; 
+
+  curl = create_curl_handle();
+
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl, CURLOPT_POST, true);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (curl_off_t)pooh.sizeleft);
+  curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+  curl_easy_setopt(curl, CURLOPT_READDATA, &pooh);
+
+  date.assign("Date: ");
+  raw_date = get_date();
+  date.append(raw_date);
+  slist = NULL;
+  slist = curl_slist_append(slist, date.c_str());
+
+  slist = curl_slist_append(slist, "Accept:");
+  slist = curl_slist_append(slist, "Content-Type:");
+
+  if(public_bucket.substr(0,1) != "1") {
+    auth.assign("Authorization: AWS ");
+    auth.append(AWSAccessKeyId);
+    auth.append(":");
+    auth.append(calc_signature("POST", "", raw_date, slist, resource));
+    slist = curl_slist_append(slist, auth.c_str());
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  result = my_curl_easy_perform(curl, &body);
+
+  curl_slist_free_all(slist);
+  destroy_curl_handle(curl);
+
+  free(pData);
+
+  if(body.text)
+    free(body.text);
+
+  if(result != 0)
+    return result;
+
+  return result;
+}
+
+string upload_part(const char *path, const char *source, int part_number, string upload_id) {
+  CURL *curl = NULL;
+  FILE *part_file;
+  int result;
+  string url;
+  string my_url;
+  string auth;
+  string resource;
+  string date;
+  string raw_date;
+  string ETag;
+  struct stat st;
+  struct BodyStruct body;
+  struct BodyStruct header;
+  struct curl_slist *slist = NULL;
+
+  // Now upload the file as the nth part
+  if(foreground) 
+    cout << "      multipart upload [path=" << path << "][part=" << part_number << "]" << endl;
+
+  // PUT /ObjectName?partNumber=PartNumber&uploadId=UploadId HTTP/1.1
+  // Host: BucketName.s3.amazonaws.com
+  // Date: date
+  // Content-Length: Size
+  // Authorization: Signature
+
+  // PUT /my-movie.m2ts?partNumber=1&uploadId=VCVsb2FkIElEIGZvciBlbZZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZR HTTP/1.1
+  // Host: example-bucket.s3.amazonaws.com
+  // Date:  Mon, 1 Nov 2010 20:34:56 GMT
+  // Content-Length: 10485760
+  // Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
+  // Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
+
+  part_file = fopen(source, "rb");
+  if(part_file == NULL) {
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, errno); \
+    return "";
+  }
+
+  if(fstat(fileno(part_file), &st) == -1) {
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, errno); \
+    return "";
+  }
+
+  resource = urlEncode(service_path + bucket + path);
+  resource.append("?partNumber=");
+  resource.append(IntToStr(part_number));
+  resource.append("&uploadId=");
+  resource.append(upload_id);
+  url = host + resource;
+  my_url = prepare_url(url.c_str());
+
+  body.text = (char *)malloc(1);
+  body.size = 0; 
+
+  header.text = (char *)malloc(1);
+  header.size = 0; 
+
+  curl = create_curl_handle();
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
+  curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
+  curl_easy_setopt(curl, CURLOPT_INFILE, part_file);
+
+  date.assign("Date: ");
+  raw_date = get_date();
+  date.append(raw_date);
+  slist = NULL;
+  slist = curl_slist_append(slist, date.c_str());
+  slist = curl_slist_append(slist, "Accept:");
+
+  if(public_bucket.substr(0,1) != "1") {
+     auth.assign("Authorization: AWS ");
+     auth.append(AWSAccessKeyId);
+     auth.append(":");
+     auth.append(calc_signature("PUT", "", raw_date, slist, resource));
+    slist = curl_slist_append(slist, auth.c_str());
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+
+  result = my_curl_easy_perform(curl, &body, part_file);
+
+  curl_slist_free_all(slist);
+  destroy_curl_handle(curl);
+  fclose(part_file);
+
+  if(result != 0) {
+    if(header.text)
+      free(header.text);
+
+    if(body.text) 
+      free(body.text);
+
+    return "";
+  }
+
+  // calculate local md5sum, if it matches the header
+  // ETag value, the upload was successful.
+  string md5 = md5sum(source).insert(0, "\"").append("\"");
+  if(!md5.empty() && strstr(header.text, md5.c_str())) {
+    ETag.assign(md5);
+  } else {
+    if(header.text)
+      free(header.text);
+
+    if(body.text) 
+      free(body.text);
+
+    return "";
+  }
+
+  // clean up
+  if(body.text)
+    free(body.text);
+
+  if(header.text)
+    free(header.text);
+
+  return ETag;
+}
+
+string md5sum(const char *path) {
+  int fd;
+  MD5_CTX c;
+  char buf[512];
+  char hexbuf[3];
+  ssize_t bytes;
+  char *md5 = (char *)malloc(2 * MD5_DIGEST_LENGTH + 1);
+  unsigned char *result = (unsigned char *) malloc(MD5_DIGEST_LENGTH);
+
+  
+  if((fd = open(path, O_RDONLY)) == -1) {
+    free(result);
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
+    return "";
+  }
+
+  memset(buf, 0, 512);
+  MD5_Init(&c);
+  while((bytes = read(fd, buf, 512)) > 0) {
+    MD5_Update(&c, buf, bytes);
+    memset(buf, 0, 512);
+  }
+
+  MD5_Final(result, &c);
+  close(fd);
+
+  memset(md5, 0, 2 * MD5_DIGEST_LENGTH + 1);
+  for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+    snprintf(hexbuf, 3, "%02x", result[i]);
+    strncat(md5, hexbuf, 2);
+  }
+
+  free(result);
+
+  return md5;
 }
 
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
@@ -2017,7 +1997,7 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     cout << "s3fs_getattr[path=" << path << "]" << endl;
 
   memset(stbuf, 0, sizeof(struct stat));
-  if (strcmp(path, "/") == 0) {
+  if(strcmp(path, "/") == 0) {
     stbuf->st_nlink = 1; // see fuse faq
     stbuf->st_mode = root_mode | S_IFDIR;
     return 0;

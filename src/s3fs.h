@@ -5,6 +5,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include <curl/curl.h>
 #include <fuse.h>
@@ -90,6 +91,10 @@ static struct fuse_operations s3fs_oper;
 
 string urlEncode(const string &s);
 string lookupMimeType(string);
+string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
+string upload_part(const char *path, const char *source, int part_number, string upload_id);
+static int complete_multipart_upload(const char *path, string upload_id, int n_parts, vector <string> etags);
+string md5sum(const char *path);
 
 static int get_stat_cache_entry(const char *path, struct stat *buf);
 static void add_stat_cache_entry(const char *path, struct stat *st);
