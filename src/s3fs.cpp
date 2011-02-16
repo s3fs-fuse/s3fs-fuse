@@ -282,7 +282,6 @@ MVNODE *add_mvnode(MVNODE *head, char *old_path, char *new_path, bool is_dir) {
 
 
 void free_mvnodes(MVNODE *head) {
-
   MVNODE *my_head;
   MVNODE *next;
   char *p_old_path;
@@ -490,9 +489,6 @@ void cleanup_multi_stuff(CURLMHLL *mhhead) {
   return;
 }
 
-
-
-
 static string prepare_url(const char* url) {
   if(debug) syslog(LOG_DEBUG, "URL is %s", url);
 
@@ -568,7 +564,6 @@ static void locate_bundle(void) {
 
   return;
 }
-
 
 /**
  * @return fuse return code
@@ -929,14 +924,9 @@ string calc_signature(
   return Signature;
 }
 
-
-
-
-
 // libcurl callback
 // another write callback as shown by example
 // http://curl.haxx.se/libcurl/c/getinmemory.html
-
 static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data) {
   size_t realsize = blockSize * numBlocks;
   struct BodyStruct *mem = (struct BodyStruct *)data;
@@ -957,8 +947,7 @@ static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks,
 
 // read_callback
 // http://curl.haxx.se/libcurl/c/post-callback.html
-static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
-{
+static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp) {
   struct WriteThis *pooh = (struct WriteThis *)userp;
  
   if(size*nmemb < 1)
@@ -973,15 +962,6 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
  
   return 0;                          /* no more data left to deliver */ 
 }
-
-
-
-
-
-
-
-
-
 
 static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
@@ -1026,7 +1006,6 @@ static int mkdirp(const string& path, mode_t mode) {
  * TODO return pair<int, headers_t>?!?
  */
 int get_headers(const char* path, headers_t& meta) {
-
   CURL *curl;
   int result;
 
@@ -1037,13 +1016,14 @@ int get_headers(const char* path, headers_t& meta) {
 
   curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
 
   headers_t responseHeaders;
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
 
   auto_curl_slist headers;
   string date = get_date();
@@ -1091,23 +1071,19 @@ int get_headers(const char* path, headers_t& meta) {
  * get_local_fd
  */
 int get_local_fd(const char* path) {
+  int fd = -1;
+  int result;
+  CURL *curl = NULL;
+  string local_md5;
+  string resource(urlEncode(service_path + bucket + path));
+  string url(host + resource);
+  string baseName = mybasename(path);
+  string resolved_path(use_cache + "/" + bucket);
+  string cache_path(resolved_path + path);
+  headers_t responseHeaders;
 
   if(foreground) 
     cout << "   get_local_fd[path=" << path << "]" << endl;
-
-  CURL *curl = NULL;
-  int result;
-  string resource(urlEncode(service_path + bucket + path));
-  string url(host + resource);
-
-  string baseName = mybasename(path);
-  string resolved_path(use_cache + "/" + bucket);
-
-  int fd = -1;
-
-  string cache_path(resolved_path + path);
-
-  headers_t responseHeaders;
 
   if (use_cache.size() > 0) {
     result = get_headers(path, responseHeaders);
@@ -1118,35 +1094,17 @@ int get_local_fd(const char* path) {
     fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
 
     if (fd != -1) {
-      MD5_CTX c;
-      if (MD5_Init(&c) != 1) {
-        YIKES(-EIO);
-      }
-      int count;
-      char buf[1024];
-      while ((count = read(fd, buf, sizeof(buf))) > 0) {
-        if (MD5_Update(&c, buf, count) != 1) {
-          YIKES(-EIO);
-        }
-      }
-      unsigned char md[MD5_DIGEST_LENGTH];
-      if (MD5_Final(md, &c) != 1) {
-        YIKES(-EIO);
-      }
-
-      char localMd5[2 * MD5_DIGEST_LENGTH+1];
-      sprintf(localMd5, "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-          md[0], md[1], md[2], md[3], md[4], md[5], md[6], md[7], md[8], md[9], md[10], md[11],
-          md[12], md[13], md[14], md[15]);
-
-      string remoteMd5(trim(responseHeaders["ETag"], "\""));
-
       // md5 match?
-      if (string(localMd5) != remoteMd5) {
+      // FIXME: files uploaded via the multipart interface will _not_ have
+      // and etag representing an md5sum of the object. This breaks the local cache
+      // for files >= 20MB.
+      local_md5 = md5sum(cache_path.c_str());
+      string remoteMd5(trim(responseHeaders["ETag"], "\""));
+      if(local_md5 != remoteMd5) {
         // no! prepare to download
-        if (close(fd) == -1) {
+        if(close(fd) == -1)
           YIKES(-errno);
-        }
+
         fd = -1;
       }
     }
@@ -1237,7 +1195,6 @@ static int put_headers(const char* path, headers_t meta) {
   if(foreground) 
     cout << "   put_headers[path=" << path << "]" << endl;
 
-
   body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
   body.size = 0;    /* no data at this point */ 
 
@@ -1306,14 +1263,13 @@ static int put_headers(const char* path, headers_t meta) {
   destroy_curl_handle(curl);
 
   if(result != 0) {
-     return result;
+    return result;
   }
 
   return 0;
 }
 
 static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
-
   struct stat st;
   if (fstat(fd, &st) == -1) {
     YIKES(-errno);
@@ -3107,6 +3063,7 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
     YIKES(-errno);
   }
 
+  // FIXME: is this required?
   delete_stat_cache_entry(path);
 
   return 0;
