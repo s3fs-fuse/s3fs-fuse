@@ -3,6 +3,8 @@
 
 #define FUSE_USE_VERSION 26
 
+#define MULTIPART_SIZE 10485760 // 10MB
+
 #include <map>
 #include <string>
 #include <vector>
@@ -73,6 +75,14 @@ typedef map<string, struct stat_cache_entry> stat_cache_t;
 static stat_cache_t stat_cache;
 static pthread_mutex_t stat_cache_lock;
 
+struct file_part {
+  char path[17];
+  string etag;
+  bool uploaded;
+
+  file_part() : uploaded(false) {}
+};
+
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
 // http headers
@@ -93,7 +103,7 @@ string urlEncode(const string &s);
 string lookupMimeType(string);
 string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
 string upload_part(const char *path, const char *source, int part_number, string upload_id);
-static int complete_multipart_upload(const char *path, string upload_id, int n_parts, vector <string> etags);
+static int complete_multipart_upload(const char *path, string upload_id, vector <file_part> parts);
 string md5sum(const char *path);
 
 static int get_stat_cache_entry(const char *path, struct stat *buf);
