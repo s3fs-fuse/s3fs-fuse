@@ -3021,8 +3021,8 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
     // etag (md5), skip uploading the file
     remote_md5 = trim(meta["ETag"], "\"");
     local_md5 = md5sum(fd);
-    if(result != 0 || local_md5 == remote_md5)
-       return result;
+    if(result != 0 || (local_md5 == remote_md5 && use_cache.size() > 0))
+      return result;
 
     meta["x-amz-meta-mtime"] = str(time(NULL));
     return put_local_fd(path, meta, fd);
