@@ -3041,8 +3041,8 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
     YIKES(-errno);
   }
 
-  // FIXME: is this required?
-  delete_stat_cache_entry(path);
+  if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
+    delete_stat_cache_entry(path);
 
   return 0;
 }
