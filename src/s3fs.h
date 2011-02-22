@@ -104,7 +104,7 @@ string lookupMimeType(string);
 string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
 string upload_part(const char *path, const char *source, int part_number, string upload_id);
 static int complete_multipart_upload(const char *path, string upload_id, vector <file_part> parts);
-string md5sum(const char *path);
+string md5sum(int fd);
 
 static int get_stat_cache_entry(const char *path, struct stat *buf);
 static void add_stat_cache_entry(const char *path, struct stat *st);

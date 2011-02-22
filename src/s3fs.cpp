@@ -560,26 +560,20 @@ static void locate_bundle(void) {
  * @return fuse return code
  */
 static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0) {
-  // char* url = new char[128];
   char url[256];
   time_t now;
   char* ptr_url = url;
-  // char* url = (char *)malloc(256);
-  // if (url) {
-     curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
-     if(debug) syslog(LOG_DEBUG, "connecting to URL %s", ptr_url);
-     // if(url) free(url);
-  // }
+  curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
+
+  if(debug)
+    syslog(LOG_DEBUG, "connecting to URL %s", ptr_url);
 
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  if (ssl_verify_hostname.substr(0,1) == "0") {
+  if(ssl_verify_hostname.substr(0,1) == "0")
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-  }
 
-  if (curl_ca_bundle.size() != 0) {
+  if(curl_ca_bundle.size() != 0)
     curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-  } 
-
 
   long responseCode;
 
@@ -600,7 +594,8 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
           return -EIO;
         }
         
-        if(debug) syslog(LOG_DEBUG, "HTTP response code %ld", responseCode);
+        if(debug)
+          syslog(LOG_DEBUG, "HTTP response code %ld", responseCode);
 
         if (responseCode < 400) {
           return 0;
@@ -1088,7 +1083,7 @@ int get_local_fd(const char* path) {
       // FIXME: files uploaded via the multipart interface will _not_ have
       // and etag representing an md5sum of the object. This breaks the local cache
       // for files >= 20MB.
-      local_md5 = md5sum(cache_path.c_str());
+      local_md5 = md5sum(fd);
       string remoteMd5(trim(responseHeaders["ETag"], "\""));
       if(local_md5 != remoteMd5) {
         // no! prepare to download
@@ -1750,6 +1745,7 @@ static int complete_multipart_upload(const char *path, string upload_id,
 }
 
 string upload_part(const char *path, const char *source, int part_number, string upload_id) {
+  int fd;
   CURL *curl = NULL;
   FILE *part_file;
   int result;
@@ -1853,7 +1849,20 @@ string upload_part(const char *path, const char *source, int part_number, string
 
   // calculate local md5sum, if it matches the header
   // ETag value, the upload was successful.
-  string md5 = md5sum(source);
+  if((fd = open(source, O_RDONLY)) == -1) {
+    if(header.text)
+      free(header.text);
+
+    if(body.text)
+      free(body.text);
+
+    syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
+    
+    return "";
+  }
+
+  string md5 = md5sum(fd);
+  close(fd);
   if(!md5.empty() && strstr(header.text, md5.c_str())) {
     ETag.assign(md5);
   } else {
@@ -1876,22 +1885,14 @@ string upload_part(const char *path, const char *source, int part_number, string
   return ETag;
 }
 
-string md5sum(const char *path) {
-  int fd;
+string md5sum(int fd) {
   MD5_CTX c;
   char buf[512];
   char hexbuf[3];
   ssize_t bytes;
   char *md5 = (char *)malloc(2 * MD5_DIGEST_LENGTH + 1);
   unsigned char *result = (unsigned char *) malloc(MD5_DIGEST_LENGTH);
-
   
-  if((fd = open(path, O_RDONLY)) == -1) {
-    free(result);
-    syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
-    return "";
-  }
-
   memset(buf, 0, 512);
   MD5_Init(&c);
   while((bytes = read(fd, buf, 512)) > 0) {
@@ -1900,7 +1901,6 @@ string md5sum(const char *path) {
   }
 
   MD5_Final(result, &c);
-  close(fd);
 
   memset(md5, 0, 2 * MD5_DIGEST_LENGTH + 1);
   for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
@@ -1909,6 +1909,7 @@ string md5sum(const char *path) {
   }
 
   free(result);
+  lseek(fd, 0, 0);
 
   return md5;
 }
@@ -3010,15 +3011,23 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
 
   // NOTE- fi->flags is not available here
   int flags = get_flags(fd);
-  if ((flags & O_RDWR) || (flags &  O_WRONLY)) {
+  if((flags & O_RDWR) || (flags & O_WRONLY)) {
+    string local_md5;
+    string remote_md5;
     headers_t meta;
     result = get_headers(path, meta);
-    if(result != 0) {
+
+    // if the local md5 matches the remote 
+    // etag (md5), skip uploading the file
+    remote_md5 = trim(meta["ETag"], "\"");
+    local_md5 = md5sum(fd);
+    if(result != 0 || local_md5 == remote_md5)
        return result;
-    }
+
     meta["x-amz-meta-mtime"] = str(time(NULL));
     return put_local_fd(path, meta, fd);
   }
+
   return 0;
 }
 
