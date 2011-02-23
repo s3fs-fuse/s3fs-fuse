@@ -47,7 +47,6 @@
 
 using namespace std;
 
-
 class auto_curl_slist {
  public:
   auto_curl_slist() : slist(0) { }
@@ -128,9 +127,6 @@ private:
   stuffMap_t stuffMap;
 };
 
-
-
-
 // homegrown timeout mechanism
 static int my_curl_progress(
     void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
@@ -142,7 +138,6 @@ static int my_curl_progress(
   //###cout << "/dlnow=" << dlnow << "/ulnow=" << ulnow << endl;
 
   pthread_mutex_lock( &curl_handles_lock );
-
 
   // any progress?
   if (p != curl_progress[curl]) {
@@ -164,7 +159,6 @@ static int my_curl_progress(
   pthread_mutex_unlock( &curl_handles_lock );
   return 0;
 }
-
 
 CURL *create_curl_handle(void) {
   long signal;
@@ -209,23 +203,6 @@ void destroy_curl_handle(CURL *curl_handle) {
   return;
 }
 
-
-time_t my_timegm (struct tm *tm) {
-  time_t ret;
-  char *tz;
-
-  tz = getenv("TZ");
-  setenv("TZ", "", 1);
-  tzset();
-  ret = mktime(tm);
-  if (tz)
-    setenv("TZ", tz, 1);
-  else
-    unsetenv("TZ");
-  tzset();
-  return ret;
-}
-
 MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   MVNODE *p;
   char *p_old_path;
@@ -234,13 +211,13 @@ MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   p = (MVNODE *) malloc(sizeof(MVNODE));
   if (p == NULL) {
      printf("create_mvnode: could not allocation memory for p\n");
-     exit(1);
+     exit(EXIT_FAILURE);
   }
 
   p_old_path = (char *)malloc(strlen(old_path)+1); 
   if (p_old_path == NULL) {
     printf("create_mvnode: could not allocation memory for p_old_path\n");
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   strcpy(p_old_path, old_path);
@@ -248,7 +225,7 @@ MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   p_new_path = (char *)malloc(strlen(new_path)+1); 
   if (p_new_path == NULL) {
     printf("create_mvnode: could not allocation memory for p_new_path\n");
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   strcpy(p_new_path, new_path);
@@ -313,7 +290,7 @@ CURLHLL *create_h_element(CURL *handle) {
   p = (CURLHLL *) malloc(sizeof(CURLHLL));
   if (p == NULL) {
      printf("create_h_element: could not allocation memory\n");
-     exit(1);
+     exit(EXIT_FAILURE);
   }
   p->handle = handle;
   p->next = NULL;
@@ -338,7 +315,7 @@ CURLMHLL *create_mh_element(CURLM *handle) {
   p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
   if (p == NULL) {
      printf("create_mh_element: could not allocation memory\n");
-     exit(1);
+     exit(EXIT_FAILURE);
   }
   p->handle = handle;
   p->curlhll_head = NULL;
@@ -522,7 +499,7 @@ static void locate_bundle(void) {
       } else {
         fprintf(stderr, "%s: file specified by CURL_CA_BUNDLE environment variable is not readable\n",
                 program_name.c_str());
-        exit(1);
+        exit(EXIT_FAILURE);
       }
       return;
     }
@@ -700,7 +677,7 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
            program_name.c_str(),
            curlCode,
            curl_easy_strerror(curlCode));
-        exit(1);
+        exit(EXIT_FAILURE);
         break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -718,7 +695,7 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
              curlCode,
              curl_easy_strerror(curlCode));
         }
-        exit(1);
+        exit(EXIT_FAILURE);
         break;
 #endif
 
@@ -745,7 +722,7 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
       default:
         syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
            curl_easy_strerror(curlCode));;
-        exit(1);
+        exit(EXIT_FAILURE);
         break;
     }
     syslog(LOG_ERR, "###retrying...");
@@ -1392,7 +1369,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
       
     if((buffer = (char *) malloc(sizeof(char) * lBufferSize)) == NULL) {
       syslog(LOG_CRIT, "Could not allocate memory for buffer\n");
-      exit(1);
+      exit(EXIT_FAILURE);
     }
 
     // copy the file portion into the buffer:
@@ -3670,7 +3647,6 @@ static int list_multipart_uploads(void) {
 // isn't found in the service).
 ////////////////////////////////////////////////////////////
 static void s3fs_check_service(void) {
-
   CURL *curl = NULL;
   CURLcode curlCode = CURLE_OK;
   CURLcode ccode = CURLE_OK;
@@ -3749,7 +3725,7 @@ static void s3fs_check_service(void) {
                program_name.c_str(),
                curlCode,
                curl_easy_strerror(curlCode));
-               exit(1);
+               exit(EXIT_FAILURE);
             break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -3758,7 +3734,7 @@ static void s3fs_check_service(void) {
                program_name.c_str(),
                curlCode,
                curl_easy_strerror(curlCode));
-               exit(1);
+               exit(EXIT_FAILURE);
           break;
 #endif
 
@@ -3810,12 +3786,12 @@ static void s3fs_check_service(void) {
      // Parse the return info
      doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
      if (doc == NULL) {
-        exit(1);
+        exit(EXIT_FAILURE);
 
      } 
      if (doc->children == NULL) {
         xmlFreeDoc(doc);
-        exit(1);
+        exit(EXIT_FAILURE);
      }
 
      for ( cur_node = doc->children->children; 
@@ -3834,7 +3810,7 @@ static void s3fs_check_service(void) {
        }
      }
      xmlFreeDoc(doc);
-     exit(1);
+     exit(EXIT_FAILURE);
   }
 
   // Success
@@ -3922,13 +3898,13 @@ static void s3fs_check_service(void) {
   if (bucketFound == 0) {
     fprintf (stderr, "%s: the service specified by the credentials does not contain any buckets\n", 
         program_name.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   if (matchFound == 0) {
     fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
         program_name.c_str(), bucket.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   // once we arrive here, that means that our preliminary connection
@@ -3997,7 +3973,7 @@ static void s3fs_check_service(void) {
                program_name.c_str(),
                curlCode,
                curl_easy_strerror(curlCode));
-               exit(1);
+               exit(EXIT_FAILURE);
             break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -4015,7 +3991,7 @@ static void s3fs_check_service(void) {
                    curlCode,
                    curl_easy_strerror(curlCode));
               }
-              exit(1);
+              exit(EXIT_FAILURE);
             break;
 #endif
 
@@ -4060,11 +4036,11 @@ static void s3fs_check_service(void) {
      if (responseCode == 403) {
        fprintf (stderr, "%s: HTTP: 403 Forbidden - it is likely that your credentials are invalid\n", 
          program_name.c_str());
-       exit(1);
+       exit(EXIT_FAILURE);
      }
      fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
        program_name.c_str(), (int)responseCode);
-     exit(1);
+     exit(EXIT_FAILURE);
   }
 
   // Success
@@ -4096,14 +4072,13 @@ static void s3fs_check_service(void) {
 // only two options: return or error out
 //////////////////////////////////////////////////////////////////
 static void check_passwd_file_perms (void) {
-
   struct stat info;
 
   // let's get the file info
   if (stat(passwd_file.c_str(), &info) != 0) {
     fprintf (stderr, "%s: unexpected error from stat(%s, ) \n", 
         program_name.c_str(), passwd_file.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   } 
 
   // return error if any file has others permissions 
@@ -4112,23 +4087,22 @@ static void check_passwd_file_perms (void) {
       (info.st_mode & S_IXOTH))  {
     fprintf (stderr, "%s: credentials file %s should not have others permissions\n", 
         program_name.c_str(), passwd_file.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   // Any local file should not have any group permissions 
+  // /etc/passwd-s3fs can have group permissions 
   if (passwd_file != "/etc/passwd-s3fs") {
     if ((info.st_mode & S_IRGRP) ||
         (info.st_mode & S_IWGRP) || 
         (info.st_mode & S_IXGRP))  {
       fprintf (stderr, "%s: credentials file %s should not have group permissions\n", 
         program_name.c_str(), passwd_file.c_str());
-      exit(1);
+      exit(EXIT_FAILURE);
     }
   }
 
   // check for owner execute permissions?
-
-  // /etc/passwd-s3fs can have group permissions 
 
   return;
 }
@@ -4175,21 +4149,21 @@ static void read_passwd_file (void) {
       if (first_pos != string::npos) {
         printf ("%s: invalid line in passwd file, found whitespace character\n", 
            program_name.c_str());
-        exit(1);
+        exit(EXIT_FAILURE);
       }
 
       first_pos = line.find_first_of("[");
       if (first_pos != string::npos && first_pos == 0) {
         printf ("%s: invalid line in passwd file, found a bracket \"[\" character\n", 
            program_name.c_str());
-        exit(1);
+        exit(EXIT_FAILURE);
       }
 
       first_pos = line.find_first_of(":");
       if (first_pos == string::npos) {
         printf ("%s: invalid line in passwd file, no \":\" separator found\n", 
            program_name.c_str());
-        exit(1);
+        exit(EXIT_FAILURE);
       }
       last_pos = line.find_last_of(":");
 
@@ -4203,7 +4177,7 @@ static void read_passwd_file (void) {
         if (default_found == 1) {
           printf ("%s: more than one default key pair found in passwd file\n", 
             program_name.c_str());
-          exit(1);
+          exit(EXIT_FAILURE);
         }
         default_found = 1;
         field1.assign("");
@@ -4263,7 +4237,7 @@ static void get_access_keys (void) {
     } else {
       fprintf(stderr, "%s: specified passwd_file is not readable\n",
               program_name.c_str());
-      exit(1);
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -4279,7 +4253,7 @@ static void get_access_keys (void) {
 
       fprintf(stderr, "%s: if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too\n",
               program_name.c_str());
-      exit(1);
+      exit(EXIT_FAILURE);
     }
     AWSAccessKeyId.assign(AWSACCESSKEYID);
     AWSSecretAccessKey.assign(AWSSECRETACCESSKEY);
@@ -4316,7 +4290,7 @@ static void get_access_keys (void) {
   
   fprintf(stderr, "%s: could not determine how to establish security credentials\n",
            program_name.c_str());
-  exit(1);
+  exit(EXIT_FAILURE);
 }
 
 static void show_usage (void) {
@@ -4397,7 +4371,7 @@ static void show_help (void) {
     "Report bugs to <s3fs-devel@googlegroups.com>\n"
     "s3fs home page: <http://code.google.com/p/s3fs/>\n"
   );
-  exit(0);
+  exit(EXIT_SUCCESS);
 }
 
 static void show_version(void) {
@@ -4408,13 +4382,12 @@ static void show_version(void) {
   "This is free software: you are free to change and redistribute it.\n"
   "There is NO WARRANTY, to the extent permitted by law.\n",
   VERSION );
-  exit(0);
+  exit(EXIT_SUCCESS);
 }
 
 // This function gets called repeatedly by the
 // fuse option parser
 static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs) {
-
   if (key == FUSE_OPT_KEY_NONOPT) {
     // tricky way to set the bucket name
     // the first plain option is assumed to be
@@ -4428,7 +4401,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
          fprintf(stderr, "%s: argument MOUNTPOINT %s was all ready provided, %s is an invalid option\n",
                  program_name.c_str(), mountpoint.c_str(), arg);
          show_usage();
-         exit(1);
+         exit(EXIT_FAILURE);
       }
       // record the mountpoint
       mountpoint = arg;
@@ -4441,14 +4414,14 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
         if (!(S_ISDIR( buf.st_mode ))) {
           fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
                   program_name.c_str(), mountpoint.c_str());
-          exit(1);
+          exit(EXIT_FAILURE);
         } else {
           struct dirent *ent;
           DIR *dp = opendir(mountpoint.c_str());
           if (dp == NULL) {
             fprintf(stderr, "%s: failed to open MOUNTPOINT: %s for reading, error: %s\n", 
                     program_name.c_str(), mountpoint.c_str(), strerror(errno));
-            exit(1); 
+            exit(EXIT_FAILURE); 
           }
           while ((ent = readdir(dp)) != NULL) {
             if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
@@ -4460,13 +4433,13 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
           if (!isempty) {
             fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty\n", 
                     program_name.c_str(), mountpoint.c_str());
-            exit(1);
+            exit(EXIT_FAILURE);
           }
         }
       } else {
          fprintf(stderr, "%s: accessing MOUNTPOINT %s had an error: %s\n", 
                  program_name.c_str(), mountpoint.c_str(), strerror(errno));
-         exit(1);
+         exit(EXIT_FAILURE);
       }
     }
   }
@@ -4475,12 +4448,12 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if (strstr(arg, "accessKeyId=") != 0) {
       fprintf(stderr, "%s: option accessKeyId is no longer supported\n", 
               program_name.c_str());
-      exit(1);
+      exit(EXIT_FAILURE);
     }
     if (strstr(arg, "secretAccessKey=") != 0) {
       fprintf(stderr, "%s: option secretAccessKey is no longer supported\n", 
               program_name.c_str());
-      exit(1);
+      exit(EXIT_FAILURE);
     }
     if (strstr(arg, "default_acl=") != 0) {
       default_acl = strchr(arg, '=') + 1;
@@ -4503,7 +4476,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
                  program_name.c_str());
-         exit(1);
+         exit(EXIT_FAILURE);
       }
     }
     if (strstr(arg, "ssl_verify_hostname=") != 0) {
@@ -4514,7 +4487,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: ssl_verify_hostname\n", 
                  program_name.c_str());
-         exit(1);
+         exit(EXIT_FAILURE);
       }
     }
     if (strstr(arg, "passwd_file=") != 0) {
@@ -4529,7 +4502,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: public_bucket\n", 
                  program_name.c_str());
-         exit(1);
+         exit(EXIT_FAILURE);
       }
     }
     if (strstr(arg, "host=") != 0) {
@@ -4581,8 +4554,6 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
   return 1;
 }
 
-
-
 int main(int argc, char *argv[]) {
   int ch;
   int option_index = 0; 
@@ -4631,7 +4602,7 @@ int main(int argc, char *argv[]) {
        break;
 
      default:
-       exit(1);
+       exit(EXIT_FAILURE);
      }
    }
 
@@ -4648,14 +4619,14 @@ int main(int argc, char *argv[]) {
   if (bucket.size() == 0) {
     fprintf(stderr, "%s: missing BUCKET argument\n", program_name.c_str());
     show_usage();
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   // bucket names cannot contain upper case characters
   if (lower(bucket) != bucket) {
     fprintf(stderr, "%s: BUCKET %s, upper case characters are not supported\n",
       program_name.c_str(), bucket.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   // The second plain argument is the mountpoint
@@ -4666,7 +4637,7 @@ int main(int argc, char *argv[]) {
     if (mountpoint.size() == 0) {
       fprintf(stderr, "%s: missing MOUNTPOINT argument\n", program_name.c_str());
       show_usage();
-      exit(1);
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -4675,21 +4646,21 @@ int main(int argc, char *argv[]) {
       (AWSSecretAccessKey.size() == 0 && AWSAccessKeyId.size() > 0)) {
     fprintf(stderr, "%s: if one access key is specified, both keys need to be specified\n",
       program_name.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   if (public_bucket.substr(0,1) == "1" && 
        (AWSSecretAccessKey.size() > 0 || AWSAccessKeyId.size() > 0)) {
     fprintf(stderr, "%s: specifying both public_bucket and the access keys options is invalid\n",
       program_name.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   if (passwd_file.size() > 0 && 
        (AWSSecretAccessKey.size() > 0 || AWSAccessKeyId.size() > 0)) {
     fprintf(stderr, "%s: specifying both passwd_file and the access keys options is invalid\n",
       program_name.c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
   }
   
   if (public_bucket.substr(0,1) != "1") {
@@ -4697,7 +4668,7 @@ int main(int argc, char *argv[]) {
      if(AWSSecretAccessKey.size() == 0 || AWSAccessKeyId.size() == 0) {
         fprintf(stderr, "%s: could not establish security credentials, check documentation\n",
          program_name.c_str());
-        exit(1);
+        exit(EXIT_FAILURE);
      }
      // More error checking on the access key pair can be done
      // like checking for appropriate lengths and characters  
@@ -4731,7 +4702,6 @@ int main(int argc, char *argv[]) {
   }
   */
 
-
   // Does the bucket exist?
   // if the network is up, check for valid
   // credentials and if the bucket exixts
@@ -4744,10 +4714,8 @@ int main(int argc, char *argv[]) {
      printf("Utility Mode\n");
      int result;
      result = list_multipart_uploads();
-     exit(0);
+     exit(EXIT_SUCCESS);
   }
-
-
 
   s3fs_oper.getattr = s3fs_getattr;
   s3fs_oper.readlink = s3fs_readlink;
@@ -4773,8 +4741,6 @@ int main(int argc, char *argv[]) {
   s3fs_oper.access = s3fs_access;
   s3fs_oper.utimens = s3fs_utimens;
   s3fs_oper.create = s3fs_create;
-  
-
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
   return fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
