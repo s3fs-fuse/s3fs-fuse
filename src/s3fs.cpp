@@ -252,7 +252,6 @@ MVNODE *add_mvnode(MVNODE *head, char *old_path, char *new_path, bool is_dir) {
   return tail;
 }
 
-
 void free_mvnodes(MVNODE *head) {
   MVNODE *my_head;
   MVNODE *next;
@@ -284,7 +283,6 @@ void free_mvnodes(MVNODE *head) {
 /////////////////////////////////////////////////
 // Multi CURL stuff
 /////////////////////////////////////////////////
-
 CURLHLL *create_h_element(CURL *handle) {
   CURLHLL *p;
   p = (CURLHLL *) malloc(sizeof(CURLHLL));
@@ -366,7 +364,6 @@ void cleanup_multi_stuff(CURLMHLL *mhhead) {
   }
 
   // Remove all of the easy handles from its multi handle
-
   my_mhhead = mhhead;
   pnext = NULL;
   cnext = NULL;
@@ -785,7 +782,6 @@ string get_day_after_tomorrow() {
  */
 string calc_signature(
     string method, string content_type, string date, curl_slist* headers, string resource) {
-
   int ret;
   int bytes_written;
   int offset;
@@ -1145,7 +1141,6 @@ int get_local_fd(const char* path) {
  * @return fuse return code
  */
 static int put_headers(const char* path, headers_t meta) {
-
   CURL *curl = NULL;
   
   string resource = urlEncode(service_path + bucket + path);
@@ -2056,7 +2051,6 @@ string lookupMimeType(string s) {
   if (last_pos != string::npos) {
     ext = s.substr(1+last_pos, string::npos);
   }
-
    
   if (last_pos != string::npos) {
      // one dot was found, now look for another
@@ -2147,8 +2141,6 @@ static int create_file_object(const char *path, mode_t mode) {
   return 0;
 }
 
-
-
 ////////////////////////////////////////////////////////
 // s3fs_mknod 
 ////////////////////////////////////////////////////////
@@ -2168,7 +2160,6 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
 
   return 0;
 }
-
 
 ////////////////////////////////////////////////////////////
 //  s3fs_create
@@ -2199,16 +2190,16 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   return 0;
 }
 
-
 static int s3fs_mkdir(const char *path, mode_t mode) {
   CURL *curl = NULL;
   int result;
+  string date = get_date();
+  string resource = urlEncode(service_path + bucket + path);
+  string url = host + resource;
+  auto_curl_slist headers;
 
   if(foreground) 
     cout << "mkdir[path=" << path << "][mode=" << mode << "]" << endl;
-
-  string resource = urlEncode(service_path + bucket + path);
-  string url = host + resource;
 
   curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
@@ -2216,8 +2207,6 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
 
-  auto_curl_slist headers;
-  string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: application/x-directory");
   // x-amz headers: (a) alphabetical order and (b) no spaces after colon
@@ -2242,9 +2231,8 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
  
   destroy_curl_handle(curl);
 
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   return 0;
 }
@@ -2253,19 +2241,20 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
 static int s3fs_unlink(const char *path) {
   CURL *curl = NULL;
   int result;
-  if(foreground) 
-    cout << "unlink[path=" << path << "]" << endl;
-
+  string date = get_date();
   string resource = urlEncode(service_path + bucket + path);
   string url = host + resource;
+  string my_url;
+  auto_curl_slist headers;
+
+  if(foreground) 
+    cout << "unlink[path=" << path << "]" << endl;
 
   curl = create_curl_handle();
   // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 
-  auto_curl_slist headers;
-  string date = get_date();
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
   if (public_bucket.substr(0,1) != "1") {
@@ -2274,16 +2263,15 @@ static int s3fs_unlink(const char *path) {
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-  string my_url = prepare_url(url.c_str());
+  my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl);
 
   destroy_curl_handle(curl);
 
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   delete_stat_cache_entry(path);
 
@@ -2293,36 +2281,39 @@ static int s3fs_unlink(const char *path) {
 static int s3fs_rmdir(const char *path) {
   CURL *curl = NULL;
   CURL *curl_handle = NULL;
-  if(foreground) 
-    cout << "rmdir[path=" << path << "]" << endl;
- 
   struct BodyStruct body;
   int result;
-  body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
-  body.size = 0;                  /* no data at this point */ 
+  body.text = (char *)malloc(1);
+  body.size = 0;
+
+  if(foreground) 
+    cout << "rmdir[path=" << path << "]" << endl;
 
    // need to check if the directory is empty
    {
+      string url;
+      string my_url;
+      string date;
       string resource = urlEncode(service_path + bucket);
       string query = "delimiter=/&prefix=";
+      auto_curl_slist headers;
 
-      if (strcmp(path, "/") != 0)
+      if(strcmp(path, "/") != 0)
        query += urlEncode(string(path).substr(1) + "/");
 
-      query += "&max-keys=50";
-
-      string url = host + resource + "?"+ query;
+      query += "&max-keys=1";
+      url = host + resource + "?"+ query;
 
       curl = create_curl_handle();
-      string my_url = prepare_url(url.c_str());
+      my_url = prepare_url(url.c_str());
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
       // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+      // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
-      auto_curl_slist headers;
-      string date = get_date();
+      date = get_date();
       headers.append("Date: " + date);
       headers.append("ContentType: ");
       if (public_bucket.substr(0,1) != "1") {
@@ -2460,44 +2451,6 @@ static int rename_object( const char *from, const char *to) {
   return result;
 }
 
-/*
-static int rename_directory_object( const char *from, const char *to) {
-  int result;
-  mode_t mode;
-  headers_t meta;
-
-  // How to determine mode?
-  mode = 493;
-
-  // create the new directory object
-  result = s3fs_mkdir(to, mode);
-  if ( result != 0) {
-    return result;
-  }
-
-  // and transfer its attributes
-  result = get_headers(from, meta);
-  if(result != 0) {
-     return result;
-  }
-
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-
-  result = put_headers(to, meta);
-  if (result != 0) {
-    return result;
-  }
-
-  result = s3fs_unlink(from);
-  if(result != 0) {
-     return result;
-  }
-
-  return 0;
-}
-*/
-
 static int clone_directory_object( const char *from, const char *to) {
   int result;
   mode_t mode;
@@ -2528,8 +2481,6 @@ static int clone_directory_object( const char *from, const char *to) {
 
   return 0;
 }
-
-
 
 static int rename_directory( const char *from, const char *to) {
   int result;
@@ -2980,6 +2931,7 @@ static int get_flags(int fd) {
 }
 
 static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
+  int flags;
   int result;
   int fd = fi->fh;
 
@@ -2987,7 +2939,7 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
 
   // NOTE- fi->flags is not available here
-  int flags = get_flags(fd);
+  flags = get_flags(fd);
   if((flags & O_RDWR) || (flags & O_WRONLY)) {
     string local_md5;
     string remote_md5;
@@ -3024,24 +2976,18 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   return 0;
 }
 
-
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 
   int result;
-
   CURLMHLL *mhhead = NULL;
   CURLMHLL *mhcurrent = NULL;
-
   CURLM *current_multi_handle = NULL;
-
   CURLMcode curlm_code;
-
   CURL *curl;
 
   if(foreground) 
     cout << "readdir[path=" << path << "]" << endl;
-
 
   struct BodyStruct body;
   body.text = (char *)malloc(1);  /* will be grown as needed by the realloc above */ 
@@ -3051,7 +2997,6 @@ static int s3fs_readdir(
   string IsTruncated("true");
 
   while (IsTruncated == "true") {
-
     string resource = urlEncode(service_path + bucket); // this is what gets signed
     string query = "delimiter=/&prefix=";
 
@@ -3101,9 +3046,9 @@ static int s3fs_readdir(
       destroy_curl_handle(curl);
 
       if(result != 0) {
-        if(body.text) {
+        if(body.text)
           free(body.text);
-        }
+
         return result;
       }
     }
@@ -3343,10 +3288,8 @@ static int s3fs_readdir(
     } // while (remaining_msgs)
   } // while (IsTruncated == "true") {
 
-
-  if(body.text) {
+  if(body.text)
     free(body.text);
-  }
 
   cleanup_multi_stuff(mhhead);
 
@@ -3441,9 +3384,8 @@ static void locking_function(int mode, int n, const char *file, int line) {
  *
  * @return    thread id
  */
-static unsigned long id_function(void)
-{
-  return ((unsigned long) pthread_self());
+static unsigned long id_function(void) {
+  return((unsigned long) pthread_self());
 }
 
 static void* s3fs_init(struct fuse_conn_info *conn) {
@@ -3824,8 +3766,6 @@ static void s3fs_check_service(void) {
   }
 
   // Parse the return info and see if the bucket is available  
-
-
   doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
   if (doc == NULL) {
     if(body.text) {
@@ -3842,7 +3782,6 @@ static void s3fs_check_service(void) {
     destroy_curl_handle(curl);
     return;
   }
-
 
   bool bucketFound = 0;
   bool matchFound = 0;
