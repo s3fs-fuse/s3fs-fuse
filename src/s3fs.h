@@ -19,65 +19,53 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-
-using namespace std;
-
 #define YIKES(result) if (true) { \
   syslog(LOG_ERR, "%d###result=%d", __LINE__, result); \
   return result; \
 }
 
-typedef pair<double, double> progress_t;
+typedef std::pair<double, double> progress_t;
 
 static long connect_timeout = 10;
 static time_t readwrite_timeout = 30;
 
 // static stack<CURL*> curl_handles;
 static pthread_mutex_t curl_handles_lock;
-static map<CURL*, time_t> curl_times;
-static map<CURL*, progress_t> curl_progress;
+static std::map<CURL*, time_t> curl_times;
+static std::map<CURL*, progress_t> curl_progress;
 
 static int retries = 2;
 
-static string bucket;
-static string mountpoint;
-static string program_name;
-static string AWSAccessKeyId;
-static string AWSSecretAccessKey;
-static string host = "http://s3.amazonaws.com";
-static string curl_ca_bundle;
+static std::string bucket;
+static std::string mountpoint;
+static std::string program_name;
+static std::string AWSAccessKeyId;
+static std::string AWSSecretAccessKey;
+static std::string host = "http://s3.amazonaws.com";
+static std::string curl_ca_bundle;
 static mode_t root_mode = 0;
-static string service_path = "/";
-static string passwd_file = "";
+static std::string service_path = "/";
+static std::string passwd_file = "";
 static bool debug = 0;
-static bool foreground = 0;
 static bool utility_mode = 0;
-static unsigned long max_stat_cache_size = 10000;
+bool foreground = 0;
+unsigned long max_stat_cache_size = 10000;
 
 // if .size()==0 then local file cache is disabled
-static string use_cache;
-static string use_rrs;
-static string ssl_verify_hostname = "1";
-static string public_bucket;
+static std::string use_cache;
+static std::string use_rrs;
+static std::string ssl_verify_hostname = "1";
+static std::string public_bucket;
+
+extern pthread_mutex_t stat_cache_lock;
 
 // TODO(apetresc): make this an enum
 // private, public-read, public-read-write, authenticated-read
-static string default_acl("private");
-
-struct stat_cache_entry {
-  struct stat stbuf;
-  unsigned long hit_count;
-
-  stat_cache_entry() : hit_count(0) {}
-};
-// key=path
-typedef map<string, struct stat_cache_entry> stat_cache_t;
-static stat_cache_t stat_cache;
-static pthread_mutex_t stat_cache_lock;
+static std::string default_acl("private");
 
 struct file_part {
   char path[17];
-  string etag;
+  std::string etag;
   bool uploaded;
 
   file_part() : uploaded(false) {}
@@ -86,12 +74,12 @@ struct file_part {
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
 // http headers
-typedef map<string, string> headers_t;
+typedef std::map<std::string, std::string> headers_t;
 
 static const EVP_MD* evp_md = EVP_sha1();
 
 // fd -> flags
-typedef map<int, int> s3fs_descriptors_t;
+typedef std::map<int, int> s3fs_descriptors_t;
 static s3fs_descriptors_t s3fs_descriptors;
 static pthread_mutex_t s3fs_descriptors_lock;
 
@@ -99,17 +87,12 @@ static pthread_mutex_t *mutex_buf = NULL;
 
 static struct fuse_operations s3fs_oper;
 
-string urlEncode(const string &s);
-string lookupMimeType(string);
-string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
-string upload_part(const char *path, const char *source, int part_number, string upload_id);
-static int complete_multipart_upload(const char *path, string upload_id, vector <file_part> parts);
-string md5sum(int fd);
-
-static int get_stat_cache_entry(const char *path, struct stat *buf);
-static void add_stat_cache_entry(const char *path, struct stat *st);
-static void delete_stat_cache_entry(const char *path);
-static void truncate_stat_cache();
+std::string urlEncode(const std::string &s);
+std::string lookupMimeType(std::string);
+std::string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
+std::string upload_part(const char *path, const char *source, int part_number, std::string upload_id);
+static int complete_multipart_upload(const char *path, std::string upload_id, std::vector <file_part> parts);
+std::string md5sum(int fd);
 
 static int s3fs_getattr(const char *path, struct stat *stbuf);
 static int s3fs_readlink(const char *path, char *buf, size_t size);
@@ -119,6 +102,7 @@ static int s3fs_unlink(const char *path);
 static int s3fs_rmdir(const char *path);
 static int s3fs_symlink(const char *from, const char *to);
 static int s3fs_rename(const char *from, const char *to);
+
 static int s3fs_link(const char *from, const char *to);
 static int s3fs_chmod(const char *path, mode_t mode);
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid);
