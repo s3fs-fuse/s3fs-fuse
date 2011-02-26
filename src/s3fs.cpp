@@ -4508,6 +4508,14 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
+  // check bucket name for illegal characters
+  found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
+  if(found != string::npos) {
+    fprintf(stderr, "%s: BUCKET %s -- bucket name contains an illegal character\n",
+      program_name.c_str(), bucket.c_str());
+    exit(EXIT_FAILURE);
+  }
+
   // The second plain argument is the mountpoint
   // if the option was given, we all ready checked for a
   // readable, non-empty directory, this checks determines
