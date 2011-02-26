@@ -626,6 +626,11 @@ static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0
         }
         break;
 
+      case CURLE_WRITE_ERROR:
+        syslog(LOG_ERR, "### CURLE_WRITE_ERROR");
+        sleep(2);
+        break; 
+
       case CURLE_OPERATION_TIMEDOUT:
         syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
         sleep(2);
