@@ -4,10 +4,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <iostream>
-#include <string>
-#include <map>
 
 struct stat_cache_entry {
   struct stat stbuf;
