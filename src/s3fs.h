@@ -24,29 +24,21 @@
   return result; \
 }
 
-typedef std::pair<double, double> progress_t;
+long connect_timeout = 10;
+time_t readwrite_timeout = 30;
 
-static long connect_timeout = 10;
-static time_t readwrite_timeout = 30;
-
-// static stack<CURL*> curl_handles;
-static pthread_mutex_t curl_handles_lock;
-static std::map<CURL*, time_t> curl_times;
-static std::map<CURL*, progress_t> curl_progress;
-
-static int retries = 2;
+int retries = 2;
 
 static std::string bucket;
 static std::string mountpoint;
-static std::string program_name;
+std::string program_name;
 static std::string AWSAccessKeyId;
 static std::string AWSSecretAccessKey;
 static std::string host = "http://s3.amazonaws.com";
-static std::string curl_ca_bundle;
 static mode_t root_mode = 0;
 static std::string service_path = "/";
 static std::string passwd_file = "";
-static bool debug = 0;
+bool debug = 0;
 static bool utility_mode = 0;
 bool foreground = 0;
 unsigned long max_stat_cache_size = 10000;
@@ -54,10 +46,12 @@ unsigned long max_stat_cache_size = 10000;
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
 static std::string use_rrs;
-static std::string ssl_verify_hostname = "1";
+std::string ssl_verify_hostname = "1";
 static std::string public_bucket;
 
 extern pthread_mutex_t stat_cache_lock;
+extern pthread_mutex_t curl_handles_lock;
+extern std::string curl_ca_bundle;
 
 // TODO(apetresc): make this an enum
 // private, public-read, public-read-write, authenticated-read
@@ -102,7 +96,6 @@ static int s3fs_unlink(const char *path);
 static int s3fs_rmdir(const char *path);
 static int s3fs_symlink(const char *from, const char *to);
 static int s3fs_rename(const char *from, const char *to);
-
 static int s3fs_link(const char *from, const char *to);
 static int s3fs_chmod(const char *path, mode_t mode);
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid);
@@ -121,6 +114,5 @@ static int s3fs_access(const char *path, int mask);
 static int s3fs_utimens(const char *path, const struct timespec ts[2]);
 static void* s3fs_init(struct fuse_conn_info *conn);
 static void s3fs_destroy(void*);
-
 
 #endif // S3FS_S3_H_

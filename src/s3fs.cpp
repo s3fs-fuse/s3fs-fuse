@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +42,7 @@
 #include <string>
 
 #include "s3fs.h"
+#include "curl.h"
 #include "cache.h"
 #include "string_util.h"
 
@@ -62,30 +62,6 @@ class auto_curl_slist {
  private:
   struct curl_slist* slist;
 };
-
-// Memory structure for the alternate
-// write memory callback used with curl_easy_perform
-struct BodyStruct {
-  char *text;    
-  size_t size;
-};
-
-// Memory structure for POST
-struct WriteThis {
-  const char *readptr;
-  int sizeleft;
-};
-
-typedef struct curlhll {
-  CURL *handle;
-  struct curlhll *next;
-} CURLHLL;
-
-typedef struct curlmhll {
-   CURLM *handle;
-   struct curlhll *curlhll_head;
-   struct curlmhll * next;
-} CURLMHLL;
 
 typedef struct mvnode {
    char *old_path;
@@ -115,6 +91,16 @@ struct cleanup_stuff {
   }
 };
 
+struct case_insensitive_compare_func {
+  bool operator ()(const string &a, const string &b) {
+    return strcasecmp(a.c_str(), b.c_str()) < 0;
+  }
+};
+
+typedef map<string, string, case_insensitive_compare_func> mimes_t;
+
+static mimes_t mimeTypes;
+
 class auto_stuff {
  public:
   auto_stuff() { }
@@ -127,82 +113,6 @@ class auto_stuff {
 private:
   stuffMap_t stuffMap;
 };
-
-// homegrown timeout mechanism
-static int my_curl_progress(
-    void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
-  CURL* curl = static_cast<CURL*>(clientp);
-
-  time_t now = time(0);
-  progress_t p(dlnow, ulnow);
-
-  //###cout << "/dlnow=" << dlnow << "/ulnow=" << ulnow << endl;
-
-  pthread_mutex_lock( &curl_handles_lock );
-
-  // any progress?
-  if (p != curl_progress[curl]) {
-    // yes!
-    curl_times[curl] = now;
-    curl_progress[curl] = p;
-  } else {
-    // timeout?
-    if (now - curl_times[curl] > readwrite_timeout) {
-      pthread_mutex_unlock( &curl_handles_lock );
-
-      syslog(LOG_ERR, "timeout  now: %li  curl_times[curl]: %lil  readwrite_timeout: %li",
-                      (long int)now, curl_times[curl], (long int)readwrite_timeout);
-
-      return CURLE_ABORTED_BY_CALLBACK;
-    }
-  }
-
-  pthread_mutex_unlock( &curl_handles_lock );
-  return 0;
-}
-
-CURL *create_curl_handle(void) {
-  long signal;
-  time_t now;
-  CURL *curl_handle;
-
-  pthread_mutex_lock( &curl_handles_lock );
-
-  curl_handle = curl_easy_init();
-
-  ///////////////////////////////////////////////////////////
-  // was part of alloc_curl_handle  
-  ///////////////////////////////////////////////////////////
-  curl_easy_reset(curl_handle);
-  signal = 1;
-  curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, signal);
-  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, connect_timeout);
-  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
-  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
-  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
-  curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
-  now = time(0);
-  curl_times[curl_handle] = now;
-  curl_progress[curl_handle] = progress_t(-1, -1);
-  ///////////////////////////////////////////////////////////
-
-  pthread_mutex_unlock( &curl_handles_lock );
-  return curl_handle;
-}
-
-void destroy_curl_handle(CURL *curl_handle) {
-  if(curl_handle != NULL) {
-
-    pthread_mutex_lock( &curl_handles_lock );
-
-    curl_times.erase(curl_handle);
-    curl_progress.erase(curl_handle);
-
-    curl_easy_cleanup(curl_handle);
-    pthread_mutex_unlock( &curl_handles_lock );
-  }
-  return;
-}
 
 MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   MVNODE *p;
@@ -281,180 +191,6 @@ void free_mvnodes(MVNODE *head) {
   return;
 }
 
-/////////////////////////////////////////////////
-// Multi CURL stuff
-/////////////////////////////////////////////////
-CURLHLL *create_h_element(CURL *handle) {
-  CURLHLL *p;
-  p = (CURLHLL *) malloc(sizeof(CURLHLL));
-  if (p == NULL) {
-     printf("create_h_element: could not allocation memory\n");
-     exit(EXIT_FAILURE);
-  }
-  p->handle = handle;
-  p->next = NULL;
-  return p;
-}
-
-void add_h_element(CURLHLL *head, CURL *handle) {
-  CURLHLL *p;
-  CURLHLL *p_new;
-
-  p_new = create_h_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return;
-}
-
-CURLMHLL *create_mh_element(CURLM *handle) {
-  CURLMHLL *p;
-  p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
-  if (p == NULL) {
-     printf("create_mh_element: could not allocation memory\n");
-     exit(EXIT_FAILURE);
-  }
-  p->handle = handle;
-  p->curlhll_head = NULL;
-  p->next = NULL;
-  return p;
-}
-
-CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle) {
-  CURLMHLL *p;
-  CURLMHLL *p_new;
-
-  p_new = create_mh_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return p_new;
-}
-
-void add_h_to_mh(CURL *h, CURLMHLL *mh) {
-   CURLHLL *h_head;
-
-   h_head = mh->curlhll_head;
-   if(h_head == NULL) {
-      h_head = create_h_element(h);
-      mh->curlhll_head = h_head;
-   } else {
-      add_h_element(h_head, h);
-   }
-   return;
-}
-
-void cleanup_multi_stuff(CURLMHLL *mhhead) {
-  // move this to it's own cleanup function  
-
-  CURLMHLL *my_mhhead;
-  CURLMHLL *pnext;
-  CURLHLL *cnext;
-  CURLHLL *chhead;
-  CURLMcode curlm_code;
-
-  CURL *curl_handle;
-  CURLM *curl_multi_handle;
-
-  if(mhhead == NULL) {
-     return;
-  }
-
-  // Remove all of the easy handles from its multi handle
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-
-      curl_multi_handle = my_mhhead->handle;
-      curl_handle = chhead->handle;
-
-      curlm_code = curl_multi_remove_handle(curl_multi_handle, curl_handle);
-      if(curlm_code != CURLM_OK) {
-        syslog(LOG_ERR, "curl_multi_remove_handle code: %d msg: %s", 
-           curlm_code, curl_multi_strerror(curlm_code));
-      }
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now clean up the easy handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      destroy_curl_handle(chhead->handle);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now cleanup the multi handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
- 
-  do {
-    pnext = my_mhhead->next;
-  
-    curlm_code = curl_multi_cleanup(my_mhhead->handle);
-    if(curlm_code != CURLM_OK) {
-       syslog(LOG_ERR, "curl_multi_cleanup code: %d msg: %s", 
-          curlm_code, curl_multi_strerror(curlm_code));
-    }
-
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-
-
-  // Now free the memory structures
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      free(chhead);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    free(my_mhhead);
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  return;
-}
-
 static string prepare_url(const char* url) {
   if(debug) syslog(LOG_DEBUG, "URL is %s", url);
 
@@ -475,265 +211,7 @@ static string prepare_url(const char* url) {
 
   return str(url_str);
 }
-
-////////////////////////////////////////////////////////////
-// locate_bundle
-////////////////////////////////////////////////////////////
-static void locate_bundle(void) {
-
-  // See if environment variable CURL_CA_BUNDLE is set
-  // if so, check it, if it is a good path, then set the
-  // curl_ca_bundle variable to it
-  char * CURL_CA_BUNDLE; 
-
-  if (curl_ca_bundle.size() == 0) {
-    CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
-    if (CURL_CA_BUNDLE != NULL)  {
-      // check for existance and readability of the file
-      ifstream BF(CURL_CA_BUNDLE);
-      if (BF.good()) {
-         BF.close();
-         curl_ca_bundle.assign(CURL_CA_BUNDLE); 
-      } else {
-        fprintf(stderr, "%s: file specified by CURL_CA_BUNDLE environment variable is not readable\n",
-                program_name.c_str());
-        exit(EXIT_FAILURE);
-      }
-      return;
-    }
-  }
-
-  // not set by Environment Variable
-  // look in likely locations
-
-  ///////////////////////////////////////////
-  // from curl's (7.21.2) acinclude.m4 file
-  ///////////////////////////////////////////
-  // dnl CURL_CHECK_CA_BUNDLE
-  // dnl -------------------------------------------------
-  // dnl Check if a default ca-bundle should be used
-  // dnl
-  // dnl regarding the paths this will scan:
-  // dnl /etc/ssl/certs/ca-certificates.crt Debian systems
-  // dnl /etc/pki/tls/certs/ca-bundle.crt Redhat and Mandriva
-  // dnl /usr/share/ssl/certs/ca-bundle.crt old(er) Redhat
-  // dnl /usr/local/share/certs/ca-root.crt FreeBSD
-  // dnl /etc/ssl/cert.pem OpenBSD
-  // dnl /etc/ssl/certs/ (ca path) SUSE
-
-  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
-  if (BF.good()) {
-     BF.close();
-     curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
-     return;
-  }
-
-  return;
-}
-
-/**
- * @return fuse return code
- */
-static int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0) {
-  char url[256];
-  time_t now;
-  char* ptr_url = url;
-  curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
-
-  if(debug)
-    syslog(LOG_DEBUG, "connecting to URL %s", ptr_url);
-
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  if(ssl_verify_hostname.substr(0,1) == "0")
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-
-  if(curl_ca_bundle.size() != 0)
-    curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-
-  long responseCode;
-
-  // 1 attempt + retries...
-  int t = retries + 1;
-  while (t-- > 0) {
-    if (f) {
-      rewind(f);
-    }
-    CURLcode curlCode = curl_easy_perform(curl);
-
-    switch (curlCode) {
-      case CURLE_OK:
-        // Need to look at the HTTP response code
-
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
-          syslog(LOG_ERR, "curl_easy_getinfo failed while trying to retrieve HTTP response code");
-          return -EIO;
-        }
-        
-        if(debug)
-          syslog(LOG_DEBUG, "HTTP response code %ld", responseCode);
-
-        if (responseCode < 400) {
-          return 0;
-        }
-
-        if (responseCode >= 500) {
-          syslog(LOG_ERR, "###HTTP response=%ld", responseCode);
-          sleep(4);
-          break; 
-        }
-
-        // Service response codes which are >= 400 && < 500
-        switch(responseCode) {
-          case 400:
-            if(debug) syslog(LOG_ERR, "HTTP response code 400 was returned");
-            if(body) {
-              if(body->size && debug) {
-                syslog(LOG_ERR, "Body Text: %s", body->text);
-              }
-            }
-            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
-            return -EIO;
-
-          case 403:
-            if(debug) syslog(LOG_ERR, "HTTP response code 403 was returned");
-            if(body) {
-              if(body->size && debug) {
-                syslog(LOG_ERR, "Body Text: %s", body->text);
-              }
-            }
-            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
-            return -EIO;
-
-          case 404:
-            if(debug) syslog(LOG_DEBUG, "HTTP response code 404 was returned");
-            if(body) {
-              if(body->size && debug) {
-                syslog(LOG_DEBUG, "Body Text: %s", body->text);
-              }
-            }
-            if(debug) syslog(LOG_DEBUG, "Now returning ENOENT");
-            return -ENOENT;
-
-          default:
-            syslog(LOG_ERR, "###response=%ld", responseCode);
-            printf("responseCode %ld\n", responseCode);
-            if(body) {
-              if(body->size) {
-                printf("Body Text %s\n", body->text);
-              }
-            }
-            return -EIO;
-        }
-        break;
-
-      case CURLE_WRITE_ERROR:
-        syslog(LOG_ERR, "### CURLE_WRITE_ERROR");
-        sleep(2);
-        break; 
-
-      case CURLE_OPERATION_TIMEDOUT:
-        syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
-        sleep(2);
-        break; 
-
-      case CURLE_COULDNT_RESOLVE_HOST:
-        syslog(LOG_ERR, "### CURLE_COULDNT_RESOLVE_HOST");
-        sleep(2);
-        break; 
-
-      case CURLE_COULDNT_CONNECT:
-        syslog(LOG_ERR, "### CURLE_COULDNT_CONNECT");
-        sleep(4);
-        break; 
-
-      case CURLE_GOT_NOTHING:
-        syslog(LOG_ERR, "### CURLE_GOT_NOTHING");
-        sleep(4);
-        break; 
-
-      case CURLE_ABORTED_BY_CALLBACK:
-        syslog(LOG_ERR, "### CURLE_ABORTED_BY_CALLBACK");
-        sleep(4);
-        now = time(0);
-        curl_times[curl] = now;
-        break; 
-
-      case CURLE_PARTIAL_FILE:
-        syslog(LOG_ERR, "### CURLE_PARTIAL_FILE");
-        sleep(4);
-        break; 
-
-      case CURLE_SSL_CACERT:
-        // try to locate cert, if successful, then set the
-        // option and continue
-        if (curl_ca_bundle.size() == 0) {
-           locate_bundle();
-           if (curl_ca_bundle.size() != 0) {
-              t++;
-              curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-              continue;
-           }
-        }
-        syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-           curl_easy_strerror(curlCode));;
-        fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-           program_name.c_str(),
-           curlCode,
-           curl_easy_strerror(curlCode));
-        exit(EXIT_FAILURE);
-        break;
-
-#ifdef CURLE_PEER_FAILED_VERIFICATION
-      case CURLE_PEER_FAILED_VERIFICATION:
-        first_pos = bucket.find_first_of(".");
-        if (first_pos != string::npos) {
-          fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-          fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-          fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-          fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-          fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-        } else {
-          fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
-             program_name.c_str(),
-             curlCode,
-             curl_easy_strerror(curlCode));
-        }
-        exit(EXIT_FAILURE);
-        break;
-#endif
-
-      // This should be invalid since curl option HTTP FAILONERROR is now off
-      case CURLE_HTTP_RETURNED_ERROR:
-        syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
-
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
-          return -EIO;
-        }
-        syslog(LOG_ERR, "###response=%ld", responseCode);
-
-        // Let's try to retrieve the 
-
-        if (responseCode == 404) {
-          return -ENOENT;
-        }
-        if (responseCode < 500) {
-          return -EIO;
-        }
-        break;
-
-      // Unknown CURL return code
-      default:
-        syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
-           curl_easy_strerror(curlCode));;
-        exit(EXIT_FAILURE);
-        break;
-    }
-    syslog(LOG_ERR, "###retrying...");
-  }
-  syslog(LOG_ERR, "###giving up");
-  return -EIO;
-}
-           
+ 
 /**
  * urlEncode a fuse path,
  * taking into special consideration "/",
@@ -885,45 +363,6 @@ string calc_signature(
   BIO_free_all(b64);
 
   return Signature;
-}
-
-// libcurl callback
-// another write callback as shown by example
-// http://curl.haxx.se/libcurl/c/getinmemory.html
-static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data) {
-  size_t realsize = blockSize * numBlocks;
-  struct BodyStruct *mem = (struct BodyStruct *)data;
- 
-  mem->text = (char *)realloc(mem->text, mem->size + realsize + 1);
-  if (mem->text == NULL) {
-    /* out of memory! */ 
-    fprintf(stderr, "not enough memory (realloc returned NULL)\n");
-    exit(EXIT_FAILURE);
-  }
- 
-  memcpy(&(mem->text[mem->size]), ptr, realsize);
-  mem->size += realsize;
-  mem->text[mem->size] = 0;
- 
-  return realsize;
-}
-
-// read_callback
-// http://curl.haxx.se/libcurl/c/post-callback.html
-static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp) {
-  struct WriteThis *pooh = (struct WriteThis *)userp;
- 
-  if(size*nmemb < 1)
-    return 0;
- 
-  if(pooh->sizeleft) {
-    *(char *)ptr = pooh->readptr[0]; /* copy one single byte */ 
-    pooh->readptr++;                 /* advance pointer */ 
-    pooh->sizeleft--;                /* less data left */ 
-    return 1;                        /* we return 1 byte at a time! */ 
-  }
- 
-  return 0;                          /* no more data left to deliver */ 
 }
 
 static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
@@ -1304,17 +743,13 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   result = my_curl_easy_perform(curl, &body, f);
 
-  //////////////////////////////////
-
-  if(body.text) {
+  if(body.text)
     free(body.text);
-  }
 
   destroy_curl_handle(curl);
 
-  if(result != 0) {
+  if(result != 0)
     return result;
-  }
 
   return 0;
 }
@@ -1907,10 +1342,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     return 0;
   }
 
-  {
-    if(get_stat_cache_entry(path, stbuf) == 0)
-      return 0;
-  }
+  if(get_stat_cache_entry(path, stbuf) == 0)
+    return 0;
 
   body.text = (char *)malloc(1);
   body.size = 0;
@@ -2024,19 +1457,11 @@ static int s3fs_readlink(const char *path, char *buf, size_t size) {
     buf[size] = 0;
   }
 
-  if(fd > 0) close(fd);
+  if(fd > 0)
+    close(fd);
+
   return 0;
 }
-
-struct case_insensitive_compare_func {
-  bool operator ()(const string &a, const string &b) {
-    return strcasecmp(a.c_str(), b.c_str()) < 0;
-  }
-};
-
-typedef map<string, string, case_insensitive_compare_func> mimes_t;
-
-static mimes_t mimeTypes;
 
 /**
  * @param s e.g., "index.html"
@@ -2049,14 +1474,12 @@ string lookupMimeType(string s) {
   string prefix, ext, ext2;
 
   // No dots in name, just return
-  if (last_pos == string::npos) {
-     return result;
-  }
+  if(last_pos == string::npos)
+    return result;
 
   // extract the last extension
-  if (last_pos != string::npos) {
+  if(last_pos != string::npos)
     ext = s.substr(1+last_pos, string::npos);
-  }
    
   if (last_pos != string::npos) {
      // one dot was found, now look for another
@@ -2080,9 +1503,8 @@ string lookupMimeType(string s) {
   }
 
   // return with the default result if there isn't a second extension
-  if (first_pos == last_pos) {
+  if(first_pos == last_pos)
      return result;
-  }
 
   // Didn't find a mime-type for the first extension
   // Look for second extension in mimeTypes, return if found
@@ -2096,7 +1518,6 @@ string lookupMimeType(string s) {
   // matched a mimeType, return the default mime type 
   return result;
 }
-
 
 ////////////////////////////////////////////////////////
 // common function for creation of a plain object
@@ -2137,19 +1558,14 @@ static int create_file_object(const char *path, mode_t mode) {
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl);
-
   destroy_curl_handle(curl);
 
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   return 0;
 }
 
-////////////////////////////////////////////////////////
-// s3fs_mknod 
-////////////////////////////////////////////////////////
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int result;
   if(foreground) 
@@ -2167,9 +1583,6 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   return 0;
 }
 
-////////////////////////////////////////////////////////////
-//  s3fs_create
-////////////////////////////////////////////////////////////
 static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
   int result;
   headers_t meta;
@@ -2377,15 +1790,14 @@ static int s3fs_rmdir(const char *path) {
 
   result = my_curl_easy_perform(curl_handle);
 
-  if(body.text) {
+  if(body.text)
     free(body.text);
-  }
+
   destroy_curl_handle(curl);
   destroy_curl_handle(curl_handle);
 
-  if(result != 0) {
+  if(result != 0)
     return result;
-  }
 
   // delete cache entry
   delete_stat_cache_entry(path);
@@ -2410,19 +1822,25 @@ static int s3fs_symlink(const char *from, const char *to) {
     return -errno;
   }
 
-  if (pwrite(fd, from, strlen(from), 0) == -1) {
+  if(pwrite(fd, from, strlen(from), 0) == -1) {
     syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
-    if(fd > 0) close(fd);
+    if(fd > 0)
+      close(fd);
+
     return -errno;
   }
 
   result = put_local_fd(to, headers, fd);
-  if (result != 0) {
-    if(fd > 0) close(fd);
+  if(result != 0) {
+    if(fd > 0)
+      close(fd);
+
     return result;
   }
 
-  if(fd > 0) close(fd);
+  if(fd > 0)
+    close(fd);
+
   return 0;
 }
 
@@ -2430,27 +1848,30 @@ static int rename_object( const char *from, const char *to) {
   int result;
   headers_t meta;
 
-  if(foreground) {
+  if(foreground)
     cout << "rename_object[from=" << from << "][to=" << to << "]" << endl; 
-  }
-  if(debug) syslog(LOG_DEBUG, "rename_object [from=%s] [to=%s]", from, to);
 
+  if(debug)
+    syslog(LOG_DEBUG, "rename_object [from=%s] [to=%s]", from, to);
 
-  if(debug) syslog(LOG_DEBUG, "   rename_object: calling get_headers....");
+  if(debug)
+    syslog(LOG_DEBUG, "   rename_object: calling get_headers....");
+
   result = get_headers(from, meta);
-  if(debug) syslog(LOG_DEBUG, "   rename_object: returning from get_headers....");
-  if(result != 0) {
-     return result;
-  }
+
+  if(debug)
+    syslog(LOG_DEBUG, "   rename_object: returning from get_headers....");
+
+  if(result != 0)
+    return result;
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
 
   result = put_headers(to, meta);
-  if (result != 0) {
+  if(result != 0)
     return result;
-  }
 
   result = s3fs_unlink(from);
 
@@ -2467,23 +1888,20 @@ static int clone_directory_object( const char *from, const char *to) {
 
   // create the new directory object
   result = s3fs_mkdir(to, mode);
-  if ( result != 0) {
+  if(result != 0)
     return result;
-  }
 
   // and transfer its attributes
   result = get_headers(from, meta);
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + from);
   meta["x-amz-metadata-directive"] = "REPLACE";
 
   result = put_headers(to, meta);
-  if (result != 0) {
+  if(result != 0)
     return result;
-  }
 
   return 0;
 }
@@ -2504,7 +1922,8 @@ static int rename_directory( const char *from, const char *to) {
   if(foreground) 
     cout << "rename_directory[from=" << from << "][to=" << to << "]" << endl;
 
-  if(debug) syslog(LOG_DEBUG, "rename_directory [from=%s] [to=%s]", from, to);
+  if(debug)
+    syslog(LOG_DEBUG, "rename_directory [from=%s] [to=%s]", from, to);
 
   CURL *curl;
   struct BodyStruct body;
@@ -2528,9 +1947,7 @@ static int rename_directory( const char *from, const char *to) {
   tail = head;
   // printf("back from create_mvnode\n");
 
-
   while (IsTruncated == "true") {
-
     string resource = urlEncode(service_path + bucket);
     // string query = "delimiter=/&prefix=";
     string query = "prefix=";
@@ -2666,8 +2083,6 @@ static int rename_directory( const char *from, const char *to) {
 
                  // push this one onto the stack
                  tail = add_mvnode(head, (char *)path.c_str(), (char *)new_path.c_str(), is_dir);
-
-
               }
 
             } // if (cur_node->children != NULL) {
@@ -2681,7 +2096,6 @@ static int rename_directory( const char *from, const char *to) {
        NextMarker = Key;
     }
 
-
   } // while (IsTruncated == "true") {
 
   if(body.text) {
@@ -2690,9 +2104,8 @@ static int rename_directory( const char *from, const char *to) {
 
   // iterate over the list - clone directories first - top down
 
-  if(head == NULL) {
-     return 0;
-  }
+  if(head == NULL)
+    return 0;
 
   MVNODE *my_head;
   MVNODE *my_tail;
@@ -2740,7 +2153,6 @@ static int rename_directory( const char *from, const char *to) {
     my_head = next;
   } while(my_head != NULL);
 
-
   // Iterate over old the directories, bottoms up and remove
   do {
     // printf("old_path: %s\n", my_tail->old_path);
@@ -2764,13 +2176,14 @@ static int rename_directory( const char *from, const char *to) {
 }
 
 static int s3fs_rename(const char *from, const char *to) {
+  struct stat buf;
+  int result;
+
   if(foreground) 
     cout << "rename[from=" << from << "][to=" << to << "]" << endl;
 
-  if(debug) syslog(LOG_DEBUG, "rename [from=%s] [to=%s]", from, to);
-
-  struct stat buf;
-  int result;
+  if(debug)
+    syslog(LOG_DEBUG, "rename [from=%s] [to=%s]", from, to);
 
   s3fs_getattr(from, &buf);
  
@@ -2791,14 +2204,14 @@ static int s3fs_link(const char *from, const char *to) {
 
 static int s3fs_chmod(const char *path, mode_t mode) {
   int result;
-  if(foreground) 
-    cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
   headers_t meta;
 
+  if(foreground) 
+    cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
+
   result = get_headers(path, meta);
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   meta["x-amz-meta-mode"] = str(mode);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
@@ -2808,7 +2221,6 @@ static int s3fs_chmod(const char *path, mode_t mode) {
 
   return put_headers(path, meta);
 }
-
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   int result;
@@ -2849,9 +2261,8 @@ static int s3fs_truncate(const char *path, off_t size) {
   headers_t meta;
 
   result = get_headers(path, meta);
-  if(result != 0) {
+  if(result != 0)
      return result;
-  }
 
   fd = fileno(tmpfile());
   if(fd == -1) {
@@ -2972,9 +2383,8 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "s3fs_release[path=" << path << "][fd=" << fd << "]" << endl;
 
-  if (close(fd) == -1) {
+  if(close(fd) == -1)
     YIKES(-errno);
-  }
 
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
     delete_stat_cache_entry(path);
@@ -3195,7 +2605,6 @@ static int s3fs_readdir(
                        curlm_code, curl_multi_strerror(curlm_code));
        return -EIO;
     }
-
 
     while (running_handles) {
       fd_set read_fd_set;
@@ -3458,7 +2867,6 @@ static int list_multipart_uploads(void) {
   // printf("resource: %s\n", resource.c_str());
   resource.append("?uploads");
   // printf("resource: %s\n", resource.c_str());
-
 
   url = host + resource;
   // printf("url: %s\n", url.c_str());
