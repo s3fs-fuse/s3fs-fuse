@@ -3814,6 +3814,16 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "url=") != 0) {
       host = strchr(arg, '=') + 1;
+      // strip the trailing '/', if any, off the end of the host
+      // string
+      size_t found, length;
+      found = host.find_last_of('/');
+      length = host.length();
+      while ( found == (length - 1) && length > 0 ) {
+         host.erase(found);
+         found = host.find_last_of('/');
+         length = host.length();
+      }
       return 0;
     }
     // debug option
