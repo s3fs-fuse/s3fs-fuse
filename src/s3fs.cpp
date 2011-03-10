@@ -25,7 +25,9 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
-#include <sys/time.h>
+#include <time.h>
+#include <utime.h>
+#include <sys/stat.h>
 #include <libgen.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -411,7 +413,11 @@ int get_headers(const char* path, headers_t& meta) {
   CURL *curl;
   int result;
 
-  if(debug) syslog(LOG_DEBUG, "get_headers called path=%s", path);
+  if(foreground) 
+    cout << "    calling get_headers [path=" << path << "]" << endl;
+
+  if(debug) 
+    syslog(LOG_DEBUG, "get_headers called path=%s", path);
 
   string resource(urlEncode(service_path + bucket + path));
   string url(host + resource);
@@ -440,33 +446,37 @@ int get_headers(const char* path, headers_t& meta) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  if(debug) syslog(LOG_DEBUG, "get_headers: now calling my_curl_easy_perform");
-  result = my_curl_easy_perform(curl);
+  if(debug)
+    syslog(LOG_DEBUG, "get_headers: now calling my_curl_easy_perform");
 
+  result = my_curl_easy_perform(curl);
   destroy_curl_handle(curl);
 
-  if(result != 0) {
+  if(result != 0)
      return result;
-  }
 
-  if(debug) syslog(LOG_DEBUG, "get_headers: now returning from my_curl_easy_perform");
+  if(debug)
+    syslog(LOG_DEBUG, "get_headers: now returning from my_curl_easy_perform");
 
   // at this point we know the file exists in s3
 
   for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;
-    if (key == "Content-Type")
+    if(key == "Content-Type")
       meta[key] = value;
-    if (key == "ETag")
+    if(key == "Content-Length")
+      meta[key] = value;
+    if(key == "ETag")
       meta[key] = value;
     if(key == "Last-Modified")
       meta[key] = value;
-    if (key.substr(0, 5) == "x-amz")
+    if(key.substr(0, 5) == "x-amz")
       meta[key] = value;
   }
 
-  if(debug) syslog(LOG_DEBUG, "returning from get_headers, path=%s", path);
+  if(debug)
+    syslog(LOG_DEBUG, "returning from get_headers, path=%s", path);
 
   return 0;
 }
@@ -477,6 +487,7 @@ int get_headers(const char* path, headers_t& meta) {
 int get_local_fd(const char* path) {
   int fd = -1;
   int result;
+  struct stat st;
   CURL *curl = NULL;
   string local_md5;
   string resource(urlEncode(service_path + bucket + path));
@@ -489,22 +500,22 @@ int get_local_fd(const char* path) {
   if(foreground) 
     cout << "   get_local_fd[path=" << path << "]" << endl;
 
-  if (use_cache.size() > 0) {
+  if(use_cache.size() > 0) {
     result = get_headers(path, responseHeaders);
     if(result != 0)
        return -result;
 
     fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
+    if(fd != -1) {
+      if((fstat(fd, &st)) == -1) {
+        close(fd);
+        YIKES(-errno);
+      }
 
-    if (fd != -1) {
-      // md5 match?
-      // FIXME: files uploaded via the multipart interface will _not_ have
-      // and etag representing an md5sum of the object. This breaks the local cache
-      // for files >= 20MB.
-      local_md5 = md5sum(fd);
-      string remoteMd5(trim(responseHeaders["ETag"], "\""));
-      if(local_md5 != remoteMd5) {
-        // no! prepare to download
+      // if the local and remote mtime/size
+      // do not match we have an invalid cache entry
+      if(str(st.st_size) != responseHeaders["Content-Length"] || 
+        (str(st.st_mtime) != responseHeaders["x-amz-meta-mtime"])) {
         if(close(fd) == -1)
           YIKES(-errno);
 
@@ -514,9 +525,9 @@ int get_local_fd(const char* path) {
   }
 
   // need to download?
-  if (fd == -1) {
+  if(fd == -1) {
     // yes!
-    if (use_cache.size() > 0) {
+    if(use_cache.size() > 0) {
       // only download files, not folders
       mode_t mode = strtoul(responseHeaders["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
       if (S_ISREG(mode)) {
@@ -531,18 +542,17 @@ int get_local_fd(const char* path) {
       fd = fileno(tmpfile());
     }
 
-    if (fd == -1) {
+    if(fd == -1)
       YIKES(-errno);
-    }
 
     curl = create_curl_handle();
     // curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
 
-    FILE* f = fdopen(fd, "w+");
-    if (f == 0) {
+    FILE *f = fdopen(fd, "w+");
+    if(f == 0)
       YIKES(-errno);
-    }
+
     curl_easy_setopt(curl, CURLOPT_FILE, f);
 
     auto_curl_slist headers;
@@ -550,7 +560,7 @@ int get_local_fd(const char* path) {
     if(debug) syslog(LOG_DEBUG, "LOCAL FD");
     headers.append("Date: " + date);
     headers.append("Content-Type: ");
-    if (public_bucket.substr(0,1) != "1") {
+    if(public_bucket.substr(0,1) != "1") {
       headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
         calc_signature("GET", "", date, headers.get(), resource));
     }
@@ -563,16 +573,23 @@ int get_local_fd(const char* path) {
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
     result = my_curl_easy_perform(curl, NULL, f);
-    if (result != 0) {
-       return -result;
-    }
+    if(result != 0)
+      return -result;
 
     //only one of these is needed...
     fflush(f);
     fsync(fd);
 
-    if (fd == -1) {
+    if(fd == -1)
       YIKES(-errno);
+
+    if(use_cache.size() > 0) {
+      // make the file's mtime match that of the file on s3
+      struct utimbuf n_mtime;
+      n_mtime.modtime = strtoul(responseHeaders["x-amz-meta-mtime"].c_str(), (char **) NULL, 10);
+      if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+        YIKES(-errno);
+      }
     }
   }
 
@@ -585,7 +602,7 @@ int get_local_fd(const char* path) {
  * create or update s3 meta
  * @return fuse return code
  */
-static int put_headers(const char* path, headers_t meta) {
+static int put_headers(const char *path, headers_t meta) {
   CURL *curl = NULL;
   
   string resource = urlEncode(service_path + bucket + path);
@@ -632,19 +649,18 @@ static int put_headers(const char* path, headers_t meta) {
       headers.append(key + ":" + value);
   }
 
-  if (use_rrs.substr(0,1) == "1") {
+  if(use_rrs.substr(0,1) == "1")
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
-  }
 
-  if (public_bucket.substr(0,1) != "1") {
+  if(public_bucket.substr(0,1) != "1") {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", ContentType, date, headers.get(), resource));
   }
+
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
-  //###rewind(f);
-
-  if(debug) syslog(LOG_DEBUG, "copy path=%s", path);
+  if(debug)
+    syslog(LOG_DEBUG, "copy path=%s", path);
 
   if(foreground) 
     cout << "      copying[path=" << path << "]" << endl;
@@ -654,18 +670,26 @@ static int put_headers(const char* path, headers_t meta) {
 
   result = my_curl_easy_perform(curl, &body);
 
-  if(body.size > 0) {
-     printf("body.text: %s\n", body.text);
-  }
-
-  if(body.text) {
+  if(body.text)
     free(body.text);
-  }
  
   destroy_curl_handle(curl);
 
-  if(result != 0) {
+  if(result != 0)
     return result;
+
+  // Update mtime in local file cache.
+  if(meta.count("x-amz-meta-mtime") > 0 && use_cache.size() > 0) {
+    struct stat st;
+    struct utimbuf n_mtime;
+    string cache_path(use_cache + "/" + bucket + path);
+
+    if((stat(cache_path.c_str(), &st)) == 0) {
+      n_mtime.modtime = strtoul(meta["x-amz-meta-mtime"].c_str(), (char **) NULL, 10);
+      if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+        YIKES(-errno);
+      }
+    }
   }
 
   return 0;
@@ -730,10 +754,6 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
       calc_signature("PUT", ContentType, date, headers.get(), resource));
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-  //###rewind(f);
-
-  // if(debug) syslog(LOG_DEBUG, "upload path=%s size=%zu", path, st.st_size);
 
   if(foreground) 
     cout << "      uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
@@ -873,15 +893,14 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
  * @return fuse return code
  */
 static int put_local_fd(const char* path, headers_t meta, int fd) {
+  int result;
+  struct stat st;
+
   if(foreground) 
     cout << "   put_local_fd[path=" << path << "][fd=" << fd << "]" << endl;
 
-  int result;
-
-  struct stat st;
-  if(fstat(fd, &st) == -1) {
+  if(fstat(fd, &st) == -1)
     YIKES(-errno);
-  }
 
   /////////////////////////////////////////////////////////
   // Make decision to do multi upload (or not)
@@ -907,7 +926,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   if(st.st_size >= 20971520) { // 20MB
      // Additional time is needed for large files
      if(readwrite_timeout < 120)
-        readwrite_timeout = 120;
+       readwrite_timeout = 120;
 
      result = put_local_fd_big_file(path, meta, fd); 
   } else {
@@ -2272,11 +2291,14 @@ static int s3fs_truncate(const char *path, off_t size) {
   
   result = put_local_fd(path, meta, fd);
   if(result != 0) {
-     if(fd > 0) close(fd);
+     if(fd > 0)
+       close(fd);
+
      return result;
   }
 
-  if(fd > 0) close(fd);
+  if(fd > 0)
+    close(fd);
 
   return 0;
 }
@@ -2310,23 +2332,26 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
 static int s3fs_read(
     const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   int res = pread(fi->fh, buf, size, offset);
+
   if(foreground) 
     cout << "s3fs_read[path=" << path << "]" << endl;
-  if (res == -1) {
+
+  if(res == -1)
     YIKES(-errno);
-  }
+
   return res;
 }
 
 static int s3fs_write(
     const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-
   int res = pwrite(fi->fh, buf, size, offset);
+
   if(foreground) 
     cout << "s3fs_write[path=" << path << "]" << endl;
-  if (res == -1) {
+
+  if(res == -1)
     YIKES(-errno);
-  }
+
   return res;
 }
 
@@ -2351,6 +2376,7 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int flags;
   int result;
   int fd = fi->fh;
+  time_t mtime;
 
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
@@ -2358,19 +2384,42 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   // NOTE- fi->flags is not available here
   flags = get_flags(fd);
   if((flags & O_RDWR) || (flags & O_WRONLY)) {
-    string local_md5;
-    string remote_md5;
     headers_t meta;
     result = get_headers(path, meta);
 
-    // if the local md5 matches the remote 
-    // etag (md5), skip uploading the file
-    remote_md5 = trim(meta["ETag"], "\"");
-    local_md5 = md5sum(fd);
-    if(result != 0 || (local_md5 == remote_md5 && use_cache.size() > 0))
+    if(result != 0)
       return result;
 
-    meta["x-amz-meta-mtime"] = str(time(NULL));
+    // if the cached file matches the remote file skip uploading
+    if(use_cache.size() > 0) {
+      struct stat st;
+
+      if((fstat(fd, &st)) == -1)
+        YIKES(-errno);
+
+      if(str(st.st_size) == meta["Content-Length"] && 
+        (str(st.st_mtime) == meta["x-amz-meta-mtime"])) {
+        return result;
+      }
+    }
+
+    mtime = time(NULL);
+    meta["x-amz-meta-mtime"] = str(mtime);
+
+    // force the cached copy to have the same mtime as the remote copy
+    if(use_cache.size() > 0) {
+      struct stat st;
+      struct utimbuf n_mtime;
+      string cache_path(use_cache + "/" + bucket + path);
+
+      if((stat(cache_path.c_str(), &st)) == 0) {
+        n_mtime.modtime = mtime;
+        if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+          YIKES(-errno);
+        }
+      }
+    }
+
     return put_local_fd(path, meta, fd);
   }
 
@@ -2811,12 +2860,9 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   if(foreground) 
     cout << "s3fs_utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
 
-  if(foreground) 
-    cout << "  calling get_headers [path=" << path << "]" << endl;
   result = get_headers(path, meta);
-  if(result != 0) {
-     return result;
-  }
+  if(result != 0)
+    return result;
 
   meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + path);
