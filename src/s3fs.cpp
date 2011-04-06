@@ -3393,6 +3393,68 @@ static void s3fs_check_service(void) {
   return;
 }
 
+static bool check_for_aws_format (void) {
+  size_t first_pos = string::npos;
+  string line;
+  bool got_access_key_id_line = 0;
+  bool got_secret_key_line = 0;
+  string str1 ("AWSAccessKeyId=");
+  string str2 ("AWSSecretKey=");
+  size_t found;
+
+
+  ifstream PF(passwd_file.c_str());
+  if (PF.good()) {
+    while (getline(PF, line)) {
+      if (line[0]=='#') {
+        continue;
+      }
+      if (line.size() == 0) {
+        continue;
+      }
+
+      first_pos = line.find_first_of(" \t");
+      if (first_pos != string::npos) {
+        printf ("%s: invalid line in passwd file, found whitespace character\n", 
+           program_name.c_str());
+        exit(EXIT_FAILURE);
+      }
+
+      first_pos = line.find_first_of("[");
+      if (first_pos != string::npos && first_pos == 0) {
+        printf ("%s: invalid line in passwd file, found a bracket \"[\" character\n", 
+           program_name.c_str());
+        exit(EXIT_FAILURE);
+      }
+
+      found = line.find(str1);
+      if (found != string::npos) {
+         first_pos = line.find_first_of("=");
+         AWSAccessKeyId = line.substr(first_pos + 1, string::npos);
+         // cout << "AWSAccessKeyId: " << AWSAccessKeyId.c_str() << endl;
+         got_access_key_id_line = 1;
+         continue;
+      }
+
+      found = line.find(str2);
+      if (found != string::npos) {
+         first_pos = line.find_first_of("=");
+         AWSSecretAccessKey = line.substr(first_pos + 1, string::npos);
+         // cout << "AWSSecretAccessKey: " << AWSSecretAccessKey.c_str() << endl;
+         got_secret_key_line = 1;
+         continue;
+      }
+    }
+  }
+
+  if (got_access_key_id_line && got_secret_key_line) {
+     return 1;
+  } else {
+     return 0;
+  }
+
+}
+
 //////////////////////////////////////////////////////////////////
 // check_passwd_file_perms
 // 
@@ -3462,11 +3524,17 @@ static void read_passwd_file (void) {
   size_t first_pos = string::npos;
   size_t last_pos = string::npos;
   bool default_found = 0;
+  bool aws_format;
 
   // if you got here, the password file
   // exists and is readable by the
   // current user, check for permissions
   check_passwd_file_perms();
+
+  aws_format = check_for_aws_format();
+
+  if (aws_format)
+     return;
 
   ifstream PF(passwd_file.c_str());
   if (PF.good()) {
@@ -3591,6 +3659,25 @@ static void get_access_keys (void) {
     AWSAccessKeyId.assign(AWSACCESSKEYID);
     AWSSecretAccessKey.assign(AWSSECRETACCESSKEY);
     return;
+  }
+
+  // 3a - from the AWS_CREDENTIAL_FILE environment variable
+  char * AWS_CREDENTIAL_FILE;
+  AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
+  if (AWS_CREDENTIAL_FILE != NULL) {
+    passwd_file.assign(AWS_CREDENTIAL_FILE);
+    if (passwd_file.size() > 0) {
+      ifstream PF(passwd_file.c_str());
+      if (PF.good()) {
+         PF.close();
+         read_passwd_file();
+         return;
+      } else {
+        fprintf(stderr, "%s: AWS_CREDENTIAL_FILE: \"%s\" is not readable\n",
+                program_name.c_str(), passwd_file.c_str());
+        exit(EXIT_FAILURE);
+      }
+    }
   }
 
   // 4 - from the default location in the users home directory
