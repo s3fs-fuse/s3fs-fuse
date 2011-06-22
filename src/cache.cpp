@@ -80,7 +80,7 @@ void delete_stat_cache_entry(const char *path) {
 void truncate_stat_cache() {
   string path_to_delete;
   unsigned int hit_count = 0;
-  unsigned int lowest_hit_count = NULL;
+  unsigned int lowest_hit_count = 0;
 
   pthread_mutex_lock(&stat_cache_lock);
   stat_cache_t::iterator iter;
