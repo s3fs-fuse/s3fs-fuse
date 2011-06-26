@@ -29,18 +29,20 @@ time_t readwrite_timeout = 30;
 
 int retries = 2;
 
-static std::string bucket;
+bool debug = 0;
+bool foreground = 0;
+bool service_validated = false;
+static std::string host = "http://s3.amazonaws.com";
+static std::string service_path = "/";
+std::string bucket = "";
+std::string mount_prefix = "";
 static std::string mountpoint;
 std::string program_name;
 static std::string AWSAccessKeyId;
 static std::string AWSSecretAccessKey;
-static std::string host = "http://s3.amazonaws.com";
 static mode_t root_mode = 0;
-static std::string service_path = "/";
 static std::string passwd_file = "";
-bool debug = 0;
 static bool utility_mode = 0;
-bool foreground = 0;
 unsigned long max_stat_cache_size = 10000;
 
 // if .size()==0 then local file cache is disabled
@@ -81,12 +83,12 @@ static pthread_mutex_t *mutex_buf = NULL;
 
 static struct fuse_operations s3fs_oper;
 
-std::string urlEncode(const std::string &s);
 std::string lookupMimeType(std::string);
 std::string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
 std::string upload_part(const char *path, const char *source, int part_number, std::string upload_id);
 static int complete_multipart_upload(const char *path, std::string upload_id, std::vector <file_part> parts);
 std::string md5sum(int fd);
+char *get_realpath(const char *path);
 
 static int s3fs_getattr(const char *path, struct stat *stbuf);
 static int s3fs_readlink(const char *path, char *buf, size_t size);
@@ -112,6 +114,7 @@ static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi);
 static int s3fs_access(const char *path, int mask);
 static int s3fs_utimens(const char *path, const struct timespec ts[2]);
+static int remote_mountpath_exists(const char *path);
 static void* s3fs_init(struct fuse_conn_info *conn);
 static void s3fs_destroy(void*);
 

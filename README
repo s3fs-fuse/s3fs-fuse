@@ -38,7 +38,7 @@ Usage:
 In order to use s3fs, make sure you have the Access Key and the Secret Key handy. (refer to the wiki)
 First, create a directory where to mount the S3 bucket you want to use.
 Example (as root): mkdir -p /mnt/s3
-Then run: s3fs mybucket /mnt/s3
+Then run: s3fs mybucket[:path] /mnt/s3
 
 This will mount your bucket to /mnt/s3. You can do a simple "ls -l /mnt/s3" to see the content of your bucket.
 

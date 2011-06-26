@@ -4,40 +4,34 @@
 /*
  * A collection of string utilities for manipulating URLs and HTTP responses.
  */
-#include <sstream>
+#include <string.h>
+#include <syslog.h>
+
 #include <string>
+#include <sstream>
 
 #define SPACES " \t\r\n"
 
-using namespace std;
-
-template<typename T> string str(T value) {
-  stringstream tmp;
-  tmp << value;
-  return tmp.str();
+template<typename T> std::string str(T value) {
+  std::stringstream s;
+  s << value;
+  return s.str();
 }
 
-inline string trim_left(const string &s, const string &t = SPACES) {
-  string d(s);
-  return d.erase(0, s.find_first_not_of(t));
-}
+extern bool debug;
+extern bool foreground;
+extern bool service_validated;
 
-inline string trim_right(const string &s, const string &t = SPACES) {
-  string d(s);
-  string::size_type i(d.find_last_not_of(t));
-  if (i == string::npos)
-    return "";
-  else
-    return d.erase(d.find_last_not_of(t) + 1);
-}
+extern std::string bucket;
 
-inline string trim(const string &s, const string &t = SPACES) {
-  string d(s);
-  return trim_left(trim_right(d, t), t);
-}
-
-string lower(string s);
-string IntToStr(int);
+std::string trim_left(const std::string &s, const std::string &t = SPACES);
+std::string trim_right(const std::string &s, const std::string &t = SPACES);
+std::string trim(const std::string &s, const std::string &t = SPACES);
+std::string lower(std::string s);
+std::string IntToStr(int);
+std::string get_date();
+std::string urlEncode(const std::string &s);
+std::string prepare_url(const char* url);
 
 
 #endif // S3FS_STRING_UTIL_H_
