@@ -1942,7 +1942,6 @@ static int rename_directory( const char *from, const char *to) {
       curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-      curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
 
       auto_curl_slist headers;
       string date = get_date();
