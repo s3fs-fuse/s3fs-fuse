@@ -856,13 +856,12 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
    * 
    * If file is > 20MB, then multipart will kick in
    */
-
   if(st.st_size > 68719476735LL ) { // 64GB - 1
      // close f ?
      return -ENOTSUP;
   }
 
-  if(st.st_size >= 20971520) { // 20MB
+  if(st.st_size >= 20971520 && !nomultipart) { // 20MB
      // Additional time is needed for large files
      if(readwrite_timeout < 120)
        readwrite_timeout = 120;
@@ -1540,9 +1539,8 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   result = create_file_object(path, mode);
 
-  if(result != 0) {
+  if(result != 0)
      return result;
-  }
 
   // Object is now made, now open it
 
@@ -2147,7 +2145,7 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   headers_t meta;
 
   if(foreground) 
-    cout << "chmod[path=" << path << "][mode=" << mode << "]" << endl;
+    printf("s3fs_chmod [path=%s] [mode=%d]\n", path, mode);
 
   result = get_headers(path, meta);
   if(result != 0)
@@ -2167,20 +2165,21 @@ static int s3fs_chmod(const char *path, mode_t mode) {
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   int result;
   char *s3_realpath;
+
   if(foreground) 
-    cout << "chown[path=" << path << "]" << endl;
+    printf("s3fs_chown [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
 
   headers_t meta;
   result = get_headers(path, meta);
   if(result != 0)
      return result;
 
-  struct passwd* aaa = getpwuid(uid);
-  if (aaa != 0)
+  struct passwd *aaa = getpwuid(uid);
+  if(aaa != 0)
     meta["x-amz-meta-uid"] = str((*aaa).pw_uid);
 
-  struct group* bbb = getgrgid(gid);
-  if (bbb != 0)
+  struct group *bbb = getgrgid(gid);
+  if(bbb != 0)
     meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
 
   s3_realpath = get_realpath(path);
@@ -2209,7 +2208,7 @@ static int s3fs_truncate(const char *path, off_t size) {
 
   fd = fileno(tmpfile());
   if(fd == -1) {
-    syslog(LOG_ERR, "%d###result=%d", __LINE__, -errno);
+    syslog(LOG_ERR, "error: line %d: %d", __LINE__, -errno);
     return -errno;
   }
   
@@ -2281,9 +2280,9 @@ static int s3fs_write(
 
 static int s3fs_statfs(const char *path, struct statvfs *stbuf) {
   // 256T
-  stbuf->f_bsize = 0X1000000;
+  stbuf->f_bsize  = 0X1000000;
   stbuf->f_blocks = 0X1000000;
-  stbuf->f_bfree = 0x1000000;
+  stbuf->f_bfree  = 0x1000000;
   stbuf->f_bavail = 0x1000000;
   return 0;
 }
@@ -3720,7 +3719,7 @@ static void show_help (void) {
     "\n"
     "s3fs Options:\n"
     "\n"
-    "   All s3fs options must given in the form where \"opt\" is:\n"
+    "   Most s3fs options are given in the form where \"opt\" is:\n"
     "\n"
     "             <option_name>=<option_value>\n"
     "\n"
@@ -3755,6 +3754,8 @@ static void show_help (void) {
     "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"
+    "\n"
+    "   nomultipart - disable multipart uploads\n"
     "\n"
     "FUSE/mount Options:\n"
     "\n"
@@ -3879,6 +3880,12 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       use_cache = strchr(arg, '=') + 1;
       return 0;
     }
+
+    if(strstr(arg, "nomultipart") != 0) {
+      nomultipart = true;
+      return 0;
+    }
+    
     if (strstr(arg, "use_rrs=") != 0) {
       use_rrs = strchr(arg, '=') + 1;
       if (strcmp(use_rrs.c_str(), "1") == 0 || 

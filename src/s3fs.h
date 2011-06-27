@@ -31,6 +31,7 @@ int retries = 2;
 
 bool debug = 0;
 bool foreground = 0;
+bool nomultipart = false;
 bool service_validated = false;
 static std::string host = "http://s3.amazonaws.com";
 static std::string service_path = "/";
