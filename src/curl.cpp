@@ -55,7 +55,13 @@ CURL *create_curl_handle(void) {
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
-  curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
+  // curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
+  
+  if(ssl_verify_hostname.substr(0,1) == "0")
+    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0);
+  if(curl_ca_bundle.size() != 0)
+    curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+
   now = time(0);
   curl_times[curl_handle] = now;
   curl_progress[curl_handle] = progress_t(-1, -1);
@@ -393,175 +399,6 @@ void locate_bundle(void) {
      curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
      return;
   }
-
-  return;
-}
-
-// Multi CURL stuff
-CURLHLL *create_h_element(CURL *handle) {
-  CURLHLL *p;
-  p = (CURLHLL *) malloc(sizeof(CURLHLL));
-  if(p == NULL) {
-     printf("create_h_element: could not allocation memory\n");
-     exit(EXIT_FAILURE);
-  }
-  p->handle = handle;
-  p->next = NULL;
-
-  return p;
-}
-
-CURLMHLL *create_mh_element(CURLM *handle) {
-  CURLMHLL *p;
-  p = (CURLMHLL *) malloc(sizeof(CURLMHLL));
-  if(p == NULL) {
-     printf("create_mh_element: could not allocation memory\n");
-     exit(EXIT_FAILURE);
-  }
-  p->handle = handle;
-  p->curlhll_head = NULL;
-  p->next = NULL;
-
-  return p;
-}
-
-CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle) {
-  CURLMHLL *p;
-  CURLMHLL *p_new;
-
-  p_new = create_mh_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return p_new;
-}
-
-void add_h_element(CURLHLL *head, CURL *handle) {
-  CURLHLL *p;
-  CURLHLL *p_new;
-
-  p_new = create_h_element(handle);
-
-  for (p = head; p->next != NULL; p = p->next);
-    ;
-
-  p->next = p_new;
-  return;
-}
-
-void add_h_to_mh(CURL *h, CURLMHLL *mh) {
-  CURLHLL *h_head;
-
-  h_head = mh->curlhll_head;
-  if(h_head == NULL) {
-    h_head = create_h_element(h);
-    mh->curlhll_head = h_head;
-  } else {
-    add_h_element(h_head, h);
-  }
-
-  return;
-}
-
-void cleanup_multi_stuff(CURLMHLL *mhhead) {
-  // move this to it's own cleanup function  
-  CURLMHLL *my_mhhead;
-  CURLMHLL *pnext;
-  CURLHLL *cnext;
-  CURLHLL *chhead;
-  CURLMcode curlm_code;
-
-  CURL *curl_handle;
-  CURLM *curl_multi_handle;
-
-  if(mhhead == NULL)
-    return;
-
-  // Remove all of the easy handles from its multi handle
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-
-      curl_multi_handle = my_mhhead->handle;
-      curl_handle = chhead->handle;
-
-      curlm_code = curl_multi_remove_handle(curl_multi_handle, curl_handle);
-      if(curlm_code != CURLM_OK) {
-        syslog(LOG_ERR, "curl_multi_remove_handle code: %d msg: %s", 
-           curlm_code, curl_multi_strerror(curlm_code));
-      }
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now clean up the easy handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      destroy_curl_handle(chhead->handle);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // now cleanup the multi handles
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
-
-  do {
-    pnext = my_mhhead->next;
-  
-    curlm_code = curl_multi_cleanup(my_mhhead->handle);
-    if(curlm_code != CURLM_OK) {
-       syslog(LOG_ERR, "curl_multi_cleanup code: %d msg: %s", 
-          curlm_code, curl_multi_strerror(curlm_code));
-    }
-
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
-
-  // Now free the memory structures
-  my_mhhead = mhhead;
-  pnext = NULL;
-  cnext = NULL;
-  chhead = NULL;
- 
-  do {
-    chhead = my_mhhead->curlhll_head;
-
-    while(chhead != NULL) {
-      cnext = chhead->next; 
-      free(chhead);
-      chhead = cnext;
-    }
-
-    pnext = my_mhhead->next;
-    free(my_mhhead);
-    my_mhhead = pnext;
-  } while(my_mhhead != NULL);
 
   return;
 }

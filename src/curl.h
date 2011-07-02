@@ -13,17 +13,6 @@ struct WriteThis {
   int sizeleft;
 };
 
-typedef struct curlhll {
-  CURL *handle;
-  struct curlhll *next;
-} CURLHLL;
-
-typedef struct curlmhll {
-   CURLM *handle;
-   struct curlhll *curlhll_head;
-   struct curlmhll * next;
-} CURLMHLL;
-
 typedef std::pair<double, double> progress_t;
 
 extern int retries;
@@ -41,12 +30,5 @@ size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
 int my_curl_progress(
     void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
 void locate_bundle(void);
-
-CURLHLL *create_h_element(CURL *handle);
-CURLMHLL *create_mh_element(CURLM *handle);
-CURLMHLL *add_mh_element(CURLMHLL *head, CURLM *handle);
-void add_h_element(CURLHLL *head, CURL *handle);
-void add_h_to_mh(CURL *h, CURLMHLL *mh);
-void cleanup_multi_stuff(CURLMHLL *mhhead);
 
 #endif // S3FS_CURL_H_

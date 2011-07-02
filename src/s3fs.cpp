@@ -29,8 +29,11 @@
 #include <utime.h>
 #include <sys/stat.h>
 #include <libgen.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <curl/curl.h>
 #include <openssl/md5.h>
 #include <pwd.h>
 #include <grp.h>
@@ -49,6 +52,11 @@
 #include "string_util.h"
 
 using namespace std;
+
+struct s3_object {
+  char *name;
+  struct s3_object *next;
+};
 
 class auto_curl_slist {
  public:
@@ -73,23 +81,21 @@ typedef struct mvnode {
    struct mvnode *next;
 } MVNODE;
 
-// All this "stuff" stuff is kinda ugly... it works though... needs cleanup
-struct stuff_t {
-  // default ctor works
+struct head_data {
   string path;
-  string* url;
-  struct curl_slist* requestHeaders;
-  headers_t* responseHeaders;
+  string *url;
+  struct curl_slist *requestHeaders;
+  headers_t *responseHeaders;
 };
 
-typedef map<CURL*, stuff_t> stuffMap_t;
+typedef map<CURL*, head_data> headMap_t;
 
-struct cleanup_stuff {
-  void operator()(pair<CURL*, stuff_t> qqq) {
-    stuff_t stuff = qqq.second;
-    delete stuff.url;
-    curl_slist_free_all(stuff.requestHeaders);
-    delete stuff.responseHeaders;
+struct cleanup_head_data {
+  void operator()(pair<CURL*, head_data> qqq) {
+    head_data response = qqq.second;
+    delete response.url;
+    curl_slist_free_all(response.requestHeaders);
+    delete response.responseHeaders;
   }
 };
 
@@ -100,21 +106,82 @@ struct case_insensitive_compare_func {
 };
 
 typedef map<string, string, case_insensitive_compare_func> mimes_t;
-
 static mimes_t mimeTypes;
 
-class auto_stuff {
+class auto_head {
  public:
-  auto_stuff() { }
-  ~auto_stuff() {
-    for_each(stuffMap.begin(), stuffMap.end(), cleanup_stuff());
+  auto_head() {}
+  ~auto_head() {
+    for_each(headMap.begin(), headMap.end(), cleanup_head_data());
   }
 
-  stuffMap_t& get() { return stuffMap; }
+  headMap_t& get() { return headMap; }
 
-private:
-  stuffMap_t stuffMap;
+  private:
+    headMap_t headMap;
 };
+
+static int insert_object(char *name, struct s3_object **head) {
+  size_t n_len = strlen(name) + 1;
+  struct s3_object *new_object;
+
+  new_object = (struct s3_object *) malloc(sizeof(struct s3_object));
+  if(new_object == NULL) {
+    printf("insert_object: could not allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
+
+  new_object->name = (char *) malloc(n_len);
+  if(new_object->name == NULL) {
+    printf("insert_object: could not allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
+
+  strncpy(new_object->name, name, n_len);
+
+  if((*head) == NULL)
+    new_object->next = NULL;
+  else
+    new_object->next = (*head);
+
+  *head = new_object;
+
+  return 0;
+}
+
+static unsigned int count_object_list(struct s3_object *list) {
+  unsigned int count = 0;
+  struct s3_object *head = list;
+
+  while(head != NULL) {
+    count++;
+    head = head->next;
+  }
+
+  return count;
+}
+
+static int free_object(struct s3_object *object) {
+  free(object->name);
+  free(object);
+  object = NULL;
+
+  return 0;
+}
+
+static int free_object_list(struct s3_object *head) {
+  struct s3_object *tmp = NULL;
+  struct s3_object *current = head;
+
+  current = head;
+  while(current != NULL) {
+    tmp = current;
+    current = current->next;
+    free_object(tmp);
+  }
+
+  return 0;
+}
 
 MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   MVNODE *p;
@@ -171,9 +238,8 @@ void free_mvnodes(MVNODE *head) {
   char *p_old_path;
   char *p_new_path;
 
-  if(head == NULL) {
-     return;
-  }
+  if(head == NULL)
+    return;
 
   my_head = head;
   next = NULL;
@@ -363,7 +429,6 @@ int get_headers(const char* path, headers_t& meta) {
 
   headers_t responseHeaders;
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
@@ -417,9 +482,6 @@ int get_headers(const char* path, headers_t& meta) {
   return 0;
 }
 
-/**
- * get_local_fd
- */
 int get_local_fd(const char* path) {
   int fd = -1;
   int result;
@@ -507,7 +569,6 @@ int get_local_fd(const char* path) {
     }
 
     curl = create_curl_handle();
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
     curl_easy_setopt(curl, CURLOPT_FILE, f);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -520,7 +581,7 @@ int get_local_fd(const char* path) {
       return -result;
     }
 
-    //only one of these is needed...
+    // only one of these is needed...
     fflush(f);
     fsync(fd);
 
@@ -593,7 +654,6 @@ static int put_headers(const char *path, headers_t meta) {
       calc_signature("PUT", ContentType, date, headers.get(), resource));
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -612,7 +672,8 @@ static int put_headers(const char *path, headers_t meta) {
   result = my_curl_easy_perform(curl, &body);
 
   destroy_curl_handle(curl);
-  free(body.text);
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
 
   if(result != 0)
@@ -661,7 +722,6 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   body.size = 0; 
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -705,7 +765,8 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   result = my_curl_easy_perform(curl, &body, f);
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
   destroy_curl_handle(curl);
 
@@ -911,7 +972,6 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   my_url = prepare_url(url.c_str());
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_POST, true);
@@ -968,8 +1028,9 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   destroy_curl_handle(curl);
 
   if(result != 0) {
+    if(body.text)
+      free(body.text);
     free(s3_realpath);
-    free(body.text);
 
     return upload_id;
   }
@@ -1002,8 +1063,9 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   xmlFreeDoc(doc);
 
   // clean up
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
-  free(body.text);
   body.size = 0;
 
   return upload_id;
@@ -1070,7 +1132,6 @@ static int complete_multipart_upload(const char *path, string upload_id,
   body.size = 0; 
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_POST, true);
@@ -1102,8 +1163,9 @@ static int complete_multipart_upload(const char *path, string upload_id,
   curl_slist_free_all(slist);
   destroy_curl_handle(curl);
 
+  if(body.text)
+    free(body.text);
   free(pData);
-  free(body.text);
   free(s3_realpath);
 
   return result;
@@ -1171,7 +1233,6 @@ string upload_part(const char *path, const char *source, int part_number, string
   header.size = 0; 
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
@@ -1204,8 +1265,10 @@ string upload_part(const char *path, const char *source, int part_number, string
   fclose(part_file);
 
   if(result != 0) {
-    free(header.text);
-    free(body.text);
+    if(header.text)
+      free(header.text);
+    if(body.text)
+      free(body.text);
     free(s3_realpath);
 
     return "";
@@ -1214,8 +1277,10 @@ string upload_part(const char *path, const char *source, int part_number, string
   // calculate local md5sum, if it matches the header
   // ETag value, the upload was successful.
   if((fd = open(source, O_RDONLY)) == -1) {
-    free(header.text);
-    free(body.text);
+    if(header.text)
+      free(header.text);
+    if(body.text)
+      free(body.text);
     free(s3_realpath);
 
     syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
@@ -1228,16 +1293,20 @@ string upload_part(const char *path, const char *source, int part_number, string
   if(!md5.empty() && strstr(header.text, md5.c_str())) {
     ETag.assign(md5);
   } else {
-    free(header.text);
-    free(body.text);
+    if(header.text)
+      free(header.text);
+    if(body.text)
+      free(body.text);
     free(s3_realpath);
 
     return "";
   }
 
   // clean up
-  free(body.text);
-  free(header.text);
+  if(header.text)
+    free(header.text);
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
 
   return ETag;
@@ -1303,7 +1372,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
@@ -1323,7 +1391,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
 
   result = my_curl_easy_perform(curl, &body);
   if(result != 0) {
-    free(body.text);
+    if(body.text)
+      free(body.text);
     free(s3_realpath);
     destroy_curl_handle(curl);
 
@@ -1359,7 +1428,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   // update stat cache
   add_stat_cache_entry(path, stbuf);
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
   destroy_curl_handle(curl);
 
@@ -1498,7 +1568,6 @@ static int create_file_object(const char *path, mode_t mode) {
       calc_signature("PUT", contentType, date, headers.get(), resource));
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
@@ -1572,7 +1641,6 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   url = host + resource;
 
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
   curl_easy_setopt(curl, CURLOPT_INFILESIZE, 0); // Content-Length: 0
 
@@ -1634,7 +1702,6 @@ static int s3fs_unlink(const char *path) {
 
   my_url = prepare_url(url.c_str());
   curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -1686,7 +1753,6 @@ static int s3fs_rmdir(const char *path) {
       curl = create_curl_handle();
       my_url = prepare_url(url.c_str());
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
@@ -1702,7 +1768,8 @@ static int s3fs_rmdir(const char *path) {
 
       result = my_curl_easy_perform(curl, &body);
       if(result != 0) {
-        free(body.text);
+        if(body.text)
+          free(body.text);
         free(s3_realpath);
         destroy_curl_handle(curl);
 
@@ -1716,7 +1783,8 @@ static int s3fs_rmdir(const char *path) {
         if(foreground) 
           cout << "[path=" << path << "] not empty" << endl;
 
-        free(body.text);
+        if(body.text)
+          free(body.text);
         free(s3_realpath);
         destroy_curl_handle(curl);
 
@@ -1729,7 +1797,6 @@ static int s3fs_rmdir(const char *path) {
   string url = host + resource;
 
   curl_handle = create_curl_handle();
-  curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "DELETE");
 
   auto_curl_slist headers;
@@ -1750,7 +1817,8 @@ static int s3fs_rmdir(const char *path) {
   // delete cache entry
   delete_stat_cache_entry(path);
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   free(s3_realpath);
   destroy_curl_handle(curl);
   destroy_curl_handle(curl_handle);
@@ -1864,7 +1932,7 @@ static int clone_directory_object(const char *from, const char *to) {
   return 0;
 }
 
-static int rename_directory( const char *from, const char *to) {
+static int rename_directory(const char *from, const char *to) {
   int result;
   // mode_t mode;
   headers_t meta;
@@ -1937,7 +2005,6 @@ static int rename_directory( const char *from, const char *to) {
       }
 
       curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
@@ -1957,9 +2024,8 @@ static int rename_directory( const char *from, const char *to) {
       destroy_curl_handle(curl);
 
       if(result != 0) {
-        if(body.text) {
+        if(body.text)
           free(body.text);
-        }
         free_mvnodes(head);
         return result;
       }
@@ -2017,7 +2083,8 @@ static int rename_directory( const char *from, const char *to) {
                
                if(result != 0) {
                  free_mvnodes(head);
-                 free(body.text);
+                 if(body.text)
+                   free(body.text);
                  body.text = NULL;
 
                  return result;
@@ -2046,7 +2113,8 @@ static int rename_directory( const char *from, const char *to) {
 
   } // while (IsTruncated == "true") {
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   body.text = NULL;
 
   // iterate over the list - clone directories first - top down
@@ -2364,330 +2432,410 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   return 0;
 }
 
+static CURL *create_head_handle(head_data *request_data) {
+  CURL *curl_handle = create_curl_handle();
+  string resource = urlEncode(service_path + bucket + request_data->path);
+  string url = host + resource;
+
+  // libcurl 7.17 does deep copy of url, deep copy "stable" url
+  string my_url = prepare_url(url.c_str());
+  request_data->url = new string(my_url.c_str());
+  request_data->requestHeaders = 0;
+  request_data->responseHeaders = new headers_t;
+
+  curl_easy_setopt(curl_handle, CURLOPT_URL, request_data->url->c_str());
+  curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
+  curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
+
+  // requestHeaders
+  string date = get_date();
+  request_data->requestHeaders = curl_slist_append(
+      request_data->requestHeaders, string("Date: " + date).c_str());
+  request_data->requestHeaders = curl_slist_append(
+      request_data->requestHeaders, string("Content-Type: ").c_str());
+  if(public_bucket.substr(0,1) != "1") {
+    request_data->requestHeaders = curl_slist_append(
+        request_data->requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          calc_signature("HEAD", "", date, request_data->requestHeaders, resource)).c_str());
+  }
+  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, request_data->requestHeaders);
+
+  // responseHeaders
+  curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, request_data->responseHeaders);
+  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_callback);
+
+  return curl_handle;
+}
+
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-
-  int result;
-  char *s3_realpath;
-  struct BodyStruct body;
-  CURLMHLL *mhhead = NULL;
-  CURLMHLL *mhcurrent = NULL;
-  CURLM *current_multi_handle = NULL;
+  CURLM *mh;
+  CURLMsg *msg;
   CURLMcode curlm_code;
-  CURL *curl;
+  int n_reqs;
+  int n_objects;
+  int remaining_messages;
+  struct s3_object *head    = NULL;
+  struct s3_object *headref = NULL;
+  auto_head curl_map;
 
   if(foreground) 
     cout << "readdir[path=" << path << "]" << endl;
 
-  body.text = (char *) malloc(1);
-  body.size = 0;
+  // get a list of all the objects
+  list_bucket(path, &head);
+  if(head == NULL)
+    return 0;
 
-  s3_realpath = get_realpath(path);
+  n_objects = count_object_list(head);
 
-  string NextMarker;
-  string IsTruncated("true");
+  // populate fuse buffer
+  headref = head;
+  while(headref != NULL) {
+    filler(buf, headref->name, 0, 0);
+    headref = headref->next;
+  }
+  headref = head;
 
-  while (IsTruncated == "true") {
-    string resource = urlEncode(service_path + bucket); // this is what gets signed
-    string query = "delimiter=/&prefix=";
-
+  // populate the multi interface with an initial set of requests
+  n_reqs = 0;
+  mh = curl_multi_init();
+  while(n_reqs < MAX_REQUESTS && head != NULL) {
+    string fullpath = path;
     if(strcmp(path, "/") != 0)
-      query += urlEncode(string(s3_realpath).substr(1) + "/");
+      fullpath += "/" + string(head->name);
     else
-      query += urlEncode(string(s3_realpath).substr(1));
+      fullpath += string(head->name);
 
-    if (NextMarker.size() > 0)
-      query += "&marker=" + urlEncode(NextMarker);
-
-    query += "&max-keys=500";
-
-    string url = host + resource + "?" + query;
-
-    {
-      curl = create_curl_handle();
-
-      string my_url = prepare_url(url.c_str());
-
-      if(body.text) {
-        free(body.text);
-        body.size = 0;
-        body.text = (char *)malloc(1);
-      }
-
-      curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-
-//    headers_t responseHeaders;
-//      curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-//      curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-
-      auto_curl_slist headers;
-      string date = get_date();
-      headers.append("Date: " + date);
-      headers.append("ContentType: ");
-      if (public_bucket.substr(0,1) != "1") {
-        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-          calc_signature("GET", "", date, headers.get(), resource + "/"));
-      }
-
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-      result = my_curl_easy_perform(curl, &body);
-
-      destroy_curl_handle(curl);
-
-      if(result != 0) {
-        free(body.text);
-        free(s3_realpath);
-
-        return result;
-      }
+    if(get_stat_cache_entry(fullpath.c_str(), NULL) == 0) {
+      head = head->next;
+      continue;
     }
 
-    auto_stuff curlMap;
-    current_multi_handle = curl_multi_init();
+    // file not cached, prepare a call to get_headers
+    head_data request_data;
+    request_data.path = fullpath;
+    CURL *curl_handle = create_head_handle(&request_data);
+    curl_map.get()[curl_handle] = request_data;
 
-    if (mhhead == NULL) {
-       mhhead = create_mh_element(current_multi_handle);
-       mhcurrent = mhhead;
-    } else {
-       mhcurrent = add_mh_element(mhhead, current_multi_handle);
-    }
-
-//    long max_connects = 5;
-//    curl_multi_setopt(multi_handle.get(), CURLMOPT_MAXCONNECTS, max_connects);
-
-    {
-      xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
-      if (doc != NULL && doc->children != NULL) {
-        for (xmlNodePtr cur_node = doc->children->children;
-             cur_node != NULL;
-             cur_node = cur_node->next) {
-
-          string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-          if (cur_node_name == "IsTruncated")
-            IsTruncated = reinterpret_cast<const char *>(cur_node->children->content);
-          if (cur_node_name == "NextMarker")
-            NextMarker = reinterpret_cast<const char *>(cur_node->children->content);
-          if (cur_node_name == "Contents") {
-            if (cur_node->children != NULL) {
-              string Key;
-              string LastModified;
-              string Size;
-              for (xmlNodePtr sub_node = cur_node->children;
-                   sub_node != NULL;
-                   sub_node = sub_node->next) {
-
-                if (sub_node->type == XML_ELEMENT_NODE) {
-                  string elementName = reinterpret_cast<const char*>(sub_node->name);
-                  if (sub_node->children != NULL) {
-                    if (sub_node->children->type == XML_TEXT_NODE) {
-                      if (elementName == "Key")
-                        Key = reinterpret_cast<const char *>(sub_node->children->content);
-                      if (elementName == "LastModified")
-                        LastModified = reinterpret_cast<const char *>(sub_node->children->content);
-                      if (elementName == "Size")
-                        Size = reinterpret_cast<const char *>(sub_node->children->content);
-                    }
-                  }
-                }
-              }
-
-              bool in_stat_cache = false;
-              string path = '/' + Key;
-              if(get_stat_cache_entry(path.c_str(), NULL) == 0) {
-                if(filler(buf, mybasename(Key).c_str(), 0, 0))
-                  break;
-
-                in_stat_cache = true;
-              }
-
-              if (Key.size() > 0 && !in_stat_cache) {
-                if (filler(buf, mybasename(Key).c_str(), 0, 0)) {
-                  break;
-                }
-
-                CURL* curl_handle = create_curl_handle();
-
-                string resource = urlEncode(service_path + bucket + "/" + Key);
-                string url = host + resource;
-
-                stuff_t stuff;
-                stuff.path = "/"+Key;
-
-                // libcurl 7.17 does deep copy of url... e.g., fc7 has libcurl 7.16... therefore, must deep copy "stable" url...
-                string my_url = prepare_url(url.c_str());
-                stuff.url = new string(my_url.c_str());
-                stuff.requestHeaders = 0;
-                stuff.responseHeaders = new headers_t;
-
-                curl_easy_setopt(curl_handle, CURLOPT_URL, stuff.url->c_str());
-                // curl_easy_setopt(curl_handle, CURLOPT_FAILONERROR, true);
-                curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
-                curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
-                curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
-                if (ssl_verify_hostname.substr(0,1) == "0") {
-                  curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0);
-                }
-                if (curl_ca_bundle.size() != 0) {
-                   curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-                } 
-
-                // requestHeaders
-                string date = get_date();
-                stuff.requestHeaders = curl_slist_append(
-                    stuff.requestHeaders, string("Date: " + date).c_str());
-                stuff.requestHeaders = curl_slist_append(
-                    stuff.requestHeaders, string("Content-Type: ").c_str());
-                if (public_bucket.substr(0,1) != "1") {
-                  stuff.requestHeaders = curl_slist_append(
-                    stuff.requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
-                        calc_signature("HEAD", "", date, stuff.requestHeaders, resource)).c_str());
-                }
-                curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, stuff.requestHeaders);
-
-                // responseHeaders
-                curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, stuff.responseHeaders);
-                curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_callback);
-
-                curlMap.get()[curl_handle] = stuff;
-
-                curlm_code = curl_multi_add_handle(current_multi_handle, curl_handle);
-                if(curlm_code != CURLM_OK) {
-                  syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
-                       curlm_code, curl_multi_strerror(curlm_code));
-                  return -EIO;
-                }
-                add_h_to_mh(curl_handle, mhcurrent);
-              }
-            }
-          }
-        }
-      }
-      xmlFreeDoc(doc);
-    }
-
-    int running_handles;
-    running_handles = 0;
-
-    CURLMcode curlm_code = CURLM_CALL_MULTI_PERFORM;
-    while(curlm_code == CURLM_CALL_MULTI_PERFORM) {
-       curlm_code = curl_multi_perform(current_multi_handle, &running_handles);
-    }
-    // Error check
+    // add this handle to the multi handle
+    n_reqs++;
+    curlm_code = curl_multi_add_handle(mh, curl_handle);
     if(curlm_code != CURLM_OK) {
-       syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
-                       curlm_code, curl_multi_strerror(curlm_code));
-       return -EIO;
+      syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
+          curlm_code, curl_multi_strerror(curlm_code));
+      return -EIO;
     }
 
-    while (running_handles) {
-      fd_set read_fd_set;
-      fd_set write_fd_set;
-      fd_set exc_fd_set;
+    // go to the next object.
+    head = head->next;
+  }
 
-      FD_ZERO(&read_fd_set);
-      FD_ZERO(&write_fd_set);
-      FD_ZERO(&exc_fd_set);
+  // Start making requests.
+  int still_running = 0;
+  curlm_code = curl_multi_perform(mh, &still_running);
+  if(curlm_code != CURLM_OK) {
+    syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
+        curlm_code, curl_multi_strerror(curlm_code));
+  }
+
+  while(still_running) {
+    curlm_code = curl_multi_perform(mh, &still_running);
+    if(curlm_code != CURLM_OK) {
+      syslog(LOG_ERR, "s3fs_readdir: curl_multi_perform code: %d msg: %s", 
+          curlm_code, curl_multi_strerror(curlm_code));
+    }
+
+    if(still_running) {
+      fd_set r_fd;
+      fd_set w_fd;
+      fd_set e_fd;
+      FD_ZERO(&r_fd);
+      FD_ZERO(&w_fd);
+      FD_ZERO(&e_fd);
 
       long milliseconds;
-
-      curlm_code = curl_multi_timeout(current_multi_handle, &milliseconds);
-      if (curlm_code != CURLM_OK) {
-        syslog(LOG_ERR, "readdir: curl_multi_timeout code: %d msg: %s", 
-                       curlm_code, curl_multi_strerror(curlm_code));
-        return -EIO;
+      curlm_code = curl_multi_timeout(mh, &milliseconds);
+      if(curlm_code != CURLM_OK) {
+        syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
+            curlm_code, curl_multi_strerror(curlm_code));
       }
 
-      if (milliseconds < 0)
+      if(milliseconds < 0)
         milliseconds = 50;
-      if (milliseconds > 0) {
+      if(milliseconds > 0) {
         struct timeval timeout;
-        timeout.tv_sec = 1000 * milliseconds / 1000000;
+        timeout.tv_sec  = 1000 * milliseconds / 1000000;
         timeout.tv_usec = 1000 * milliseconds % 1000000;
 
         int max_fd;
-
-        curlm_code = curl_multi_fdset(current_multi_handle, &read_fd_set, 
-                                  &write_fd_set, &exc_fd_set, &max_fd);
-        if (curlm_code != CURLM_OK) {
+        curlm_code = curl_multi_fdset(mh, &r_fd, &w_fd, &e_fd, &max_fd);
+        if(curlm_code != CURLM_OK) {
           syslog(LOG_ERR, "readdir: curl_multi_fdset code: %d msg: %s", 
-                       curlm_code, curl_multi_strerror(curlm_code));
+              curlm_code, curl_multi_strerror(curlm_code));
           return -EIO;
         }
 
-        if (select(max_fd + 1, &read_fd_set, &write_fd_set, &exc_fd_set, &timeout) == -1) {
+        if(select(max_fd + 1, &r_fd, &w_fd, &e_fd, &timeout) == -1)
           YIKES(-errno);
-        }
       }
-
-      while (curl_multi_perform(current_multi_handle, &running_handles) == CURLM_CALL_MULTI_PERFORM);
     }
 
-    int remaining_msgs = 1;
-    while (remaining_msgs) {
-      // this next line pegs cpu for directories w/lotsa files
-      CURLMsg* msg = curl_multi_info_read(current_multi_handle, &remaining_msgs);
-        if (msg != NULL) {
-          CURLcode code =msg->data.result;
-          if (code != 0) {
-            syslog(LOG_DEBUG, "readdir: remaining_msgs: %i code: %d  msg: %s", 
-                             remaining_msgs, code, curl_easy_strerror(code));
+    while((msg = curl_multi_info_read(mh, &remaining_messages))) {
+      if(msg->msg == CURLMSG_DONE) {
+        CURLcode code = msg->data.result;
+        if(code != 0) {
+          syslog(LOG_DEBUG, "s3fs_readdir: remaining_msgs: %i code: %d  msg: %s", 
+              remaining_messages, code, curl_easy_strerror(code));
+          return -EIO;
+        }
+
+        CURL *curl_handle = msg->easy_handle;
+        head_data response = curl_map.get()[curl_handle];
+
+        struct stat st;
+        memset(&st, 0, sizeof(st));
+
+        st.st_nlink = 1; // see fuse FAQ
+
+        // mode
+        st.st_mode = strtoul(
+            (*response.responseHeaders)["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
+
+        // content-type
+        char *ContentType = 0;
+        if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_TYPE, &ContentType) == 0)
+          if(ContentType)
+            st.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
+
+        // mtime
+        st.st_mtime = strtoul((*response.responseHeaders)["x-amz-meta-mtime"].c_str(), (char **)NULL, 10);
+        if(st.st_mtime == 0) {
+          long LastModified;
+          if(curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0)
+            st.st_mtime = LastModified;
+        }
+
+        // size
+        double ContentLength;
+        if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
+          st.st_size = static_cast<off_t>(ContentLength);
+
+        // blocksstuff
+        if(S_ISREG(st.st_mode))
+          st.st_blocks = st.st_size / 512 + 1;
+
+        st.st_uid = strtoul((*response.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
+        st.st_gid = strtoul((*response.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
+
+        add_stat_cache_entry(response.path.c_str(), &st);
+
+        // cleanup
+        curl_multi_remove_handle(mh, curl_handle);
+        destroy_curl_handle(curl_handle);
+        n_reqs--;
+
+        // add additional requests
+        while(n_reqs < MAX_REQUESTS && head != NULL) {
+          string fullpath = path;
+          if(strcmp(path, "/") != 0)
+            fullpath += "/" + string(head->name);
+          else
+            fullpath += string(head->name);
+
+          if(get_stat_cache_entry(fullpath.c_str(), NULL) == 0) {
+            head = head->next;
+            continue;
           }
-          if (code == 0) {
-            CURL* curl_handle = msg->easy_handle;
-            stuff_t stuff = curlMap.get()[curl_handle];
 
-            struct stat st;
-            memset(&st, 0, sizeof(st));
-            st.st_nlink = 1; // see fuse faq
-            // mode
-            st.st_mode = strtoul(
-                (*stuff.responseHeaders)["x-amz-meta-mode"].c_str(), (char **)NULL, 10);
-            char* ContentType = 0;
-            if (curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_TYPE, &ContentType) == 0) {
-              if (ContentType) {
-                st.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
-              }
-            }
+          // file not cached, prepare a call to get_headers
+          head_data request_data;
+          request_data.path = fullpath;
+          CURL *curl_handle = create_head_handle(&request_data);
+          curl_map.get()[curl_handle] = request_data;
 
-            // mtime
-            st.st_mtime = strtoul
-                ((*stuff.responseHeaders)["x-amz-meta-mtime"].c_str(), (char **)NULL, 10);
-            if (st.st_mtime == 0) {
-              long LastModified;
-              if (curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0) {
-                st.st_mtime = LastModified;
-              }
-            }
+          // add this handle to the multi handle
+          n_reqs++;
+          curlm_code = curl_multi_add_handle(mh, curl_handle);
+          if(curlm_code != CURLM_OK) {
+            syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
+                curlm_code, curl_multi_strerror(curlm_code));
+            return -EIO;
+          }
 
-            // size
-            double ContentLength;
-            if (curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0) {
-              st.st_size = static_cast<off_t>(ContentLength);
-            }
+          // prevent this from sitting at 0, we may have requests to finish
+          remaining_messages++;
 
-            // blocks
-            if (S_ISREG(st.st_mode)) {
-              st.st_blocks = st.st_size / 512 + 1;
-            }
+          // go to the next object.
+          head = head->next;
+        }
+      } else {
+        syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
+            curlm_code, curl_multi_strerror(curlm_code));
 
-            st.st_uid = strtoul((*stuff.responseHeaders)["x-amz-meta-uid"].c_str(), (char **)NULL, 10);
-            st.st_gid = strtoul((*stuff.responseHeaders)["x-amz-meta-gid"].c_str(), (char **)NULL, 10);
+        curl_multi_cleanup(mh);
+        free_object_list(headref);
+        return -EIO;
+      }
+    }
+  }
 
-            add_stat_cache_entry(stuff.path.c_str(), &st);
-        } // if (code == 0)
-      } // if (msg != NULL) {
-    } // while (remaining_msgs)
-  } // while (IsTruncated == "true") {
-
-  free(body.text);
-  free(s3_realpath);
-  cleanup_multi_stuff(mhhead);
+  curl_multi_cleanup(mh);
+  free_object_list(headref);
 
   return 0;
+}
+
+static int list_bucket(const char *path, struct s3_object **head) {
+  CURL *curl;
+  int result; 
+  char *s3_realpath;
+  struct BodyStruct body;
+  bool truncated = true;
+  string next_marker = "";
+
+  if(foreground) 
+    printf("list_bucket [path=%s]\n", path);
+
+  body.text = (char *) malloc(1);
+  body.size = 0;
+  s3_realpath = get_realpath(path);
+
+  string resource = urlEncode(service_path + bucket); // this is what gets signed
+  string query = "delimiter=/&prefix=";
+
+  if(strcmp(path, "/") != 0)
+    query += urlEncode(string(s3_realpath).substr(1) + "/");
+  else
+    query += urlEncode(string(s3_realpath).substr(1));
+
+  query += "&max-keys=1000";
+
+  while(truncated) {
+    string url = host + resource + "?" + query;
+
+    if(next_marker != "")
+      url += "&marker=" + urlEncode(next_marker);
+
+    string my_url = prepare_url(url.c_str());
+
+    auto_curl_slist headers;
+    string date = get_date();
+    headers.append("Date: " + date);
+    headers.append("ContentType: ");
+    if(public_bucket.substr(0,1) != "1") {
+      headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+        calc_signature("GET", "", date, headers.get(), resource + "/"));
+    }
+
+    curl = create_curl_handle();
+    curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &body);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+    result = my_curl_easy_perform(curl, &body);
+    destroy_curl_handle(curl);
+
+    if(result != 0) {
+      if(body.text)
+        free(body.text);
+      free(s3_realpath);
+
+      return result;
+    }
+
+    if((append_objects_from_xml(body.text, head)) != 0)
+      return -1;
+
+    truncated = is_truncated(body.text);
+    if(truncated)
+      next_marker = get_next_marker(body.text);
+
+    if(body.text)
+      free(body.text);
+    body.size = 0;
+    body.text = (char *) malloc(1);
+  }
+
+  if(body.text)
+    free(body.text);
+  free(s3_realpath);
+
+  return 0;
+}
+
+static int append_objects_from_xml(const char *xml, struct s3_object **head) {
+  xmlDocPtr doc;
+  xmlXPathContextPtr ctx;
+  xmlXPathObjectPtr contents_xp;
+  xmlNodeSetPtr content_nodes;
+
+  doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
+  ctx = xmlXPathNewContext(doc);
+  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+                     (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+  
+  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
+  content_nodes = contents_xp->nodesetval;
+
+  int i;
+  for(i = 0; i < content_nodes->nodeNr; i++) {
+    ctx->node = content_nodes->nodeTab[i];
+
+    // object name
+    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
+    xmlNodeSetPtr key_nodes = key->nodesetval;
+    char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode);
+
+    if((insert_object(name, head)) != 0)
+      return -1;
+
+    xmlXPathFreeObject(key);
+  }
+
+  xmlXPathFreeObject(contents_xp);
+  xmlXPathFreeContext(ctx);
+  xmlFreeDoc(doc);
+
+  return 0;
+}
+
+static const char *get_next_marker(const char *xml) {
+  xmlDocPtr doc;
+  xmlXPathContextPtr ctx;
+  xmlXPathObjectPtr marker_xp;
+  xmlNodeSetPtr nodes;
+  char *next_marker;
+
+  doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
+  ctx = xmlXPathNewContext(doc);
+  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+                     (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+  marker_xp = xmlXPathEvalExpression((xmlChar *) "//s3:NextMarker", ctx);
+  nodes = marker_xp->nodesetval;
+
+  if(nodes->nodeNr < 1)
+    return "";
+
+  next_marker = (char *) xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
+
+  xmlXPathFreeObject(marker_xp);
+  xmlXPathFreeContext(ctx);
+  xmlFreeDoc(doc);
+
+  return next_marker;
+}
+
+static bool is_truncated(const char *xml) {
+  if(strstr(xml, "<IsTruncated>true</IsTruncated>"))
+    return true;
+
+  return false;
+}
+
+static char *get_object_name(xmlDocPtr doc, xmlNodePtr node) {
+  return (char *) mybasename((char *) xmlNodeListGetString(doc, node, 1)).c_str();
 }
 
 static int remote_mountpath_exists(const char *path) {
@@ -2715,7 +2863,6 @@ static int remote_mountpath_exists(const char *path) {
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
   curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
   curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
@@ -2725,7 +2872,8 @@ static int remote_mountpath_exists(const char *path) {
 
   result = my_curl_easy_perform(curl, &body);
   if(result != 0) {
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
     destroy_curl_handle(curl);
 
@@ -2739,7 +2887,8 @@ static int remote_mountpath_exists(const char *path) {
     if(ContentType)
       stbuf.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   body.text = NULL;
   destroy_curl_handle(curl);
 
@@ -2916,8 +3065,6 @@ static int list_multipart_uploads(void) {
 
   curl = create_curl_handle();
 
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
@@ -2944,10 +3091,8 @@ static int list_multipart_uploads(void) {
   destroy_curl_handle(curl);
 
   if(result != 0) {
-    if(body.size > 0) {
-      printf("body.text:\n%s\n", body.text);
-    }
-    if(body.text) free(body.text);
+    if(body.text)
+      free(body.text);
     return result;
   }
 
@@ -3001,15 +3146,13 @@ static void s3fs_check_service(void) {
       calc_signature("GET", "", date, headers.get(), resource));
   } else {
      // This operation is only valid if done by an authenticated sender
-     if(body.text) {
+     if(body.text)
        free(body.text);
-     }
      return;
   }
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -3065,9 +3208,9 @@ static void s3fs_check_service(void) {
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
                curl_easy_strerror(curlCode));;
-            if(body.text) {
+            if(body.text)
               free(body.text);
-            }
+
             return;
         }
       }
@@ -3085,7 +3228,8 @@ static void s3fs_check_service(void) {
 
   // network is down
   if(curlCode == CURLE_OPERATION_TIMEDOUT) {
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
 
     return;
@@ -3138,10 +3282,12 @@ static void s3fs_check_service(void) {
 
   // Success
   if (responseCode != 200) {
-    if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-    if(body.text) {
+    if(debug)
+      syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+
+    if(body.text)
       free(body.text);
-    }
+
     destroy_curl_handle(curl);
     return;
   }
@@ -3149,7 +3295,8 @@ static void s3fs_check_service(void) {
   // Parse the return info and see if the bucket is available  
   doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
   if(doc == NULL) {
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
     destroy_curl_handle(curl);
 
@@ -3158,7 +3305,8 @@ static void s3fs_check_service(void) {
 
   if(doc->children == NULL) {
     xmlFreeDoc(doc);
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
     destroy_curl_handle(curl);
 
@@ -3307,9 +3455,8 @@ static void s3fs_check_service(void) {
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
                curl_easy_strerror(curlCode));;
-            if(body.text) {
+            if(body.text)
               free(body.text);
-            }
             destroy_curl_handle(curl);
             return;
         }
@@ -3328,7 +3475,8 @@ static void s3fs_check_service(void) {
 
   // network is down
   if(curlCode == CURLE_OPERATION_TIMEDOUT) {
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
     destroy_curl_handle(curl);
 
@@ -3368,14 +3516,16 @@ static void s3fs_check_service(void) {
     if(debug)
       syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
 
-    free(body.text);
+    if(body.text)
+      free(body.text);
     body.text = NULL;
     destroy_curl_handle(curl);
 
     return;
   }
 
-  free(body.text);
+  if(body.text)
+    free(body.text);
   body.text = NULL;
   destroy_curl_handle(curl);
 
