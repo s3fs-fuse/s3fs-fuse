@@ -51,6 +51,7 @@ CURL *create_curl_handle(void) {
   curl_handle = curl_easy_init();
   curl_easy_reset(curl_handle);
   curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
+  curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
   curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, connect_timeout);
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
