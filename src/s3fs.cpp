@@ -2664,7 +2664,7 @@ static int s3fs_readdir(
           }
 
           // prevent this from sitting at 0, we may have requests to finish
-          remaining_messages++;
+          still_running++;
 
           // go to the next object.
           head = head->next;
