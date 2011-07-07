@@ -931,6 +931,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   } else {
      result = put_local_fd_small_file(path, meta, fd); 
   }
+
   return result;
 }
 
@@ -1609,7 +1610,7 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   result = create_file_object(path, mode);
 
   if(result != 0)
-     return result;
+    return result;
 
   // Object is now made, now open it
 
@@ -2367,7 +2368,6 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int flags;
   int result;
   int fd = fi->fh;
-  time_t mtime;
 
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
@@ -2394,9 +2394,6 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
       }
     }
 
-    mtime = time(NULL);
-    meta["x-amz-meta-mtime"] = str(mtime);
-
     // force the cached copy to have the same mtime as the remote copy
     if(use_cache.size() > 0) {
       struct stat st;
@@ -2404,7 +2401,7 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
       string cache_path(use_cache + "/" + bucket + path);
 
       if((stat(cache_path.c_str(), &st)) == 0) {
-        n_mtime.modtime = mtime;
+        n_mtime.modtime = strtoul(meta["x-amz-meta-mtime"].c_str(), (char **) NULL, 10);
         if((utime(cache_path.c_str(), &n_mtime)) == -1) {
           YIKES(-errno);
         }
@@ -2418,12 +2415,10 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
 }
 
 static int s3fs_release(const char *path, struct fuse_file_info *fi) {
-  int fd = fi->fh;
-
   if(foreground) 
-    cout << "s3fs_release[path=" << path << "][fd=" << fd << "]" << endl;
+    cout << "s3fs_release[path=" << path << "][fd=" << fi->fh << "]" << endl;
 
-  if(close(fd) == -1)
+  if(close(fi->fh) == -1)
     YIKES(-errno);
 
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
