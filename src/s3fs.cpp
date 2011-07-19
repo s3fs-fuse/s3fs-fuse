@@ -2353,6 +2353,7 @@ static int s3fs_statfs(const char *path, struct statvfs *stbuf) {
   stbuf->f_blocks = 0X1000000;
   stbuf->f_bfree  = 0x1000000;
   stbuf->f_bavail = 0x1000000;
+  stbuf->f_namemax = NAME_MAX;
   return 0;
 }
 
