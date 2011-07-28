@@ -2479,7 +2479,9 @@ static int s3fs_readdir(
     cout << "readdir[path=" << path << "]" << endl;
 
   // get a list of all the objects
-  list_bucket(path, &head);
+  if((list_bucket(path, &head)) != 0)
+    return -EIO;
+
   if(head == NULL)
     return 0;
 
@@ -2768,6 +2770,9 @@ static int append_objects_from_xml(const char *xml, struct s3_object **head) {
   xmlNodeSetPtr content_nodes;
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
+  if(doc == NULL)
+    return -1;
+
   ctx = xmlXPathNewContext(doc);
   xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
                      (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
