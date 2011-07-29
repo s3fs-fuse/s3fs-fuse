@@ -215,6 +215,16 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
         sleep(4);
         break; 
 
+      case CURLE_SEND_ERROR:
+        syslog(LOG_ERR, "### CURLE_SEND_ERROR");
+        sleep(2);
+        break;
+
+      case CURLE_RECV_ERROR:
+        syslog(LOG_ERR, "### CURLE_RECV_ERROR");
+        sleep(2);
+        break;
+
       case CURLE_SSL_CACERT:
         // try to locate cert, if successful, then set the
         // option and continue
