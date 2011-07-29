@@ -2531,14 +2531,20 @@ static int s3fs_readdir(
 
   // Start making requests.
   int still_running = 0;
-  curlm_code = curl_multi_perform(mh, &still_running);
+  do {
+    curlm_code = curl_multi_perform(mh, &still_running);
+  } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
+
   if(curlm_code != CURLM_OK) {
     syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
         curlm_code, curl_multi_strerror(curlm_code));
   }
 
   while(still_running) {
-    curlm_code = curl_multi_perform(mh, &still_running);
+    do {
+      curlm_code = curl_multi_perform(mh, &still_running);
+    } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
+
     if(curlm_code != CURLM_OK) {
       syslog(LOG_ERR, "s3fs_readdir: curl_multi_perform code: %d msg: %s", 
           curlm_code, curl_multi_strerror(curlm_code));
