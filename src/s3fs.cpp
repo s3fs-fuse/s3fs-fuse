@@ -3281,11 +3281,13 @@ static void s3fs_check_service(void) {
           string content = reinterpret_cast<const char *>(cur_node->children->content);
           fprintf (stderr, "%s: AWS Error Code: %s\n", program_name.c_str(), content.c_str());
        }
+
        if (cur_node_name == "Message") {
           string content = reinterpret_cast<const char *>(cur_node->children->content);
           fprintf (stderr, "%s: AWS Message: %s\n", program_name.c_str(), content.c_str());
        }
      }
+
      xmlFreeDoc(doc);
      exit(EXIT_FAILURE);
   }
@@ -3950,6 +3952,8 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
         exit(EXIT_FAILURE);
       }
     }
+
+    closedir(dp);
   }
 
   if (key == FUSE_OPT_KEY_OPT) {
