@@ -281,10 +281,9 @@ string calc_signature(
   StringToSign += content_type + "\n";
   StringToSign += date + "\n";
   int count = 0;
-  if (headers != 0) {
+  if(headers != 0) {
     do {
-      //###cout << headers->data << endl;
-      if (strncmp(headers->data, "x-amz", 5) == 0) {
+      if(strncmp(headers->data, "x-amz", 5) == 0) {
         ++count;
         StringToSign += headers->data;
         StringToSign += 10; // linefeed
@@ -3201,7 +3200,9 @@ static void s3fs_check_service(void) {
                program_name.c_str(),
                curlCode,
                curl_easy_strerror(curlCode));
-               exit(EXIT_FAILURE);
+
+            destroy_curl_handle(curl);
+            exit(EXIT_FAILURE);
             break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -3210,7 +3211,8 @@ static void s3fs_check_service(void) {
                program_name.c_str(),
                curlCode,
                curl_easy_strerror(curlCode));
-               exit(EXIT_FAILURE);
+            destroy_curl_handle(curl);
+            exit(EXIT_FAILURE);
           break;
 #endif
 
@@ -3289,6 +3291,7 @@ static void s3fs_check_service(void) {
      }
 
      xmlFreeDoc(doc);
+     destroy_curl_handle(curl);
      exit(EXIT_FAILURE);
   }
 
@@ -3309,6 +3312,7 @@ static void s3fs_check_service(void) {
   if(strstr(body.text, match.c_str()) == NULL) {
     fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
         program_name.c_str(), bucket.c_str());
+    destroy_curl_handle(curl);
     exit(EXIT_FAILURE);
   }
 
@@ -3361,37 +3365,40 @@ static void s3fs_check_service(void) {
                }
             }
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
+                curl_easy_strerror(curlCode));;
             fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-               program_name.c_str(),
-               curlCode,
-               curl_easy_strerror(curlCode));
-               exit(EXIT_FAILURE);
+                program_name.c_str(),
+                curlCode,
+                curl_easy_strerror(curlCode));
+              
+            destroy_curl_handle(curl);
+            exit(EXIT_FAILURE);
             break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
-            case CURLE_PEER_FAILED_VERIFICATION:
-              first_pos = bucket.find_first_of(".");
-              if (first_pos != string::npos) {
-                fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-                fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-                fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-                fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-                fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-              } else {
-                fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
-                   program_name.c_str(),
-                   curlCode,
-                   curl_easy_strerror(curlCode));
-              }
-              exit(EXIT_FAILURE);
+          case CURLE_PEER_FAILED_VERIFICATION:
+            first_pos = bucket.find_first_of(".");
+            if(first_pos != string::npos) {
+              fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
+              fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
+              fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
+              fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
+              fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
+            } else {
+              fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
+                  program_name.c_str(),
+                  curlCode,
+                  curl_easy_strerror(curlCode));
+            }
+            destroy_curl_handle(curl);
+            exit(EXIT_FAILURE);
             break;
 #endif
 
           default:
             // Unknown error - return
             syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
+                curl_easy_strerror(curlCode));;
             if(body.text)
               free(body.text);
             destroy_curl_handle(curl);
@@ -3442,6 +3449,7 @@ static void s3fs_check_service(void) {
       fprintf(stderr, "%s: remote mountpath %s not found.\n", 
           program_name.c_str(), mount_prefix.c_str());
 
+      destroy_curl_handle(curl);
       exit(EXIT_FAILURE);
     }
   }
@@ -4085,6 +4093,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
 
 int main(int argc, char *argv[]) {
   int ch;
+  int fuse_res;
   int option_index = 0; 
 
   static const struct option long_opts[] = {
@@ -4270,5 +4279,8 @@ int main(int argc, char *argv[]) {
   s3fs_oper.create = s3fs_create;
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
-  return fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
+  fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
+  fuse_opt_free_args(&custom_args);
+
+  return fuse_res;
 }
