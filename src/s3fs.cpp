@@ -3302,84 +3302,9 @@ static void s3fs_check_service(void) {
     return;
   }
 
-  // Parse the return info and see if the bucket is available  
-  doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
-  if(doc == NULL) {
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
-    destroy_curl_handle(curl);
-
-    return;
-  } 
-
-  if(doc->children == NULL) {
-    xmlFreeDoc(doc);
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
-    destroy_curl_handle(curl);
-
-    return;
-  }
-
-  bool bucketFound = 0;
-  bool matchFound = 0;
-
-  // Parse the XML looking for the bucket names
-  for ( cur_node = doc->children->children; 
-        cur_node != NULL; 
-        cur_node = cur_node->next) {
-
-    string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-
-    if (cur_node_name == "Buckets") {
-      if (cur_node->children != NULL) {
-        for (xmlNodePtr sub_node = cur_node->children;
-                        sub_node != NULL;
-                        sub_node = sub_node->next) {
-
-          if (sub_node->type == XML_ELEMENT_NODE) {
-            string elementName = reinterpret_cast<const char*>(sub_node->name);
-
-            if (elementName == "Bucket") { 
-               string Name;
-
-              for (xmlNodePtr b_node = sub_node->children;
-                              b_node != NULL;
-                              b_node = b_node->next) {
-
-                if (b_node->type == XML_ELEMENT_NODE) {
-                  string elementName = reinterpret_cast<const char*>(b_node->name);
-                  if (b_node->children != NULL) {
-                    if (b_node->children->type == XML_TEXT_NODE) {
-                      if (elementName == "Name") {
-                        Name = reinterpret_cast<const char *>(b_node->children->content);
-                        bucketFound = 1; 
-                        if(Name == bucket) {
-                           matchFound = 1;
-                        }
-                      }
-                    }
-                  }
-                }
-              } // for (xmlNodePtr b_node = sub_node->children;
-            }
-          }
-        } // for (xmlNodePtr sub_node = cur_node->children;
-      }
-    }
-  } // for (xmlNodePtr cur_node = doc->children->children; 
-
-  xmlFreeDoc(doc);
-
-  if (bucketFound == 0) {
-    fprintf (stderr, "%s: the service specified by the credentials does not contain any buckets\n", 
-        program_name.c_str());
-    exit(EXIT_FAILURE);
-  }
-
-  if (matchFound == 0) {
+  // make sure the bucket exists and we have access to it
+  string match = "<Bucket><Name>" + bucket + "</Name>";
+  if(strstr(body.text, match.c_str()) == NULL) {
     fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
         program_name.c_str(), bucket.c_str());
     exit(EXIT_FAILURE);

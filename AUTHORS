@@ -9,3 +9,7 @@ Patches and improvements.
 3. Adrian Petrescu <apetresc@gmail.com>
 
 Converted the project to be autotools-based.
+
+4. Ben LeMasurier <ben.lemasurier@gmail.com>
+
+Bugfixes, performance and other improvements.
