@@ -311,7 +311,7 @@ size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *
   memcpy(&(mem->text[mem->size]), ptr, realsize);
   mem->size += realsize;
   mem->text[mem->size] = 0;
- 
+
   return realsize;
 }
 
