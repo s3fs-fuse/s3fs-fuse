@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(s3fs, 1.59)
+AC_INIT(s3fs, 1.60)
 
 
 AC_CANONICAL_SYSTEM
