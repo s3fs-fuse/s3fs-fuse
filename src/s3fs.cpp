@@ -2728,8 +2728,9 @@ static int s3fs_readdir(
     cout << "readdir[path=" << path << "]" << endl;
 
   // get a list of all the objects
-  if((list_bucket(path, &head)) != 0)
-    return -EIO;
+  int result;
+  if((result = list_bucket(path, &head)) != 0)
+    return result;
 
   if(head == NULL)
     return 0;
@@ -3555,6 +3556,7 @@ static void s3fs_check_service(void) {
   }
 
   // make sure the bucket exists and we have access to it
+  /*
   string match = "<Bucket><Name>" + bucket + "</Name>";
   if(strstr(body.text, match.c_str()) == NULL) {
     fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
@@ -3562,6 +3564,7 @@ static void s3fs_check_service(void) {
     destroy_curl_handle(curl);
     exit(EXIT_FAILURE);
   }
+  */
 
   // once we arrive here, that means that our preliminary connection
   // worked and the bucket matches the credentials provided

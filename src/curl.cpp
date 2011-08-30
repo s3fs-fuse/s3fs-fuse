@@ -148,13 +148,10 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
 
           case 403:
             if(debug) syslog(LOG_ERR, "HTTP response code 403 was returned");
-            if(body) {
-              if(body->size && debug) {
+            if(body)
+              if(body->size && debug)
                 syslog(LOG_ERR, "Body Text: %s", body->text);
-              }
-            }
-            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
-            return -EIO;
+            return -EPERM;
 
           case 404:
             if(debug) syslog(LOG_DEBUG, "HTTP response code 404 was returned");
