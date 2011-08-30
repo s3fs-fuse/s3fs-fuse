@@ -839,7 +839,7 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   if(foreground) 
-    cout << "      uploading[path=" << path << "][fd=" << fd << "][size="<<st.st_size <<"]" << endl;
+    printf("    uploading[path=%s][fd=%d][size=%zd]\n", path, fd, st.st_size);
 
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
@@ -3193,7 +3193,7 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   pthread_mutex_init(&curl_handles_lock, NULL);
   pthread_mutex_init(&s3fs_descriptors_lock, NULL);
   pthread_mutex_init(&stat_cache_lock, NULL);
-  //
+
   string line;
   ifstream MT("/etc/mime.types");
   if (MT.good()) {
@@ -3218,10 +3218,8 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   }
 
   // Investigate system capabilities
-  if ( (unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC) {
-     // so let's set the bit
+  if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC)
      conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
-  }
 
   return 0;
 }
@@ -3233,7 +3231,7 @@ static void s3fs_destroy(void*) {
   // openssl
   CRYPTO_set_id_callback(NULL);
   CRYPTO_set_locking_callback(NULL);
-  for (int i = 0; i < CRYPTO_num_locks(); i++)
+  for(int i = 0; i < CRYPTO_num_locks(); i++)
     pthread_mutex_destroy(&mutex_buf[i]);
   free(mutex_buf);
   mutex_buf = NULL;
@@ -3245,7 +3243,8 @@ static void s3fs_destroy(void*) {
 
 static int s3fs_access(const char *path, int mask) {
   if(foreground) 
-    cout << "access[path=" << path << "]" <<  endl;
+    printf("s3fs_access[path=%s]\n", path);
+
   return 0;
 }
 
@@ -3296,32 +3295,11 @@ static int list_multipart_uploads(void) {
   body.size = 0; 
 
   printf("List Multipart Uploads\n");
-
-  //////////////////////////////////////////
-  //  Syntax:
-  //
-  //    GET /?uploads HTTP/1.1
-  //    Host: BucketName.s3.amazonaws.com
-  //    Date: Date
-  //    Authorization: Signature			
-  //////////////////////////////////////////
-
-  // printf("service_path: %s\n", service_path.c_str());
-
-  // resource = urlEncode(service_path);
   resource = urlEncode(service_path + bucket + "/");
-  // printf("resource: %s\n", resource.c_str());
   resource.append("?uploads");
-  // printf("resource: %s\n", resource.c_str());
-
   url = host + resource;
-  // printf("url: %s\n", url.c_str());
-
   my_url = prepare_url(url.c_str());
-  // printf("my_url: %s\n", my_url.c_str());
-
   curl = create_curl_handle();
-
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
@@ -3329,7 +3307,6 @@ static int list_multipart_uploads(void) {
   raw_date = get_date();
   date.append(raw_date);
   slist = curl_slist_append(slist, date.c_str());
-
   slist = curl_slist_append(slist, "Accept:");
 
   if (public_bucket.substr(0,1) != "1") {
@@ -3341,9 +3318,7 @@ static int list_multipart_uploads(void) {
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
   result = my_curl_easy_perform(curl, &body);
-
   curl_slist_free_all(slist);
   destroy_curl_handle(curl);
 
@@ -3353,46 +3328,25 @@ static int list_multipart_uploads(void) {
     return result;
   }
 
-  if(body.size > 0) {
+  if(body.size > 0)
     printf("body.text:\n%s\n", body.text);
-  }
 
-  result = 0;
-  return result;
+  return 0;
 }
 
-/*
- * s3fs_check_service
- *
- * Preliminary check on credentials and bucket
- * If the network is up when s3fs is started and the bucket is not a public
- * bucket, then connect to S3 service with the bucket's credentials.
- * This will indicate if the credentials are valid or not.
- * If the connection is successful, then check the list of available buckets
- * against the bucket name that we are trying to mount.
- *
- * This function either just returns (in cases where the network is 
- * unavailable, a public bucket, etc...) of exits with an error message
- * (where the connection is successful, but returns an error code or if
- * the bucket isn't found in the service).
- */
 static void s3fs_check_service(void) {
   CURL *curl = NULL;
-  CURLcode curlCode = CURLE_OK;
-  CURLcode ccode = CURLE_OK;
+  int result = CURLE_OK;
+  CURLcode responseCode;
 
   if(foreground) 
-    cout << "s3fs_check_service" << endl;
+    printf("s3fs_check_service\n");
 
   struct BodyStruct body;
   body.text = (char *)malloc(1);
   body.size = 0;
 
-  long responseCode;
-  xmlDocPtr doc;
-  xmlNodePtr cur_node;
-  
-  string resource = "/";
+  string resource = urlEncode(service_path + bucket);
   string url = host + resource;
 
   auto_curl_slist headers;
@@ -3413,284 +3367,37 @@ static void s3fs_check_service(void) {
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-  if(ssl_verify_hostname.substr(0,1) == "0")
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+  result = my_curl_easy_perform(curl);
 
-  // Need to know if the curl response is just a timeout possibly indicating
-  // the the network is down or if the connection was acutally made 
-  // - my_curl_easy_perform doesn't differentiate between the two
-  int t = retries + 1;
-  while (t-- > 0) {
-    curlCode = curl_easy_perform(curl);
-    if(curlCode == 0)
-      break;
-
-    if (curlCode != CURLE_OPERATION_TIMEDOUT) {
-      if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-         break;
-      } else {
-        switch (curlCode) {
-          case CURLE_SSL_CACERT:
-            // try to locate cert, if successful, then set the
-            // option and continue
-            if (curl_ca_bundle.size() == 0) {
-               locate_bundle();
-               if (curl_ca_bundle.size() != 0) {
-                  t++;
-                  curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-                  continue;
-               }
-            }
-            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
-            fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-               program_name.c_str(),
-               curlCode,
-               curl_easy_strerror(curlCode));
-
-            destroy_curl_handle(curl);
-            exit(EXIT_FAILURE);
-            break;
-
-#ifdef CURLE_PEER_FAILED_VERIFICATION
-          case CURLE_PEER_FAILED_VERIFICATION:
-            fprintf (stderr, "%s: s3fs_check_service: curlCode: %i -- %s\n", 
-               program_name.c_str(),
-               curlCode,
-               curl_easy_strerror(curlCode));
-            destroy_curl_handle(curl);
-            exit(EXIT_FAILURE);
-          break;
-#endif
-
-          default:
-            // Unknown error - return
-            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-               curl_easy_strerror(curlCode));;
-            if(body.text)
-              free(body.text);
-
-            return;
-        }
-      }
-    }
-  }
- 
-  // We get here under three conditions:
-  //  - too many timeouts
-  //  - connection, but a HTTP error
-  //  - success
-
-  if(debug) 
-    syslog(LOG_DEBUG, "curlCode: %i   msg: %s\n", 
-           curlCode, curl_easy_strerror(curlCode));
-
-  // network is down
-  if(curlCode == CURLE_OPERATION_TIMEDOUT) {
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
-
-    return;
-  }
-
+  // connect either successful or too many timeouts
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
-  if(debug)
-    syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-
-  // Connection was made, but there is a HTTP error
-  if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-     // Try again, but this time grab the data
-     curl_easy_setopt(curl, CURLOPT_FAILONERROR, false);
-     ccode = curl_easy_perform(curl);
-
-     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
-    
-     fprintf (stderr, "%s: CURLE_HTTP_RETURNED_ERROR\n", program_name.c_str());
-     fprintf (stderr, "%s: HTTP Error Code: %i\n", program_name.c_str(), (int)responseCode);
-
-     // Parse the return info
-     doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
-     if(doc == NULL)
-        exit(EXIT_FAILURE);
-
-     if (doc->children == NULL) {
-        xmlFreeDoc(doc);
-        exit(EXIT_FAILURE);
-     }
-
-     for ( cur_node = doc->children->children; 
-           cur_node != NULL; 
-           cur_node = cur_node->next) {
-   
-       string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-
-       if (cur_node_name == "Code") {
-          string content = reinterpret_cast<const char *>(cur_node->children->content);
-          fprintf (stderr, "%s: AWS Error Code: %s\n", program_name.c_str(), content.c_str());
-       }
-
-       if (cur_node_name == "Message") {
-          string content = reinterpret_cast<const char *>(cur_node->children->content);
-          fprintf (stderr, "%s: AWS Message: %s\n", program_name.c_str(), content.c_str());
-       }
-     }
-
-     xmlFreeDoc(doc);
-     destroy_curl_handle(curl);
-     exit(EXIT_FAILURE);
-  }
-
-  // Success
-  if (responseCode != 200) {
-    if(debug)
-      syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-
-    if(body.text)
-      free(body.text);
-
-    destroy_curl_handle(curl);
-    return;
-  }
-
-  // make sure the bucket exists and we have access to it
-  /*
-  string match = "<Bucket><Name>" + bucket + "</Name>";
-  if(strstr(body.text, match.c_str()) == NULL) {
-    fprintf (stderr, "%s: bucket \"%s\" is not part of the service specified by the credentials\n", 
-        program_name.c_str(), bucket.c_str());
-    destroy_curl_handle(curl);
+  if(responseCode == 403) {
+    fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
     exit(EXIT_FAILURE);
   }
-  */
 
-  // once we arrive here, that means that our preliminary connection
-  // worked and the bucket matches the credentials provided
-  // now check for bucket location using the virtual host name
-  // this should expose the certificate mismatch that may occur
-  // when using https:// (SSL) and a bucket name that contains periods
-  resource = urlEncode(service_path + bucket);
-  url = host + resource + "?location";
-
-  string my_url = prepare_url(url.c_str());
-  auto_curl_slist new_headers;
-  date = get_date();
-  new_headers.append("Date: " + date);
-  new_headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("GET", "", date, new_headers.get(), resource + "/?location"));
-
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, new_headers.get());
-
-  // Need to know if the curl response is just a timeout possibly
-  // indicating the the network is down or if the connection was
-  // acutally made - my_curl_easy_perform doesn't differentiate
-  // between the two
-
-  strcpy(body.text, "");
-  body.size = 0;
-
-  t = retries + 1;
-  while (t-- > 0) {
-    curlCode = curl_easy_perform(curl);
-    if(curlCode == 0)
-      break;
-
-    if (curlCode != CURLE_OPERATION_TIMEDOUT) {
-      if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-         break;
-      } else {
-        switch (curlCode) {
-          case CURLE_SSL_CACERT:
-            // try to locate cert, if successful, then set the
-            // option and continue
-            if (curl_ca_bundle.size() == 0) {
-               locate_bundle();
-               if (curl_ca_bundle.size() != 0) {
-                  t++;
-                  curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-                  continue;
-               }
-            }
-            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-                curl_easy_strerror(curlCode));;
-            fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-                program_name.c_str(),
-                curlCode,
-                curl_easy_strerror(curlCode));
-              
-            destroy_curl_handle(curl);
-            exit(EXIT_FAILURE);
-            break;
-
-#ifdef CURLE_PEER_FAILED_VERIFICATION
-          case CURLE_PEER_FAILED_VERIFICATION:
-            first_pos = bucket.find_first_of(".");
-            if(first_pos != string::npos) {
-              fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-              fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-              fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-              fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-              fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-            } else {
-              fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
-                  program_name.c_str(),
-                  curlCode,
-                  curl_easy_strerror(curlCode));
-            }
-            destroy_curl_handle(curl);
-            exit(EXIT_FAILURE);
-            break;
-#endif
-
-          default:
-            // Unknown error - return
-            syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-                curl_easy_strerror(curlCode));;
-            if(body.text)
-              free(body.text);
-            destroy_curl_handle(curl);
-            return;
-        }
-      }
-    }
+  if(responseCode == 404) {
+    fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
+    exit(EXIT_FAILURE);
   }
 
-  // We get here under three conditions:
-  //  - too many timeouts
-  //  - connection, but a HTTP error
-  //  - success
-
-  if(debug)
-    syslog(LOG_DEBUG, "curlCode: %i   msg: %s\n", 
-           curlCode, curl_easy_strerror(curlCode));
-
-  // network is down
-  if(curlCode == CURLE_OPERATION_TIMEDOUT) {
-    if(body.text)
-      free(body.text);
+  // unable to connect
+  if(responseCode == CURLE_OPERATION_TIMEDOUT) {
+    if(body.text) free(body.text);
     body.text = NULL;
-    destroy_curl_handle(curl);
 
     return;
   }
 
-  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
-  if(debug)
-    syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+  if(responseCode != 200) {
+    if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
+    if(body.text) free(body.text);
+    destroy_curl_handle(curl);
+    fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
 
-  // Connection was made, but there is a HTTP error
-  if (curlCode == CURLE_HTTP_RETURNED_ERROR) {
-     if (responseCode == 403) {
-       fprintf (stderr, "%s: HTTP: 403 Forbidden - it is likely that your credentials are invalid\n", 
-         program_name.c_str());
-       exit(EXIT_FAILURE);
-     }
-     fprintf (stderr, "%s: HTTP: %i - report this to the s3fs developers\n", 
-       program_name.c_str(), (int)responseCode);
-     exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
   }
 
   // make sure remote mountpath exists and is a directory
@@ -3704,23 +3411,9 @@ static void s3fs_check_service(void) {
     }
   }
 
-  // Success
+  // success
   service_validated = true;
-
-  if(responseCode != 200) {
-    if(debug)
-      syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
-
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
-    destroy_curl_handle(curl);
-
-    return;
-  }
-
-  if(body.text)
-    free(body.text);
+  if(body.text) free(body.text);
   body.text = NULL;
   destroy_curl_handle(curl);
 
@@ -3740,12 +3433,10 @@ static bool check_for_aws_format (void) {
   ifstream PF(passwd_file.c_str());
   if (PF.good()) {
     while (getline(PF, line)) {
-      if (line[0]=='#') {
+      if(line[0]=='#')
         continue;
-      }
-      if (line.size() == 0) {
+      if(line.size() == 0)
         continue;
-      }
 
       first_pos = line.find_first_of(" \t");
       if (first_pos != string::npos) {
@@ -3765,7 +3456,6 @@ static bool check_for_aws_format (void) {
       if (found != string::npos) {
          first_pos = line.find_first_of("=");
          AWSAccessKeyId = line.substr(first_pos + 1, string::npos);
-         // cout << "AWSAccessKeyId: " << AWSAccessKeyId.c_str() << endl;
          got_access_key_id_line = 1;
          continue;
       }
@@ -3774,19 +3464,16 @@ static bool check_for_aws_format (void) {
       if (found != string::npos) {
          first_pos = line.find_first_of("=");
          AWSSecretAccessKey = line.substr(first_pos + 1, string::npos);
-         // cout << "AWSSecretAccessKey: " << AWSSecretAccessKey.c_str() << endl;
          got_secret_key_line = 1;
          continue;
       }
     }
   }
 
-  if (got_access_key_id_line && got_secret_key_line) {
+  if(got_access_key_id_line && got_secret_key_line)
      return 1;
-  } else {
+  else
      return 0;
-  }
-
 }
 
 //////////////////////////////////////////////////////////////////
@@ -3830,8 +3517,6 @@ static void check_passwd_file_perms (void) {
       exit(EXIT_FAILURE);
     }
   }
-
-  // check for owner execute permissions?
 
   return;
 }
