@@ -1898,6 +1898,68 @@ static int s3fs_unlink(const char *path) {
   return 0;
 }
 
+static int directory_empty(const char *path) {
+  int result;
+  char *s3_realpath;
+  string url;
+  string my_url;
+  string date;
+  string resource = urlEncode(service_path + bucket);
+  string query = "delimiter=/&prefix=";
+  CURL *curl = NULL;
+  struct BodyStruct body;
+  auto_curl_slist headers;
+
+  s3_realpath = get_realpath(path);
+  body.text = (char *)malloc(1);
+  body.size = 0;
+
+  if(strcmp(path, "/") != 0)
+    query += urlEncode(string(s3_realpath).substr(1) + "/");
+  else
+    query += urlEncode(string(s3_realpath).substr(1));
+
+  query += "&max-keys=1";
+  url = host + resource + "?"+ query;
+
+  curl = create_curl_handle();
+  my_url = prepare_url(url.c_str());
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+  date = get_date();
+  headers.append("Date: " + date);
+  headers.append("ContentType: ");
+  if(public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+        calc_signature("GET", "", date, headers.get(), resource + "/"));
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+
+  result = my_curl_easy_perform(curl, &body);
+  if(result != 0) {
+    if(body.text)
+      free(body.text);
+    free(s3_realpath);
+    destroy_curl_handle(curl);
+
+    return result;
+  }
+
+  // is the directory empty?
+  if(strstr(body.text, "<CommonPrefixes>") != NULL ||
+      strstr(body.text, "<ETag>") != NULL ) {
+    if(body.text) free(body.text);
+    free(s3_realpath);
+    destroy_curl_handle(curl);
+
+    return -ENOTEMPTY;
+  }
+
+  return 0;
+}
+
 static int s3fs_rmdir(const char *path) {
   CURL *curl = NULL;
   CURL *curl_handle = NULL;
@@ -1906,70 +1968,15 @@ static int s3fs_rmdir(const char *path) {
   struct BodyStruct body;
 
   if(foreground) 
-    cout << "rmdir[path=" << path << "]" << endl;
+    printf("s3fs_rmdir [path=%s]\n", path);
 
   s3_realpath = get_realpath(path);
   body.text = (char *)malloc(1);
   body.size = 0;
 
-   // need to check if the directory is empty
-   {
-      string url;
-      string my_url;
-      string date;
-      string resource = urlEncode(service_path + bucket);
-      string query = "delimiter=/&prefix=";
-      auto_curl_slist headers;
-
-      if(strcmp(path, "/") != 0)
-        query += urlEncode(string(s3_realpath).substr(1) + "/");
-      else
-        query += urlEncode(string(s3_realpath).substr(1));
-
-      query += "&max-keys=1";
-      url = host + resource + "?"+ query;
-
-      curl = create_curl_handle();
-      my_url = prepare_url(url.c_str());
-      curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-
-      date = get_date();
-      headers.append("Date: " + date);
-      headers.append("ContentType: ");
-      if (public_bucket.substr(0,1) != "1") {
-        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-          calc_signature("GET", "", date, headers.get(), resource + "/"));
-      }
-
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-      result = my_curl_easy_perform(curl, &body);
-      if(result != 0) {
-        if(body.text)
-          free(body.text);
-        free(s3_realpath);
-        destroy_curl_handle(curl);
-
-        return result;
-      }
-
-      if(strstr(body.text, "<CommonPrefixes>") != NULL ||
-         strstr(body.text, "<ETag>") != NULL ) {
-        // directory is not empty
-
-        if(foreground) 
-          cout << "[path=" << path << "] not empty" << endl;
-
-        if(body.text)
-          free(body.text);
-        free(s3_realpath);
-        destroy_curl_handle(curl);
-
-        return -ENOTEMPTY;
-      }
-   }
+   // directory must be empty
+   if(directory_empty(path) != 0)
+     return -ENOTEMPTY;
 
    // delete the directory
   string resource = urlEncode(service_path + bucket + s3_realpath);
@@ -1996,8 +2003,7 @@ static int s3fs_rmdir(const char *path) {
   // delete cache entry
   delete_stat_cache_entry(path);
 
-  if(body.text)
-    free(body.text);
+  if(body.text) free(body.text);
   free(s3_realpath);
   destroy_curl_handle(curl);
   destroy_curl_handle(curl_handle);
