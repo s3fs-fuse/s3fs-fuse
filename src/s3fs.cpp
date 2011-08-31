@@ -125,6 +125,10 @@ time_t get_mtime(const char *s) {
   return (time_t) strtoul(s, (char **) NULL, 10);
 }
 
+off_t get_size(const char *s) {
+  return (off_t) strtoul(s, (char **) NULL, 10);
+}
+
 mode_t get_mode(const char *s) {
   return (mode_t) strtoul(s, (char **) NULL, 10);
 }
@@ -135,6 +139,10 @@ uid_t get_uid(const char *s) {
 
 gid_t get_gid(const char *s) {
   return (gid_t) strtoul(s, (char **) NULL, 10);
+}
+
+blkcnt_t get_blocks(off_t size) {
+  return size / 512 + 1;
 }
 
 static int insert_object(char *name, struct s3_object **head) {
@@ -1536,13 +1544,11 @@ string md5sum(int fd) {
 }
 
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
-  CURL *curl;
   int result;
-  char *s3_realpath;
-  struct BodyStruct body;
+  headers_t meta;
 
   if(foreground) 
-    cout << "s3fs_getattr[path=" << path << "]" << endl;
+    printf("s3fs_getattr[path=%s]\n", path);
 
   memset(stbuf, 0, sizeof(struct stat));
   if(strcmp(path, "/") == 0) {
@@ -1554,78 +1560,30 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   if(get_stat_cache_entry(path, stbuf) == 0)
     return 0;
 
-  s3_realpath = get_realpath(path);
-
-  body.text = (char *)malloc(1);
-  body.size = 0;
-
-  string resource = urlEncode(service_path + bucket + s3_realpath);
-  string url = host + resource;
-
-  headers_t responseHeaders;
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
-  curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if (public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("HEAD", "", date, headers.get(), resource));
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl, &body);
-  if(result != 0) {
-    if(body.text)
-      free(body.text);
-    free(s3_realpath);
-    destroy_curl_handle(curl);
-
+  if((result = get_headers(path, meta)) != 0)
     return result;
-  }
 
   stbuf->st_nlink = 1; // see fuse faq
+  stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
+  if(stbuf->st_mtime == 0)
+    stbuf->st_mtime = get_mtime(meta["Last-Modified"].c_str());
 
-  stbuf->st_mtime = get_mtime(responseHeaders["x-amz-meta-mtime"].c_str());
-  if (stbuf->st_mtime == 0) {
-    long LastModified;
-    if (curl_easy_getinfo(curl, CURLINFO_FILETIME, &LastModified) == 0)
-      stbuf->st_mtime = LastModified;
-  }
+  stbuf->st_mode = get_mode(meta["x-amz-meta-mode"].c_str());
+  if(strstr(meta["Content-Type"].c_str(), "x-directory"))
+    stbuf->st_mode |= S_IFDIR;
+  else
+    stbuf->st_mode |= S_IFREG;
 
-  stbuf->st_mode = get_mode(responseHeaders["x-amz-meta-mode"].c_str());
-  char* ContentType = 0;
-  if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ContentType) == 0) {
-    if (ContentType)
-      stbuf->st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
-  }
+  stbuf->st_size = get_size(meta["Content-Length"].c_str());
 
-  double ContentLength;
-  if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
-    stbuf->st_size = static_cast<off_t>(ContentLength);
+  if(S_ISREG(stbuf->st_mode))
+    stbuf->st_blocks = get_blocks(stbuf->st_size);
 
-  if (S_ISREG(stbuf->st_mode))
-    stbuf->st_blocks = stbuf->st_size / 512 + 1;
-
-  stbuf->st_uid = get_uid(responseHeaders["x-amz-meta-uid"].c_str());
-  stbuf->st_gid = get_gid(responseHeaders["x-amz-meta-gid"].c_str());
+  stbuf->st_uid = get_uid(meta["x-amz-meta-uid"].c_str());
+  stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
 
   // update stat cache
   add_stat_cache_entry(path, stbuf);
-
-  if(body.text)
-    free(body.text);
-  free(s3_realpath);
-  destroy_curl_handle(curl);
 
   return 0;
 }
@@ -2889,9 +2847,8 @@ static int s3fs_readdir(
         if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
           st.st_size = static_cast<off_t>(ContentLength);
 
-        // blocksstuff
         if(S_ISREG(st.st_mode))
-          st.st_blocks = st.st_size / 512 + 1;
+          st.st_blocks = get_blocks(st.st_size);
 
         st.st_uid = get_uid((*response.responseHeaders)["x-amz-meta-uid"].c_str());
         st.st_gid = get_gid((*response.responseHeaders)["x-amz-meta-gid"].c_str());

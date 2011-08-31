@@ -95,6 +95,12 @@ std::string md5sum(int fd);
 char *get_realpath(const char *path);
 
 time_t get_mtime(const char *s);
+off_t get_size(const char *s);
+mode_t get_mode(const char *s);
+uid_t get_uid(const char *s);
+gid_t get_gid(const char *s);
+blkcnt_t get_blocks(off_t size);
+
 static int insert_object(char *name, struct s3_object **head);
 static unsigned int count_object_list(struct s3_object *list);
 static int free_object(struct s3_object *object);
