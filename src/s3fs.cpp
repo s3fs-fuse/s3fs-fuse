@@ -1697,7 +1697,7 @@ static int create_file_object(const char *path, mode_t mode) {
   CURL *curl = NULL;
 
   if(foreground) 
-    cout << "   create_file_object[path=" << path << "][mode=" << mode << "]" << endl;
+    printf("   create_file_object[path=%s][mode=%d]\n", path, mode);
 
   s3_realpath = get_realpath(path);
   string resource = urlEncode(service_path + bucket + s3_realpath);
@@ -1739,7 +1739,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
   int result;
 
   if(foreground) 
-    cout << "s3fs_mknod[path=" << path << "][mode=" << mode << "]" << endl;
+    printf("s3fs_mknod[path=%s][mode=%d]\n", path, mode);
 
   // see man 2 mknod: if pathname already exists, or is 
   // a symbolic link, this call fails with an EEXIST error.
@@ -1763,10 +1763,9 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if(result != 0)
     return result;
 
-  // Object is now made, now open it
-
-  //###TODO check fi->fh here...
-  fi->fh = get_local_fd(path);
+  // object created, open it
+  if((fi->fh = get_local_fd(path)) <= 0)
+    return -EIO;
 
   // remember flags and headers...
   pthread_mutex_lock( &s3fs_descriptors_lock );
@@ -2501,13 +2500,13 @@ static int s3fs_truncate(const char *path, off_t size) {
     syslog(LOG_ERR, "error: line %d: %d", __LINE__, -errno);
     return -errno;
   }
-  
+
   result = put_local_fd(path, meta, fd);
   if(result != 0) {
-     if(fd > 0)
-       close(fd);
+    if(fd > 0)
+      close(fd);
 
-     return result;
+    return result;
   }
 
   if(fd > 0)
@@ -2530,8 +2529,8 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
         return result;
   }
 
-  // TODO: check fi->fh here...
-  fi->fh = get_local_fd(path);
+  if((fi->fh = get_local_fd(path)) <= 0)
+    return -EIO;
 
   // remember flags and headers...
   pthread_mutex_lock( &s3fs_descriptors_lock );
@@ -3186,8 +3185,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   if(foreground) 
     printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
 
-  result = get_headers(path, meta);
-  if(result != 0)
+  if((result = get_headers(path, meta) != 0))
     return result;
 
   s3_realpath = get_realpath(path);
@@ -3196,12 +3194,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   meta["x-amz-metadata-directive"] = "REPLACE";
   free(s3_realpath);
 
-  if(foreground) 
-    cout << "  calling put_headers [path=" << path << "]" << endl;
-
-  result = put_headers(path, meta);
-
-  return result;
+  return put_headers(path, meta);
 }
 
 ///////////////////////////////////////////////////////////
