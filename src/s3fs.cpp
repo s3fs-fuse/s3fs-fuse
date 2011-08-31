@@ -1716,48 +1716,20 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   return 0;
 }
 
-// aka rm
 static int s3fs_unlink(const char *path) {
   int result;
-  string date;
-  string url;
-  string my_url;
-  string resource;
   char *s3_realpath;
-  auto_curl_slist headers;
-  CURL *curl = NULL;
 
   if(foreground) 
-    cout << "unlink[path=" << path << "]" << endl;
+    printf("unlink[path=%s]\n", path);
 
   s3_realpath = get_realpath(path);
-  resource = urlEncode(service_path + bucket + s3_realpath);
-  url = host + resource;
-  date = get_date();
 
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if(public_bucket.substr(0,1) != "1")
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("DELETE", "", date, headers.get(), resource));
-
-  my_url = prepare_url(url.c_str());
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl);
-
-  destroy_curl_handle(curl);
+  result = curl_delete(s3_realpath);
   free(s3_realpath);
-
-  if(result != 0)
-    return result;
-
   delete_stat_cache_entry(path);
 
-  return 0;
+  return result;
 }
 
 static int directory_empty(const char *path) {
@@ -1823,57 +1795,24 @@ static int directory_empty(const char *path) {
 }
 
 static int s3fs_rmdir(const char *path) {
-  CURL *curl = NULL;
-  CURL *curl_handle = NULL;
   int result;
   char *s3_realpath;
-  struct BodyStruct body;
 
   if(foreground) 
     printf("s3fs_rmdir [path=%s]\n", path);
 
   s3_realpath = get_realpath(path);
-  body.text = (char *)malloc(1);
-  body.size = 0;
 
    // directory must be empty
    if(directory_empty(path) != 0)
      return -ENOTEMPTY;
 
-   // delete the directory
-  string resource = urlEncode(service_path + bucket + s3_realpath);
-  string url = host + resource;
+  result = curl_delete(s3_realpath);
 
-  curl_handle = create_curl_handle();
-  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "DELETE");
-
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if (public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("DELETE", "", date, headers.get(), resource));
-  }
-  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers.get());
-
-  string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl_handle, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl_handle);
-
-  // delete cache entry
   delete_stat_cache_entry(path);
-
-  if(body.text) free(body.text);
   free(s3_realpath);
-  destroy_curl_handle(curl);
-  destroy_curl_handle(curl_handle);
 
-  if(result != 0)
-    return result;
-
-  return 0;
+  return result;
 }
 
 static int s3fs_symlink(const char *from, const char *to) {

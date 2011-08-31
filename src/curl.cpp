@@ -40,6 +40,7 @@
 #include <map>
 
 #include "curl.h"
+#include "string_util.h"
 
 using namespace std;
 
@@ -47,6 +48,21 @@ pthread_mutex_t curl_handles_lock;
 std::map<CURL*, time_t> curl_times;
 std::map<CURL*, progress_t> curl_progress;
 std::string curl_ca_bundle;
+
+class auto_curl_slist {
+ public:
+  auto_curl_slist() : slist(0) { }
+  ~auto_curl_slist() { curl_slist_free_all(slist); }
+
+  struct curl_slist* get() const { return slist; }
+
+  void append(const string& s) {
+    slist = curl_slist_append(slist, s.c_str());
+  }
+
+ private:
+  struct curl_slist* slist;
+};
 
 CURL *create_curl_handle(void) {
   time_t now;
@@ -86,6 +102,36 @@ void destroy_curl_handle(CURL *curl_handle) {
   }
 
   return;
+}
+
+int curl_delete(const char *path) {
+  int result;
+  string date;
+  string url;
+  string my_url;
+  string resource;
+  auto_curl_slist headers;
+  CURL *curl = NULL;
+
+  resource = urlEncode(service_path + bucket + path);
+  url = host + resource;
+  date = get_date();
+
+  headers.append("Date: " + date);
+  headers.append("Content-Type: ");
+  if(public_bucket.substr(0,1) != "1")
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      calc_signature("DELETE", "", date, headers.get(), resource));
+
+  my_url = prepare_url(url.c_str());
+  curl = create_curl_handle();
+  curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+  result = my_curl_easy_perform(curl);
+  destroy_curl_handle(curl);
+
+  return result;
 }
 
 /**

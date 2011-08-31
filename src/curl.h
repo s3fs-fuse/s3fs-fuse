@@ -21,12 +21,18 @@ extern time_t readwrite_timeout;
 extern bool debug;
 extern std::string program_name;
 extern std::string ssl_verify_hostname;
+extern std::string AWSAccessKeyId;
 extern std::string AWSSecretAccessKey;
+extern std::string service_path;
+extern std::string host;
+extern std::string bucket;
+extern std::string public_bucket;
 
 static const EVP_MD* evp_md = EVP_sha1();
 
 CURL *create_curl_handle(void);
 void destroy_curl_handle(CURL *curl_handle);
+int curl_delete(const char *path);
 int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0);
 size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
