@@ -3075,59 +3075,13 @@ static char *get_object_name(xmlDocPtr doc, xmlNodePtr node) {
 }
 
 static int remote_mountpath_exists(const char *path) {
-  CURL *curl;
-  int result;
-  struct BodyStruct body;
+  struct stat stbuf;
 
   if(foreground) 
     printf("remote_mountpath_exists [path=%s]\n", path);
 
-  body.text = (char *) malloc(1);
-  body.size = 0;
-
-  string resource = urlEncode(service_path + bucket + path);
-  string url = host + resource;
-  string my_url = prepare_url(url.c_str());
-  headers_t responseHeaders;
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if(public_bucket.substr(0,1) != "1")
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("HEAD", "", date, headers.get(), resource));
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
-  curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  result = my_curl_easy_perform(curl, &body);
-  if(result != 0) {
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
-    destroy_curl_handle(curl);
-
-    return result;
-  }
-
-  struct stat stbuf;
-  stbuf.st_mode = get_mode(responseHeaders["x-amz-meta-mode"].c_str());
-  char* ContentType = 0;
-  if(curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ContentType) == 0)
-    if(ContentType)
-      stbuf.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
-
-  if(body.text)
-    free(body.text);
-  body.text = NULL;
-  destroy_curl_handle(curl);
-
+  // getattr will prefix the path with the remote mountpoint
+  s3fs_getattr("", &stbuf);
   if(!S_ISDIR(stbuf.st_mode))
     return -1;
 
@@ -3151,11 +3105,7 @@ static void locking_function(int mode, int n, const char *file, int line) {
   }
 }
 
-/**
- * OpenSSL uniq id function.
- *
- * @return    thread id
- */
+// OpenSSL uniq thread id function.
 static unsigned long id_function(void) {
   return((unsigned long) pthread_self());
 }
@@ -3234,7 +3184,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   headers_t meta;
 
   if(foreground) 
-    cout << "s3fs_utimens[path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
+    printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
 
   result = get_headers(path, meta);
   if(result != 0)
