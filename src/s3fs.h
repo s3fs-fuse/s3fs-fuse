@@ -42,7 +42,7 @@ std::string mount_prefix = "";
 static std::string mountpoint;
 std::string program_name;
 static std::string AWSAccessKeyId;
-static std::string AWSSecretAccessKey;
+std::string AWSSecretAccessKey;
 static mode_t root_mode = 0;
 static std::string passwd_file = "";
 static bool utility_mode = 0;
@@ -74,8 +74,6 @@ static const char hexAlphabet[] = "0123456789ABCDEF";
 
 // http headers
 typedef std::map<std::string, std::string> headers_t;
-
-static const EVP_MD* evp_md = EVP_sha1();
 
 // fd -> flags
 typedef std::map<int, int> s3fs_descriptors_t;

@@ -29,6 +29,11 @@
 #include <syslog.h>
 #include <pthread.h>
 #include <curl/curl.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/md5.h>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -359,6 +364,113 @@ int my_curl_progress(
 
   pthread_mutex_unlock(&curl_handles_lock);
   return 0;
+}
+
+/**
+ * Returns the Amazon AWS signature for the given parameters.
+ *
+ * @param method e.g., "GET"
+ * @param content_type e.g., "application/x-directory"
+ * @param date e.g., get_date()
+ * @param resource e.g., "/pub"
+ */
+string calc_signature(
+    string method, string content_type, string date, curl_slist* headers, string resource) {
+  int ret;
+  int bytes_written;
+  int offset;
+  int write_attempts = 0;
+
+  string Signature;
+  string StringToSign;
+  StringToSign += method + "\n";
+  StringToSign += "\n"; // md5
+  StringToSign += content_type + "\n";
+  StringToSign += date + "\n";
+  int count = 0;
+  if(headers != 0) {
+    do {
+      if(strncmp(headers->data, "x-amz", 5) == 0) {
+        ++count;
+        StringToSign += headers->data;
+        StringToSign += 10; // linefeed
+      }
+    } while ((headers = headers->next) != 0);
+  }
+
+  StringToSign += resource;
+
+  const void* key = AWSSecretAccessKey.data();
+  int key_len = AWSSecretAccessKey.size();
+  const unsigned char* d = reinterpret_cast<const unsigned char*>(StringToSign.data());
+  int n = StringToSign.size();
+  unsigned int md_len;
+  unsigned char md[EVP_MAX_MD_SIZE];
+
+  HMAC(evp_md, key, key_len, d, n, md, &md_len);
+
+  BIO* b64 = BIO_new(BIO_f_base64());
+  BIO* bmem = BIO_new(BIO_s_mem());
+  b64 = BIO_push(b64, bmem);
+
+  offset = 0;
+  for(;;) {
+    bytes_written = BIO_write(b64, &(md[offset]), md_len);
+    write_attempts++;
+    // -1 indicates that an error occurred, or a temporary error, such as
+    // the server is busy, occurred and we need to retry later.
+    // BIO_write can do a short write, this code addresses this condition
+    if(bytes_written <= 0) {
+      // Indicates whether a temporary error occurred or a failure to
+      // complete the operation occurred
+      if ((ret = BIO_should_retry(b64))) {
+        // Wait until the write can be accomplished
+        if(write_attempts <= 10)
+          continue;
+
+        // Too many write attempts
+        syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+        BIO_free_all(b64);
+        Signature.clear();
+        return Signature;
+      } else {
+        // If not a retry then it is an error
+        syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+        BIO_free_all(b64);
+        Signature.clear();
+        return Signature;
+      }
+    }
+  
+    // The write request succeeded in writing some Bytes
+    offset += bytes_written;
+    md_len -= bytes_written;
+  
+    // If there is no more data to write, the request sending has been
+    // completed
+    if(md_len <= 0)
+      break;
+  }
+
+  // Flush the data
+  ret = BIO_flush(b64);
+  if ( ret <= 0) { 
+    syslog(LOG_ERR, "Failure during BIO_flush, returning null String");  
+    BIO_free_all(b64);
+    Signature.clear();
+    return Signature;
+  } 
+
+  BUF_MEM *bptr;
+
+  BIO_get_mem_ptr(b64, &bptr);
+
+  Signature.resize(bptr->length - 1);
+  memcpy(&Signature[0], bptr->data, bptr->length-1);
+
+  BIO_free_all(b64);
+
+  return Signature;
 }
 
 void locate_bundle(void) {
