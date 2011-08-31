@@ -383,15 +383,15 @@ static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, vo
 }
 
 // safe variant of dirname
+// dirname clobbers path so let it operate on a tmp copy
 static string mydirname(string path) {
-  // dirname clobbers path so let it operate on a tmp copy
-  return dirname(&path[0]);
+  return string(dirname(&path[0]));
 }
 
 // safe variant of basename
+// basename clobbers path so let it operate on a tmp copy
 static string mybasename(string path) {
-  // basename clobbers path so let it operate on a tmp copy
-  return basename(&path[0]);
+  return string(basename(&path[0]));
 }
 
 // mkdir --parents
@@ -401,8 +401,7 @@ static int mkdirp(const string& path, mode_t mode) {
   stringstream ss(path);
   while (getline(ss, component, '/')) {
     base += "/" + component;
-    /*if (*/mkdir(base.c_str(), mode)/* == -1);
-      return -1*/;
+    mkdir(base.c_str(), mode);
   }
   return 0;
 }
@@ -533,11 +532,11 @@ int get_local_fd(const char* path) {
     if(use_cache.size() > 0) {
       // only download files, not folders
       if (S_ISREG(mode)) {
-        /*if (*/mkdirp(resolved_path + mydirname(path), 0777)/* == -1)
-          return -errno*/;
+        mkdirp(resolved_path + mydirname(path), 0777);
         fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
       } else {
-        // its a folder; do *not* create anything in local cache... (###TODO do this in a better way)
+        // its a folder; do *not* create anything in local cache... 
+        // TODO: do this in a better way)
         fd = fileno(tmpfile());
       }
     } else {
@@ -2992,15 +2991,18 @@ static int list_bucket(const char *path, struct s3_object **head) {
     destroy_curl_handle(curl);
 
     if(result != 0) {
-      if(body.text)
-        free(body.text);
       free(s3_realpath);
+      if(body.text) free(body.text);
 
       return result;
     }
 
-    if((append_objects_from_xml(body.text, head)) != 0)
+    if((append_objects_from_xml(body.text, head)) != 0) {
+      free(s3_realpath);
+      if(body.text) free(body.text);
+
       return -1;
+    }
 
     truncated = is_truncated(body.text);
     if(truncated)
@@ -3045,8 +3047,13 @@ static int append_objects_from_xml(const char *xml, struct s3_object **head) {
     xmlNodeSetPtr key_nodes = key->nodesetval;
     char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode);
 
-    if((insert_object(name, head)) != 0)
+    if((insert_object(name, head)) != 0) {
+      xmlXPathFreeObject(contents_xp);
+      xmlXPathFreeContext(ctx);
+      xmlFreeDoc(doc);
+
       return -1;
+    }
 
     xmlXPathFreeObject(key);
   }
