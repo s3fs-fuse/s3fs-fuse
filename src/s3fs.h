@@ -94,6 +94,7 @@ static int complete_multipart_upload(const char *path, std::string upload_id, st
 std::string md5sum(int fd);
 char *get_realpath(const char *path);
 
+time_t get_mtime(const char *s);
 static int insert_object(char *name, struct s3_object **head);
 static unsigned int count_object_list(struct s3_object *list);
 static int free_object(struct s3_object *object);
