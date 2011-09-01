@@ -64,6 +64,19 @@ class auto_curl_slist {
   struct curl_slist* slist;
 };
 
+static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
+  headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
+  string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
+  string key;
+  stringstream ss(header);
+  if (getline(ss, key, ':')) {
+    string value;
+    getline(ss, value);
+    (*headers)[key] = trim(value);
+  }
+  return blockSize * numBlocks;
+}
+
 CURL *create_curl_handle(void) {
   time_t now;
   CURL *curl_handle;
@@ -132,6 +145,60 @@ int curl_delete(const char *path) {
   destroy_curl_handle(curl);
 
   return result;
+}
+
+int curl_get_headers(const char *path, headers_t &meta) {
+  int result;
+  CURL *curl;
+
+  if(foreground)
+    printf("  curl_headers[path=%s]\n", path);
+
+  string resource(urlEncode(service_path + bucket + path));
+  string url(host + resource);
+
+  headers_t responseHeaders;
+  curl = create_curl_handle();
+  curl_easy_setopt(curl, CURLOPT_NOBODY, true);   // HEAD
+  curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
+  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+
+  auto_curl_slist headers;
+  string date = get_date();
+  headers.append("Date: " + date);
+  headers.append("Content-Type: ");
+  if(public_bucket.substr(0,1) != "1") {
+    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
+      calc_signature("HEAD", "", date, headers.get(), resource));
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
+  string my_url = prepare_url(url.c_str());
+  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
+  result = my_curl_easy_perform(curl);
+  destroy_curl_handle(curl);
+
+  if(result != 0)
+     return result;
+
+  // file exists in s3
+  // fixme: clean this up. yuck.
+  for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if(key == "Content-Type")
+      meta[key] = value;
+    if(key == "Content-Length")
+      meta[key] = value;
+    if(key == "ETag")
+      meta[key] = value;
+    if(key == "Last-Modified")
+      meta[key] = value;
+    if(key.substr(0, 5) == "x-amz")
+      meta[key] = value;
+  }
+
+  return 0;
 }
 
 /**

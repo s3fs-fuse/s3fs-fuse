@@ -320,80 +320,6 @@ static int mkdirp(const string& path, mode_t mode) {
   return 0;
 }
 
-/**
- * @return fuse return code
- * TODO return pair<int, headers_t>?!?
- */
-int get_headers(const char* path, headers_t& meta) {
-  int result;
-  char *s3_realpath;
-  CURL *curl;
-
-  if(foreground) 
-    cout << "    calling get_headers [path=" << path << "]" << endl;
-
-  if(debug) 
-    syslog(LOG_DEBUG, "get_headers called path=%s", path);
-
-  s3_realpath = get_realpath(path);
-  string resource(urlEncode(service_path + bucket + s3_realpath));
-  string url(host + resource);
-
-  headers_t responseHeaders;
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_NOBODY, true); // HEAD
-  curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if (public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("HEAD", "", date, headers.get(), resource));
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-  string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-
-  if(debug)
-    syslog(LOG_DEBUG, "get_headers: now calling my_curl_easy_perform");
-
-  result = my_curl_easy_perform(curl);
-  destroy_curl_handle(curl);
-  free(s3_realpath);
-
-  if(result != 0)
-     return result;
-
-  if(debug)
-    syslog(LOG_DEBUG, "get_headers: now returning from my_curl_easy_perform");
-
-  // at this point we know the file exists in s3
-  for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
-    string key = (*iter).first;
-    string value = (*iter).second;
-    if(key == "Content-Type")
-      meta[key] = value;
-    if(key == "Content-Length")
-      meta[key] = value;
-    if(key == "ETag")
-      meta[key] = value;
-    if(key == "Last-Modified")
-      meta[key] = value;
-    if(key.substr(0, 5) == "x-amz")
-      meta[key] = value;
-  }
-
-  if(debug)
-    syslog(LOG_DEBUG, "returning from get_headers, path=%s", path);
-
-  return 0;
-}
-
 int get_local_fd(const char* path) {
   int fd = -1;
   int result;
@@ -416,9 +342,11 @@ int get_local_fd(const char* path) {
   url = host + resource;
 
   if(use_cache.size() > 0) {
-    result = get_headers(path, responseHeaders);
-    if(result != 0)
-       return -result;
+    result = curl_get_headers(s3_realpath, responseHeaders);
+    if(result != 0) {
+      free(s3_realpath);
+      return -result;
+    }
 
     fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
     if(fd != -1) {
@@ -1436,10 +1364,12 @@ string md5sum(int fd) {
 static int s3fs_getattr(const char *path, struct stat *stbuf) {
   int result;
   headers_t meta;
+  char *s3_realpath;
 
   if(foreground) 
     printf("s3fs_getattr[path=%s]\n", path);
 
+  s3_realpath = get_realpath(path);
   memset(stbuf, 0, sizeof(struct stat));
   if(strcmp(path, "/") == 0) {
     stbuf->st_nlink = 1; // see fuse faq
@@ -1447,11 +1377,15 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
     return 0;
   }
 
-  if(get_stat_cache_entry(path, stbuf) == 0)
+  if(get_stat_cache_entry(path, stbuf) == 0) {
+    free(s3_realpath);
     return 0;
+  }
 
-  if((result = get_headers(path, meta)) != 0)
+  if((result = curl_get_headers(s3_realpath, meta)) != 0) {
+    free(s3_realpath);
     return result;
+  }
 
   stbuf->st_nlink = 1; // see fuse faq
   stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
@@ -1472,8 +1406,8 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   stbuf->st_uid = get_uid(meta["x-amz-meta-uid"].c_str());
   stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
 
-  // update stat cache
   add_stat_cache_entry(path, stbuf);
+  free(s3_realpath);
 
   return 0;
 }
@@ -1865,18 +1799,21 @@ static int rename_object(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "rename_object [from=%s] [to=%s]", from, to);
 
-  result = get_headers(from, meta);
-
-  if(result != 0)
-    return result;
-
   s3_realpath = get_realpath(from);
+  result = curl_get_headers(s3_realpath, meta);
+
+  if(result != 0) {
+    free(s3_realpath);
+    return result;
+  }
+
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
+  free(s3_realpath);
 
   result = put_headers(to, meta);
-  if(result != 0)
+  if(result != 0) 
     return result;
 
   result = s3fs_unlink(from);
@@ -1901,11 +1838,14 @@ static int rename_large_object(const char *from, const char *to) {
   s3fs_getattr(from, &buf);
   s3_realpath = get_realpath(from);
 
-  if((get_headers(from, meta) != 0))
+  if((curl_get_headers(s3_realpath, meta) != 0)) {
+    free(s3_realpath);
     return -1;
+  }
 
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
+  free(s3_realpath);
 
   upload_id = initiate_multipart_upload(to, buf.st_size, meta);
   if(upload_id.size() == 0)
@@ -1944,12 +1884,15 @@ static int clone_directory_object(const char *from, const char *to) {
   int result;
   mode_t mode;
   headers_t meta;
+  char *s3_realpath;
 
   if(foreground)
     printf("clone_directory_object [from=%s] [to=%s]\n", from, to);
 
   if(debug)
     syslog(LOG_DEBUG, "clone_directory_object [from=%s] [to=%s]", from, to);
+
+  s3_realpath = get_realpath(from);
 
   // How to determine mode?
   mode = 493;
@@ -1960,12 +1903,15 @@ static int clone_directory_object(const char *from, const char *to) {
     return result;
 
   // and transfer its attributes
-  result = get_headers(from, meta);
-  if(result != 0)
+  result = curl_get_headers(s3_realpath, meta);
+  if(result != 0) {
+    free(s3_realpath);
     return result;
+  }
 
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + mount_prefix + from);
+  meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["x-amz-metadata-directive"] = "REPLACE";
+  free(s3_realpath);
 
   result = put_headers(to, meta);
   if(result != 0)
@@ -2119,9 +2065,9 @@ static int rename_directory(const char *from, const char *to) {
                  new_path.replace(0, from_path.size(), to_path);
 
                if(mount_prefix.size() > 0)
-                 result = get_headers(path.replace(0, mount_prefix.size(), "").c_str(), meta);
+                 result = curl_get_headers(path.replace(0, mount_prefix.size(), "").c_str(), meta);
                else
-                 result = get_headers(path.c_str(), meta);
+                 result = curl_get_headers(path.c_str(), meta);
                
                if(result != 0) {
                  free_mvnodes(head);
@@ -2259,11 +2205,13 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   if(foreground) 
     printf("s3fs_chmod [path=%s] [mode=%d]\n", path, mode);
 
-  result = get_headers(path, meta);
-  if(result != 0)
-    return result;
-
   s3_realpath = get_realpath(path);
+  result = curl_get_headers(s3_realpath, meta);
+  if(result != 0) {
+    free(s3_realpath);
+    return result;
+  }
+
   meta["x-amz-meta-mode"] = str(mode);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["x-amz-metadata-directive"] = "REPLACE";
@@ -2284,10 +2232,13 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   if(foreground) 
     printf("s3fs_chown [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
 
+  s3_realpath = get_realpath(path);
   headers_t meta;
-  result = get_headers(path, meta);
-  if(result != 0)
-     return result;
+  result = curl_get_headers(s3_realpath, meta);
+  if(result != 0) {
+    free(s3_realpath);
+    return result;
+  }
 
   struct passwd *aaa = getpwuid(uid);
   if(aaa != 0)
@@ -2297,7 +2248,6 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   if(bbb != 0)
     meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
 
-  s3_realpath = get_realpath(path);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["x-amz-metadata-directive"] = "REPLACE";
   free(s3_realpath);
@@ -2314,15 +2264,18 @@ static int s3fs_truncate(const char *path, off_t size) {
   int fd = -1;
   int result;
   headers_t meta;
+  char *s3_realpath;
   // TODO: honor size?!?
 
   if(foreground) 
-    cout << "truncate[path=" << path << "][size=" << size << "]" << endl;
+    printf("truncate[path=%s][size=%zd]\n", path, size);
 
   // preserve headers across truncate
-  result = get_headers(path, meta);
+  s3_realpath = get_realpath(path);
+  result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
   if(result != 0)
-     return result;
+    return result;
 
   fd = fileno(tmpfile());
   if(fd == -1) {
@@ -2418,15 +2371,18 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int flags;
   int result;
   int fd = fi->fh;
+  char *s3_realpath;
 
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
 
+  s3_realpath = get_realpath(path);
   // NOTE- fi->flags is not available here
   flags = get_flags(fd);
   if((flags & O_RDWR) || (flags & O_WRONLY)) {
     headers_t meta;
-    result = get_headers(path, meta);
+    result = curl_get_headers(s3_realpath, meta);
+    free(s3_realpath);
 
     if(result != 0)
       return result;
@@ -2926,11 +2882,10 @@ static int remote_mountpath_exists(const char *path) {
  * @return    none
  */
 static void locking_function(int mode, int n, const char *file, int line) {
-  if (mode & CRYPTO_LOCK) {
+  if(mode & CRYPTO_LOCK)
     pthread_mutex_lock(&mutex_buf[n]);
-  } else {
+  else
     pthread_mutex_unlock(&mutex_buf[n]);
-  }
 }
 
 // OpenSSL uniq thread id function.
@@ -2940,6 +2895,7 @@ static unsigned long id_function(void) {
 
 static void* s3fs_init(struct fuse_conn_info *conn) {
   syslog(LOG_INFO, "init $Rev$");
+
   // openssl
   mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
   for (int i = 0; i < CRYPTO_num_locks(); i++)
@@ -2955,12 +2911,10 @@ static void* s3fs_init(struct fuse_conn_info *conn) {
   ifstream MT("/etc/mime.types");
   if (MT.good()) {
     while (getline(MT, line)) {
-      if (line[0]=='#') {
+      if(line[0]=='#')
         continue;
-      }
-      if (line.size() == 0) {
+      if(line.size() == 0)
         continue;
-      }
       stringstream tmp(line);
       string mimeType;
       tmp >> mimeType;
@@ -3005,7 +2959,6 @@ static int s3fs_access(const char *path, int mask) {
   return 0;
 }
 
-// aka touch
 static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   int result;
   char *s3_realpath;
@@ -3014,10 +2967,12 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   if(foreground) 
     printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
 
-  if((result = get_headers(path, meta) != 0))
-    return result;
-
   s3_realpath = get_realpath(path);
+  if((result = curl_get_headers(path, meta) != 0)) {
+    free(s3_realpath);
+    return result;
+  }
+
   meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["x-amz-metadata-directive"] = "REPLACE";
@@ -3094,7 +3049,7 @@ static void s3fs_check_service(void) {
     printf("s3fs_check_service\n");
 
   struct BodyStruct body;
-  body.text = (char *)malloc(1);
+  body.text = (char *) malloc(1);
   body.size = 0;
 
   string resource = urlEncode(service_path + bucket);
@@ -3107,9 +3062,7 @@ static void s3fs_check_service(void) {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("GET", "", date, headers.get(), resource));
   } else {
-     // This operation is only valid if done by an authenticated sender
-     if(body.text)
-       free(body.text);
+     if(body.text) free(body.text);
      return;
   }
 

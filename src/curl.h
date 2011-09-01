@@ -14,6 +14,7 @@ struct WriteThis {
 };
 
 typedef std::pair<double, double> progress_t;
+typedef std::map<std::string, std::string> headers_t;
 
 extern int retries;
 extern long connect_timeout;
@@ -29,10 +30,12 @@ extern std::string bucket;
 extern std::string public_bucket;
 
 static const EVP_MD* evp_md = EVP_sha1();
+static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
 
 CURL *create_curl_handle(void);
 void destroy_curl_handle(CURL *curl_handle);
 int curl_delete(const char *path);
+int curl_get_headers(const char *path, headers_t &meta);
 int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0);
 size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
