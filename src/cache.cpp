@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -58,6 +59,9 @@ void add_stat_cache_entry(const char *path, struct stat *st) {
   if(foreground)
     cout << "    add_stat_cache_entry[path=" << path << "]" << endl;
 
+  if(max_stat_cache_size < 1)
+    return;
+
   if(stat_cache.size() > max_stat_cache_size)
     truncate_stat_cache(); 
 
@@ -87,8 +91,10 @@ void truncate_stat_cache() {
   for(iter = stat_cache.begin(); iter != stat_cache.end(); iter++) {
     hit_count = (* iter).second.hit_count;
 
-    if(!lowest_hit_count)
+    if(!lowest_hit_count) {
       lowest_hit_count = hit_count;
+      path_to_delete = (* iter).first;
+    }
 
     if(lowest_hit_count > hit_count)
       path_to_delete = (* iter).first;
@@ -97,5 +103,5 @@ void truncate_stat_cache() {
   stat_cache.erase(path_to_delete);
   pthread_mutex_unlock(&stat_cache_lock);
 
-  cout << "    purged " << path_to_delete << " from the stat cache" << endl;
+  printf("    purged %s from the stat cache\n", path_to_delete.c_str());
 }

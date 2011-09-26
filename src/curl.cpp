@@ -182,7 +182,7 @@ int curl_get_headers(const char *path, headers_t &meta) {
      return result;
 
   // file exists in s3
-  // fixme: clean this up. yuck.
+  // fixme: clean this up.
   for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;

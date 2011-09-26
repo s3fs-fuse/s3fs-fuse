@@ -56,7 +56,6 @@ fi
 ##########################################################
 echo "Testing mv file function ..."
 
-
 # if the rename file exists, delete it
 if [ -e $ALT_TEST_TEXT_FILE ]
 then
@@ -106,7 +105,7 @@ fi
 ##########################################################
 # Rename test (individual directory)
 ##########################################################
-echo "Testing directory mv directory function ..."
+echo "Testing mv directory function ..."
 if [ -e $TEST_DIR ]; then
    echo "Unexpected, this file/directory exists: ${TEST_DIR}"
    exit 1
@@ -229,6 +228,39 @@ chmod 777 $TEST_TEXT_FILE;
 if [ $(stat --format=%a $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
 then
   echo "Could not modify $TEST_TEXT_FILE permissions"
+  exit 1
+fi
+
+# clean up
+rm $TEST_TEXT_FILE
+
+if [ -e $TEST_TEXT_FILE ]
+then
+   echo "Could not cleanup file ${TEST_TEXT_FILE}"
+   exit 1
+fi
+
+##########################################################
+# File permissions test (individual file)
+##########################################################
+echo "Testing chown file function ..."
+
+# create the test file again
+echo $TEST_TEXT > $TEST_TEXT_FILE
+if [ ! -e $TEST_TEXT_FILE ]
+then
+   echo "Could not create file ${TEST_TEXT_FILE}"
+   exit 1
+fi
+
+ORIGINAL_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
+
+chown 1000:1000 $TEST_TEXT_FILE;
+
+# if they're the same, we have a problem.
+if [ $(stat --format=%a $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
+then
+  echo "Could not modify $TEST_TEXT_FILE ownership"
   exit 1
 fi
 
