@@ -47,6 +47,8 @@ static mode_t root_mode = 0;
 static std::string passwd_file = "";
 static bool utility_mode = 0;
 unsigned long max_stat_cache_size = 10000;
+bool noxmlns = false;
+bool nocopyapi = false;
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -79,6 +81,9 @@ typedef std::map<std::string, std::string> headers_t;
 typedef std::map<int, int> s3fs_descriptors_t;
 static s3fs_descriptors_t s3fs_descriptors;
 static pthread_mutex_t s3fs_descriptors_lock;
+// path -> fd
+typedef std::map<std::string, int> s3fs_pathtofd_t;
+static s3fs_pathtofd_t s3fs_pathtofd;
 
 static pthread_mutex_t *mutex_buf = NULL;
 
@@ -107,9 +112,9 @@ static int free_object_list(struct s3_object *head);
 static CURL *create_head_handle(struct head_data *request);
 static int list_bucket(const char *path, struct s3_object **head);
 static bool is_truncated(const char *xml);
-static int append_objects_from_xml(const char *xml, struct s3_object **head);
+static int append_objects_from_xml(const char* path, const char *xml, struct s3_object **head);
 static const char *get_next_marker(const char *xml);
-static char *get_object_name(xmlDocPtr doc, xmlNodePtr node);
+static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
 
 static int put_headers(const char *path, headers_t meta);
 static int put_multipart_headers(const char *path, headers_t meta);
@@ -143,3 +148,4 @@ static void* s3fs_init(struct fuse_conn_info *conn);
 static void s3fs_destroy(void*);
 
 #endif // S3FS_S3_H_
+

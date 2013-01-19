@@ -157,6 +157,7 @@ static int insert_object(char *name, struct s3_object **head) {
 
   new_object->name = (char *) malloc(n_len);
   if(new_object->name == NULL) {
+    free(new_object);
     printf("insert_object: could not allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -220,6 +221,7 @@ MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
 
   p_old_path = (char *)malloc(strlen(old_path)+1); 
   if (p_old_path == NULL) {
+    free(p);
     printf("create_mvnode: could not allocation memory for p_old_path\n");
     exit(EXIT_FAILURE);
   }
@@ -228,6 +230,8 @@ MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
  
   p_new_path = (char *)malloc(strlen(new_path)+1); 
   if (p_new_path == NULL) {
+    free(p);
+    free(p_old_path);
     printf("create_mvnode: could not allocation memory for p_new_path\n");
     exit(EXIT_FAILURE);
   }
@@ -320,6 +324,23 @@ static int mkdirp(const string& path, mode_t mode) {
   return 0;
 }
 
+// Get fd in mapping data by path
+static int get_opened_fd(const char* path)
+{
+  int fd = -1;
+
+  pthread_mutex_lock( &s3fs_descriptors_lock );
+  if(s3fs_pathtofd.find(string(path)) != s3fs_pathtofd.end()){
+    fd = s3fs_pathtofd[string(path)];
+    if(foreground){
+      cout << "  get_opened_fd: found fd [path=" << path << "][fd=" << fd << "]" << endl;
+    }
+  }
+  pthread_mutex_unlock( &s3fs_descriptors_lock );
+
+  return fd;
+}
+
 int get_local_fd(const char* path) {
   int fd = -1;
   int result;
@@ -352,6 +373,7 @@ int get_local_fd(const char* path) {
     if(fd != -1) {
       if((fstat(fd, &st)) == -1) {
         close(fd);
+        free(s3_realpath);
         YIKES(-errno);
       }
 
@@ -359,13 +381,15 @@ int get_local_fd(const char* path) {
       // do not match we have an invalid cache entry
       if(str(st.st_size) != responseHeaders["Content-Length"] || 
         (str(st.st_mtime) != responseHeaders["x-amz-meta-mtime"])) {
-        if(close(fd) == -1)
+        if(close(fd) == -1){
+          free(s3_realpath);
           YIKES(-errno);
-
+        }
         fd = -1;
       }
     }
   }
+  free(s3_realpath);
 
   // need to download?
   if(fd == -1) {
@@ -389,8 +413,10 @@ int get_local_fd(const char* path) {
       YIKES(-errno);
 
     FILE *f = fdopen(fd, "w+");
-    if(f == 0)
+    if(f == 0){
+      close(fd);
       YIKES(-errno);
+    }
 
     if(foreground) 
       cout << "      downloading[path=" << path << "][fd=" << fd << "]" << endl;
@@ -416,8 +442,7 @@ int get_local_fd(const char* path) {
     result = my_curl_easy_perform(curl, NULL, f);
     if(result != 0) {
       destroy_curl_handle(curl);
-      free(s3_realpath);
-
+      fclose(f);
       return -result;
     }
 
@@ -434,12 +459,11 @@ int get_local_fd(const char* path) {
       n_mtime.modtime = get_mtime(responseHeaders["x-amz-meta-mtime"].c_str());
       n_mtime.actime = n_mtime.modtime;
       if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+        fclose(f);
         YIKES(-errno);
       }
     }
   }
-
-  free(s3_realpath);
   destroy_curl_handle(curl);
 
   return fd;
@@ -560,6 +584,7 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
+  free(s3_realpath);
 
   body.text = (char *)malloc(1);
   body.size = 0;
@@ -567,8 +592,11 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   s3fs_getattr(path, &buf);
 
   upload_id = initiate_multipart_upload(path, buf.st_size, meta);
-  if(upload_id.size() == 0)
+  if(upload_id.size() == 0){
+    if(body.text)
+      free(body.text);
     return(-EIO);
+  }
 
   off_t chunk = 0;
   off_t bytes_written = 0;
@@ -594,7 +622,8 @@ static int put_multipart_headers(const char *path, headers_t meta) {
 
   result = complete_multipart_upload(path, upload_id, parts);
   if(result != 0) {
-    free(s3_realpath);
+    if(body.text)
+      free(body.text);
     return -EIO;
   }
 
@@ -608,12 +637,15 @@ static int put_multipart_headers(const char *path, headers_t meta) {
       n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
       n_mtime.actime = n_mtime.modtime;
       if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+        if(body.text)
+          free(body.text);
         YIKES(-errno);
       }
     }
   }
 
-  free(s3_realpath);
+  if(body.text)
+    free(body.text);
 
   return 0;
 }
@@ -634,6 +666,7 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
+  free(s3_realpath);
 
   int result;
   struct BodyStruct body;
@@ -650,8 +683,11 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
 
   FILE* f = fdopen(fd, "rb");
-  if(f == 0)
+  if(f == 0){
+    if(body.text)
+      free(body.text);
     YIKES(-errno);
+  }
 
   curl_easy_setopt(curl, CURLOPT_INFILE, f);
 
@@ -689,7 +725,6 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   if(body.text)
     free(body.text);
-  free(s3_realpath);
   destroy_curl_handle(curl);
 
   if(result != 0)
@@ -776,6 +811,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     if((pPartFile = fdopen(partfd, "wb")) == NULL) {
       syslog(LOG_ERR, "%d ### Could not open temporary file: errno %i\n", 
                       __LINE__, errno);
+      close(partfd);
       if(buffer)
         free(buffer);
 
@@ -893,6 +929,7 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   resource.append("?uploads");
   url = host + resource;
   my_url = prepare_url(url.c_str());
+  free(s3_realpath);
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -953,8 +990,6 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   if(result != 0) {
     if(body.text)
       free(body.text);
-    free(s3_realpath);
-
     return upload_id;
   }
 
@@ -988,7 +1023,6 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   // clean up
   if(body.text)
     free(body.text);
-  free(s3_realpath);
   body.size = 0;
 
   return upload_id;
@@ -1016,8 +1050,6 @@ static int complete_multipart_upload(const char *path, string upload_id,
     cout << "      complete_multipart_upload [path=" << path <<  "]" << endl;
 
   // initialization of variables
-  body.text = (char *)malloc(1);
-  body.size = 0; 
   curl = NULL;
 
   postContent.clear();
@@ -1136,12 +1168,15 @@ string upload_part(const char *path, const char *source, int part_number, string
   }
 
   if(fstat(fileno(part_file), &st) == -1) {
+    fclose(part_file);
     syslog(LOG_ERR, "%d###result=%d", __LINE__, errno); \
     return "";
   }
 
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
+  free(s3_realpath);
+
   resource.append("?partNumber=");
   resource.append(IntToStr(part_number));
   resource.append("&uploadId=");
@@ -1192,8 +1227,6 @@ string upload_part(const char *path, const char *source, int part_number, string
       free(header.text);
     if(body.text)
       free(body.text);
-    free(s3_realpath);
-
     return "";
   }
 
@@ -1204,8 +1237,6 @@ string upload_part(const char *path, const char *source, int part_number, string
       free(header.text);
     if(body.text)
       free(body.text);
-    free(s3_realpath);
-
     syslog(LOG_ERR, "%d###result=%d", __LINE__, -fd);
     
     return "";
@@ -1221,8 +1252,6 @@ string upload_part(const char *path, const char *source, int part_number, string
       free(header.text);
     if(body.text)
       free(body.text);
-    free(s3_realpath);
-
     return "";
   }
 
@@ -1231,7 +1260,6 @@ string upload_part(const char *path, const char *source, int part_number, string
     free(header.text);
   if(body.text)
     free(body.text);
-  free(s3_realpath);
 
   return ETag;
 }
@@ -1255,6 +1283,8 @@ string copy_part(const char *from, const char *to, int part_number, string uploa
 
   s3_realpath = get_realpath(to);
   resource = urlEncode(service_path + bucket + s3_realpath);
+  free(s3_realpath);
+
   resource.append("?partNumber=");
   resource.append(IntToStr(part_number));
   resource.append("&uploadId=");
@@ -1310,8 +1340,6 @@ string copy_part(const char *from, const char *to, int part_number, string uploa
       free(body.text);
     if(header.text)
       free(header.text);
-    free(s3_realpath);
-
     return "";
   }
 
@@ -1327,7 +1355,6 @@ string copy_part(const char *from, const char *to, int part_number, string uploa
     free(body.text);
   if(header.text)
     free(header.text);
-  free(s3_realpath);
 
   return ETag;
 }
@@ -1369,7 +1396,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   if(foreground) 
     printf("s3fs_getattr[path=%s]\n", path);
 
-  s3_realpath = get_realpath(path);
   memset(stbuf, 0, sizeof(struct stat));
   if(strcmp(path, "/") == 0) {
     stbuf->st_nlink = 1; // see fuse faq
@@ -1378,14 +1404,15 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   }
 
   if(get_stat_cache_entry(path, stbuf) == 0) {
-    free(s3_realpath);
     return 0;
   }
 
+  s3_realpath = get_realpath(path);
   if((result = curl_get_headers(s3_realpath, meta)) != 0) {
     free(s3_realpath);
     return result;
   }
+  free(s3_realpath);
 
   stbuf->st_nlink = 1; // see fuse faq
   stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
@@ -1407,7 +1434,6 @@ static int s3fs_getattr(const char *path, struct stat *stbuf) {
   stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
 
   add_stat_cache_entry(path, stbuf);
-  free(s3_realpath);
 
   return 0;
 }
@@ -1418,7 +1444,7 @@ static int s3fs_readlink(const char *path, char *buf, size_t size) {
     --size; // reserve nil terminator
 
     if(foreground) 
-      cout << "readlink[path=" << path << "]" << endl;
+      cout << "s3fs_readlink[path=" << path << "]" << endl;
 
     fd = get_local_fd(path);
     if(fd < 0) {
@@ -1559,20 +1585,14 @@ static int create_file_object(const char *path, mode_t mode) {
   return 0;
 }
 
-static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev) {
-  int result;
-
+static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
+{
   if(foreground) 
     printf("s3fs_mknod[path=%s][mode=%d]\n", path, mode);
 
-  // see man 2 mknod: if pathname already exists, or is 
-  // a symbolic link, this call fails with an EEXIST error.
-  result = create_file_object(path, mode);
-
-  if(result != 0)
-     return result;
-
-  return 0;
+  // Could not make block or character special files on S3,
+  // always return a error.
+  return -EPERM;
 }
 
 static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
@@ -1594,12 +1614,14 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   // remember flags and headers...
   pthread_mutex_lock( &s3fs_descriptors_lock );
   s3fs_descriptors[fi->fh] = fi->flags;
+  s3fs_pathtofd[string(path)] = fi->fh;
   pthread_mutex_unlock( &s3fs_descriptors_lock );
 
   return 0;
 }
 
-static int s3fs_mkdir(const char *path, mode_t mode) {
+static int create_directory_object(const char *path, mode_t mode, time_t time, uid_t uid, gid_t gid)
+{
   CURL *curl = NULL;
   int result;
   char *s3_realpath;
@@ -1609,10 +1631,12 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   auto_curl_slist headers;
 
   if(foreground) 
-    cout << "mkdir[path=" << path << "][mode=" << mode << "]" << endl;
+    cout << " create_directory_object[path=" << path << "][mode=" << mode << 
+            "][time=" << time << "][uid=" << uid << "][gid=" << gid << "]" << endl;
 
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
+  free(s3_realpath);
   url = host + resource;
 
   curl = create_curl_handle();
@@ -1623,10 +1647,10 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   headers.append("Content-Type: application/x-directory");
   // x-amz headers: (a) alphabetical order and (b) no spaces after colon
   headers.append("x-amz-acl:" + default_acl);
-  headers.append("x-amz-meta-gid:" + str(getgid()));
+  headers.append("x-amz-meta-gid:" + str(gid));
   headers.append("x-amz-meta-mode:" + str(mode));
-  headers.append("x-amz-meta-mtime:" + str(time(NULL)));
-  headers.append("x-amz-meta-uid:" + str(getuid()));
+  headers.append("x-amz-meta-mtime:" + str(time));
+  headers.append("x-amz-meta-uid:" + str(uid));
   if (use_rrs.substr(0,1) == "1") {
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
   }
@@ -1642,7 +1666,6 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   result = my_curl_easy_perform(curl);
  
   destroy_curl_handle(curl);
-  free(s3_realpath);
 
   if(result != 0)
     return result;
@@ -1650,12 +1673,20 @@ static int s3fs_mkdir(const char *path, mode_t mode) {
   return 0;
 }
 
+static int s3fs_mkdir(const char *path, mode_t mode)
+{
+  if(foreground) 
+    cout << "s3fs_mkdir[path=" << path << "][mode=" << mode << "]" << endl;
+
+  return create_directory_object(path, mode, time(NULL), getuid(), getgid());
+}
+
 static int s3fs_unlink(const char *path) {
   int result;
   char *s3_realpath;
 
   if(foreground) 
-    printf("unlink[path=%s]\n", path);
+    printf("s3fs_unlink[path=%s]\n", path);
 
   s3_realpath = get_realpath(path);
 
@@ -1682,10 +1713,12 @@ static int directory_empty(const char *path) {
   body.text = (char *)malloc(1);
   body.size = 0;
 
-  if(strcmp(path, "/") != 0)
+  if(strcmp(path, "/") != 0){
     query += urlEncode(string(s3_realpath).substr(1) + "/");
-  else
+  }else{
     query += urlEncode(string(s3_realpath).substr(1));
+  }
+  free(s3_realpath);
 
   query += "&max-keys=1";
   url = host + resource + "?"+ query;
@@ -1706,24 +1739,23 @@ static int directory_empty(const char *path) {
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
   result = my_curl_easy_perform(curl, &body);
+  destroy_curl_handle(curl);
   if(result != 0) {
     if(body.text)
       free(body.text);
-    free(s3_realpath);
-    destroy_curl_handle(curl);
-
     return result;
   }
 
   // is the directory empty?
   if(strstr(body.text, "<CommonPrefixes>") != NULL ||
       strstr(body.text, "<ETag>") != NULL ) {
-    if(body.text) free(body.text);
-    free(s3_realpath);
-    destroy_curl_handle(curl);
-
+    if(body.text)
+      free(body.text);
     return -ENOTEMPTY;
   }
+
+  if(body.text)
+    free(body.text);
 
   return 0;
 }
@@ -1757,7 +1789,7 @@ static int s3fs_symlink(const char *from, const char *to) {
     cout << "s3fs_symlink[from=" << from << "][to=" << to << "]" << endl;
 
   headers_t headers;
-  headers["x-amz-meta-mode"] = str(S_IFLNK);
+  headers["x-amz-meta-mode"] = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
   headers["x-amz-meta-mtime"] = str(time(NULL));
 
   fd = fileno(tmpfile());
@@ -1821,6 +1853,67 @@ static int rename_object(const char *from, const char *to) {
   return result;
 }
 
+static int rename_object_nocopy(const char *from, const char *to) {
+  int       result;
+  char*     s3_realpath;
+  headers_t meta;
+  int       fd;
+  int       isclose = 1;
+
+  if(foreground)
+    printf("rename_object_nocopy [from=%s] [to=%s]\n", from , to);
+
+  if(debug)
+    syslog(LOG_DEBUG, "rename_object_nocopy [from=%s] [to=%s]", from, to);
+
+  // Downloading
+  if(0 > (fd = get_opened_fd(from))){
+    if(0 > (fd = get_local_fd(from))){
+      if(foreground) {
+        printf("  rename_object_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+      }
+      syslog(LOG_ERR, "rename_object_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+      return -EIO;
+    }
+  }else{
+    isclose = 0;
+  }
+
+  // Get attributes
+  s3_realpath = get_realpath(from);
+  result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
+  if(result != 0){
+    if(isclose){
+      close(fd);
+    }
+    return result;
+  }
+
+  // Set header
+  meta["Content-Type"] = lookupMimeType(to);
+
+  // Re-uploading
+  result = put_local_fd(to, meta, fd);
+  if(isclose){
+    close(fd);
+  }
+  if(0 != result){
+    if(foreground) {
+      printf("  rename_object_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+    }
+    return result;
+  }
+
+  // Remove file
+  result = s3fs_unlink(from);
+
+  // Stats
+  delete_stat_cache_entry(to);
+
+  return result;
+}
+
 static int rename_large_object(const char *from, const char *to) {
   int result;
   char *s3_realpath;
@@ -1880,9 +1973,13 @@ static int rename_large_object(const char *from, const char *to) {
   return s3fs_unlink(from);
 }
 
-static int clone_directory_object(const char *from, const char *to) {
+static int clone_directory_object(const char *from, const char *to)
+{
   int result;
   mode_t mode;
+  time_t time;
+  uid_t  uid;
+  gid_t  gid;
   headers_t meta;
   char *s3_realpath;
 
@@ -1892,32 +1989,21 @@ static int clone_directory_object(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "clone_directory_object [from=%s] [to=%s]", from, to);
 
+  // get target's attributes
   s3_realpath = get_realpath(from);
-
-  // How to determine mode?
-  mode = 493;
-
-  // create the new directory object
-  result = s3fs_mkdir(to, mode);
-  if(result != 0)
-    return result;
-
-  // and transfer its attributes
   result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
   if(result != 0) {
-    free(s3_realpath);
     return result;
   }
 
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-  free(s3_realpath);
+  mode = get_mode(meta["x-amz-meta-mode"].c_str());
+  time = get_mtime(meta["x-amz-meta-mtime"].c_str());
+  uid  = get_uid(meta["x-amz-meta-uid"].c_str());
+  gid  = get_gid(meta["x-amz-meta-gid"].c_str());
+  result = create_directory_object(to, mode, time, uid, gid);
 
-  result = put_headers(to, meta);
-  if(result != 0)
-    return result;
-
-  return 0;
+  return result;
 }
 
 static int rename_directory(const char *from, const char *to) {
@@ -2070,6 +2156,7 @@ static int rename_directory(const char *from, const char *to) {
                  result = curl_get_headers(path.c_str(), meta);
                
                if(result != 0) {
+                 xmlFreeDoc(doc);
                  free_mvnodes(head);
                  if(body.text)
                    free(body.text);
@@ -2138,7 +2225,11 @@ static int rename_directory(const char *from, const char *to) {
  
   do {
     if(my_head->is_dir != 1) {
-      result = rename_object( my_head->old_path, my_head->new_path);
+      if(!nocopyapi){
+        result = rename_object( my_head->old_path, my_head->new_path);
+      }else{
+        result = rename_object_nocopy( my_head->old_path, my_head->new_path);
+      }
       if(result != 0) {
          free_mvnodes(head);
          syslog(LOG_ERR, "rename_dir: rename_object returned an error");
@@ -2181,19 +2272,25 @@ static int s3fs_rename(const char *from, const char *to) {
   s3fs_getattr(from, &buf);
 
   // files larger than 5GB must be modified via the multipart interface
-  if(S_ISDIR(buf.st_mode))
+  if(S_ISDIR(buf.st_mode)){
     result = rename_directory(from, to);
-  else if(buf.st_size >= FIVE_GB)
+  }else if(!nomultipart && buf.st_size >= FIVE_GB){
     result = rename_large_object(from, to);
-  else
-    result = rename_object(from, to);
+  }else{
+    if(!nocopyapi){
+      result = rename_object(from, to);
+    }else{
+      result = rename_object_nocopy(from, to);
+    }
+  }
 
   return result;
 }
 
 static int s3fs_link(const char *from, const char *to) {
   if(foreground) 
-    cout << "link[from=" << from << "][to=" << to << "]" << endl;
+    cout << "s3fs_link[from=" << from << "][to=" << to << "]" << endl;
+
   return -EPERM;
 }
 
@@ -2223,6 +2320,69 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   delete_stat_cache_entry(path);
 
   return 0;
+}
+
+static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
+  int result;
+  char *s3_realpath;
+  headers_t meta;
+  int       fd;
+  int       isclose = 1;
+
+  if(foreground) 
+    printf("s3fs_chmod_nocopy [path=%s] [mode=%d]\n", path, mode);
+
+  // Downloading
+  if(0 > (fd = get_opened_fd(path))){
+    if(0 > (fd = get_local_fd(path))){
+      if(foreground) {
+        printf("  s3fs_chmod_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+      }
+      syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+      return -EIO;
+    }
+  }else{
+    isclose = 0;
+  }
+
+  // Get attributes
+  s3_realpath = get_realpath(path);
+  result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
+  if(result != 0){
+    if(isclose){
+      close(fd);
+    }
+    return result;
+  }
+
+  // Change file mode
+  meta["x-amz-meta-mode"] = str(mode);
+  // Change local file mode
+  if(-1 == fchmod(fd, mode)){
+    if(isclose){
+      close(fd);
+    }
+    if(foreground) {
+      printf("  s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)\n", __LINE__, fd, errno);
+    }
+    syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)", __LINE__, fd, errno);
+    return -errno;
+  }
+
+  // Re-uploading
+  if(0 != (result = put_local_fd(path, meta, fd))){
+    if(foreground) {
+      printf("  s3fs_chmod_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+    }
+  }
+
+  if(isclose){
+    close(fd);
+  }
+  delete_stat_cache_entry(path);
+
+  return result;
 }
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
@@ -2260,40 +2420,134 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   return 0;
 }
 
+static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
+  int result;
+  char *s3_realpath;
+  headers_t meta;
+  int fd;
+  int isclose = 1;
+
+  if(foreground) 
+    printf("s3fs_chown_nocopy [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
+
+  // Downloading
+  if(0 > (fd = get_opened_fd(path))){
+    if(0 > (fd = get_local_fd(path))){
+      if(foreground) {
+        printf("  s3fs_chown_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+      }
+      syslog(LOG_ERR, "s3fs_chown_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+      return -EIO;
+    }
+  }else{
+    isclose = 0;
+  }
+
+  // Get attributes
+  s3_realpath = get_realpath(path);
+  result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
+  if(result != 0){
+    if(isclose){
+      close(fd);
+    }
+    return result;
+  }
+
+  // Change owner
+  struct passwd *aaa = getpwuid(uid);
+  if(aaa != 0){
+    meta["x-amz-meta-uid"] = str((*aaa).pw_uid);
+  }
+  struct group *bbb = getgrgid(gid);
+  if(bbb != 0){
+    meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
+  }
+  // Change local file owner
+  if(-1 == fchown(fd, uid, gid)){
+    if(isclose){
+      close(fd);
+    }
+    if(foreground) {
+      printf("  s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)\n", __LINE__, fd, (int)uid, (int)gid, errno);
+    }
+    syslog(LOG_ERR, "s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)", __LINE__, fd, (int)uid, (int)gid, errno);
+    return -errno;
+  }
+
+  // Re-uploading
+  if(0 != (result = put_local_fd(path, meta, fd))){
+    if(foreground) {
+      printf("  s3fs_chown_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+    }
+  }
+
+  if(isclose){
+    close(fd);
+  }
+  delete_stat_cache_entry(path);
+
+  return 0;
+}
+
 static int s3fs_truncate(const char *path, off_t size) {
   int fd = -1;
   int result;
   headers_t meta;
   char *s3_realpath;
-  // TODO: honor size?!?
+  int isclose = 1;
 
   if(foreground) 
-    printf("truncate[path=%s][size=%zd]\n", path, size);
+    printf("s3fs_truncate[path=%s][size=%zd]\n", path, size);
 
-  // preserve headers across truncate
+  // Get file information
   s3_realpath = get_realpath(path);
   result = curl_get_headers(s3_realpath, meta);
   free(s3_realpath);
-  if(result != 0)
-    return result;
+  if(0 == result){
+    // Exists -> Get file
+    if(0 > (fd = get_opened_fd(path))){
+      if(0 > (fd = get_local_fd(path))){
+        if(foreground) {
+          printf("  s3fs_truncate line %d: get_local_fd result: %d\n", __LINE__, fd);
+        }
+        syslog(LOG_ERR, "s3fs_truncate line %d: get_local_fd result: %d", __LINE__, fd);
+        return -EIO;
+      }
+    }else{
+      isclose = 0;
+    }
+  }else{
+    // Not found -> Make tmpfile
+    if(-1 == (fd = fileno(tmpfile()))){
+      syslog(LOG_ERR, "error: line %d: %d", __LINE__, -errno);
+      return -errno;
+    }
+  }
 
-  fd = fileno(tmpfile());
-  if(fd == -1) {
-    syslog(LOG_ERR, "error: line %d: %d", __LINE__, -errno);
+  // Truncate
+  if(0 != ftruncate(fd, size) || 0 != fsync(fd)){
+    if(foreground) {
+      printf("  s3fs_truncate line %d: ftruncate or fsync returned err(%d)\n", __LINE__, errno);
+    }
+    syslog(LOG_ERR, "s3fs_truncate line %d: ftruncate or fsync returned err(%d)", __LINE__, errno);
+    if(isclose){
+      close(fd);
+    }
     return -errno;
   }
 
-  result = put_local_fd(path, meta, fd);
-  if(result != 0) {
-    if(fd > 0)
-      close(fd);
-
-    return result;
+  // Re-uploading
+  if(0 != (result = put_local_fd(path, meta, fd))){
+    if(foreground) {
+      printf("  s3fs_truncate line %d: put_local_fd result: %d\n", __LINE__, result);
+    }
   }
 
-  if(fd > 0)
+  if(isclose){
     close(fd);
-
+  }
+  delete_stat_cache_entry(path);
   return 0;
 }
 
@@ -2317,6 +2571,7 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
   // remember flags and headers...
   pthread_mutex_lock( &s3fs_descriptors_lock );
   s3fs_descriptors[fi->fh] = fi->flags;
+  s3fs_pathtofd[string(path)] = fi->fh;
   pthread_mutex_unlock( &s3fs_descriptors_lock );
 
   return 0;
@@ -2376,11 +2631,11 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
 
-  s3_realpath = get_realpath(path);
   // NOTE- fi->flags is not available here
   flags = get_flags(fd);
   if((flags & O_RDWR) || (flags & O_WRONLY)) {
     headers_t meta;
+    s3_realpath = get_realpath(path);
     result = curl_get_headers(s3_realpath, meta);
     free(s3_realpath);
 
@@ -2424,6 +2679,20 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
 static int s3fs_release(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "s3fs_release[path=" << path << "][fd=" << fi->fh << "]" << endl;
+
+  // clear file discriptor mapping.
+  s3fs_pathtofd_t::iterator it;
+  pthread_mutex_lock( &s3fs_descriptors_lock );
+  if(s3fs_pathtofd.end() != (it = s3fs_pathtofd.find(string(path)))){
+    if(fi->fh == (uint)s3fs_pathtofd[string(path)]){
+      s3fs_pathtofd.erase(it);
+    }else{
+      if(foreground) {
+        printf("s3fs_release line %d: file discriptor is not same(%d : %d)\n", __LINE__, (int)fi->fh, s3fs_pathtofd[string(path)]);
+      }
+    }
+  }
+  pthread_mutex_unlock( &s3fs_descriptors_lock );
 
   if(close(fi->fh) == -1)
     YIKES(-errno);
@@ -2482,15 +2751,21 @@ static int s3fs_readdir(
   auto_head curl_map;
 
   if(foreground) 
-    cout << "readdir[path=" << path << "]" << endl;
+    cout << "s3fs_readdir[path=" << path << "]" << endl;
 
   // get a list of all the objects
   int result;
-  if((result = list_bucket(path, &head)) != 0)
+  if((result = list_bucket(path, &head)) != 0){
+    if(foreground)
+      printf(" s3fs_readdir list_bucket returns error.\n");
     return result;
+  }
 
-  if(head == NULL)
+  if(head == NULL){
+    if(foreground)
+      printf(" s3fs_readdir list_bucket returns empty head.\n");
     return 0;
+  }
 
   n_objects = count_object_list(head);
 
@@ -2718,13 +2993,17 @@ static int list_bucket(const char *path, struct s3_object **head) {
   else
     query += urlEncode(string(s3_realpath).substr(1));
 
+  free(s3_realpath);
+
   query += "&max-keys=1000";
 
   while(truncated) {
     string url = host + resource + "?" + query;
 
-    if(next_marker != "")
+    if(next_marker != ""){
       url += "&marker=" + urlEncode(next_marker);
+      next_marker = "";
+    }
 
     string my_url = prepare_url(url.c_str());
 
@@ -2747,22 +3026,29 @@ static int list_bucket(const char *path, struct s3_object **head) {
     destroy_curl_handle(curl);
 
     if(result != 0) {
-      free(s3_realpath);
-      if(body.text) free(body.text);
-
+      if(body.text)
+        free(body.text);
+      if(foreground)
+        printf("  list_bucket my_curl_easy_perform returns with error.\n");
       return result;
     }
 
-    if((append_objects_from_xml(body.text, head)) != 0) {
-      free(s3_realpath);
-      if(body.text) free(body.text);
-
+    if((append_objects_from_xml(path, body.text, head)) != 0) {
+      if(body.text)
+        free(body.text);
+      if(foreground)
+        printf("  list_bucket append_objects_from_xml returns with error.\n");
       return -1;
     }
 
     truncated = is_truncated(body.text);
-    if(truncated)
-      next_marker = get_next_marker(body.text);
+    if(truncated){
+      xmlChar*	tmpch = (xmlChar*)get_next_marker(body.text);
+      if(tmpch){
+        next_marker = (char*)tmpch;
+        xmlFree(tmpch);
+      }
+    }
 
     if(body.text)
       free(body.text);
@@ -2772,26 +3058,33 @@ static int list_bucket(const char *path, struct s3_object **head) {
 
   if(body.text)
     free(body.text);
-  free(s3_realpath);
 
   return 0;
 }
 
-static int append_objects_from_xml(const char *xml, struct s3_object **head) {
+const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
+
+static int append_objects_from_xml(const char* path, const char *xml, struct s3_object **head) {
   xmlDocPtr doc;
   xmlXPathContextPtr ctx;
   xmlXPathObjectPtr contents_xp;
   xmlNodeSetPtr content_nodes;
+  string exp_contents = noxmlns ? "//Contents" : "//s3:Contents";
+  string exp_Key      = noxmlns ? "Key" : "s3:Key";
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
-  if(doc == NULL)
+  if(doc == NULL){
+    if(foreground)
+      printf("  append_objects_from_xml xmlReadMemory returns with error.\n");
     return -1;
+  }
 
   ctx = xmlXPathNewContext(doc);
-  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
-                     (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
-  
-  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
+  if(!noxmlns){
+    xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+                       (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+  }
+  contents_xp = xmlXPathEvalExpression((xmlChar *)exp_contents.c_str(), ctx);
   content_nodes = contents_xp->nodesetval;
 
   int i;
@@ -2799,18 +3092,29 @@ static int append_objects_from_xml(const char *xml, struct s3_object **head) {
     ctx->node = content_nodes->nodeTab[i];
 
     // object name
-    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
+    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *)exp_Key.c_str(), ctx);
     xmlNodeSetPtr key_nodes = key->nodesetval;
-    char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode);
+    char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
-    if((insert_object(name, head)) != 0) {
-      xmlXPathFreeObject(contents_xp);
-      xmlXPathFreeContext(ctx);
-      xmlFreeDoc(doc);
+    if(!name){
+      if(foreground)
+        printf("  append_objects_from_xml name is something wrong. but continue.\n");
 
-      return -1;
+    }else if((const char*)name != c_strErrorObjectName){
+      if((insert_object(name, head)) != 0){
+        if(foreground)
+          printf("  append_objects_from_xml insert_object returns with error.\n");
+
+        xmlXPathFreeObject(key);
+        xmlXPathFreeObject(contents_xp);
+        xmlXPathFreeContext(ctx);
+        xmlFreeDoc(doc);
+        return -1;
+      }
+    }else{
+      //if(foreground)
+      //  printf("append_objects_from_xml name is file or subdir in dir. but continue.\n");
     }
-
     xmlXPathFreeObject(key);
   }
 
@@ -2827,12 +3131,15 @@ static const char *get_next_marker(const char *xml) {
   xmlXPathObjectPtr marker_xp;
   xmlNodeSetPtr nodes;
   char *next_marker;
+  string exp_nextmarker = noxmlns ? "//NextMarker" : "//s3:NextMarker";
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
   ctx = xmlXPathNewContext(doc);
-  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
-                     (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
-  marker_xp = xmlXPathEvalExpression((xmlChar *) "//s3:NextMarker", ctx);
+  if(!noxmlns){
+    xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+                       (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+  }
+  marker_xp = xmlXPathEvalExpression((xmlChar *)exp_nextmarker.c_str(), ctx);
   nodes = marker_xp->nodesetval;
 
   if(nodes->nodeNr < 1)
@@ -2854,8 +3161,55 @@ static bool is_truncated(const char *xml) {
   return false;
 }
 
-static char *get_object_name(xmlDocPtr doc, xmlNodePtr node) {
-  return (char *) mybasename((char *) xmlNodeListGetString(doc, node, 1)).c_str();
+static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
+{
+  // Get full path
+  xmlChar*    fullpath= xmlNodeListGetString(doc, node, 1);
+  if(!fullpath){
+    if(foreground)
+      printf("  get_object_name could not get object full path name..\n");
+    return NULL;
+  }
+  // Make dir path and filename
+  string   strfullpath= (char*)fullpath;
+  string   strdirpath = mydirname((char*)fullpath);
+  string   strmybpath = mybasename((char*)fullpath);
+  const char* dirpath = strdirpath.c_str();
+  const char* mybname = strmybpath.c_str();
+  const char* basepath= (!path || '\0' == path[0] || '/' != path[0] ? path : &path[1]);
+  xmlFree(fullpath);
+
+  if(!mybname || '\0' == mybname[0]){
+    return NULL;
+  }
+
+  // check subdir & file in subdir
+  if(dirpath && 0 < strlen(dirpath)){
+    // case of "/"
+    if(0 == strcmp(mybname, "/") && 0 == strcmp(dirpath, "/")){
+      return (char*)c_strErrorObjectName;
+    }
+    // case of "."
+    if(0 == strcmp(mybname, ".") && 0 == strcmp(dirpath, ".")){
+      return (char*)c_strErrorObjectName;
+    }
+    // case of ".."
+    if(0 == strcmp(mybname, "..") && 0 == strcmp(dirpath, ".")){
+      return (char*)c_strErrorObjectName;
+    }
+    // case of "name"
+    if(0 == strcmp(dirpath, ".")){
+      // OK
+      return (char*)mybname;
+    }else{
+      if(0 == strcmp(dirpath, basepath)){
+        // OK
+        return (char*)mybname;
+      }
+    }
+  }
+  // case of something wrong
+  return (char*)c_strErrorObjectName;
 }
 
 static int remote_mountpath_exists(const char *path) {
@@ -2895,6 +3249,9 @@ static unsigned long id_function(void) {
 
 static void* s3fs_init(struct fuse_conn_info *conn) {
   syslog(LOG_INFO, "init $Rev$");
+
+  if(foreground) 
+    cout << "s3fs_init" << endl;
 
   // openssl
   mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
@@ -2939,6 +3296,9 @@ static void s3fs_destroy(void*) {
   if(debug)
     syslog(LOG_DEBUG, "destroy");
 
+  if(foreground) 
+    cout << "s3fs_destroy" << endl;
+
   // openssl
   CRYPTO_set_id_callback(NULL);
   CRYPTO_set_locking_callback(NULL);
@@ -2968,7 +3328,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
     printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
 
   s3_realpath = get_realpath(path);
-  if((result = curl_get_headers(path, meta) != 0)) {
+  if((result = curl_get_headers(s3_realpath, meta) != 0)) {
     free(s3_realpath);
     return result;
   }
@@ -2979,6 +3339,72 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   free(s3_realpath);
 
   return put_headers(path, meta);
+}
+
+static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
+  int result;
+  char *s3_realpath;
+  headers_t meta;
+  int       fd;
+  int       isclose = 1;
+  struct timeval tv[2];
+
+  if(foreground) 
+    cout << "s3fs_utimens_nocopy [path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
+
+  // Downloading
+  if(0 > (fd = get_opened_fd(path))){
+    if(0 > (fd = get_local_fd(path))){
+      if(foreground) {
+        printf("  s3fs_utimens_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+      }
+      syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+      return -EIO;
+    }
+  }else{
+    isclose = 0;
+  }
+
+  // Get attributes
+  s3_realpath = get_realpath(path);
+  result = curl_get_headers(s3_realpath, meta);
+  free(s3_realpath);
+  if(result != 0){
+    if(isclose){
+      close(fd);
+    }
+    return result;
+  }
+
+  // Change date
+  meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
+  // Change local file date
+  TIMESPEC_TO_TIMEVAL(&tv[0], &ts[0]);
+  TIMESPEC_TO_TIMEVAL(&tv[1], &ts[1]);
+  if(-1 == futimes(fd, tv)){
+    if(isclose){
+      close(fd);
+    }
+    if(foreground) {
+      printf("  s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)\n", __LINE__, fd, errno);
+    }
+    syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)", __LINE__, fd, errno);
+    return -errno;
+  }
+
+  // Re-uploading
+  if(0 != (result = put_local_fd(path, meta, fd))){
+    if(foreground) {
+      printf("  s3fs_utimens_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+    }
+  }
+
+  if(isclose){
+    close(fd);
+  }
+  delete_stat_cache_entry(path);
+
+  return result;
 }
 
 ///////////////////////////////////////////////////////////
@@ -3036,6 +3462,8 @@ static int list_multipart_uploads(void) {
 
   if(body.size > 0)
     printf("body.text:\n%s\n", body.text);
+  if(body.text)
+    free(body.text);
 
   return 0;
 }
@@ -3078,24 +3506,33 @@ static void s3fs_check_service(void) {
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
   if(responseCode == 403) {
+    destroy_curl_handle(curl);
+    if(body.text)
+      free(body.text);
+    body.text = NULL;
     fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
     exit(EXIT_FAILURE);
   }
 
   if(responseCode == 404) {
+    destroy_curl_handle(curl);
+    if(body.text)
+      free(body.text);
+    body.text = NULL;
     fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
     exit(EXIT_FAILURE);
   }
 
   // unable to connect
   if(responseCode == CURLE_OPERATION_TIMEDOUT) {
+    destroy_curl_handle(curl);
     if(body.text) free(body.text);
     body.text = NULL;
 
     return;
   }
 
-  if(responseCode != 200) {
+  if(responseCode != 200 && responseCode != 301) {
     if(debug) syslog(LOG_DEBUG, "responseCode: %i\n", (int)responseCode);
     if(body.text) free(body.text);
     destroy_curl_handle(curl);
@@ -3111,6 +3548,9 @@ static void s3fs_check_service(void) {
           program_name.c_str(), mount_prefix.c_str());
 
       destroy_curl_handle(curl);
+      if(body.text)
+        free(body.text);
+      body.text = NULL;
       exit(EXIT_FAILURE);
     }
   }
@@ -3491,6 +3931,18 @@ static void show_help (void) {
     "\n"
     "   nomultipart - disable multipart uploads\n"
     "\n"
+    "   noxmlns - disable registing xml name space.\n"
+    "        disable registing xml name space for response of \n"
+    "        ListBucketResult and ListVersionsResult etc. Default name \n"
+    "        space is looked up from \"http://s3.amazonaws.com/doc/2006-03-01\".\n"
+    "\n"
+    "   nocopyapi - for other incomplete compatibility object storage.\n"
+    "        For a distributed object storage which is compatibility S3\n"
+    "        API without PUT(copy api).\n"
+    "        If you set this option, s3fs do not use PUT with \n"
+    "        \"x-amz-copy-source\"(copy api). Because traffic is increased\n"
+    "        2-3 times by this option, we do not recommend this.\n"
+    "\n"
     "FUSE/mount Options:\n"
     "\n"
     "   Most of the generic mount options described in 'man mount' are\n"
@@ -3677,6 +4129,14 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "max_stat_cache_size=") != 0) {
       max_stat_cache_size = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
+    if(strstr(arg, "noxmlns") != 0) {
+      noxmlns = true;
+      return 0;
+    }
+    if(strstr(arg, "nocopyapi") != 0) {
+      nocopyapi = true;
       return 0;
     }
     if (strstr(arg, "url=") != 0) {
@@ -3901,8 +4361,15 @@ int main(int argc, char *argv[]) {
   s3fs_oper.symlink = s3fs_symlink;
   s3fs_oper.rename = s3fs_rename;
   s3fs_oper.link = s3fs_link;
-  s3fs_oper.chmod = s3fs_chmod;
-  s3fs_oper.chown = s3fs_chown;
+  if(!nocopyapi){
+    s3fs_oper.chmod = s3fs_chmod;
+    s3fs_oper.chown = s3fs_chown;
+    s3fs_oper.utimens = s3fs_utimens;
+  }else{
+    s3fs_oper.chmod = s3fs_chmod_nocopy;
+    s3fs_oper.chown = s3fs_chown_nocopy;
+    s3fs_oper.utimens = s3fs_utimens_nocopy;
+  }
   s3fs_oper.truncate = s3fs_truncate;
   s3fs_oper.open = s3fs_open;
   s3fs_oper.read = s3fs_read;
@@ -3914,7 +4381,6 @@ int main(int argc, char *argv[]) {
   s3fs_oper.init = s3fs_init;
   s3fs_oper.destroy = s3fs_destroy;
   s3fs_oper.access = s3fs_access;
-  s3fs_oper.utimens = s3fs_utimens;
   s3fs_oper.create = s3fs_create;
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
@@ -3923,3 +4389,4 @@ int main(int argc, char *argv[]) {
 
   return fuse_res;
 }
+
