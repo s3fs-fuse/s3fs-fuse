@@ -36,21 +36,34 @@ static stat_cache_t stat_cache;
 pthread_mutex_t stat_cache_lock;
 
 int get_stat_cache_entry(const char *path, struct stat *buf) {
+  int is_delete_cache = 0;
+
   pthread_mutex_lock(&stat_cache_lock);
   stat_cache_t::iterator iter = stat_cache.find(path);
   if(iter != stat_cache.end()) {
-    if(foreground)
-      cout << "    stat cache hit [path=" << path << "]"
-           << " [hit count=" << (*iter).second.hit_count << "]" << endl;
+    if(!is_stat_cache_expire_time || ((*iter).second.cache_date + stat_cache_expire_time) >= time(NULL)){
+      // hit 
+      if(foreground)
+        cout << "    stat cache hit [path=" << path << "]"
+             << " [time=" << (*iter).second.cache_date << "]"
+             << " [hit count=" << (*iter).second.hit_count << "]" << endl;
 
-    if(buf != NULL)
-      *buf = (*iter).second.stbuf;
+      if(buf != NULL)
+        *buf = (*iter).second.stbuf;
 
-    (*iter).second.hit_count++;
-    pthread_mutex_unlock(&stat_cache_lock);
-    return 0;
+      (*iter).second.hit_count++;
+      pthread_mutex_unlock(&stat_cache_lock);
+      return 0;
+    }else{
+      // timeout
+      is_delete_cache = 1;
+    }
   }
   pthread_mutex_unlock(&stat_cache_lock);
+
+  if(is_delete_cache){
+    delete_stat_cache_entry(path);
+  }
 
   return -1;
 }
@@ -67,6 +80,7 @@ void add_stat_cache_entry(const char *path, struct stat *st) {
 
   pthread_mutex_lock(&stat_cache_lock);
   stat_cache[path].stbuf = *st;
+  stat_cache[path].cache_date = time(NULL); // Set time.
   pthread_mutex_unlock(&stat_cache_lock);
 }
 

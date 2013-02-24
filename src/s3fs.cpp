@@ -145,8 +145,7 @@ blkcnt_t get_blocks(off_t size) {
   return size / 512 + 1;
 }
 
-static int insert_object(char *name, struct s3_object **head) {
-  size_t n_len = strlen(name) + 1;
+static int insert_object(const char *name, struct s3_object **head) {
   struct s3_object *new_object;
 
   new_object = (struct s3_object *) malloc(sizeof(struct s3_object));
@@ -155,14 +154,11 @@ static int insert_object(char *name, struct s3_object **head) {
     exit(EXIT_FAILURE);
   }
 
-  new_object->name = (char *) malloc(n_len);
-  if(new_object->name == NULL) {
+  if(NULL == (new_object->name = strdup(name))){
     free(new_object);
     printf("insert_object: could not allocate memory\n");
     exit(EXIT_FAILURE);
   }
-
-  strncpy(new_object->name, name, n_len);
 
   if((*head) == NULL)
     new_object->next = NULL;
@@ -324,6 +320,241 @@ static int mkdirp(const string& path, mode_t mode) {
   return 0;
 }
 
+// get user name from uid
+static string get_username(uid_t uid)
+{
+  struct passwd* ppw;
+  if(NULL == (ppw = getpwuid(uid)) || NULL == ppw->pw_name){
+    if(foreground){
+      printf("    could not get username(errno=%d).\n", (int)errno);
+    }
+    if(debug){
+      syslog(LOG_DEBUG, "could not get username(errno=%d).\n", (int)errno);
+    }
+    return NULL;
+  }
+  return string(ppw->pw_name);
+}
+
+// check uid in group(gid)
+static int is_uid_inculde_group(uid_t uid, gid_t gid)
+{
+  static size_t maxlen = 0;	// set onece
+  int result;
+  char* pbuf;
+  struct group ginfo;
+  struct group* pginfo = NULL;
+
+  // make buffer
+  if(0 == maxlen){
+    if(0 > (maxlen = (size_t)sysconf(_SC_GETGR_R_SIZE_MAX))){
+      if(foreground){
+        printf("    could not get max name length.\n");
+      }
+      if(debug){
+        syslog(LOG_DEBUG, "could not get max name length.\n");
+      }
+      maxlen = 0;
+      return -ERANGE;
+    }
+  }
+  if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
+    if(foreground){
+      printf("    failed to allocate memory.\n");
+    }
+    syslog(LOG_ERR, "failed to allocate memory.\n");
+    return -ENOMEM;
+  }
+  // get group infomation
+  if(0 != (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
+    if(foreground){
+      printf("    could not get group infomation.\n");
+    }
+    if(debug){
+      syslog(LOG_DEBUG, "could not get group infomation.\n");
+    }
+    free(pbuf);
+    return -result;
+  }
+
+  // check group
+  if(NULL == pginfo){
+    // there is not gid in group.
+    free(pbuf);
+    return -EINVAL;
+  }
+
+  string username = get_username(uid);
+
+  char** ppgr_mem;
+  for(ppgr_mem = pginfo->gr_mem; ppgr_mem && *ppgr_mem; ppgr_mem++){
+    if(username == *ppgr_mem){
+      // Found username in group.
+      free(pbuf);
+      return 1;
+    }
+  }
+  free(pbuf);
+  return 0;
+}
+
+//
+// Get object attributes with stat cache.
+// This function is base for s3fs_getattr().
+//
+static int get_object_attribute(const char *path, struct stat *stbuf) {
+  int result;
+  headers_t meta;
+  char *s3_realpath;
+
+//if(foreground) 
+//  printf("   get_object_attribute[path=%s]\n", path);
+
+  memset(stbuf, 0, sizeof(struct stat));
+  if(strcmp(path, "/") == 0) {
+    stbuf->st_nlink = 1; // see fuse faq
+    stbuf->st_mode = root_mode | S_IFDIR;
+    return 0;
+  }
+
+  if(get_stat_cache_entry(path, stbuf) == 0) {
+    return 0;
+  }
+
+  s3_realpath = get_realpath(path);
+  if((result = curl_get_headers(s3_realpath, meta)) != 0) {
+    free(s3_realpath);
+    return result;
+  }
+  free(s3_realpath);
+
+  stbuf->st_nlink = 1; // see fuse faq
+  stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
+  if(stbuf->st_mtime == 0){
+    struct tm tm;
+    strptime(meta["Last-Modified"].c_str(), "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    stbuf->st_mtime = mktime(&tm);	// GMT
+  }
+  stbuf->st_mode = get_mode(meta["x-amz-meta-mode"].c_str());
+  if(strstr(meta["Content-Type"].c_str(), "x-directory"))
+    stbuf->st_mode |= S_IFDIR;
+  else
+    stbuf->st_mode |= S_IFREG;
+
+  stbuf->st_size = get_size(meta["Content-Length"].c_str());
+
+  if(S_ISREG(stbuf->st_mode))
+    stbuf->st_blocks = get_blocks(stbuf->st_size);
+
+  stbuf->st_uid = get_uid(meta["x-amz-meta-uid"].c_str());
+  stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
+
+  add_stat_cache_entry(path, stbuf);
+
+  return 0;
+}
+
+//
+// Check the object uid and gid for write/read/execute.
+// The param "mask" is as same as access() function.
+// If there is not a target file, this function returns -ENOENT.
+// If the target file can be accessed, the result always is 0.
+//
+// path:   the target object path
+// mask:   bit field(F_OK, R_OK, W_OK, X_OK) like access().
+// stat:   NULL or the pointer of struct stat.
+//
+static int check_object_access(const char *path, int mask, struct stat* pstbuf)
+{
+  int result;
+  struct stat st;
+  struct stat* pst = (pstbuf ? pstbuf : &st);
+  struct fuse_context* pcxt;
+
+//if(foreground) 
+//  printf("  check_object_access[path=%s]\n", path);
+
+  if(NULL == (pcxt = fuse_get_context())){
+    return -EIO;
+  }
+
+  memset(pst, 0, sizeof(struct stat));
+  if(0 != (result = get_object_attribute(path, pst))){
+    // If there is not tha target file(object), reusult is -ENOENT.
+    return result;
+  }
+
+  if(0 == pcxt->uid){
+    // root is allowed all accessing.
+    return 0;
+  }
+  if(F_OK == mask){
+    // if there is a file, always return allowed.
+    return 0;
+  }
+
+  // compare file mode and uid/gid + mask.
+  mode_t mode = pst->st_mode;
+  mode_t base_mask = 0;
+  if(pcxt->uid == pst->st_uid){
+    base_mask = S_IRWXU;
+  }else if(pcxt->gid == pst->st_gid){
+    base_mask = S_IRWXG;
+  }else{
+    if(1 == is_uid_inculde_group(pcxt->uid, pst->st_gid)){
+      base_mask = S_IRWXG;
+    }else{
+      base_mask = S_IRWXO;
+    }
+  }
+  mode &= base_mask;
+
+  if(X_OK == (mask & X_OK)){
+    if(0 == (mode & (S_IXUSR | S_IXGRP | S_IXOTH))){
+      return -EPERM;
+    }
+  }
+  if(W_OK == (mask & W_OK)){
+    if(0 == (mode & (S_IWUSR | S_IWGRP | S_IWOTH))){
+      return -EACCES;
+    }
+  }
+  if(R_OK == (mask & R_OK)){
+    if(0 == (mode & (S_IRUSR | S_IRGRP | S_IROTH))){
+      return -EACCES;
+    }
+  }
+  if(0 == mode){
+    return -EACCES;
+  }
+  return 0;
+}
+
+//
+// Check accessing the parent directories of the object by uid and gid.
+//
+static int check_parent_object_access(const char *path, int mask)
+{
+  string parent;
+  int result;
+
+//if(foreground) 
+//  printf("  check_parent_object_access[path=%s]\n", path);
+
+  for(parent = mydirname(path); 0 < parent.size(); parent = mydirname(parent.c_str())){
+    if(parent == "."){
+      parent = "/";
+    }
+    if(0 != (result = check_object_access(parent.c_str(), mask, NULL))){
+      return result;
+    }
+    if(parent == "/" || parent == "."){
+      break;
+    }
+  }
+  return 0;
+}
+
 // Get fd in mapping data by path
 static int get_opened_fd(const char* path)
 {
@@ -362,13 +593,13 @@ int get_local_fd(const char* path) {
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
 
-  if(use_cache.size() > 0) {
-    result = curl_get_headers(s3_realpath, responseHeaders);
-    if(result != 0) {
-      free(s3_realpath);
-      return -result;
-    }
+  result = curl_get_headers(s3_realpath, responseHeaders);
+  if(result != 0) {
+    free(s3_realpath);
+    return -result;
+  }
 
+  if(use_cache.size() > 0) {
     fd = open(cache_path.c_str(), O_RDWR); // ### TODO should really somehow obey flags here
     if(fd != -1) {
       if((fstat(fd, &st)) == -1) {
@@ -453,12 +684,15 @@ int get_local_fd(const char* path) {
     if(fd == -1)
       YIKES(-errno);
 
-    if(use_cache.size() > 0 && !S_ISLNK(mode)) {
+    if(S_ISREG(mode) && !S_ISLNK(mode)) {
       // make the file's mtime match that of the file on s3
-      struct utimbuf n_mtime;
-      n_mtime.modtime = get_mtime(responseHeaders["x-amz-meta-mtime"].c_str());
-      n_mtime.actime = n_mtime.modtime;
-      if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+      // if fd is tmpfile, but we force tor set mtime.
+      struct timeval tv[2];
+      tv[0].tv_sec = get_mtime(responseHeaders["x-amz-meta-mtime"].c_str());
+      tv[0].tv_usec= 0L;
+      tv[1].tv_sec = tv[0].tv_sec;
+      tv[1].tv_usec= 0L;
+      if(-1 == futimes(fd, tv)){
         fclose(f);
         YIKES(-errno);
       }
@@ -486,7 +720,8 @@ static int put_headers(const char *path, headers_t meta) {
     cout << "   put_headers[path=" << path << "]" << endl;
 
   // files larger than 5GB must be modified via the multipart interface
-  s3fs_getattr(path, &buf);
+  get_object_attribute(path, &buf);
+
   if(buf.st_size >= FIVE_GB)
     return(put_multipart_headers(path, meta));
 
@@ -589,7 +824,8 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   body.text = (char *)malloc(1);
   body.size = 0;
 
-  s3fs_getattr(path, &buf);
+  // already checked by check_object_access(), so only get attr.
+  get_object_attribute(path, &buf);
 
   upload_id = initiate_multipart_upload(path, buf.st_size, meta);
   if(upload_id.size() == 0){
@@ -1388,54 +1624,18 @@ string md5sum(int fd) {
   return string(md5);
 }
 
-static int s3fs_getattr(const char *path, struct stat *stbuf) {
+static int s3fs_getattr(const char *path, struct stat *stbuf)
+{
   int result;
-  headers_t meta;
-  char *s3_realpath;
 
   if(foreground) 
     printf("s3fs_getattr[path=%s]\n", path);
 
-  memset(stbuf, 0, sizeof(struct stat));
-  if(strcmp(path, "/") == 0) {
-    stbuf->st_nlink = 1; // see fuse faq
-    stbuf->st_mode = root_mode | S_IFDIR;
-    return 0;
-  }
-
-  if(get_stat_cache_entry(path, stbuf) == 0) {
-    return 0;
-  }
-
-  s3_realpath = get_realpath(path);
-  if((result = curl_get_headers(s3_realpath, meta)) != 0) {
-    free(s3_realpath);
+  // check parent directory attribute.
+  if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
-  free(s3_realpath);
-
-  stbuf->st_nlink = 1; // see fuse faq
-  stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
-  if(stbuf->st_mtime == 0)
-    stbuf->st_mtime = get_mtime(meta["Last-Modified"].c_str());
-
-  stbuf->st_mode = get_mode(meta["x-amz-meta-mode"].c_str());
-  if(strstr(meta["Content-Type"].c_str(), "x-directory"))
-    stbuf->st_mode |= S_IFDIR;
-  else
-    stbuf->st_mode |= S_IFREG;
-
-  stbuf->st_size = get_size(meta["Content-Length"].c_str());
-
-  if(S_ISREG(stbuf->st_mode))
-    stbuf->st_blocks = get_blocks(stbuf->st_size);
-
-  stbuf->st_uid = get_uid(meta["x-amz-meta-uid"].c_str());
-  stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
-
-  add_stat_cache_entry(path, stbuf);
-
-  return 0;
+  return check_object_access(path, F_OK, stbuf);
 }
 
 static int s3fs_readlink(const char *path, char *buf, size_t size) {
@@ -1541,7 +1741,7 @@ string lookupMimeType(string s) {
 }
 
 // common function for creation of a plain object
-static int create_file_object(const char *path, mode_t mode) {
+static int create_file_object(const char *path, mode_t mode, uid_t uid, gid_t gid) {
   int result;
   char *s3_realpath;
   CURL *curl = NULL;
@@ -1561,10 +1761,10 @@ static int create_file_object(const char *path, mode_t mode) {
   headers.append("Content-Type: " + contentType);
   // x-amz headers: (a) alphabetical order and (b) no spaces after colon
   headers.append("x-amz-acl:" + default_acl);
-  headers.append("x-amz-meta-gid:" + str(getgid()));
+  headers.append("x-amz-meta-gid:" + str(gid));
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time(NULL)));
-  headers.append("x-amz-meta-uid:" + str(getuid()));
+  headers.append("x-amz-meta-uid:" + str(uid));
   if(public_bucket.substr(0,1) != "1")
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", contentType, date, headers.get(), resource));
@@ -1598,11 +1798,24 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
   int result;
   headers_t meta;
+  struct fuse_context* pcxt;
 
   if(foreground) 
     cout << "s3fs_create[path=" << path << "][mode=" << mode << "]" << "[flags=" << fi->flags << "]" <<  endl;
 
-  result = create_file_object(path, mode);
+  if(NULL == (pcxt = fuse_get_context())){
+    return -EIO;
+  }
+
+  // check parent directory attribute.
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  result = check_object_access(path, W_OK, NULL);
+  if(0 != result && -ENOENT != result){
+    return result;
+  }
+  result = create_file_object(path, mode, pcxt->uid, pcxt->gid);
 
   if(result != 0)
     return result;
@@ -1675,10 +1888,28 @@ static int create_directory_object(const char *path, mode_t mode, time_t time, u
 
 static int s3fs_mkdir(const char *path, mode_t mode)
 {
+  int result;
+  struct fuse_context* pcxt;
+
   if(foreground) 
     cout << "s3fs_mkdir[path=" << path << "][mode=" << mode << "]" << endl;
 
-  return create_directory_object(path, mode, time(NULL), getuid(), getgid());
+  if(NULL == (pcxt = fuse_get_context())){
+    return -EIO;
+  }
+
+  // check parent directory attribute.
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(-ENOENT != (result = check_object_access(path, F_OK, NULL))){
+    if(0 == result){
+      result = -EEXIST;
+    }
+    return result;
+  }
+
+  return create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
 }
 
 static int s3fs_unlink(const char *path) {
@@ -1687,6 +1918,10 @@ static int s3fs_unlink(const char *path) {
 
   if(foreground) 
     printf("s3fs_unlink[path=%s]\n", path);
+
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
 
   s3_realpath = get_realpath(path);
 
@@ -1767,6 +2002,10 @@ static int s3fs_rmdir(const char *path) {
   if(foreground) 
     printf("s3fs_rmdir [path=%s]\n", path);
 
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+
   s3_realpath = get_realpath(path);
 
    // directory must be empty
@@ -1787,6 +2026,16 @@ static int s3fs_symlink(const char *from, const char *to) {
 
   if(foreground) 
     cout << "s3fs_symlink[from=" << from << "][to=" << to << "]" << endl;
+
+  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    return result;
+  }
+  if(-ENOENT != (result = check_object_access(to, F_OK, NULL))){
+    if(0 == result){
+      result = -EEXIST;
+    }
+    return result;
+  }
 
   headers_t headers;
   headers["x-amz-meta-mode"] = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
@@ -1831,6 +2080,15 @@ static int rename_object(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "rename_object [from=%s] [to=%s]", from, to);
 
+  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    // not permmit writing "to" object parent dir.
+    return result;
+  }
+  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+    // not permmit removing "from" object parent dir.
+    return result;
+  }
+
   s3_realpath = get_realpath(from);
   result = curl_get_headers(s3_realpath, meta);
 
@@ -1865,6 +2123,15 @@ static int rename_object_nocopy(const char *from, const char *to) {
 
   if(debug)
     syslog(LOG_DEBUG, "rename_object_nocopy [from=%s] [to=%s]", from, to);
+
+  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    // not permmit writing "to" object parent dir.
+    return result;
+  }
+  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+    // not permmit removing "from" object parent dir.
+    return result;
+  }
 
   // Downloading
   if(0 > (fd = get_opened_fd(from))){
@@ -1928,9 +2195,17 @@ static int rename_large_object(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "rename_large_object [from=%s] [to=%s]", from, to);
 
-  s3fs_getattr(from, &buf);
-  s3_realpath = get_realpath(from);
+  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    // not permmit writing "to" object parent dir.
+    return result;
+  }
+  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+    // not permmit removing "from" object parent dir.
+    return result;
+  }
+  get_object_attribute(from, &buf);
 
+  s3_realpath = get_realpath(from);
   if((curl_get_headers(s3_realpath, meta) != 0)) {
     free(s3_realpath);
     return -1;
@@ -2269,7 +2544,15 @@ static int s3fs_rename(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "s3fs_rename [from=%s] [to=%s]", from, to);
 
-  s3fs_getattr(from, &buf);
+  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    // not permmit writing "to" object parent dir.
+    return result;
+  }
+  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+    // not permmit removing "from" object parent dir.
+    return result;
+  }
+  get_object_attribute(from, &buf);
 
   // files larger than 5GB must be modified via the multipart interface
   if(S_ISDIR(buf.st_mode)){
@@ -2302,6 +2585,13 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   if(foreground) 
     printf("s3fs_chmod [path=%s] [mode=%d]\n", path, mode);
 
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
+
   s3_realpath = get_realpath(path);
   result = curl_get_headers(s3_realpath, meta);
   if(result != 0) {
@@ -2331,6 +2621,13 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
 
   if(foreground) 
     printf("s3fs_chmod_nocopy [path=%s] [mode=%d]\n", path, mode);
+
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
 
   // Downloading
   if(0 > (fd = get_opened_fd(path))){
@@ -2392,6 +2689,13 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   if(foreground) 
     printf("s3fs_chown [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
 
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
+
   s3_realpath = get_realpath(path);
   headers_t meta;
   result = curl_get_headers(s3_realpath, meta);
@@ -2429,6 +2733,13 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
 
   if(foreground) 
     printf("s3fs_chown_nocopy [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
+
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
 
   // Downloading
   if(0 > (fd = get_opened_fd(path))){
@@ -2500,6 +2811,13 @@ static int s3fs_truncate(const char *path, off_t size) {
   if(foreground) 
     printf("s3fs_truncate[path=%s][size=%zd]\n", path, size);
 
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
+
   // Get file information
   s3_realpath = get_realpath(path);
   result = curl_get_headers(s3_realpath, meta);
@@ -2558,6 +2876,14 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "s3fs_open[path=" << path << "][flags=" << fi->flags << "]" <<  endl;
 
+  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
+  if(0 != (result = check_parent_object_access(path, mask | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, mask, NULL))){
+    return result;
+  }
+
   // Go do the truncation if called for
   if((unsigned int)fi->flags & O_TRUNC) {
      result = s3fs_truncate(path, 0);
@@ -2595,8 +2921,9 @@ static int s3fs_write(
     const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   int res = pwrite(fi->fh, buf, size, offset);
 
-  if(foreground) 
-    cout << "s3fs_write[path=" << path << "]" << endl;
+  // Commented - This message is output too much
+//if(foreground) 
+//  cout << "s3fs_write[path=" << path << "]" << endl;
 
   if(res == -1)
     YIKES(-errno);
@@ -2631,9 +2958,17 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
 
+  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
+  if(0 != (result = check_parent_object_access(path, mask | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, mask, NULL))){
+    return result;
+  }
+
   // NOTE- fi->flags is not available here
   flags = get_flags(fd);
-  if((flags & O_RDWR) || (flags & O_WRONLY)) {
+  if(O_RDONLY != (flags & O_ACCMODE)) {
     headers_t meta;
     s3_realpath = get_realpath(path);
     result = curl_get_headers(s3_realpath, meta);
@@ -2643,31 +2978,18 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
       return result;
 
     // if the cached file matches the remote file skip uploading
-    if(use_cache.size() > 0) {
-      struct stat st;
+    struct stat st;
+    if((fstat(fd, &st)) == -1)
+      YIKES(-errno);
 
-      if((fstat(fd, &st)) == -1)
-        YIKES(-errno);
-
-      if(str(st.st_size) == meta["Content-Length"] && 
-        (str(st.st_mtime) == meta["x-amz-meta-mtime"])) {
-        return result;
-      }
+    if(str(st.st_size) == meta["Content-Length"] &&
+      (str(st.st_mtime) == meta["x-amz-meta-mtime"])) {
+      return result;
     }
 
-    // force the cached copy to have the same mtime as the remote copy
-    if(use_cache.size() > 0) {
-      struct stat st;
-      struct utimbuf n_mtime;
-      string cache_path(use_cache + "/" + bucket + path);
-
-      if((stat(cache_path.c_str(), &st)) == 0) {
-        n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
-        n_mtime.actime = n_mtime.modtime;
-        if((utime(cache_path.c_str(), &n_mtime)) == -1) {
-          YIKES(-errno);
-        }
-      }
+    // If both mtime are not same, force to change mtime based on fd.
+    if(str(st.st_mtime) != meta["x-amz-meta-mtime"]){
+      meta["x-amz-meta-mtime"] = str(st.st_mtime);
     }
 
     return put_local_fd(path, meta, fd);
@@ -2738,6 +3060,20 @@ static CURL *create_head_handle(head_data *request_data) {
   return curl_handle;
 }
 
+static int s3fs_opendir(const char *path, struct fuse_file_info *fi)
+{
+  int result;
+  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
+
+  if(foreground) 
+    cout << "s3fs_opendir [path=" << path << "][flags=" << fi->flags << "]" <<  endl;
+
+  if(0 == (result = check_object_access(path, mask, NULL))){
+    result = check_parent_object_access(path, mask);
+  }
+  return result;
+}
+
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
   CURLM *mh;
@@ -2753,15 +3089,20 @@ static int s3fs_readdir(
   if(foreground) 
     cout << "s3fs_readdir[path=" << path << "]" << endl;
 
-  // get a list of all the objects
   int result;
+  if(0 != (result = check_object_access(path, X_OK, NULL))){
+    return result;
+  }
+
+  // get a list of all the objects
   if((result = list_bucket(path, &head)) != 0){
     if(foreground)
       printf(" s3fs_readdir list_bucket returns error.\n");
     return result;
   }
 
-  if(head == NULL){
+  // force to add "." and ".." name.
+  if(0 != insert_object("..", &head) || 0 != insert_object(".", &head) || !head){
     if(foreground)
       printf(" s3fs_readdir list_bucket returns empty head.\n");
     return 0;
@@ -3109,8 +3450,10 @@ static int append_objects_from_xml(const char* path, const char *xml, struct s3_
         xmlXPathFreeObject(contents_xp);
         xmlXPathFreeContext(ctx);
         xmlFreeDoc(doc);
+        free(name);
         return -1;
       }
+      free(name);
     }else{
       //if(foreground)
       //  printf("append_objects_from_xml name is file or subdir in dir. but continue.\n");
@@ -3161,6 +3504,9 @@ static bool is_truncated(const char *xml) {
   return false;
 }
 
+// return: the pointer to object name on allocated memory.
+//         the pointer to "c_strErrorObjectName".(not allocated)
+//         NULL(a case of something error occured)
 static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
 {
   // Get full path
@@ -3200,11 +3546,11 @@ static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     // case of "name"
     if(0 == strcmp(dirpath, ".")){
       // OK
-      return (char*)mybname;
+      return strdup(mybname);
     }else{
       if(0 == strcmp(dirpath, basepath)){
         // OK
-        return (char*)mybname;
+        return strdup(mybname);
       }
     }
   }
@@ -3219,7 +3565,7 @@ static int remote_mountpath_exists(const char *path) {
     printf("remote_mountpath_exists [path=%s]\n", path);
 
   // getattr will prefix the path with the remote mountpoint
-  s3fs_getattr("", &stbuf);
+  get_object_attribute("", &stbuf);
   if(!S_ISDIR(stbuf.st_mode))
     return -1;
 
@@ -3314,9 +3660,13 @@ static void s3fs_destroy(void*) {
 
 static int s3fs_access(const char *path, int mask) {
   if(foreground) 
-    printf("s3fs_access[path=%s]\n", path);
+    printf("s3fs_access[path=%s][mask=%s%s%s%s]\n", path,
+          ((mask & R_OK) == R_OK) ? "R_OK " : "",
+          ((mask & W_OK) == W_OK) ? "W_OK " : "",
+          ((mask & X_OK) == X_OK) ? "X_OK " : "",
+          (mask == F_OK) ? "F_OK" : "");
 
-  return 0;
+    return check_object_access(path, mask, NULL);
 }
 
 static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
@@ -3326,6 +3676,13 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
 
   if(foreground) 
     printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
+
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
 
   s3_realpath = get_realpath(path);
   if((result = curl_get_headers(s3_realpath, meta) != 0)) {
@@ -3351,6 +3708,13 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
 
   if(foreground) 
     cout << "s3fs_utimens_nocopy [path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
+
+  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    return result;
+  }
+  if(0 != (result = check_object_access(path, W_OK, NULL))){
+    return result;
+  }
 
   // Downloading
   if(0 > (fd = get_opened_fd(path))){
@@ -3926,6 +4290,9 @@ static void show_help (void) {
     "   max_stat_cache_size (default=\"10000\" entries (about 4MB))\n"
     "      - maximum number of entries in the stat cache\n"
     "\n"
+    "   stat_cache_expire (default is no expire)\n"
+    "      - specify expire time(seconds) for entries in the stat cache.\n"
+    "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"
     "\n"
@@ -4129,6 +4496,11 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "max_stat_cache_size=") != 0) {
       max_stat_cache_size = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 0;
+    }
+    if (strstr(arg, "stat_cache_expire=") != 0) {
+      is_stat_cache_expire_time = 1;
+      stat_cache_expire_time = strtoul(strchr(arg, '=') + 1, 0, 10);
       return 0;
     }
     if(strstr(arg, "noxmlns") != 0) {
@@ -4377,6 +4749,7 @@ int main(int argc, char *argv[]) {
   s3fs_oper.statfs = s3fs_statfs;
   s3fs_oper.flush = s3fs_flush;
   s3fs_oper.release = s3fs_release;
+  s3fs_oper.opendir = s3fs_opendir;
   s3fs_oper.readdir = s3fs_readdir;
   s3fs_oper.init = s3fs_init;
   s3fs_oper.destroy = s3fs_destroy;

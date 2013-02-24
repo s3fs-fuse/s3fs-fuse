@@ -77,6 +77,9 @@ time to wait between read/write activity before giving up.
 \fB\-o\fR max_stat_cache_size (default="10000" entries (about 4MB))
 maximum number of entries in the stat cache
 .TP
+\fB\-o\fR stat_cache_expire (default is no expire)
+specify expire time(seconds) for entries in the stat cache
+.TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
 .TP

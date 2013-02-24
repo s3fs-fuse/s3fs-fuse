@@ -47,6 +47,8 @@ static mode_t root_mode = 0;
 static std::string passwd_file = "";
 static bool utility_mode = 0;
 unsigned long max_stat_cache_size = 10000;
+time_t stat_cache_expire_time = 0;
+int is_stat_cache_expire_time = 0;
 bool noxmlns = false;
 bool nocopyapi = false;
 
@@ -104,7 +106,7 @@ uid_t get_uid(const char *s);
 gid_t get_gid(const char *s);
 blkcnt_t get_blocks(off_t size);
 
-static int insert_object(char *name, struct s3_object **head);
+static int insert_object(const char *name, struct s3_object **head);
 static unsigned int count_object_list(struct s3_object *list);
 static int free_object(struct s3_object *object);
 static int free_object_list(struct s3_object *head);
@@ -139,6 +141,7 @@ static int s3fs_write(
 static int s3fs_statfs(const char *path, struct statvfs *stbuf);
 static int s3fs_flush(const char *path, struct fuse_file_info *fi);
 static int s3fs_release(const char *path, struct fuse_file_info *fi);
+static int s3fs_opendir(const char *path, struct fuse_file_info *fi);
 static int s3fs_readdir(
     const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi);
 static int s3fs_access(const char *path, int mask);
