@@ -91,6 +91,11 @@ disable registing xml name space for response of ListBucketResult and ListVersio
 \fB\-o\fR nocopyapi - for other incomplete compatibility object storage.
 For a distributed object storage which is compatibility S3 API without PUT(copy api).
 If you set this option, s3fs do not use PUT with "x-amz-copy-source"(copy api). Because traffic is increased 2-3 times by this option, we do not recommend this.
+.TP
+\fB\-o\fR norenameapi - for other incomplete compatibility object storage.
+For a distributed object storage which is compatibility S3 API without PUT(copy api).
+This option is a subset of nocopyapi option. The nocopyapi option does not use copy-api for all command(ex. chmod, chown, touch, mv, etc), but this option does not use copy-api for only rename command(ex. mv).
+If this option is specified with nocopapi, the s3fs ignores it.
 .SH FUSE/MOUNT OPTIONS
 .TP
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '-onodev,nosuid' by default, which can only be overridden by a privileged user.

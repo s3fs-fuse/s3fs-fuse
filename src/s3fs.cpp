@@ -92,10 +92,13 @@ typedef map<CURL*, head_data> headMap_t;
 
 struct cleanup_head_data {
   void operator()(pair<CURL*, head_data> qqq) {
+    CURL* curl_handle  = qqq.first;
+
     head_data response = qqq.second;
     delete response.url;
     curl_slist_free_all(response.requestHeaders);
     delete response.responseHeaders;
+    destroy_curl_handle(curl_handle);
   }
 };
 
@@ -116,6 +119,21 @@ class auto_head {
   }
 
   headMap_t& get() { return headMap; }
+
+  void remove(CURL* curl_handle) {
+    headMap_t::iterator iter = headMap.find(curl_handle);
+    if(iter == headMap.end()){
+      return;
+    }
+
+    head_data response = iter->second;
+    delete response.url;
+    curl_slist_free_all(response.requestHeaders);
+    delete response.responseHeaders;
+    destroy_curl_handle(curl_handle);
+
+    headMap.erase(iter);
+  }
 
   private:
     headMap_t headMap;
@@ -145,19 +163,71 @@ blkcnt_t get_blocks(off_t size) {
   return size / 512 + 1;
 }
 
+// [Change]
+// The s3_object's name member can be set "dir" or "dir/" as directory name.
+// Both of names are same directory s3_object.
+// "dir/" is given priority to over "dir".
+//
+// [Notice]
+// If there are "dir" and "dir/" object on S3, s3fs only recognizes "dir/".
+// On this case, user can not know the "dir" object.
+//
 static int insert_object(const char *name, struct s3_object **head) {
+  struct s3_object *cur_object;
   struct s3_object *new_object;
+  int nLen = name ? strlen(name) : 0;
+  int is_have_ndelimiter = 0;
 
+  // search same name object
+  if(nLen && '/' == name[nLen - 1]){
+    // case of "dir/"
+    nLen--;
+    is_have_ndelimiter = 1;
+  }
+  for(cur_object = *head; nLen && cur_object; cur_object = cur_object->next){
+    if(0 == strncmp(cur_object->name, name, nLen)){
+      int cLen = strlen(cur_object->name);
+      int is_have_cdelimiter = 0;
+
+      if('/' == cur_object->name[cLen - 1]){
+        cLen--;
+        is_have_cdelimiter = 1;
+      }
+      if(cLen == nLen){
+        // same object
+        if(is_have_cdelimiter == is_have_ndelimiter){
+          // perfect same object
+          return 0;
+        }
+        if(is_have_cdelimiter){
+          // already set "dir/"
+          return 0;
+        }
+        // new object is "dir/", replace name.
+        free(cur_object->name);
+        if(NULL == (cur_object->name = strdup(name))){
+          printf("insert_object: could not allocate memory\n");
+          S3FS_FUSE_EXIT();
+          return -1;
+        }
+        return 0;
+      }
+    }
+  }
+
+  // Not found same object.
   new_object = (struct s3_object *) malloc(sizeof(struct s3_object));
   if(new_object == NULL) {
     printf("insert_object: could not allocate memory\n");
-    exit(EXIT_FAILURE);
+    S3FS_FUSE_EXIT();
+    return -1;
   }
 
   if(NULL == (new_object->name = strdup(name))){
     free(new_object);
     printf("insert_object: could not allocate memory\n");
-    exit(EXIT_FAILURE);
+    S3FS_FUSE_EXIT();
+    return -1;
   }
 
   if((*head) == NULL)
@@ -170,6 +240,8 @@ static int insert_object(const char *name, struct s3_object **head) {
   return 0;
 }
 
+// This function is defined but not used.
+/***
 static unsigned int count_object_list(struct s3_object *list) {
   unsigned int count = 0;
   struct s3_object *head = list;
@@ -181,6 +253,7 @@ static unsigned int count_object_list(struct s3_object *list) {
 
   return count;
 }
+***/
 
 static int free_object(struct s3_object *object) {
   free(object->name);
@@ -204,35 +277,32 @@ static int free_object_list(struct s3_object *head) {
   return 0;
 }
 
-MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
+MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir) {
   MVNODE *p;
   char *p_old_path;
   char *p_new_path;
 
   p = (MVNODE *) malloc(sizeof(MVNODE));
   if (p == NULL) {
-     printf("create_mvnode: could not allocation memory for p\n");
-     exit(EXIT_FAILURE);
+    printf("create_mvnode: could not allocation memory for p\n");
+    S3FS_FUSE_EXIT();
+    return NULL;
   }
 
-  p_old_path = (char *)malloc(strlen(old_path)+1); 
-  if (p_old_path == NULL) {
+  if(NULL == (p_old_path = strdup(old_path))){
     free(p);
     printf("create_mvnode: could not allocation memory for p_old_path\n");
-    exit(EXIT_FAILURE);
+    S3FS_FUSE_EXIT();
+    return NULL;
   }
 
-  strcpy(p_old_path, old_path);
- 
-  p_new_path = (char *)malloc(strlen(new_path)+1); 
-  if (p_new_path == NULL) {
+  if(NULL == (p_new_path = strdup(new_path))){ 
     free(p);
     free(p_old_path);
     printf("create_mvnode: could not allocation memory for p_new_path\n");
-    exit(EXIT_FAILURE);
+    S3FS_FUSE_EXIT();
+    return NULL;
   }
-
-  strcpy(p_new_path, new_path);
 
   p->old_path = p_old_path;
   p->new_path = p_new_path;
@@ -242,58 +312,76 @@ MVNODE *create_mvnode(char *old_path, char *new_path, bool is_dir) {
   return p;
 }
 
-MVNODE *add_mvnode(MVNODE *head, char *old_path, char *new_path, bool is_dir) {
-  MVNODE *p;
-  MVNODE *tail;
+//
+// Add sorted MVNODE data(Ascending order) 
+//
+MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir)
+{
+  if(!head || !tail){
+    return NULL;
+  }
 
-  tail = create_mvnode(old_path, new_path, is_dir);
+  MVNODE* cur;
+  MVNODE* mvnew;
+  for(cur = *head; cur; cur = cur->next){
+    if(cur->is_dir == is_dir){
+      int nResult = strcmp(cur->old_path, old_path);
+      if(0 == nResult){
+        // Found same old_path.
+        return cur;
 
-  for (p = head; p->next != NULL; p = p->next);
-    ;
+      }else if(0 > nResult){
+        // next check.
+        // ex: cur("abc"), mvnew("abcd")
+        // ex: cur("abc"), mvnew("abd")
+        continue;
 
-  p->next = tail;
-  tail->prev = p;
-  return tail;
+      }else{
+        // Add into before cur-pos.
+        // ex: cur("abc"), mvnew("ab")
+        // ex: cur("abc"), mvnew("abb")
+        if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir))){
+          return NULL;
+        }
+        if(cur->prev){
+          (cur->prev)->next = mvnew;
+        }else{
+          *head = mvnew;
+        }
+        mvnew->prev = cur->prev;
+        mvnew->next = cur;
+        cur->prev = mvnew;
+
+        return mvnew;
+      }
+    }
+  }
+  // Add into tail.
+  if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir))){
+    return NULL;
+  }
+  mvnew->prev = (*tail);
+  if(*tail){
+    (*tail)->next = mvnew;
+  }
+  (*tail) = mvnew;
+  if(!(*head)){
+    (*head) = mvnew;
+  }
+  return mvnew;
 }
 
 void free_mvnodes(MVNODE *head) {
   MVNODE *my_head;
   MVNODE *next;
-  char *p_old_path;
-  char *p_new_path;
 
-  if(head == NULL)
-    return;
-
-  my_head = head;
-  next = NULL;
- 
-  do {
+  for(my_head = head, next = NULL; my_head; my_head = next){
     next = my_head->next;
-    p_old_path = my_head->old_path;
-    p_new_path = my_head->new_path;
-
-    free(p_old_path);
-    free(p_new_path);
+    free(my_head->old_path);
+    free(my_head->new_path);
     free(my_head);
-
-    my_head = next;
-  } while(my_head != NULL);
-
-  return;
-}
- 
-static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
-  headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
-  string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
-  string key;
-  stringstream ss(header);
-  if (getline(ss, key, ':')) {
-    string value;
-    getline(ss, value);
-    (*headers)[key] = trim(value);
   }
-  return blockSize * numBlocks;
+  return;
 }
 
 // safe variant of dirname
@@ -403,9 +491,9 @@ static int is_uid_inculde_group(uid_t uid, gid_t gid)
 // This function is base for s3fs_getattr().
 //
 static int get_object_attribute(const char *path, struct stat *stbuf) {
-  int result;
+  int result = -1;
   headers_t meta;
-  char *s3_realpath;
+  string strpath;
 
 //if(foreground) 
 //  printf("   get_object_attribute[path=%s]\n", path);
@@ -421,12 +509,20 @@ static int get_object_attribute(const char *path, struct stat *stbuf) {
     return 0;
   }
 
-  s3_realpath = get_realpath(path);
-  if((result = curl_get_headers(s3_realpath, meta)) != 0) {
-    free(s3_realpath);
-    return result;
+  // At first, check "object/".
+  if(path && 0 < strlen(path) && '/' != path[strlen(path) - 1]){
+    strpath = path;
+    strpath += "/";
+    string s3_realpath = get_realpath(strpath.c_str());
+    result = curl_get_headers(s3_realpath.c_str(), meta);
   }
-  free(s3_realpath);
+  if(0 != result){
+    strpath = path;
+    string s3_realpath = get_realpath(strpath.c_str());
+    if((result = curl_get_headers(s3_realpath.c_str(), meta)) != 0) {
+      return result;
+    }
+  }
 
   stbuf->st_nlink = 1; // see fuse faq
   stbuf->st_mtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
@@ -436,10 +532,18 @@ static int get_object_attribute(const char *path, struct stat *stbuf) {
     stbuf->st_mtime = mktime(&tm);	// GMT
   }
   stbuf->st_mode = get_mode(meta["x-amz-meta-mode"].c_str());
-  if(strstr(meta["Content-Type"].c_str(), "x-directory"))
+  if(strstr(meta["Content-Type"].c_str(), "x-directory")){
     stbuf->st_mode |= S_IFDIR;
-  else
-    stbuf->st_mode |= S_IFREG;
+  }else{
+    if(0 < strpath.length() && '/' == strpath[strpath.length() - 1] &&
+       (0 == strcmp(meta["Content-Type"].c_str(), "binary/octet-stream") || 
+        0 == strcmp(meta["Content-Type"].c_str(), "application/octet-stream")) )
+    {
+      stbuf->st_mode |= S_IFDIR;
+    }else{
+      stbuf->st_mode |= S_IFREG;
+    }
+  }
 
   stbuf->st_size = get_size(meta["Content-Length"].c_str());
 
@@ -449,7 +553,7 @@ static int get_object_attribute(const char *path, struct stat *stbuf) {
   stbuf->st_uid = get_uid(meta["x-amz-meta-uid"].c_str());
   stbuf->st_gid = get_gid(meta["x-amz-meta-gid"].c_str());
 
-  add_stat_cache_entry(path, stbuf);
+  add_stat_cache_entry(strpath.c_str(), stbuf);
 
   return 0;
 }
@@ -478,7 +582,6 @@ static int check_object_access(const char *path, int mask, struct stat* pstbuf)
     return -EIO;
   }
 
-  memset(pst, 0, sizeof(struct stat));
   if(0 != (result = get_object_attribute(path, pst))){
     // If there is not tha target file(object), reusult is -ENOENT.
     return result;
@@ -576,7 +679,6 @@ int get_local_fd(const char* path) {
   int fd = -1;
   int result;
   struct stat st;
-  char *s3_realpath;
   CURL *curl = NULL;
   string url;
   string resource;
@@ -589,13 +691,11 @@ int get_local_fd(const char* path) {
   if(foreground) 
     cout << "   get_local_fd[path=" << path << "]" << endl;
 
-  s3_realpath = get_realpath(path);
+  string s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
 
-  result = curl_get_headers(s3_realpath, responseHeaders);
-  if(result != 0) {
-    free(s3_realpath);
+  if(0 != (result = curl_get_headers(s3_realpath.c_str(), responseHeaders))){
     return -result;
   }
 
@@ -604,7 +704,6 @@ int get_local_fd(const char* path) {
     if(fd != -1) {
       if((fstat(fd, &st)) == -1) {
         close(fd);
-        free(s3_realpath);
         YIKES(-errno);
       }
 
@@ -613,14 +712,12 @@ int get_local_fd(const char* path) {
       if(str(st.st_size) != responseHeaders["Content-Length"] || 
         (str(st.st_mtime) != responseHeaders["x-amz-meta-mtime"])) {
         if(close(fd) == -1){
-          free(s3_realpath);
           YIKES(-errno);
         }
         fd = -1;
       }
     }
   }
-  free(s3_realpath);
 
   // need to download?
   if(fd == -1) {
@@ -709,7 +806,7 @@ int get_local_fd(const char* path) {
  */
 static int put_headers(const char *path, headers_t meta) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   string url;
   string resource;
   struct stat buf;
@@ -780,32 +877,43 @@ static int put_headers(const char *path, headers_t meta) {
   destroy_curl_handle(curl);
   if(body.text)
     free(body.text);
-  free(s3_realpath);
 
   if(result != 0)
     return result;
 
   // Update mtime in local file cache.
-  if(meta.count("x-amz-meta-mtime") > 0 && use_cache.size() > 0) {
-    struct stat st;
-    struct utimbuf n_mtime;
-    string cache_path(use_cache + "/" + bucket + path);
-
-    if((stat(cache_path.c_str(), &st)) == 0) {
-      n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
-      n_mtime.actime = n_mtime.modtime;
-      if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+  if(meta.count("x-amz-meta-mtime") > 0){
+    int fd;
+    if(0 <= (fd = get_opened_fd(path))){
+      // The file already is opened, so update fd before close(flush);
+      struct timeval tv[2];
+      memset(tv, 0, sizeof(struct timeval) * 2);
+      tv[0].tv_sec = get_mtime(meta["x-amz-meta-mtime"].c_str());
+      tv[1].tv_sec = tv[0].tv_sec;
+      if(-1 == futimes(fd, tv)){
         YIKES(-errno);
+      }
+    }else if(use_cache.size() > 0){
+      // Use local cache file.
+      struct stat st;
+      struct utimbuf n_mtime;
+      string cache_path(use_cache + "/" + bucket + path);
+
+      if((stat(cache_path.c_str(), &st)) == 0) {
+        n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
+        n_mtime.actime = n_mtime.modtime;
+        if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+          YIKES(-errno);
+        }
       }
     }
   }
-
   return 0;
 }
 
 static int put_multipart_headers(const char *path, headers_t meta) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   string url;
   string resource;
   string upload_id;
@@ -819,7 +927,6 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
-  free(s3_realpath);
 
   body.text = (char *)malloc(1);
   body.size = 0;
@@ -889,7 +996,7 @@ static int put_multipart_headers(const char *path, headers_t meta) {
 static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   string resource;
   string url;
-  char *s3_realpath;
+  string s3_realpath;
   struct stat st;
   CURL *curl = NULL;
 
@@ -902,7 +1009,6 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
-  free(s3_realpath);
 
   int result;
   struct BodyStruct body;
@@ -1019,7 +1125,8 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
       
     if((buffer = (char *) malloc(sizeof(char) * lBufferSize)) == NULL) {
       syslog(LOG_CRIT, "Could not allocate memory for buffer\n");
-      exit(EXIT_FAILURE);
+      S3FS_FUSE_EXIT();
+      return -ENOMEM;
     }
 
     // copy the file portion into the buffer:
@@ -1150,13 +1257,13 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   string resource;
   string upload_id = "";
   string ContentType;
-  char *s3_realpath;
+  string s3_realpath;
   struct BodyStruct body;
   struct curl_slist *slist=NULL;
 
   if(foreground) 
     cout << "      initiate_multipart_upload [path=" << path << "][size=" << size << "]" << endl;
-  
+
   body.text = (char *)malloc(1);
   body.size = 0; 
 
@@ -1165,7 +1272,6 @@ string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
   resource.append("?uploads");
   url = host + resource;
   my_url = prepare_url(url.c_str());
-  free(s3_realpath);
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -1277,7 +1383,7 @@ static int complete_multipart_upload(const char *path, string upload_id,
   string my_url;
   string resource;
   string postContent;
-  char *s3_realpath;
+  string s3_realpath;
   struct BodyStruct body;
   struct WriteThis pooh;
   struct curl_slist *slist = NULL;
@@ -1357,7 +1463,6 @@ static int complete_multipart_upload(const char *path, string upload_id,
   if(body.text)
     free(body.text);
   free(pData);
-  free(s3_realpath);
 
   return result;
 }
@@ -1374,7 +1479,7 @@ string upload_part(const char *path, const char *source, int part_number, string
   string date;
   string raw_date;
   string ETag;
-  char *s3_realpath;
+  string s3_realpath;
   struct stat st;
   struct BodyStruct body;
   struct BodyStruct header;
@@ -1411,7 +1516,6 @@ string upload_part(const char *path, const char *source, int part_number, string
 
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
-  free(s3_realpath);
 
   resource.append("?partNumber=");
   resource.append(IntToStr(part_number));
@@ -1509,7 +1613,7 @@ string copy_part(const char *from, const char *to, int part_number, string uploa
   string resource;
   string raw_date;
   string ETag;
-  char *s3_realpath;
+  string s3_realpath;
   struct BodyStruct body;
   struct BodyStruct header;
 
@@ -1519,7 +1623,6 @@ string copy_part(const char *from, const char *to, int part_number, string uploa
 
   s3_realpath = get_realpath(to);
   resource = urlEncode(service_path + bucket + s3_realpath);
-  free(s3_realpath);
 
   resource.append("?partNumber=");
   resource.append(IntToStr(part_number));
@@ -1743,7 +1846,7 @@ string lookupMimeType(string s) {
 // common function for creation of a plain object
 static int create_file_object(const char *path, mode_t mode, uid_t uid, gid_t gid) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   CURL *curl = NULL;
 
   if(foreground) 
@@ -1777,7 +1880,6 @@ static int create_file_object(const char *path, mode_t mode, uid_t uid, gid_t gi
 
   result = my_curl_easy_perform(curl);
   destroy_curl_handle(curl);
-  free(s3_realpath);
 
   if(result != 0)
     return result;
@@ -1837,7 +1939,7 @@ static int create_directory_object(const char *path, mode_t mode, time_t time, u
 {
   CURL *curl = NULL;
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   string url;
   string resource;
   string date = get_date();
@@ -1848,8 +1950,10 @@ static int create_directory_object(const char *path, mode_t mode, time_t time, u
             "][time=" << time << "][uid=" << uid << "][gid=" << gid << "]" << endl;
 
   s3_realpath = get_realpath(path);
+  if('/' != s3_realpath[s3_realpath.length() - 1]){
+    s3_realpath += "/";
+  }
   resource = urlEncode(service_path + bucket + s3_realpath);
-  free(s3_realpath);
   url = host + resource;
 
   curl = create_curl_handle();
@@ -1914,7 +2018,7 @@ static int s3fs_mkdir(const char *path, mode_t mode)
 
 static int s3fs_unlink(const char *path) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
 
   if(foreground) 
     printf("s3fs_unlink[path=%s]\n", path);
@@ -1924,9 +2028,7 @@ static int s3fs_unlink(const char *path) {
   }
 
   s3_realpath = get_realpath(path);
-
-  result = curl_delete(s3_realpath);
-  free(s3_realpath);
+  result = curl_delete(s3_realpath.c_str());
   delete_stat_cache_entry(path);
 
   return result;
@@ -1934,70 +2036,25 @@ static int s3fs_unlink(const char *path) {
 
 static int directory_empty(const char *path) {
   int result;
-  char *s3_realpath;
-  string url;
-  string my_url;
-  string date;
-  string resource = urlEncode(service_path + bucket);
-  string query = "delimiter=/&prefix=";
-  CURL *curl = NULL;
-  struct BodyStruct body;
-  auto_curl_slist headers;
+  struct s3_object *head = NULL;
 
-  s3_realpath = get_realpath(path);
-  body.text = (char *)malloc(1);
-  body.size = 0;
-
-  if(strcmp(path, "/") != 0){
-    query += urlEncode(string(s3_realpath).substr(1) + "/");
-  }else{
-    query += urlEncode(string(s3_realpath).substr(1));
-  }
-  free(s3_realpath);
-
-  query += "&max-keys=1";
-  url = host + resource + "?"+ query;
-
-  curl = create_curl_handle();
-  my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-
-  date = get_date();
-  headers.append("Date: " + date);
-  headers.append("ContentType: ");
-  if(public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-        calc_signature("GET", "", date, headers.get(), resource + "/"));
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-
-  result = my_curl_easy_perform(curl, &body);
-  destroy_curl_handle(curl);
-  if(result != 0) {
-    if(body.text)
-      free(body.text);
+  if((result = list_bucket(path, &head, "/")) != 0){
+    if(foreground){
+      printf(" directory_empty - list_bucket returns error.\n");
+    }
     return result;
   }
-
-  // is the directory empty?
-  if(strstr(body.text, "<CommonPrefixes>") != NULL ||
-      strstr(body.text, "<ETag>") != NULL ) {
-    if(body.text)
-      free(body.text);
+  if(head){
+    free_object_list(head);
     return -ENOTEMPTY;
   }
-
-  if(body.text)
-    free(body.text);
 
   return 0;
 }
 
 static int s3fs_rmdir(const char *path) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
 
   if(foreground) 
     printf("s3fs_rmdir [path=%s]\n", path);
@@ -2006,16 +2063,36 @@ static int s3fs_rmdir(const char *path) {
     return result;
   }
 
-  s3_realpath = get_realpath(path);
-
    // directory must be empty
    if(directory_empty(path) != 0)
      return -ENOTEMPTY;
 
-  result = curl_delete(s3_realpath);
-
+  s3_realpath = get_realpath(path);
+  if('/' != s3_realpath[s3_realpath.length() - 1]){
+    s3_realpath += "/";
+  }
+  result = curl_delete(s3_realpath.c_str());
   delete_stat_cache_entry(path);
-  free(s3_realpath);
+
+  if(0 != result){
+    return result;
+  }
+
+  // double check for old version(before 1.63)
+  // The old version makes "dir" object, newer version makes "dir/".
+  // A case, there is only "dir", the first removing object is "dir/".
+  // Then "dir/" is not exists, but curl_delete returns 0.
+  // So need to check "dir" and should be removed it.
+  struct stat stbuf;
+  if(0 != get_object_attribute(path, &stbuf)){
+    // This case is 0 return.
+    return 0;
+  }
+  if(S_ISDIR(stbuf.st_mode)){
+    // Found "dir" object.
+    result = curl_delete(path);
+    delete_stat_cache_entry(path);
+  }
 
   return result;
 }
@@ -2071,7 +2148,7 @@ static int s3fs_symlink(const char *from, const char *to) {
 
 static int rename_object(const char *from, const char *to) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
 
   if(foreground)
@@ -2090,22 +2167,17 @@ static int rename_object(const char *from, const char *to) {
   }
 
   s3_realpath = get_realpath(from);
-  result = curl_get_headers(s3_realpath, meta);
-
-  if(result != 0) {
-    free(s3_realpath);
+  if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
     return result;
   }
 
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
-  free(s3_realpath);
 
-  result = put_headers(to, meta);
-  if(result != 0) 
+  if(0 != (result = put_headers(to, meta))){
     return result;
-
+  }
   result = s3fs_unlink(from);
 
   return result;
@@ -2113,7 +2185,7 @@ static int rename_object(const char *from, const char *to) {
 
 static int rename_object_nocopy(const char *from, const char *to) {
   int       result;
-  char*     s3_realpath;
+  string    s3_realpath;
   headers_t meta;
   int       fd;
   int       isclose = 1;
@@ -2148,9 +2220,7 @@ static int rename_object_nocopy(const char *from, const char *to) {
 
   // Get attributes
   s3_realpath = get_realpath(from);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(result != 0){
+  if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
     if(isclose){
       close(fd);
     }
@@ -2183,7 +2253,7 @@ static int rename_object_nocopy(const char *from, const char *to) {
 
 static int rename_large_object(const char *from, const char *to) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   struct stat buf;
   headers_t meta;
   string upload_id;
@@ -2206,14 +2276,12 @@ static int rename_large_object(const char *from, const char *to) {
   get_object_attribute(from, &buf);
 
   s3_realpath = get_realpath(from);
-  if((curl_get_headers(s3_realpath, meta) != 0)) {
-    free(s3_realpath);
+  if(0 != (curl_get_headers(s3_realpath.c_str(), meta))){
     return -1;
   }
 
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
-  free(s3_realpath);
 
   upload_id = initiate_multipart_upload(to, buf.st_size, meta);
   if(upload_id.size() == 0)
@@ -2250,13 +2318,13 @@ static int rename_large_object(const char *from, const char *to) {
 
 static int clone_directory_object(const char *from, const char *to)
 {
-  int result;
+  int result = -1;
   mode_t mode;
   time_t time;
   uid_t  uid;
   gid_t  gid;
   headers_t meta;
-  char *s3_realpath;
+  string s3_realpath;
 
   if(foreground)
     printf("clone_directory_object [from=%s] [to=%s]\n", from, to);
@@ -2265,13 +2333,17 @@ static int clone_directory_object(const char *from, const char *to)
     syslog(LOG_DEBUG, "clone_directory_object [from=%s] [to=%s]", from, to);
 
   // get target's attributes
-  s3_realpath = get_realpath(from);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(result != 0) {
-    return result;
+  if('/' != from[strlen(from) - 1]){
+    s3_realpath = get_realpath(from);
+    s3_realpath += "/";
+    result = curl_get_headers(s3_realpath.c_str(), meta);
   }
-
+  if(0 != result){
+    s3_realpath = get_realpath(from);
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      return result;
+    }
+  }
   mode = get_mode(meta["x-amz-meta-mode"].c_str());
   time = get_mtime(meta["x-amz-meta-mtime"].c_str());
   uid  = get_uid(meta["x-amz-meta-uid"].c_str());
@@ -2282,17 +2354,18 @@ static int clone_directory_object(const char *from, const char *to)
 }
 
 static int rename_directory(const char *from, const char *to) {
+  struct s3_object* lb_head    = NULL;
+  struct s3_object* lb_headref = NULL;
+  string strfrom  = from ? from : "";	// from is without "/".
+  string strto    = to ? to : "";	// to is without "/" too.
+  string basepath = strfrom + "/";
+  MVNODE* mn_head = NULL;
+  MVNODE* mn_tail = NULL;
+  MVNODE* mn_cur;
+  struct stat stbuf;
   int result;
-  // mode_t mode;
-  headers_t meta;
-  int num_keys = 0;
-  int max_keys = 50;
-  string path;
-  string new_path;
-  string to_path;
-  string from_path;
-  MVNODE *head = NULL;
-  MVNODE *tail = NULL;
+  bool is_dir;
+  bool is_nobase = false;
 
   if(foreground) 
     cout << "rename_directory[from=" << from << "][to=" << to << "]" << endl;
@@ -2300,236 +2373,116 @@ static int rename_directory(const char *from, const char *to) {
   if(debug)
     syslog(LOG_DEBUG, "rename_directory [from=%s] [to=%s]", from, to);
 
-  CURL *curl;
-  struct BodyStruct body;
-  string NextMarker;
-  string IsTruncated("true");
-  string object_type;
-  string Key;
-  bool is_dir;
+  //
+  // Initiate and Add base directory into MVNODE struct.
+  //
+  is_dir = true;
 
-  body.text = (char *)malloc(1);
-  body.size = 0;
+  if(0 == get_object_attribute(basepath.c_str(), &stbuf)){
+    // "from" diredtory is new version type("dir/").
+    strfrom = basepath;
+  }else{
+    // "from" diredtory is old version type("dir").
+    if(0 != get_object_attribute(strfrom.c_str(), &stbuf)){
+      // "from" diredtory is not new and old version type.
+      // This case is that object is made by s3cmd tool(etc).
+      is_nobase = true;
+    }
+  }
+  // "to" directory object is always "dir/".
+  strto += "/";	
 
-  // create the head/tail of the linked list
-  from_path.assign(from);
-  to_path.assign(to);
-  is_dir = 1;
+  if(!is_nobase){
+    if(NULL == (add_mvnode(&mn_head, &mn_tail, strfrom.c_str(), strto.c_str(), is_dir))){
+      return -ENOMEM;
+    }
+  }
 
-  // printf("calling create_mvnode\n");
-  // head = create_mvnode((char *)from, (char *)to, is_dir);
-  head = create_mvnode((char *)from_path.c_str(), (char *)to_path.c_str(), is_dir);
-  tail = head;
-  // printf("back from create_mvnode\n");
+  //
+  // get a list of all the objects
+  //
+  // No delimiter is specified, the result(head) is all object keys.
+  // (CommonPrefixes is empty, but all object is listed in Key.)
+  if(0 != (result = list_bucket(basepath.c_str(), &lb_head, NULL))){
+    if(foreground){
+      printf(" rename_directory list_bucket returns error.\n");
+    }
+    return result; 
+  }
+  for(lb_headref = lb_head; lb_headref; lb_headref = lb_headref->next){
+    // make "from" and "to" object name.
+    string from_name = basepath + lb_headref->name;
+    string to_name   = strto + lb_headref->name;
 
-  while (IsTruncated == "true") {
-    string query;
-    string resource = urlEncode(service_path + bucket);
-
-    if(mount_prefix.size() > 0)
-      query = "prefix=" + mount_prefix .substr(1, mount_prefix.size() - 1) + "/";
-    else
-      query = "prefix=";
-
-    if (strcmp(from, "/") != 0)
-      query += urlEncode(string(from).substr(1) + "/");
-
-    if (NextMarker.size() > 0)
-      query += "&marker=" + urlEncode(NextMarker);
-
-    query += "&max-keys=";
-    query.append(IntToStr(max_keys));
-
-    string url = host + resource + "?" + query;
-
-    {
-      curl = create_curl_handle();
-
-      string my_url = prepare_url(url.c_str());
-
-      if(body.text) {
-        free(body.text);
-        body.size = 0;
-        body.text = (char *)malloc(1);
+    // Check subdirectory.
+    if(0 != get_object_attribute(from_name.c_str(), &stbuf)){
+      if(foreground){
+        printf(" rename_directory - failed to get %s object attribute.\n", from_name.c_str());
       }
+      continue;
+    }
+    is_dir = S_ISDIR(stbuf.st_mode) ? true : false;
+    
+    // push this one onto the stack
+    if(NULL == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir)){
+      return -ENOMEM;
+    }
+  }
+  if(lb_head){
+    free_object_list(lb_head);
+  }
 
-      curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-
-      auto_curl_slist headers;
-      string date = get_date();
-      headers.append("Date: " + date);
-      headers.append("ContentType: ");
-      if (public_bucket.substr(0,1) != "1") {
-        headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-          calc_signature("GET", "", date, headers.get(), resource + "/"));
-      }
-
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-      
-      result = my_curl_easy_perform(curl, &body);
-
-      destroy_curl_handle(curl);
-
-      if(result != 0) {
-        if(body.text)
-          free(body.text);
-        free_mvnodes(head);
-        return result;
+  //
+  // rename
+  //
+  // rename directory objects.
+  for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
+    if(mn_cur->is_dir){
+      if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
+        if(foreground){
+          printf(" rename_directory - failed(%d) to rename %s directory object to %s.\n", result, mn_cur->old_path, mn_cur->new_path);
+        }
+        syslog(LOG_ERR, "clone_directory_object returned an error(%d)", result);
+        free_mvnodes(mn_head);
+        return -EIO;
       }
     }
-
-    xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
-    if (doc != NULL && doc->children != NULL) {
-      for (xmlNodePtr cur_node = doc->children->children;
-           cur_node != NULL;
-           cur_node = cur_node->next) {
-
-        string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-        if(cur_node_name == "IsTruncated")
-          IsTruncated = reinterpret_cast<const char *>(cur_node->children->content);
-
-        if (cur_node_name == "Contents") {
-          if (cur_node->children != NULL) {
-            string LastModified;
-            string Size;
-            for (xmlNodePtr sub_node = cur_node->children;
-                 sub_node != NULL;
-                 sub_node = sub_node->next) {
-
-              if (sub_node->type == XML_ELEMENT_NODE) {
-                string elementName = reinterpret_cast<const char*>(sub_node->name);
-                if (sub_node->children != NULL) {
-                  if (sub_node->children->type == XML_TEXT_NODE) {
-                    if (elementName == "Key") {
-                      Key = reinterpret_cast<const char *>(sub_node->children->content);
-                    }
-                    if (elementName == "LastModified") {
-                      LastModified = reinterpret_cast<const char *>(sub_node->children->content);
-                    }
-                    if (elementName == "Size") {
-                      Size = reinterpret_cast<const char *>(sub_node->children->content);
-                    }
-                  }
-                }
-              }
-            }
-
-            if (Key.size() > 0) {
-               num_keys++;
-               path = "/" + Key;
-               new_path = path;
-               if(mount_prefix.size() > 0)
-                 new_path.replace(0, mount_prefix.substr(0, mount_prefix.size()).size() + from_path.size(), to_path);
-               else
-                 new_path.replace(0, from_path.size(), to_path);
-
-               if(mount_prefix.size() > 0)
-                 result = curl_get_headers(path.replace(0, mount_prefix.size(), "").c_str(), meta);
-               else
-                 result = curl_get_headers(path.c_str(), meta);
-               
-               if(result != 0) {
-                 xmlFreeDoc(doc);
-                 free_mvnodes(head);
-                 if(body.text)
-                   free(body.text);
-                 body.text = NULL;
-
-                 return result;
-               }
-
-               // process the Key appropriately
-               // if it is a directory move the directory object
-               object_type = meta["Content-Type"];
-               if(object_type.compare("application/x-directory") == 0)
-                  is_dir = 1;
-               else
-                  is_dir = 0;
-
-               // push this one onto the stack
-               tail = add_mvnode(head, (char *)path.c_str(), (char *)new_path.c_str(), is_dir);
-            }
-
-          } // if (cur_node->children != NULL) {
-        } // if (cur_node_name == "Contents") {
-      } // for (xmlNodePtr cur_node = doc->children->children;
-    } // if (doc != NULL && doc->children != NULL) {
-    xmlFreeDoc(doc);
-
-    if(IsTruncated == "true")
-       NextMarker = Key;
-
-  } // while (IsTruncated == "true") {
-
-  if(body.text)
-    free(body.text);
-  body.text = NULL;
-
-  // iterate over the list - clone directories first - top down
-  if(head == NULL)
-    return 0;
-
-  MVNODE *my_head;
-  MVNODE *my_tail;
-  MVNODE *next;
-  MVNODE *prev;
-  my_head = head;
-  my_tail = tail;
-  next = NULL;
-  prev = NULL;
- 
-  do {
-    if(my_head->is_dir) {
-      result = clone_directory_object( my_head->old_path, my_head->new_path);
-      if(result != 0) {
-         free_mvnodes(head);
-         syslog(LOG_ERR, "clone_directory_object returned an error");
-         return -EIO;
-      }
-    }
-    next = my_head->next;
-    my_head = next;
-  } while(my_head != NULL);
+  }
 
   // iterate over the list - copy the files with rename_object
   // does a safe copy - copies first and then deletes old
-  my_head = head;
-  next = NULL;
- 
-  do {
-    if(my_head->is_dir != 1) {
-      if(!nocopyapi){
-        result = rename_object( my_head->old_path, my_head->new_path);
+  for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
+    if(!mn_cur->is_dir){
+      if(!nocopyapi && !norenameapi){
+        result = rename_object(mn_cur->old_path, mn_cur->new_path);
       }else{
-        result = rename_object_nocopy( my_head->old_path, my_head->new_path);
+        result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
       }
-      if(result != 0) {
-         free_mvnodes(head);
-         syslog(LOG_ERR, "rename_dir: rename_object returned an error");
-         return -EIO;
+      if(0 != result){
+        if(foreground){
+          printf(" rename_directory - failed(%d) to rename %s object to %s.\n", result, mn_cur->old_path, mn_cur->new_path);
+        }
+        syslog(LOG_ERR, "rename_object returned an error(%d)", result);
+        free_mvnodes(mn_head);
+        return -EIO;
       }
     }
-    next = my_head->next;
-    my_head = next;
-  } while(my_head != NULL);
+  }
 
   // Iterate over old the directories, bottoms up and remove
-  do {
-    if(my_tail->is_dir) {
-      result = s3fs_unlink( my_tail->old_path);
-      if(result != 0) {
-         free_mvnodes(head);
-         syslog(LOG_ERR, "rename_dir: s3fs_unlink returned an error");
-         return -EIO;
+  for(mn_cur = mn_tail; mn_cur; mn_cur = mn_cur->prev){
+    if(mn_cur->is_dir){
+      if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
+        if(foreground){
+          printf(" rename_directory - failed(%d) to remove %s directory object.\n", result, mn_cur->old_path);
+        }
+        syslog(LOG_ERR, "s3fs_rmdir returned an error(%d)", result);
+        free_mvnodes(mn_head);
+        return -EIO;
       }
     }
-    prev = my_tail->prev;
-    my_tail = prev;
-  } while(my_tail != NULL);
-
-  free_mvnodes(head);
+  }
+  free_mvnodes(mn_head);
 
   return 0;
 }
@@ -2560,13 +2513,12 @@ static int s3fs_rename(const char *from, const char *to) {
   }else if(!nomultipart && buf.st_size >= FIVE_GB){
     result = rename_large_object(from, to);
   }else{
-    if(!nocopyapi){
+    if(!nocopyapi && !norenameapi){
       result = rename_object(from, to);
     }else{
       result = rename_object_nocopy(from, to);
     }
   }
-
   return result;
 }
 
@@ -2579,8 +2531,10 @@ static int s3fs_link(const char *from, const char *to) {
 
 static int s3fs_chmod(const char *path, mode_t mode) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     printf("s3fs_chmod [path=%s] [mode=%d]\n", path, mode);
@@ -2588,36 +2542,67 @@ static int s3fs_chmod(const char *path, mode_t mode) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
   }
 
   s3_realpath = get_realpath(path);
-  result = curl_get_headers(s3_realpath, meta);
-  if(result != 0) {
-    free(s3_realpath);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
+    }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  meta["x-amz-meta-mode"] = str(mode);
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-  free(s3_realpath);
+  if(S_ISDIR(stbuf.st_mode) && 0 == nIsNewDirType){
+    // directory object of old version
+    // Need to remove old dir("dir") and make new dir("dir/")
 
-  if(put_headers(path, meta) != 0)
-    return -EIO;
+    // At first, remove directory old object
+    if(0 != (result = curl_delete(s3_realpath.c_str()))){
+      return result;
+    }
+    delete_stat_cache_entry(path);
 
-  delete_stat_cache_entry(path);
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(path, mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+      return result;
+    }
+
+  }else{
+    // normal object or directory object of newer version
+    meta["x-amz-meta-mode"] = str(mode);
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+
+    string strpath = path;
+    if(S_ISDIR(stbuf.st_mode)){
+      strpath += "/";
+    }
+    if(put_headers(strpath.c_str(), meta) != 0){
+      return -EIO;
+    }
+    delete_stat_cache_entry(strpath.c_str());
+  }
 
   return 0;
 }
 
 static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
-  int       fd;
-  int       isclose = 1;
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     printf("s3fs_chmod_nocopy [path=%s] [mode=%d]\n", path, mode);
@@ -2625,66 +2610,108 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
-  }
-
-  // Downloading
-  if(0 > (fd = get_opened_fd(path))){
-    if(0 > (fd = get_local_fd(path))){
-      if(foreground) {
-        printf("  s3fs_chmod_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
-      }
-      syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
-      return -EIO;
-    }
-  }else{
-    isclose = 0;
   }
 
   // Get attributes
   s3_realpath = get_realpath(path);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(result != 0){
-    if(isclose){
-      close(fd);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
     }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  // Change file mode
-  meta["x-amz-meta-mode"] = str(mode);
-  // Change local file mode
-  if(-1 == fchmod(fd, mode)){
+  if(S_ISDIR(stbuf.st_mode)){
+    if(0 == nIsNewDirType){
+      // directory object of old version
+      // Need to remove old dir("dir") and make new dir("dir/")
+
+      // At first, remove directory old object
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
+      delete_stat_cache_entry(path);
+
+      // Make new directory object("dir/")
+      if(0 != (result = create_directory_object(path, mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        return result;
+      }
+    }else{
+      // directory object of new version
+      // Over put directory object.
+      if(0 != (result = create_directory_object(path, mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        return result;
+      }
+      string strpath = path;
+      strpath += "/";
+      delete_stat_cache_entry(strpath.c_str());
+    }
+
+  }else{
+    // normal object or directory object of newer version
+    int fd;
+    int isclose = 1;
+
+    // Downloading
+    if(0 > (fd = get_opened_fd(path))){
+      if(0 > (fd = get_local_fd(path))){
+        if(foreground) {
+          printf("  s3fs_chmod_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+        }
+        syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+        return -EIO;
+      }
+    }else{
+      isclose = 0;
+    }
+
+    // Change file mode
+    meta["x-amz-meta-mode"] = str(mode);
+    // Change local file mode
+    if(-1 == fchmod(fd, mode)){
+      if(isclose){
+        close(fd);
+      }
+      if(foreground) {
+        printf("  s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)\n", __LINE__, fd, errno);
+      }
+      syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)", __LINE__, fd, errno);
+      return -errno;
+    }
+
+    // Re-uploading
+    if(0 != (result = put_local_fd(path, meta, fd))){
+      if(foreground) {
+        printf("  s3fs_chmod_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+      }
+    }
+
     if(isclose){
       close(fd);
     }
-    if(foreground) {
-      printf("  s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)\n", __LINE__, fd, errno);
-    }
-    syslog(LOG_ERR, "s3fs_chmod_nocopy line %d: fchmod(fd=%d) error(%d)", __LINE__, fd, errno);
-    return -errno;
+    delete_stat_cache_entry(path);
   }
-
-  // Re-uploading
-  if(0 != (result = put_local_fd(path, meta, fd))){
-    if(foreground) {
-      printf("  s3fs_chmod_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
-    }
-  }
-
-  if(isclose){
-    close(fd);
-  }
-  delete_stat_cache_entry(path);
 
   return result;
 }
 
 static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
+  headers_t meta;
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     printf("s3fs_chown [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
@@ -2692,44 +2719,76 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
   }
 
   s3_realpath = get_realpath(path);
-  headers_t meta;
-  result = curl_get_headers(s3_realpath, meta);
-  if(result != 0) {
-    free(s3_realpath);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
+    }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  struct passwd *aaa = getpwuid(uid);
-  if(aaa != 0)
-    meta["x-amz-meta-uid"] = str((*aaa).pw_uid);
+  struct passwd* pwdata= getpwuid(uid);
+  struct group* grdata = getgrgid(gid);
+  if(pwdata){
+    uid = pwdata->pw_uid;
+  }
+  if(grdata){
+    gid = grdata->gr_gid;
+  }
 
-  struct group *bbb = getgrgid(gid);
-  if(bbb != 0)
-    meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
+  if(S_ISDIR(stbuf.st_mode) && 0 == nIsNewDirType){
+    // directory object of old version
+    // Need to remove old dir("dir") and make new dir("dir/")
 
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-  free(s3_realpath);
+    // At first, remove directory old object
+    if(0 != (result = curl_delete(s3_realpath.c_str()))){
+      return result;
+    }
+    delete_stat_cache_entry(path);
 
-  if(put_headers(path, meta) != 0)
-    return -EIO;
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(path, stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+      return result;
+    }
 
-  delete_stat_cache_entry(path);
+  }else{
+    meta["x-amz-meta-uid"] = str(uid);
+    meta["x-amz-meta-gid"] = str(gid);
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+
+    string strpath = path;
+    if(S_ISDIR(stbuf.st_mode)){
+      strpath += "/";
+    }
+    if(put_headers(strpath.c_str(), meta) != 0)
+      return -EIO;
+
+    delete_stat_cache_entry(strpath.c_str());
+  }
 
   return 0;
 }
 
 static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
-  int fd;
-  int isclose = 1;
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     printf("s3fs_chown_nocopy [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
@@ -2737,75 +2796,118 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
-  }
-
-  // Downloading
-  if(0 > (fd = get_opened_fd(path))){
-    if(0 > (fd = get_local_fd(path))){
-      if(foreground) {
-        printf("  s3fs_chown_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
-      }
-      syslog(LOG_ERR, "s3fs_chown_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
-      return -EIO;
-    }
-  }else{
-    isclose = 0;
   }
 
   // Get attributes
   s3_realpath = get_realpath(path);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(result != 0){
-    if(isclose){
-      close(fd);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
     }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  // Change owner
-  struct passwd *aaa = getpwuid(uid);
-  if(aaa != 0){
-    meta["x-amz-meta-uid"] = str((*aaa).pw_uid);
+  struct passwd* pwdata= getpwuid(uid);
+  struct group* grdata = getgrgid(gid);
+  if(pwdata){
+    uid = pwdata->pw_uid;
   }
-  struct group *bbb = getgrgid(gid);
-  if(bbb != 0){
-    meta["x-amz-meta-gid"] = str((*bbb).gr_gid);
+  if(grdata){
+    gid = grdata->gr_gid;
   }
-  // Change local file owner
-  if(-1 == fchown(fd, uid, gid)){
+
+  if(S_ISDIR(stbuf.st_mode)){
+    if(0 == nIsNewDirType){
+      // directory object of old version
+      // Need to remove old dir("dir") and make new dir("dir/")
+
+      // At first, remove directory old object
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
+      delete_stat_cache_entry(path);
+
+      // Make new directory object("dir/")
+      if(0 != (result = create_directory_object(path, stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        return result;
+      }
+    }else{
+      // directory object of new version
+      // Over put directory object.
+      if(0 != (result = create_directory_object(path, stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        return result;
+      }
+      string strpath = path;
+      strpath += "/";
+      delete_stat_cache_entry(strpath.c_str());
+    }
+
+  }else{
+    // normal object or directory object of newer version
+    int fd;
+    int isclose = 1;
+
+    // Downloading
+    if(0 > (fd = get_opened_fd(path))){
+      if(0 > (fd = get_local_fd(path))){
+        if(foreground) {
+          printf("  s3fs_chown_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+        }
+        syslog(LOG_ERR, "s3fs_chown_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+        return -EIO;
+      }
+    }else{
+      isclose = 0;
+    }
+
+    // Change owner
+    meta["x-amz-meta-uid"] = str(uid);
+    meta["x-amz-meta-gid"] = str(gid);
+
+    // Change local file owner
+    if(-1 == fchown(fd, uid, gid)){
+      if(isclose){
+        close(fd);
+      }
+      if(foreground) {
+        printf("  s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)\n", __LINE__, fd, (int)uid, (int)gid, errno);
+      }
+      syslog(LOG_ERR, "s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)", __LINE__, fd, (int)uid, (int)gid, errno);
+      return -errno;
+    }
+
+    // Re-uploading
+    if(0 != (result = put_local_fd(path, meta, fd))){
+      if(foreground) {
+        printf("  s3fs_chown_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+      }
+    }
+
     if(isclose){
       close(fd);
     }
-    if(foreground) {
-      printf("  s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)\n", __LINE__, fd, (int)uid, (int)gid, errno);
-    }
-    syslog(LOG_ERR, "s3fs_chown_nocopy line %d: fchown(fd=%d, uid=%d, gid=%d) is error(%d)", __LINE__, fd, (int)uid, (int)gid, errno);
-    return -errno;
+    delete_stat_cache_entry(path);
   }
 
-  // Re-uploading
-  if(0 != (result = put_local_fd(path, meta, fd))){
-    if(foreground) {
-      printf("  s3fs_chown_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
-    }
-  }
-
-  if(isclose){
-    close(fd);
-  }
-  delete_stat_cache_entry(path);
-
-  return 0;
+  return result;
 }
 
 static int s3fs_truncate(const char *path, off_t size) {
   int fd = -1;
   int result;
   headers_t meta;
-  char *s3_realpath;
+  string s3_realpath;
   int isclose = 1;
 
   if(foreground) 
@@ -2820,9 +2922,7 @@ static int s3fs_truncate(const char *path, off_t size) {
 
   // Get file information
   s3_realpath = get_realpath(path);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(0 == result){
+  if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
     // Exists -> Get file
     if(0 > (fd = get_opened_fd(path))){
       if(0 > (fd = get_local_fd(path))){
@@ -2866,7 +2966,7 @@ static int s3fs_truncate(const char *path, off_t size) {
     close(fd);
   }
   delete_stat_cache_entry(path);
-  return 0;
+  return result;
 }
 
 static int s3fs_open(const char *path, struct fuse_file_info *fi) {
@@ -2953,7 +3053,7 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   int flags;
   int result;
   int fd = fi->fh;
-  char *s3_realpath;
+  string s3_realpath;
 
   if(foreground) 
     cout << "s3fs_flush[path=" << path << "][fd=" << fd << "]" << endl;
@@ -2971,11 +3071,9 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
   if(O_RDONLY != (flags & O_ACCMODE)) {
     headers_t meta;
     s3_realpath = get_realpath(path);
-    result = curl_get_headers(s3_realpath, meta);
-    free(s3_realpath);
-
-    if(result != 0)
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
       return result;
+    }
 
     // if the cached file matches the remote file skip uploading
     struct stat st;
@@ -3080,7 +3178,6 @@ static int s3fs_readdir(
   CURLMsg *msg;
   CURLMcode curlm_code;
   int n_reqs;
-  int n_objects;
   int remaining_messages;
   struct s3_object *head    = NULL;
   struct s3_object *headref = NULL;
@@ -3095,84 +3192,86 @@ static int s3fs_readdir(
   }
 
   // get a list of all the objects
-  if((result = list_bucket(path, &head)) != 0){
+  if((result = list_bucket(path, &head, "/")) != 0){
     if(foreground)
       printf(" s3fs_readdir list_bucket returns error.\n");
     return result;
   }
 
   // force to add "." and ".." name.
-  if(0 != insert_object("..", &head) || 0 != insert_object(".", &head) || !head){
-    if(foreground)
-      printf(" s3fs_readdir list_bucket returns empty head.\n");
+  filler(buf, ".", 0, 0);
+  filler(buf, "..", 0, 0);
+  if(!head){
     return 0;
   }
 
-  n_objects = count_object_list(head);
-
   // populate fuse buffer
-  headref = head;
-  while(headref != NULL) {
-    filler(buf, headref->name, 0, 0);
-    headref = headref->next;
+  for(headref = head; headref; headref = headref->next){
+    int nLen = strlen(headref->name);
+    if(2 <= nLen && '/' == headref->name[nLen - 1]){
+      // cut for last '/' charactor
+      char* ptmp = strdup(headref->name);
+      ptmp[nLen - 1] = '\0';
+      filler(buf, ptmp, 0, 0);
+      free(ptmp);
+    }else{
+      filler(buf, headref->name, 0, 0);
+    }
   }
   headref = head;
 
   // populate the multi interface with an initial set of requests
   n_reqs = 0;
   mh = curl_multi_init();
-  while(n_reqs < MAX_REQUESTS && head != NULL) {
-    string fullpath = path;
-    if(strcmp(path, "/") != 0)
-      fullpath += "/" + string(head->name);
-    else
-      fullpath += string(head->name);
-
-    if(get_stat_cache_entry(fullpath.c_str(), NULL) == 0) {
-      head = head->next;
-      continue;
-    }
-
-    // file not cached, prepare a call to get_headers
-    head_data request_data;
-    request_data.path = fullpath;
-    CURL *curl_handle = create_head_handle(&request_data);
-    curl_map.get()[curl_handle] = request_data;
-
-    // add this handle to the multi handle
-    n_reqs++;
-    curlm_code = curl_multi_add_handle(mh, curl_handle);
-    if(curlm_code != CURLM_OK) {
-      syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
-          curlm_code, curl_multi_strerror(curlm_code));
-      return -EIO;
-    }
-
-    // go to the next object.
-    head = head->next;
-  }
-
-  // Start making requests.
   int still_running = 0;
-  do {
-    curlm_code = curl_multi_perform(mh, &still_running);
-  } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
 
-  if(curlm_code != CURLM_OK) {
-    syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
-        curlm_code, curl_multi_strerror(curlm_code));
-  }
+  do{
+    // Add curl handle to multi session.
+    while(n_reqs < MAX_REQUESTS && head != NULL) {
+      string fullpath = path;
+      if(strcmp(path, "/") != 0)
+        fullpath += "/" + string(head->name);
+      else
+        fullpath += string(head->name);
 
-  while(still_running) {
+      if(get_stat_cache_entry(fullpath.c_str(), NULL) == 0) {
+        head = head->next;
+        continue;
+      }
+
+      // file not cached, prepare a call to get_headers
+      head_data request_data;
+      request_data.path = fullpath;
+      CURL *curl_handle = create_head_handle(&request_data);
+      curl_map.get()[curl_handle] = request_data;
+
+      // add this handle to the multi handle
+      n_reqs++;
+      curlm_code = curl_multi_add_handle(mh, curl_handle);
+      if(curlm_code != CURLM_OK) {
+        syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
+            curlm_code, curl_multi_strerror(curlm_code));
+
+        curl_multi_cleanup(mh);
+        free_object_list(headref);
+        return -EIO;
+      }
+      // go to the next object.
+      head = head->next;
+    }
+
+    // Start making requests and check running.
+    still_running = 0;
     do {
       curlm_code = curl_multi_perform(mh, &still_running);
     } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
 
     if(curlm_code != CURLM_OK) {
-      syslog(LOG_ERR, "s3fs_readdir: curl_multi_perform code: %d msg: %s", 
+      syslog(LOG_ERR, "readdir: curl_multi_perform code: %d msg: %s", 
           curlm_code, curl_multi_strerror(curlm_code));
     }
 
+    // Set timer when still running
     if(still_running) {
       fd_set r_fd;
       fd_set w_fd;
@@ -3200,101 +3299,23 @@ static int s3fs_readdir(
         if(curlm_code != CURLM_OK) {
           syslog(LOG_ERR, "readdir: curl_multi_fdset code: %d msg: %s", 
               curlm_code, curl_multi_strerror(curlm_code));
+
+          curl_multi_cleanup(mh);
+          free_object_list(headref);
           return -EIO;
         }
 
-        if(select(max_fd + 1, &r_fd, &w_fd, &e_fd, &timeout) == -1)
+        if(select(max_fd + 1, &r_fd, &w_fd, &e_fd, &timeout) == -1){
+          curl_multi_cleanup(mh);
+          free_object_list(headref);
           YIKES(-errno);
+        }
       }
     }
 
+    // Read the result
     while((msg = curl_multi_info_read(mh, &remaining_messages))) {
-      if(msg->msg == CURLMSG_DONE) {
-        CURLcode code = msg->data.result;
-        if(code != 0) {
-          syslog(LOG_DEBUG, "s3fs_readdir: remaining_msgs: %i code: %d  msg: %s", 
-              remaining_messages, code, curl_easy_strerror(code));
-          return -EIO;
-        }
-
-        CURL *curl_handle = msg->easy_handle;
-        head_data response = curl_map.get()[curl_handle];
-
-        struct stat st;
-        memset(&st, 0, sizeof(st));
-
-        st.st_nlink = 1; // see fuse FAQ
-
-        // mode
-        st.st_mode = get_mode((*response.responseHeaders)["x-amz-meta-mode"].c_str());
-
-        // content-type
-        char *ContentType = 0;
-        if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_TYPE, &ContentType) == 0)
-          if(ContentType)
-            st.st_mode |= strcmp(ContentType, "application/x-directory") == 0 ? S_IFDIR : S_IFREG;
-
-        // mtime
-        st.st_mtime = get_mtime((*response.responseHeaders)["x-amz-meta-mtime"].c_str());
-        if(st.st_mtime == 0) {
-          long LastModified;
-          if(curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0)
-            st.st_mtime = LastModified;
-        }
-
-        // size
-        double ContentLength;
-        if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == 0)
-          st.st_size = static_cast<off_t>(ContentLength);
-
-        if(S_ISREG(st.st_mode))
-          st.st_blocks = get_blocks(st.st_size);
-
-        st.st_uid = get_uid((*response.responseHeaders)["x-amz-meta-uid"].c_str());
-        st.st_gid = get_gid((*response.responseHeaders)["x-amz-meta-gid"].c_str());
-
-        add_stat_cache_entry(response.path.c_str(), &st);
-
-        // cleanup
-        curl_multi_remove_handle(mh, curl_handle);
-        destroy_curl_handle(curl_handle);
-        n_reqs--;
-
-        // add additional requests
-        while(n_reqs < MAX_REQUESTS && head != NULL) {
-          string fullpath = path;
-          if(strcmp(path, "/") != 0)
-            fullpath += "/" + string(head->name);
-          else
-            fullpath += string(head->name);
-
-          if(get_stat_cache_entry(fullpath.c_str(), NULL) == 0) {
-            head = head->next;
-            continue;
-          }
-
-          // file not cached, prepare a call to get_headers
-          head_data request_data;
-          request_data.path = fullpath;
-          CURL *curl_handle = create_head_handle(&request_data);
-          curl_map.get()[curl_handle] = request_data;
-
-          // add this handle to the multi handle
-          n_reqs++;
-          curlm_code = curl_multi_add_handle(mh, curl_handle);
-          if(curlm_code != CURLM_OK) {
-            syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
-                curlm_code, curl_multi_strerror(curlm_code));
-            return -EIO;
-          }
-
-          // prevent this from sitting at 0, we may have requests to finish
-          still_running++;
-
-          // go to the next object.
-          head = head->next;
-        }
-      } else {
+      if(msg->msg != CURLMSG_DONE) {
         syslog(LOG_ERR, "readdir: curl_multi_add_handle code: %d msg: %s", 
             curlm_code, curl_multi_strerror(curlm_code));
 
@@ -3302,8 +3323,85 @@ static int s3fs_readdir(
         free_object_list(headref);
         return -EIO;
       }
+
+      CURLcode code = msg->data.result;
+      if(code != 0) {
+        syslog(LOG_DEBUG, "s3fs_readdir: remaining_msgs: %i code: %d  msg: %s", 
+            remaining_messages, code, curl_easy_strerror(code));
+
+        curl_multi_cleanup(mh);
+        free_object_list(headref);
+        return -EIO;
+      }
+
+      CURL *curl_handle = msg->easy_handle;
+      head_data response= curl_map.get()[curl_handle];
+      long responseCode = -1;
+      if(CURLE_OK != curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &responseCode) || 400 <= responseCode){
+        curl_multi_remove_handle(mh, curl_handle);
+        curl_map.remove(curl_handle);
+        n_reqs--;
+        continue;
+      }
+
+      struct stat st;
+      memset(&st, 0, sizeof(st));
+
+      st.st_nlink = 1; // see fuse FAQ
+
+      // mode
+      st.st_mode = get_mode((*response.responseHeaders)["x-amz-meta-mode"].c_str());
+
+      // content-type
+      char *ContentType = 0;
+      if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_TYPE, &ContentType) == CURLE_OK){
+        if(ContentType){
+          if(0 == strcmp(ContentType, "application/x-directory")){
+            st.st_mode |= S_IFDIR;
+          }else if(0 < response.path.length() && 
+                   '/' == response.path[response.path.length() - 1] && 
+                   (0 == strcmp(ContentType, "binary/octet-stream") || 0 == strcmp(ContentType, "application/octet-stream")) )
+          {
+            st.st_mode |= S_IFDIR;
+          }else{
+            st.st_mode |= S_IFREG;
+          }
+        }
+      }
+
+      // mtime
+      st.st_mtime = get_mtime((*response.responseHeaders)["x-amz-meta-mtime"].c_str());
+      if(st.st_mtime == 0) {
+        long LastModified;
+        if(curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &LastModified) == 0)
+          st.st_mtime = LastModified;
+      }
+      if(-1 == st.st_mtime){
+        st.st_mtime = 0;
+      }
+
+      // size
+      double ContentLength = 0;
+      if(curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &ContentLength) == CURLE_OK){
+        if(-1 != ContentLength){
+          st.st_size = static_cast<off_t>(ContentLength);
+        }
+      }
+
+      if(S_ISREG(st.st_mode))
+        st.st_blocks = get_blocks(st.st_size);
+
+      st.st_uid = get_uid((*response.responseHeaders)["x-amz-meta-uid"].c_str());
+      st.st_gid = get_gid((*response.responseHeaders)["x-amz-meta-gid"].c_str());
+
+      add_stat_cache_entry(response.path.c_str(), &st);
+
+      // cleanup
+      curl_multi_remove_handle(mh, curl_handle);
+      curl_map.remove(curl_handle);
+      n_reqs--;
     }
-  }
+  }while(still_running || head);
 
   curl_multi_cleanup(mh);
   free_object_list(headref);
@@ -3311,10 +3409,10 @@ static int s3fs_readdir(
   return 0;
 }
 
-static int list_bucket(const char *path, struct s3_object **head) {
+static int list_bucket(const char *path, struct s3_object **head, const char* delimiter) {
   CURL *curl;
   int result; 
-  char *s3_realpath;
+  string s3_realpath;
   struct BodyStruct body;
   bool truncated = true;
   string next_marker = "";
@@ -3327,15 +3425,20 @@ static int list_bucket(const char *path, struct s3_object **head) {
   s3_realpath = get_realpath(path);
 
   string resource = urlEncode(service_path + bucket); // this is what gets signed
-  string query = "delimiter=/&prefix=";
+  string query;
+  if(delimiter && 0 < strlen(delimiter)){
+    query += "delimiter=";
+    query += delimiter;
+    query += "&";
+  }
+  query += "prefix=";
 
-  if(strcmp(path, "/") != 0)
-    query += urlEncode(string(s3_realpath).substr(1) + "/");
-  else
-    query += urlEncode(string(s3_realpath).substr(1));
-
-  free(s3_realpath);
-
+  if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+    // last word must be "/"
+    query += urlEncode(s3_realpath.substr(1) + "/");
+  }else{
+    query += urlEncode(s3_realpath.substr(1));
+  }
   query += "&max-keys=1000";
 
   while(truncated) {
@@ -3384,7 +3487,7 @@ static int list_bucket(const char *path, struct s3_object **head) {
 
     truncated = is_truncated(body.text);
     if(truncated){
-      xmlChar*	tmpch = (xmlChar*)get_next_marker(body.text);
+      xmlChar*	tmpch = get_next_marker(body.text);
       if(tmpch){
         next_marker = (char*)tmpch;
         xmlFree(tmpch);
@@ -3405,13 +3508,65 @@ static int list_bucket(const char *path, struct s3_object **head) {
 
 const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
 
+static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
+       const char* ex_contents, const char* ex_key, int isCPrefix, struct s3_object **head)
+{
+  xmlXPathObjectPtr contents_xp;
+  xmlNodeSetPtr content_nodes;
+
+  contents_xp = xmlXPathEvalExpression((xmlChar*)ex_contents, ctx);
+  content_nodes = contents_xp->nodesetval;
+
+  int i;
+  for(i = 0; i < content_nodes->nodeNr; i++) {
+    ctx->node = content_nodes->nodeTab[i];
+
+    // object name
+    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar*)ex_key, ctx);
+    xmlNodeSetPtr key_nodes = key->nodesetval;
+    char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
+
+    if(!name){
+      if(foreground)
+        printf("  append_objects_from_xml_ex name is something wrong. but continue.\n");
+
+    }else if((const char*)name != c_strErrorObjectName){
+      string objname = name;
+      free(name);
+      if(isCPrefix){
+        objname += "/";
+      }
+      if((insert_object(objname.c_str(), head)) != 0){
+        if(foreground)
+          printf("  append_objects_from_xml_ex insert_object returns with error.\n");
+
+        xmlXPathFreeObject(key);
+        xmlXPathFreeObject(contents_xp);
+        return -1;
+      }
+    }else{
+      //if(foreground)
+      //  printf("append_objects_from_xml_ex name is file or subdir in dir. but continue.\n");
+    }
+    xmlXPathFreeObject(key);
+  }
+  xmlXPathFreeObject(contents_xp);
+
+  return 0;
+}
+
 static int append_objects_from_xml(const char* path, const char *xml, struct s3_object **head) {
   xmlDocPtr doc;
   xmlXPathContextPtr ctx;
-  xmlXPathObjectPtr contents_xp;
-  xmlNodeSetPtr content_nodes;
-  string exp_contents = noxmlns ? "//Contents" : "//s3:Contents";
-  string exp_Key      = noxmlns ? "Key" : "s3:Key";
+  string ex_contents = noxmlns ? "//Contents" : "//s3:Contents";
+  string ex_key      = noxmlns ? "Key" : "s3:Key";
+  string ex_cprefix  = noxmlns ? "//CommonPrefixes" : "//s3:CommonPrefixes";
+  string ex_prefix   = noxmlns ? "Prefix" : "s3:Prefix";
+
+  // If there is not <Prefix>, use path instead of it.
+  xmlChar* pprefix = get_prefix(xml);
+  string prefix = (pprefix ? (char*)pprefix : path ? path : "");
+  xmlFree(pprefix);
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
   if(doc == NULL){
@@ -3425,56 +3580,31 @@ static int append_objects_from_xml(const char* path, const char *xml, struct s3_
     xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
                        (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
   }
-  contents_xp = xmlXPathEvalExpression((xmlChar *)exp_contents.c_str(), ctx);
-  content_nodes = contents_xp->nodesetval;
 
-  int i;
-  for(i = 0; i < content_nodes->nodeNr; i++) {
-    ctx->node = content_nodes->nodeTab[i];
-
-    // object name
-    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *)exp_Key.c_str(), ctx);
-    xmlNodeSetPtr key_nodes = key->nodesetval;
-    char *name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
-
-    if(!name){
-      if(foreground)
-        printf("  append_objects_from_xml name is something wrong. but continue.\n");
-
-    }else if((const char*)name != c_strErrorObjectName){
-      if((insert_object(name, head)) != 0){
-        if(foreground)
-          printf("  append_objects_from_xml insert_object returns with error.\n");
-
-        xmlXPathFreeObject(key);
-        xmlXPathFreeObject(contents_xp);
-        xmlXPathFreeContext(ctx);
-        xmlFreeDoc(doc);
-        free(name);
-        return -1;
-      }
-      free(name);
-    }else{
-      //if(foreground)
-      //  printf("append_objects_from_xml name is file or subdir in dir. but continue.\n");
+  if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_contents.c_str(), ex_key.c_str(), 0, head) ||
+     -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), 1, head) )
+  {
+    if(foreground){
+      printf("  append_objects_from_xml append_objects_from_xml_ex returns with error.\n");
     }
-    xmlXPathFreeObject(key);
+    xmlXPathFreeContext(ctx);
+    xmlFreeDoc(doc);
+    return -1;
   }
-
-  xmlXPathFreeObject(contents_xp);
   xmlXPathFreeContext(ctx);
   xmlFreeDoc(doc);
 
   return 0;
 }
 
-static const char *get_next_marker(const char *xml) {
+static xmlChar* get_base_exp(const char* xml, const char* exp) {
   xmlDocPtr doc;
   xmlXPathContextPtr ctx;
   xmlXPathObjectPtr marker_xp;
   xmlNodeSetPtr nodes;
-  char *next_marker;
-  string exp_nextmarker = noxmlns ? "//NextMarker" : "//s3:NextMarker";
+  xmlChar* result;
+  string exp_string = noxmlns ? "//" : "//s3:";
+  exp_string += exp;
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
   ctx = xmlXPathNewContext(doc);
@@ -3482,19 +3612,27 @@ static const char *get_next_marker(const char *xml) {
     xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
                        (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
   }
-  marker_xp = xmlXPathEvalExpression((xmlChar *)exp_nextmarker.c_str(), ctx);
+  marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx);
   nodes = marker_xp->nodesetval;
 
   if(nodes->nodeNr < 1)
-    return "";
+    return NULL;
 
-  next_marker = (char *) xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
+  result = xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
 
   xmlXPathFreeObject(marker_xp);
   xmlXPathFreeContext(ctx);
   xmlFreeDoc(doc);
 
-  return next_marker;
+  return result;
+}
+
+static xmlChar* get_prefix(const char *xml) {
+  return get_base_exp(xml, "Prefix");
+}
+
+static xmlChar* get_next_marker(const char *xml) {
+  return get_base_exp(xml, "NextMarker");
 }
 
 static bool is_truncated(const char *xml) {
@@ -3516,6 +3654,11 @@ static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
       printf("  get_object_name could not get object full path name..\n");
     return NULL;
   }
+  // basepath(path) is as same as fullpath.
+  if(0 == strcmp((char*)fullpath, path)){
+    return (char*)c_strErrorObjectName;
+  }
+
   // Make dir path and filename
   string   strfullpath= (char*)fullpath;
   string   strdirpath = mydirname((char*)fullpath);
@@ -3548,9 +3691,19 @@ static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
       // OK
       return strdup(mybname);
     }else{
-      if(0 == strcmp(dirpath, basepath)){
+      if(basepath && 0 == strcmp(dirpath, basepath)){
         // OK
         return strdup(mybname);
+      }else if(basepath && 0 < strlen(basepath) && '/' == basepath[strlen(basepath) - 1] && 0 == strncmp(dirpath, basepath, strlen(basepath) - 1)){
+        string withdirname = "";
+        if(strlen(dirpath) > strlen(basepath)){
+          withdirname = &dirpath[strlen(basepath)];
+        }
+        if(0 < withdirname.length() && '/' != withdirname[withdirname.length() - 1]){
+          withdirname += "/";
+        }
+        withdirname += mybname;
+        return strdup(withdirname.c_str());
       }
     }
   }
@@ -3671,8 +3824,10 @@ static int s3fs_access(const char *path, int mask) {
 
 static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     printf("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
@@ -3680,31 +3835,66 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
   }
 
   s3_realpath = get_realpath(path);
-  if((result = curl_get_headers(s3_realpath, meta) != 0)) {
-    free(s3_realpath);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
+    }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
-  meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
-  meta["x-amz-metadata-directive"] = "REPLACE";
-  free(s3_realpath);
+  if(S_ISDIR(stbuf.st_mode) && 0 == nIsNewDirType){
+    // directory object of old version
+    // Need to remove old dir("dir") and make new dir("dir/")
 
-  return put_headers(path, meta);
+    // At first, remove directory old object
+    if(0 != (result = curl_delete(s3_realpath.c_str()))){
+      return result;
+    }
+    delete_stat_cache_entry(path);
+
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(path, stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+      return result;
+    }
+
+  }else{
+    meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
+    meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
+    meta["x-amz-metadata-directive"] = "REPLACE";
+
+    string strpath = path;
+    if(S_ISDIR(stbuf.st_mode)){
+      strpath += "/";
+    }
+    if(put_headers(strpath.c_str(), meta) != 0){
+      return -EIO;
+    }
+    delete_stat_cache_entry(strpath.c_str());
+  }
+
+  return 0;
 }
 
 static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
   int result;
-  char *s3_realpath;
+  string s3_realpath;
   headers_t meta;
-  int       fd;
-  int       isclose = 1;
-  struct timeval tv[2];
+  struct stat stbuf;
+  int nIsNewDirType = 1;
 
   if(foreground) 
     cout << "s3fs_utimens_nocopy [path=" << path << "][mtime=" << str(ts[1].tv_sec) << "]" << endl;
@@ -3712,61 +3902,101 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
   }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
+  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
     return result;
-  }
-
-  // Downloading
-  if(0 > (fd = get_opened_fd(path))){
-    if(0 > (fd = get_local_fd(path))){
-      if(foreground) {
-        printf("  s3fs_utimens_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
-      }
-      syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
-      return -EIO;
-    }
-  }else{
-    isclose = 0;
   }
 
   // Get attributes
   s3_realpath = get_realpath(path);
-  result = curl_get_headers(s3_realpath, meta);
-  free(s3_realpath);
-  if(result != 0){
-    if(isclose){
-      close(fd);
+  if(S_ISDIR(stbuf.st_mode)){
+    s3_realpath += "/";
+    if(0 != (result = curl_get_headers(s3_realpath.c_str(), meta))){
+      // Need to chack old type directory("dir").
+      s3_realpath = get_realpath(path);
+      if(0 == (result = curl_get_headers(s3_realpath.c_str(), meta))){
+        nIsNewDirType = 0;
+      }
     }
+  }else{
+    result = curl_get_headers(s3_realpath.c_str(), meta);
+  }
+  if(0 != result){
     return result;
   }
 
-  // Change date
-  meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
-  // Change local file date
-  TIMESPEC_TO_TIMEVAL(&tv[0], &ts[0]);
-  TIMESPEC_TO_TIMEVAL(&tv[1], &ts[1]);
-  if(-1 == futimes(fd, tv)){
+  if(S_ISDIR(stbuf.st_mode)){
+    if(0 == nIsNewDirType){
+      // directory object of old version
+      // Need to remove old dir("dir") and make new dir("dir/")
+
+      // At first, remove directory old object
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
+      delete_stat_cache_entry(path);
+
+      // Make new directory object("dir/")
+      if(0 != (result = create_directory_object(path, stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        return result;
+      }
+    }else{
+      // directory object of new version
+      // Over put directory object.
+      if(0 != (result = create_directory_object(path, stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        return result;
+      }
+      string strpath = path;
+      strpath += "/";
+      delete_stat_cache_entry(strpath.c_str());
+    }
+
+  }else{
+    // normal object or directory object of newer version
+    int fd;
+    int isclose = 1;
+    struct timeval tv[2];
+
+    // Downloading
+    if(0 > (fd = get_opened_fd(path))){
+      if(0 > (fd = get_local_fd(path))){
+        if(foreground) {
+          printf("  s3fs_utimens_nocopy line %d: get_local_fd result: %d\n", __LINE__, fd);
+        }
+        syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: get_local_fd result: %d", __LINE__, fd);
+        return -EIO;
+      }
+    }else{
+      isclose = 0;
+    }
+
+    // Change date
+    meta["x-amz-meta-mtime"] = str(ts[1].tv_sec);
+
+    // Change local file date
+    TIMESPEC_TO_TIMEVAL(&tv[0], &ts[0]);
+    TIMESPEC_TO_TIMEVAL(&tv[1], &ts[1]);
+    if(-1 == futimes(fd, tv)){
+      if(isclose){
+        close(fd);
+      }
+      if(foreground) {
+        printf("  s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)\n", __LINE__, fd, errno);
+      }
+      syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)", __LINE__, fd, errno);
+      return -errno;
+    }
+
+    // Re-uploading
+    if(0 != (result = put_local_fd(path, meta, fd))){
+      if(foreground) {
+        printf("  s3fs_utimens_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
+      }
+    }
     if(isclose){
       close(fd);
     }
-    if(foreground) {
-      printf("  s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)\n", __LINE__, fd, errno);
-    }
-    syslog(LOG_ERR, "s3fs_utimens_nocopy line %d: futimes(fd=%d, ...) is error(%d)", __LINE__, fd, errno);
-    return -errno;
+    delete_stat_cache_entry(path);
   }
-
-  // Re-uploading
-  if(0 != (result = put_local_fd(path, meta, fd))){
-    if(foreground) {
-      printf("  s3fs_utimens_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
-    }
-  }
-
-  if(isclose){
-    close(fd);
-  }
-  delete_stat_cache_entry(path);
 
   return result;
 }
@@ -3832,7 +4062,7 @@ static int list_multipart_uploads(void) {
   return 0;
 }
 
-static void s3fs_check_service(void) {
+static int s3fs_check_service(void) {
   CURL *curl = NULL;
   int result = CURLE_OK;
   CURLcode responseCode;
@@ -3855,7 +4085,7 @@ static void s3fs_check_service(void) {
       calc_signature("GET", "", date, headers.get(), resource));
   } else {
      if(body.text) free(body.text);
-     return;
+     return EXIT_SUCCESS;
   }
 
   curl = create_curl_handle();
@@ -3875,7 +4105,7 @@ static void s3fs_check_service(void) {
       free(body.text);
     body.text = NULL;
     fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   if(responseCode == 404) {
@@ -3884,7 +4114,7 @@ static void s3fs_check_service(void) {
       free(body.text);
     body.text = NULL;
     fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   // unable to connect
@@ -3892,8 +4122,7 @@ static void s3fs_check_service(void) {
     destroy_curl_handle(curl);
     if(body.text) free(body.text);
     body.text = NULL;
-
-    return;
+    return EXIT_SUCCESS;
   }
 
   if(responseCode != 200 && responseCode != 301) {
@@ -3901,8 +4130,7 @@ static void s3fs_check_service(void) {
     if(body.text) free(body.text);
     destroy_curl_handle(curl);
     fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
-
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   // make sure remote mountpath exists and is a directory
@@ -3915,7 +4143,7 @@ static void s3fs_check_service(void) {
       if(body.text)
         free(body.text);
       body.text = NULL;
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
 
@@ -3925,10 +4153,13 @@ static void s3fs_check_service(void) {
   body.text = NULL;
   destroy_curl_handle(curl);
 
-  return;
+  return EXIT_SUCCESS;
 }
 
-static bool check_for_aws_format (void) {
+// Return:  1 - OK(could read and set accesskey etc.)
+//          0 - NG(could not read)
+//         -1 - Should shoutdown immidiatly
+static int check_for_aws_format (void) {
   size_t first_pos = string::npos;
   string line;
   bool got_access_key_id_line = 0;
@@ -3950,14 +4181,14 @@ static bool check_for_aws_format (void) {
       if (first_pos != string::npos) {
         printf ("%s: invalid line in passwd file, found whitespace character\n", 
            program_name.c_str());
-        exit(EXIT_FAILURE);
+        return -1;
       }
 
       first_pos = line.find_first_of("[");
       if (first_pos != string::npos && first_pos == 0) {
         printf ("%s: invalid line in passwd file, found a bracket \"[\" character\n", 
            program_name.c_str());
-        exit(EXIT_FAILURE);
+        return -1;
       }
 
       found = line.find(str1);
@@ -3995,14 +4226,14 @@ static bool check_for_aws_format (void) {
 //
 // only two options: return or error out
 //////////////////////////////////////////////////////////////////
-static void check_passwd_file_perms (void) {
+static int check_passwd_file_perms (void) {
   struct stat info;
 
   // let's get the file info
   if (stat(passwd_file.c_str(), &info) != 0) {
     fprintf (stderr, "%s: unexpected error from stat(%s, ) \n", 
         program_name.c_str(), passwd_file.c_str());
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   } 
 
   // return error if any file has others permissions 
@@ -4011,7 +4242,7 @@ static void check_passwd_file_perms (void) {
       (info.st_mode & S_IXOTH))  {
     fprintf (stderr, "%s: credentials file %s should not have others permissions\n", 
         program_name.c_str(), passwd_file.c_str());
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   // Any local file should not have any group permissions 
@@ -4022,11 +4253,10 @@ static void check_passwd_file_perms (void) {
         (info.st_mode & S_IXGRP))  {
       fprintf (stderr, "%s: credentials file %s should not have group permissions\n", 
         program_name.c_str(), passwd_file.c_str());
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
-
-  return;
+  return EXIT_SUCCESS;
 }
 
 //////////////////////////////////////////////////////////////////
@@ -4045,7 +4275,7 @@ static void check_passwd_file_perms (void) {
 //
 // only one default key pair is allowed, but not required
 //////////////////////////////////////////////////////////////////
-static void read_passwd_file (void) {
+static int read_passwd_file (void) {
   string line;
   string field1, field2, field3;
   size_t first_pos = string::npos;
@@ -4059,9 +4289,11 @@ static void read_passwd_file (void) {
   check_passwd_file_perms();
 
   aws_format = check_for_aws_format();
-
-  if (aws_format)
-     return;
+  if(1 == aws_format){
+     return EXIT_SUCCESS;
+  }else if(-1 == aws_format){
+     return EXIT_FAILURE;
+  }
 
   ifstream PF(passwd_file.c_str());
   if (PF.good()) {
@@ -4077,21 +4309,21 @@ static void read_passwd_file (void) {
       if (first_pos != string::npos) {
         printf ("%s: invalid line in passwd file, found whitespace character\n", 
            program_name.c_str());
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
 
       first_pos = line.find_first_of("[");
       if (first_pos != string::npos && first_pos == 0) {
         printf ("%s: invalid line in passwd file, found a bracket \"[\" character\n", 
            program_name.c_str());
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
 
       first_pos = line.find_first_of(":");
       if (first_pos == string::npos) {
         printf ("%s: invalid line in passwd file, no \":\" separator found\n", 
            program_name.c_str());
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
       last_pos = line.find_last_of(":");
 
@@ -4105,7 +4337,7 @@ static void read_passwd_file (void) {
         if (default_found == 1) {
           printf ("%s: more than one default key pair found in passwd file\n", 
             program_name.c_str());
-          exit(EXIT_FAILURE);
+          return EXIT_FAILURE;
         }
         default_found = 1;
         field1.assign("");
@@ -4125,7 +4357,7 @@ static void read_passwd_file (void) {
       }
     }
   }
-  return;
+  return EXIT_SUCCESS;
 }
 
 /////////////////////////////////////////////////////////////
@@ -4143,16 +4375,16 @@ static void read_passwd_file (void) {
 // 4 - from the users ~/.passwd-s3fs
 // 5 - from /etc/passwd-s3fs
 /////////////////////////////////////////////////////////////
-static void get_access_keys (void) {
+static int get_access_keys (void) {
 
   // should be redundant
   if (public_bucket.substr(0,1) == "1") {
-     return;
+     return EXIT_SUCCESS;
   }
 
   // 1 - keys specified on the command line
   if (AWSAccessKeyId.size() > 0 && AWSSecretAccessKey.size() > 0) {
-     return;
+     return EXIT_SUCCESS;
   }
 
   // 2 - was specified on the command line
@@ -4160,12 +4392,11 @@ static void get_access_keys (void) {
     ifstream PF(passwd_file.c_str());
     if (PF.good()) {
        PF.close();
-       read_passwd_file();
-       return;
+       return read_passwd_file();
     } else {
       fprintf(stderr, "%s: specified passwd_file is not readable\n",
               program_name.c_str());
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
 
@@ -4181,11 +4412,11 @@ static void get_access_keys (void) {
 
       fprintf(stderr, "%s: if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too\n",
               program_name.c_str());
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
     AWSAccessKeyId.assign(AWSACCESSKEYID);
     AWSSecretAccessKey.assign(AWSSECRETACCESSKEY);
-    return;
+    return EXIT_SUCCESS;
   }
 
   // 3a - from the AWS_CREDENTIAL_FILE environment variable
@@ -4197,12 +4428,11 @@ static void get_access_keys (void) {
       ifstream PF(passwd_file.c_str());
       if (PF.good()) {
          PF.close();
-         read_passwd_file();
-         return;
+         return read_passwd_file();
       } else {
         fprintf(stderr, "%s: AWS_CREDENTIAL_FILE: \"%s\" is not readable\n",
                 program_name.c_str(), passwd_file.c_str());
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
       }
     }
   }
@@ -4216,12 +4446,14 @@ static void get_access_keys (void) {
      ifstream PF(passwd_file.c_str());
      if (PF.good()) {
        PF.close();
-       read_passwd_file();
+       if(EXIT_SUCCESS != read_passwd_file()){
+         return EXIT_FAILURE;
+       }
        // It is possible that the user's file was there but
        // contained no key pairs i.e. commented out
        // in that case, go look in the final location
        if (AWSAccessKeyId.size() > 0 && AWSSecretAccessKey.size() > 0) {
-          return;
+          return EXIT_SUCCESS;
        }
      }
    }
@@ -4231,13 +4463,12 @@ static void get_access_keys (void) {
   ifstream PF(passwd_file.c_str());
   if (PF.good()) {
     PF.close();
-    read_passwd_file();
-    return;
+    return read_passwd_file();
   }
   
   fprintf(stderr, "%s: could not determine how to establish security credentials\n",
            program_name.c_str());
-  exit(EXIT_FAILURE);
+  return EXIT_FAILURE;
 }
 
 static void show_usage (void) {
@@ -4310,6 +4541,15 @@ static void show_help (void) {
     "        \"x-amz-copy-source\"(copy api). Because traffic is increased\n"
     "        2-3 times by this option, we do not recommend this.\n"
     "\n"
+    "   norenameapi - for other incomplete compatibility object storage.\n"
+    "        For a distributed object storage which is compatibility S3\n"
+    "        API without PUT(copy api).\n"
+    "        This option is a subset of nocopyapi option. The nocopyapi\n"
+    "        option does not use copy-api for all command(ex. chmod, chown,\n"
+    "        touch, mv, etc), but this option does not use copy-api for\n"
+    "        only rename command(ex. mv). If this option is specified with\n"
+    "        nocopapi, the s3fs ignores it.\n"
+    "\n"
     "FUSE/mount Options:\n"
     "\n"
     "   Most of the generic mount options described in 'man mount' are\n"
@@ -4335,7 +4575,7 @@ static void show_help (void) {
     "Report bugs to <s3fs-devel@googlegroups.com>\n"
     "s3fs home page: <http://code.google.com/p/s3fs/>\n"
   );
-  exit(EXIT_SUCCESS);
+  return;
 }
 
 static void show_version(void) {
@@ -4345,18 +4585,14 @@ static void show_version(void) {
   "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>\n"
   "This is free software: you are free to change and redistribute it.\n"
   "There is NO WARRANTY, to the extent permitted by law.\n", VERSION );
-  exit(EXIT_SUCCESS);
+  return;
 }
 
-char *get_realpath(const char *path) {
-  size_t size;
-  char *realpath;
+string get_realpath(const char *path) {
+  string realpath = mount_prefix;
+  realpath += path;
 
-  size  = (strlen(path) + 1) + (mount_prefix.size() + 1);
-  realpath = (char *) malloc(size);
-  snprintf(realpath, size, "%s%s", mount_prefix.c_str(), path);
-
-  return(realpath);
+  return realpath;
 }
 
 // This is repeatedly called by the fuse option parser
@@ -4391,7 +4627,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if(stat(arg, &stbuf) == -1) {
       fprintf(stderr, "%s: unable to access MOUNTPOINT %s: %s\n", 
           program_name.c_str(), mountpoint.c_str(), strerror(errno));
-      exit(EXIT_FAILURE);
+      return -1;
     }
 
     root_mode = stbuf.st_mode; // save mode for later usage
@@ -4399,7 +4635,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if(!(S_ISDIR(stbuf.st_mode ))) {
       fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
               program_name.c_str(), mountpoint.c_str());
-      exit(EXIT_FAILURE);
+      return -1;
     } 
 
     struct dirent *ent;
@@ -4407,7 +4643,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if(dp == NULL) {
       fprintf(stderr, "%s: failed to open MOUNTPOINT: %s: %s\n", 
               program_name.c_str(), mountpoint.c_str(), strerror(errno));
-      exit(EXIT_FAILURE); 
+      return -1;
     }
 
     while((ent = readdir(dp)) != NULL) {
@@ -4415,7 +4651,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
         closedir(dp);
         fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty\n", 
                 program_name.c_str(), mountpoint.c_str());
-        exit(EXIT_FAILURE);
+        return -1;
       }
     }
 
@@ -4449,7 +4685,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
                  program_name.c_str());
-         exit(EXIT_FAILURE);
+         return -1;
       }
     }
     if (strstr(arg, "ssl_verify_hostname=") != 0) {
@@ -4460,7 +4696,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: ssl_verify_hostname\n", 
                  program_name.c_str());
-         exit(EXIT_FAILURE);
+         return -1;
       }
     }
     if (strstr(arg, "passwd_file=") != 0) {
@@ -4475,7 +4711,7 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: public_bucket\n", 
                  program_name.c_str());
-         exit(EXIT_FAILURE);
+         return -1;
       }
     }
     if (strstr(arg, "host=") != 0) {
@@ -4509,6 +4745,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if(strstr(arg, "nocopyapi") != 0) {
       nocopyapi = true;
+      return 0;
+    }
+    if(strstr(arg, "norenameapi") != 0) {
+      norenameapi = true;
       return 0;
     }
     if (strstr(arg, "url=") != 0) {
@@ -4550,12 +4790,12 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if (strstr(arg, "accessKeyId=") != 0) {
       fprintf(stderr, "%s: option accessKeyId is no longer supported\n", 
               program_name.c_str());
-      exit(EXIT_FAILURE);
+      return -1;
     }
     if (strstr(arg, "secretAccessKey=") != 0) {
       fprintf(stderr, "%s: option secretAccessKey is no longer supported\n", 
               program_name.c_str());
-      exit(EXIT_FAILURE);
+      return -1;
     }
   }
 
@@ -4584,12 +4824,14 @@ int main(int argc, char *argv[]) {
    while ((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1) {
      switch (ch) {
      case 0:
-       if(strcmp(long_opts[option_index].name, "version") == 0)
-          show_version();
+       if(strcmp(long_opts[option_index].name, "version") == 0){
+         show_version();
+         exit(EXIT_SUCCESS);
+       }
        break;
      case 'h':
        show_help();
-       break;
+       exit(EXIT_SUCCESS);
      case 'o':
        break;
      case 'd':
@@ -4614,7 +4856,9 @@ int main(int argc, char *argv[]) {
   // after which the bucket name and mountpoint names
   // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
-  fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc);
+  if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
+    exit(EXIT_FAILURE);
+  }
 
   // The first plain argument is the bucket
   if (bucket.size() == 0) {
@@ -4673,7 +4917,9 @@ int main(int argc, char *argv[]) {
   }
   
   if (public_bucket.substr(0,1) != "1") {
-     get_access_keys();
+     if(EXIT_SUCCESS != get_access_keys()){
+        exit(EXIT_FAILURE);
+     }
      if(AWSSecretAccessKey.size() == 0 || AWSAccessKeyId.size() == 0) {
         fprintf(stderr, "%s: could not establish security credentials, check documentation\n",
          program_name.c_str());
@@ -4714,8 +4960,12 @@ int main(int argc, char *argv[]) {
   // Does the bucket exist?
   // if the network is up, check for valid credentials and if the bucket
   // exists. skip check if mounting a public bucket
-  if(public_bucket.substr(0,1) != "1")
-     s3fs_check_service();
+  if(public_bucket.substr(0,1) != "1"){
+     int result;
+     if(EXIT_SUCCESS != (result = s3fs_check_service())){
+       exit(result);
+     }
+  }
 
   if (utility_mode) {
      printf("Utility Mode\n");
@@ -4760,6 +5010,6 @@ int main(int argc, char *argv[]) {
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
 
-  return fuse_res;
+  exit(fuse_res);
 }
 

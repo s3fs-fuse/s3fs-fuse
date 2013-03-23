@@ -26,6 +26,13 @@
   return result; \
 }
 
+#define S3FS_FUSE_EXIT() { \
+  struct fuse_context* pcxt = fuse_get_context(); \
+  if(pcxt){ \
+    fuse_exit(pcxt->fuse); \
+  } \
+}
+
 long connect_timeout = 10;
 time_t readwrite_timeout = 30;
 
@@ -51,6 +58,7 @@ time_t stat_cache_expire_time = 0;
 int is_stat_cache_expire_time = 0;
 bool noxmlns = false;
 bool nocopyapi = false;
+bool norenameapi = false;
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -97,7 +105,7 @@ std::string upload_part(const char *path, const char *source, int part_number, s
 std::string copy_part(const char *from, const char *to, int part_number, std::string upload_id, headers_t meta);
 static int complete_multipart_upload(const char *path, std::string upload_id, std::vector <file_part> parts);
 std::string md5sum(int fd);
-char *get_realpath(const char *path);
+std::string get_realpath(const char *path);
 
 time_t get_mtime(const char *s);
 off_t get_size(const char *s);
@@ -107,15 +115,19 @@ gid_t get_gid(const char *s);
 blkcnt_t get_blocks(off_t size);
 
 static int insert_object(const char *name, struct s3_object **head);
-static unsigned int count_object_list(struct s3_object *list);
+//static unsigned int count_object_list(struct s3_object *list);
 static int free_object(struct s3_object *object);
 static int free_object_list(struct s3_object *head);
 
 static CURL *create_head_handle(struct head_data *request);
-static int list_bucket(const char *path, struct s3_object **head);
+static int list_bucket(const char *path, struct s3_object **head, const char* delimiter);
 static bool is_truncated(const char *xml);
+static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx,
+       const char* ex_contents, const char* ex_key, int isCPrefix, struct s3_object **head);
 static int append_objects_from_xml(const char* path, const char *xml, struct s3_object **head);
-static const char *get_next_marker(const char *xml);
+static xmlChar* get_base_exp(const char* xml, const char* exp);
+static xmlChar* get_prefix(const char *xml);
+static xmlChar* get_next_marker(const char *xml);
 static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
 
 static int put_headers(const char *path, headers_t meta);

@@ -38,6 +38,7 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <algorithm>
 
 #include "curl.h"
 #include "string_util.h"
@@ -64,12 +65,18 @@ class auto_curl_slist {
   struct curl_slist* slist;
 };
 
-static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
+size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
   string key;
   stringstream ss(header);
   if (getline(ss, key, ':')) {
+    // Force to lower, only "x-amz"
+    string lkey = key;
+    transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
+    if(lkey.substr(0, 5) == "x-amz"){
+      key = lkey;
+    }
     string value;
     getline(ss, value);
     (*headers)[key] = trim(value);
@@ -186,16 +193,23 @@ int curl_get_headers(const char *path, headers_t &meta) {
   for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;
-    if(key == "Content-Type")
+    if(key == "Content-Type"){
       meta[key] = value;
-    if(key == "Content-Length")
+    }else if(key == "Content-Length"){
       meta[key] = value;
-    if(key == "ETag")
+    }else if(key == "ETag"){
       meta[key] = value;
-    if(key == "Last-Modified")
+    }else if(key == "Last-Modified"){
       meta[key] = value;
-    if(key.substr(0, 5) == "x-amz")
+    }else if(key.substr(0, 5) == "x-amz"){
       meta[key] = value;
+    }else{
+      // Check for upper case
+      transform(key.begin(), key.end(), key.begin(), static_cast<int (*)(int)>(std::tolower));
+      if(key.substr(0, 5) == "x-amz"){
+        meta[key] = value;
+      }
+    }
   }
 
   return 0;

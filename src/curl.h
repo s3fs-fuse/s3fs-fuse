@@ -30,8 +30,8 @@ extern std::string bucket;
 extern std::string public_bucket;
 
 static const EVP_MD* evp_md = EVP_sha1();
-static size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
 
+size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
 CURL *create_curl_handle(void);
 void destroy_curl_handle(CURL *curl_handle);
 int curl_delete(const char *path);

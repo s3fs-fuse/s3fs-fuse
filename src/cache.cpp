@@ -37,14 +37,25 @@ pthread_mutex_t stat_cache_lock;
 
 int get_stat_cache_entry(const char *path, struct stat *buf) {
   int is_delete_cache = 0;
+  string strpath = path;
 
   pthread_mutex_lock(&stat_cache_lock);
-  stat_cache_t::iterator iter = stat_cache.find(path);
+
+  stat_cache_t::iterator iter = stat_cache.end();
+  if('/' != strpath[strpath.length() - 1]){
+    strpath += "/";
+    iter = stat_cache.find(strpath.c_str());
+  }
+  if(iter == stat_cache.end()){
+    strpath = path;
+    iter = stat_cache.find(strpath.c_str());
+  }
+
   if(iter != stat_cache.end()) {
     if(!is_stat_cache_expire_time || ((*iter).second.cache_date + stat_cache_expire_time) >= time(NULL)){
       // hit 
       if(foreground)
-        cout << "    stat cache hit [path=" << path << "]"
+        cout << "    stat cache hit [path=" << strpath << "]"
              << " [time=" << (*iter).second.cache_date << "]"
              << " [hit count=" << (*iter).second.hit_count << "]" << endl;
 
@@ -62,7 +73,7 @@ int get_stat_cache_entry(const char *path, struct stat *buf) {
   pthread_mutex_unlock(&stat_cache_lock);
 
   if(is_delete_cache){
-    delete_stat_cache_entry(path);
+    delete_stat_cache_entry(strpath.c_str());
   }
 
   return -1;
