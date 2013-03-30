@@ -40,36 +40,53 @@
 #include <map>
 #include <algorithm>
 
+#include "common.h"
 #include "curl.h"
 #include "string_util.h"
 
 using namespace std;
 
-pthread_mutex_t curl_handles_lock;
-std::map<CURL*, time_t> curl_times;
-std::map<CURL*, progress_t> curl_progress;
-std::string curl_ca_bundle;
-
-class auto_curl_slist {
- public:
-  auto_curl_slist() : slist(0) { }
-  ~auto_curl_slist() { curl_slist_free_all(slist); }
-
-  struct curl_slist* get() const { return slist; }
-
-  void append(const string& s) {
-    slist = curl_slist_append(slist, s.c_str());
+//-------------------------------------------------------------------
+// Typedef
+//-------------------------------------------------------------------
+struct case_insensitive_compare_func {
+  bool operator ()(const string &a, const string &b) {
+    return strcasecmp(a.c_str(), b.c_str()) < 0;
   }
-
- private:
-  struct curl_slist* slist;
 };
+typedef map<string, string, case_insensitive_compare_func> mimes_t;
+typedef pair<double, double> progress_t;
 
-size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr) {
+//-------------------------------------------------------------------
+// Static valiables
+//-------------------------------------------------------------------
+static pthread_mutex_t curl_handles_lock;
+static const EVP_MD* evp_md = EVP_sha1();
+static map<CURL*, time_t> curl_times;
+static map<CURL*, progress_t> curl_progress;
+static string curl_ca_bundle;
+static mimes_t mimeTypes;
+
+//-------------------------------------------------------------------
+// Functions
+//-------------------------------------------------------------------
+int init_curl_handles_mutex(void)
+{
+  return pthread_mutex_init(&curl_handles_lock, NULL);
+}
+
+int destroy_curl_handles_mutex(void)
+{
+  return pthread_mutex_destroy(&curl_handles_lock);
+}
+
+size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr)
+{
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
   string key;
   stringstream ss(header);
+
   if (getline(ss, key, ':')) {
     // Force to lower, only "x-amz"
     string lkey = key;
@@ -84,7 +101,8 @@ size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *use
   return blockSize * numBlocks;
 }
 
-CURL *create_curl_handle(void) {
+CURL *create_curl_handle(void)
+{
   time_t now;
   CURL *curl_handle;
 
@@ -99,11 +117,12 @@ CURL *create_curl_handle(void) {
   curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
   // curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
   
-  if(ssl_verify_hostname.substr(0,1) == "0")
+  if(ssl_verify_hostname.substr(0,1) == "0"){
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0);
-  if(curl_ca_bundle.size() != 0)
+  }
+  if(curl_ca_bundle.size() != 0){
     curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-
+  }
   now = time(0);
   curl_times[curl_handle] = now;
   curl_progress[curl_handle] = progress_t(-1, -1);
@@ -112,7 +131,8 @@ CURL *create_curl_handle(void) {
   return curl_handle;
 }
 
-void destroy_curl_handle(CURL *curl_handle) {
+void destroy_curl_handle(CURL *curl_handle)
+{
   if(curl_handle != NULL) {
     pthread_mutex_lock(&curl_handles_lock);
     curl_times.erase(curl_handle);
@@ -124,7 +144,8 @@ void destroy_curl_handle(CURL *curl_handle) {
   return;
 }
 
-int curl_delete(const char *path) {
+int curl_delete(const char *path)
+{
   int result;
   string date;
   string url;
@@ -139,10 +160,10 @@ int curl_delete(const char *path) {
 
   headers.append("Date: " + date);
   headers.append("Content-Type: ");
-  if(public_bucket.substr(0,1) != "1")
+  if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("DELETE", "", date, headers.get(), resource));
-
+  }
   my_url = prepare_url(url.c_str());
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
@@ -154,12 +175,12 @@ int curl_delete(const char *path) {
   return result;
 }
 
-int curl_get_headers(const char *path, headers_t &meta) {
+int curl_get_headers(const char *path, headers_t &meta)
+{
   int result;
   CURL *curl;
 
-  if(foreground)
-    printf("  curl_headers[path=%s]\n", path);
+  FGPRINT("  curl_headers[path=%s]\n", path);
 
   string resource(urlEncode(service_path + bucket + path));
   string url(host + resource);
@@ -185,8 +206,9 @@ int curl_get_headers(const char *path, headers_t &meta) {
   result = my_curl_easy_perform(curl);
   destroy_curl_handle(curl);
 
-  if(result != 0)
+  if(result != 0){
      return result;
+  }
 
   // file exists in s3
   // fixme: clean this up.
@@ -215,24 +237,61 @@ int curl_get_headers(const char *path, headers_t &meta) {
   return 0;
 }
 
+CURL *create_head_handle(head_data *request_data)
+{
+  CURL *curl_handle = create_curl_handle();
+  string resource = urlEncode(service_path + bucket + request_data->path);
+  string url = host + resource;
+
+  // libcurl 7.17 does deep copy of url, deep copy "stable" url
+  string my_url = prepare_url(url.c_str());
+  request_data->url = new string(my_url.c_str());
+  request_data->requestHeaders = 0;
+  request_data->responseHeaders = new headers_t;
+
+  curl_easy_setopt(curl_handle, CURLOPT_URL, request_data->url->c_str());
+  curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
+  curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
+
+  // requestHeaders
+  string date = get_date();
+  request_data->requestHeaders = curl_slist_append(
+      request_data->requestHeaders, string("Date: " + date).c_str());
+  request_data->requestHeaders = curl_slist_append(
+      request_data->requestHeaders, string("Content-Type: ").c_str());
+  if(public_bucket.substr(0,1) != "1") {
+    request_data->requestHeaders = curl_slist_append(
+        request_data->requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          calc_signature("HEAD", "", date, request_data->requestHeaders, resource)).c_str());
+  }
+  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, request_data->requestHeaders);
+
+  // responseHeaders
+  curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, request_data->responseHeaders);
+  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_callback);
+
+  return curl_handle;
+}
+
 /**
  * @return fuse return code
  */
-int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
+int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
+{
   char url[256];
   time_t now;
   char* ptr_url = url;
   curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
 
-  if(debug)
-    syslog(LOG_DEBUG, "connecting to URL %s", ptr_url);
+  SYSLOGDBG("connecting to URL %s", ptr_url);
 
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  if(ssl_verify_hostname.substr(0,1) == "0")
+  if(ssl_verify_hostname.substr(0,1) == "0"){
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-
-  if(curl_ca_bundle.size() != 0)
+  }
+  if(curl_ca_bundle.size() != 0){
     curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
+  }
 
   long responseCode;
 
@@ -249,19 +308,16 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
         // Need to look at the HTTP response code
 
         if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
-          syslog(LOG_ERR, "curl_easy_getinfo failed while trying to retrieve HTTP response code");
+          SYSLOGERR("curl_easy_getinfo failed while trying to retrieve HTTP response code");
           return -EIO;
         }
-        
-        if(debug)
-          syslog(LOG_DEBUG, "HTTP response code %ld", responseCode);
+        SYSLOGDBG("HTTP response code %ld", responseCode);
 
         if (responseCode < 400) {
           return 0;
         }
-
         if (responseCode >= 500) {
-          syslog(LOG_ERR, "###HTTP response=%ld", responseCode);
+          SYSLOGERR("###HTTP response=%ld", responseCode);
           sleep(4);
           break; 
         }
@@ -269,88 +325,82 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
         // Service response codes which are >= 400 && < 500
         switch(responseCode) {
           case 400:
-            if(debug) syslog(LOG_ERR, "HTTP response code 400 was returned");
-            if(body) {
-              if(body->size && debug) {
-                syslog(LOG_ERR, "Body Text: %s", body->text);
-              }
+            SYSLOGDBGERR("HTTP response code 400 was returned");
+            if(body && body->size){
+              SYSLOGDBGERR("Body Text: %s", body->text);
             }
-            if(debug) syslog(LOG_DEBUG, "Now returning EIO");
+            SYSLOGDBG("Now returning EIO");
             return -EIO;
 
           case 403:
-            if(debug) syslog(LOG_ERR, "HTTP response code 403 was returned");
-            if(body)
-              if(body->size && debug)
-                syslog(LOG_ERR, "Body Text: %s", body->text);
+            SYSLOGDBGERR("HTTP response code 403 was returned");
+            if(body && body->size){
+              SYSLOGDBGERR("Body Text: %s", body->text);
+            }
             return -EPERM;
 
           case 404:
-            if(debug) syslog(LOG_DEBUG, "HTTP response code 404 was returned");
-            if(body) {
-              if(body->size && debug) {
-                syslog(LOG_DEBUG, "Body Text: %s", body->text);
-              }
+            SYSLOGDBG("HTTP response code 404 was returned");
+            if(body && body->size){
+              SYSLOGDBG("Body Text: %s", body->text);
             }
-            if(debug) syslog(LOG_DEBUG, "Now returning ENOENT");
+            SYSLOGDBG("Now returning ENOENT");
             return -ENOENT;
 
           default:
-            syslog(LOG_ERR, "###response=%ld", responseCode);
+            SYSLOGERR("###response=%ld", responseCode);
             printf("responseCode %ld\n", responseCode);
-            if(body) {
-              if(body->size) {
-                printf("Body Text %s\n", body->text);
-              }
+            if(body && body->size){
+              printf("Body Text %s\n", body->text);
             }
             return -EIO;
         }
         break;
 
       case CURLE_WRITE_ERROR:
-        syslog(LOG_ERR, "### CURLE_WRITE_ERROR");
+        SYSLOGERR("### CURLE_WRITE_ERROR");
         sleep(2);
         break; 
 
       case CURLE_OPERATION_TIMEDOUT:
-        syslog(LOG_ERR, "### CURLE_OPERATION_TIMEDOUT");
+        SYSLOGERR("### CURLE_OPERATION_TIMEDOUT");
         sleep(2);
         break; 
 
       case CURLE_COULDNT_RESOLVE_HOST:
-        syslog(LOG_ERR, "### CURLE_COULDNT_RESOLVE_HOST");
+        SYSLOGERR("### CURLE_COULDNT_RESOLVE_HOST");
         sleep(2);
         break; 
 
       case CURLE_COULDNT_CONNECT:
-        syslog(LOG_ERR, "### CURLE_COULDNT_CONNECT");
+        SYSLOGERR("### CURLE_COULDNT_CONNECT");
         sleep(4);
         break; 
 
       case CURLE_GOT_NOTHING:
-        syslog(LOG_ERR, "### CURLE_GOT_NOTHING");
+        SYSLOGERR("### CURLE_GOT_NOTHING");
         sleep(4);
         break; 
 
       case CURLE_ABORTED_BY_CALLBACK:
-        syslog(LOG_ERR, "### CURLE_ABORTED_BY_CALLBACK");
+        SYSLOGERR("### CURLE_ABORTED_BY_CALLBACK");
         sleep(4);
         now = time(0);
         curl_times[curl] = now;
         break; 
 
       case CURLE_PARTIAL_FILE:
-        syslog(LOG_ERR, "### CURLE_PARTIAL_FILE");
+        SYSLOGERR("### CURLE_PARTIAL_FILE");
         sleep(4);
         break; 
 
       case CURLE_SEND_ERROR:
-        syslog(LOG_ERR, "### CURLE_SEND_ERROR");
+        SYSLOGERR("### CURLE_SEND_ERROR");
         sleep(2);
         break;
 
       case CURLE_RECV_ERROR:
-        syslog(LOG_ERR, "### CURLE_RECV_ERROR");
+        SYSLOGERR("### CURLE_RECV_ERROR");
         sleep(2);
         break;
 
@@ -365,8 +415,7 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
               continue;
            }
         }
-        syslog(LOG_ERR, "curlCode: %i  msg: %s", curlCode,
-           curl_easy_strerror(curlCode));;
+        SYSLOGERR("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
         fprintf (stderr, "%s: curlCode: %i -- %s\n", 
            program_name.c_str(),
            curlCode,
@@ -395,12 +444,12 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
 
       // This should be invalid since curl option HTTP FAILONERROR is now off
       case CURLE_HTTP_RETURNED_ERROR:
-        syslog(LOG_ERR, "### CURLE_HTTP_RETURNED_ERROR");
+        SYSLOGERR("### CURLE_HTTP_RETURNED_ERROR");
 
         if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
           return -EIO;
         }
-        syslog(LOG_ERR, "###response=%ld", responseCode);
+        SYSLOGERR("###response=%ld", responseCode);
 
         // Let's try to retrieve the 
 
@@ -414,19 +463,19 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f) {
 
       // Unknown CURL return code
       default:
-        syslog(LOG_ERR, "###curlCode: %i  msg: %s", curlCode,
-           curl_easy_strerror(curlCode));;
+        SYSLOGERR("###curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
     }
-    syslog(LOG_ERR, "###retrying...");
+    SYSLOGERR("###retrying...");
   }
-  syslog(LOG_ERR, "###giving up");
+  SYSLOGERR("###giving up");
   return -EIO;
 }
 
 // libcurl callback
-size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data) {
+size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data)
+{
   size_t realsize = blockSize * numBlocks;
   struct BodyStruct *mem = (struct BodyStruct *)data;
  
@@ -446,12 +495,13 @@ size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *
 
 // read_callback
 // http://curl.haxx.se/libcurl/c/post-callback.html
-size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp) {
+size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
+{
   struct WriteThis *pooh = (struct WriteThis *)userp;
  
-  if(size*nmemb < 1)
+  if(size*nmemb < 1){
     return 0;
- 
+  }
   if(pooh->sizeleft) {
     *(char *)ptr = pooh->readptr[0]; /* copy one single byte */ 
     pooh->readptr++;                 /* advance pointer */ 
@@ -463,8 +513,8 @@ size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp) {
 }
 
 // homegrown timeout mechanism
-int my_curl_progress(
-    void *clientp, double dltotal, double dlnow, double ultotal, double ulnow) {
+int my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+{
   CURL* curl = static_cast<CURL*>(clientp);
 
   time_t now = time(0);
@@ -482,7 +532,7 @@ int my_curl_progress(
     if (now - curl_times[curl] > readwrite_timeout) {
       pthread_mutex_unlock( &curl_handles_lock );
 
-      syslog(LOG_ERR, "timeout  now: %li  curl_times[curl]: %lil  readwrite_timeout: %li",
+      SYSLOGERR("timeout  now: %li  curl_times[curl]: %lil  readwrite_timeout: %li",
                       (long int)now, curl_times[curl], (long int)readwrite_timeout);
 
       return CURLE_ABORTED_BY_CALLBACK;
@@ -501,8 +551,8 @@ int my_curl_progress(
  * @param date e.g., get_date()
  * @param resource e.g., "/pub"
  */
-string calc_signature(
-    string method, string content_type, string date, curl_slist* headers, string resource) {
+string calc_signature(string method, string content_type, string date, curl_slist* headers, string resource)
+{
   int ret;
   int bytes_written;
   int offset;
@@ -556,13 +606,13 @@ string calc_signature(
           continue;
 
         // Too many write attempts
-        syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+        SYSLOGERR("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
         Signature.clear();
         return Signature;
       } else {
         // If not a retry then it is an error
-        syslog(LOG_ERR, "Failure during BIO_write, returning null String");  
+        SYSLOGERR("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
         Signature.clear();
         return Signature;
@@ -575,14 +625,15 @@ string calc_signature(
   
     // If there is no more data to write, the request sending has been
     // completed
-    if(md_len <= 0)
+    if(md_len <= 0){
       break;
+    }
   }
 
   // Flush the data
   ret = BIO_flush(b64);
   if ( ret <= 0) { 
-    syslog(LOG_ERR, "Failure during BIO_flush, returning null String");  
+    SYSLOGERR("Failure during BIO_flush, returning null String");  
     BIO_free_all(b64);
     Signature.clear();
     return Signature;
@@ -600,7 +651,8 @@ string calc_signature(
   return Signature;
 }
 
-void locate_bundle(void) {
+void locate_bundle(void)
+{
   // See if environment variable CURL_CA_BUNDLE is set
   // if so, check it, if it is a good path, then set the
   // curl_ca_bundle variable to it
@@ -619,7 +671,6 @@ void locate_bundle(void) {
                 program_name.c_str());
         exit(EXIT_FAILURE);
       }
-
       return;
     }
   }
@@ -649,3 +700,125 @@ void locate_bundle(void) {
 
   return;
 }
+
+string md5sum(int fd)
+{
+  MD5_CTX c;
+  char buf[512];
+  char hexbuf[3];
+  ssize_t bytes;
+  char md5[2 * MD5_DIGEST_LENGTH + 1];
+  unsigned char *result = (unsigned char *) malloc(MD5_DIGEST_LENGTH);
+  
+  memset(buf, 0, 512);
+  MD5_Init(&c);
+  while((bytes = read(fd, buf, 512)) > 0) {
+    MD5_Update(&c, buf, bytes);
+    memset(buf, 0, 512);
+  }
+
+  MD5_Final(result, &c);
+
+  memset(md5, 0, 2 * MD5_DIGEST_LENGTH + 1);
+  for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+    snprintf(hexbuf, 3, "%02x", result[i]);
+    strncat(md5, hexbuf, 2);
+  }
+
+  free(result);
+  lseek(fd, 0, 0);
+
+  return string(md5);
+}
+
+bool InitMimeType(const char* file)
+{
+  if(!file){
+    return false;
+  }
+
+  string line;
+  ifstream MT(file);
+  if (MT.good()) {
+    while (getline(MT, line)) {
+      if(line[0]=='#'){
+        continue;
+      }
+      if(line.size() == 0){
+        continue;
+      }
+
+      stringstream tmp(line);
+      string mimeType;
+      tmp >> mimeType;
+      while (tmp) {
+        string ext;
+        tmp >> ext;
+        if (ext.size() == 0){
+          continue;
+        }
+        mimeTypes[ext] = mimeType;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * @param s e.g., "index.html"
+ * @return e.g., "text/html"
+ */
+string lookupMimeType(string s)
+{
+  string result("application/octet-stream");
+  string::size_type last_pos = s.find_last_of('.');
+  string::size_type first_pos = s.find_first_of('.');
+  string prefix, ext, ext2;
+
+  // No dots in name, just return
+  if(last_pos == string::npos){
+    return result;
+  }
+  // extract the last extension
+  if(last_pos != string::npos){
+    ext = s.substr(1+last_pos, string::npos);
+  }
+  if (last_pos != string::npos) {
+     // one dot was found, now look for another
+     if (first_pos != string::npos && first_pos < last_pos) {
+        prefix = s.substr(0, last_pos);
+        // Now get the second to last file extension
+        string::size_type next_pos = prefix.find_last_of('.');
+        if (next_pos != string::npos) {
+           ext2 = prefix.substr(1+next_pos, string::npos);
+        }
+     }
+  }
+
+  // if we get here, then we have an extension (ext)
+  mimes_t::const_iterator iter = mimeTypes.find(ext);
+  // if the last extension matches a mimeType, then return
+  // that mime type
+  if (iter != mimeTypes.end()) {
+    result = (*iter).second;
+    return result;
+  }
+
+  // return with the default result if there isn't a second extension
+  if(first_pos == last_pos){
+     return result;
+  }
+
+  // Didn't find a mime-type for the first extension
+  // Look for second extension in mimeTypes, return if found
+  iter = mimeTypes.find(ext2);
+  if (iter != mimeTypes.end()) {
+     result = (*iter).second;
+     return result;
+  }
+
+  // neither the last extension nor the second-to-last extension
+  // matched a mimeType, return the default mime type 
+  return result;
+}
+

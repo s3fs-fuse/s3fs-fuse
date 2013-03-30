@@ -18,12 +18,6 @@ template<typename T> std::string str(T value) {
   return s.str();
 }
 
-extern bool debug;
-extern bool foreground;
-extern bool service_validated;
-
-extern std::string bucket;
-
 std::string trim_left(const std::string &s, const std::string &t = SPACES);
 std::string trim_right(const std::string &s, const std::string &t = SPACES);
 std::string trim(const std::string &s, const std::string &t = SPACES);
@@ -32,6 +26,5 @@ std::string IntToStr(int);
 std::string get_date();
 std::string urlEncode(const std::string &s);
 std::string prepare_url(const char* url);
-
 
 #endif // S3FS_STRING_UTIL_H_

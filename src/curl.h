@@ -13,29 +13,83 @@ struct WriteThis {
   int sizeleft;
 };
 
-typedef std::pair<double, double> progress_t;
-typedef std::map<std::string, std::string> headers_t;
+class auto_curl_slist {
+ public:
+  auto_curl_slist() : slist(0) { }
+  ~auto_curl_slist() { curl_slist_free_all(slist); }
 
-extern int retries;
-extern long connect_timeout;
-extern time_t readwrite_timeout;
-extern bool debug;
-extern std::string program_name;
-extern std::string ssl_verify_hostname;
-extern std::string AWSAccessKeyId;
-extern std::string AWSSecretAccessKey;
-extern std::string service_path;
-extern std::string host;
-extern std::string bucket;
-extern std::string public_bucket;
+  struct curl_slist* get() const { return slist; }
 
-static const EVP_MD* evp_md = EVP_sha1();
+  void append(const std::string& s) {
+    slist = curl_slist_append(slist, s.c_str());
+  }
 
+ private:
+  struct curl_slist* slist;
+};
+
+// header data
+struct head_data {
+  std::string path;
+  std::string *url;
+  struct curl_slist *requestHeaders;
+  headers_t *responseHeaders;
+};
+
+typedef std::map<CURL*, head_data> headMap_t;
+
+void destroy_curl_handle(CURL *curl_handle);
+
+struct cleanup_head_data {
+  void operator()(std::pair<CURL*, head_data> qqq) {
+    CURL* curl_handle  = qqq.first;
+
+    head_data response = qqq.second;
+    delete response.url;
+    curl_slist_free_all(response.requestHeaders);
+    delete response.responseHeaders;
+    destroy_curl_handle(curl_handle);
+  }
+};
+
+class auto_head {
+ public:
+  auto_head() {}
+  ~auto_head() {
+    for_each(headMap.begin(), headMap.end(), cleanup_head_data());
+  }
+
+  headMap_t& get() { return headMap; }
+
+  void remove(CURL* curl_handle) {
+    headMap_t::iterator iter = headMap.find(curl_handle);
+    if(iter == headMap.end()){
+      return;
+    }
+
+    head_data response = iter->second;
+    delete response.url;
+    curl_slist_free_all(response.requestHeaders);
+    delete response.responseHeaders;
+    destroy_curl_handle(curl_handle);
+
+    headMap.erase(iter);
+  }
+
+  private:
+    headMap_t headMap;
+};
+
+//
+// Functions
+//
+int init_curl_handles_mutex(void);
+int destroy_curl_handles_mutex(void);
 size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
 CURL *create_curl_handle(void);
-void destroy_curl_handle(CURL *curl_handle);
 int curl_delete(const char *path);
 int curl_get_headers(const char *path, headers_t &meta);
+CURL *create_head_handle(struct head_data *request);
 int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0);
 size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
@@ -44,5 +98,8 @@ int my_curl_progress(
 std::string calc_signature(
     std::string method, std::string content_type, std::string date, curl_slist* headers, std::string resource);
 void locate_bundle(void);
+std::string md5sum(int fd);
+bool InitMimeType(const char* file);
+std::string lookupMimeType(std::string);
 
 #endif // S3FS_CURL_H_
