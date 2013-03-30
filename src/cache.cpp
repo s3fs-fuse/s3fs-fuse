@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <string.h>
 #include <iostream>
 #include <string>
 #include <map>
@@ -123,6 +124,15 @@ void delete_stat_cache_entry(const char *path)
   stat_cache_t::iterator iter = stat_cache.find(path);
   if(iter != stat_cache.end()){
     stat_cache.erase(iter);
+  }
+  if(0 < strlen(path) && '/' != path[strlen(path) - 1]){
+    // If there is "path/" cache, delete it.
+    string strpath = path;
+    strpath += "/";
+    iter = stat_cache.find(strpath.c_str());
+    if(iter != stat_cache.end()){
+      stat_cache.erase(iter);
+    }
   }
   pthread_mutex_unlock(&stat_cache_lock);
 }
