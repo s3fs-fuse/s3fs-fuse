@@ -212,6 +212,7 @@ int curl_get_headers(const char *path, headers_t &meta)
 
   // file exists in s3
   // fixme: clean this up.
+  meta.clear();
   for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;

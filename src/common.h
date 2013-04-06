@@ -33,9 +33,6 @@ typedef std::map<std::string, std::string> headers_t;
 //
 extern bool debug;
 extern bool foreground;
-extern unsigned long max_stat_cache_size;
-extern time_t stat_cache_expire_time;
-extern int is_stat_cache_expire_time;
 extern int retries;
 extern long connect_timeout;
 extern time_t readwrite_timeout;

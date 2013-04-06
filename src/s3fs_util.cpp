@@ -65,7 +65,7 @@ string get_realpath(const char *path) {
 // If there are "dir" and "dir/" object on S3, s3fs only recognizes "dir/".
 // On this case, user can not know the "dir" object.
 //
-int insert_object(const char *name, struct s3_object **head)
+int insert_object(const char* name, const char* etag, struct s3_object** head)
 {
   struct s3_object *cur_object;
   struct s3_object *new_object;
@@ -88,21 +88,31 @@ int insert_object(const char *name, struct s3_object **head)
         is_have_cdelimiter = 1;
       }
       if(cLen == nLen){
-        // same object
         if(is_have_cdelimiter == is_have_ndelimiter){
-          // perfect same object
+          // perfect same object, replace only etag.
+        }else if(is_have_cdelimiter){
+          // already set "dir/", so not need to add this.
           return 0;
+        }else{
+          // new object is "dir/", replace name and etag
+          free(cur_object->name);
+          if(NULL == (cur_object->name = strdup(name))){
+            printf("insert_object: could not allocate memory\n");
+            S3FS_FUSE_EXIT();
+            return -1;
+          }
         }
-        if(is_have_cdelimiter){
-          // already set "dir/"
-          return 0;
+        // replace etag.
+        if(cur_object->etag){
+          free(cur_object->etag);
+          cur_object->etag = NULL;
         }
-        // new object is "dir/", replace name.
-        free(cur_object->name);
-        if(NULL == (cur_object->name = strdup(name))){
-          printf("insert_object: could not allocate memory\n");
-          S3FS_FUSE_EXIT();
-          return -1;
+        if(etag){
+          if(NULL == (cur_object->etag = strdup(etag))){
+            printf("insert_object: could not allocate memory\n");
+            S3FS_FUSE_EXIT();
+            return -1;
+          }
         }
         return 0;
       }
@@ -110,7 +120,7 @@ int insert_object(const char *name, struct s3_object **head)
   }
 
   // Not found same object.
-  new_object = (struct s3_object *) malloc(sizeof(struct s3_object));
+  new_object = (struct s3_object*)malloc(sizeof(struct s3_object));
   if(new_object == NULL) {
     printf("insert_object: could not allocate memory\n");
     S3FS_FUSE_EXIT();
@@ -123,12 +133,23 @@ int insert_object(const char *name, struct s3_object **head)
     S3FS_FUSE_EXIT();
     return -1;
   }
+  if(etag){
+    if(NULL == (new_object->etag = strdup(etag))){
+      free(new_object->name);
+      free(new_object);
+      printf("insert_object: could not allocate memory\n");
+      S3FS_FUSE_EXIT();
+      return -1;
+    }
+  }else{
+    new_object->etag = NULL;
+  }
 
-  if((*head) == NULL)
+  if((*head) == NULL){
     new_object->next = NULL;
-  else
+  }else{
     new_object->next = (*head);
-
+  }
   *head = new_object;
 
   return 0;
@@ -137,6 +158,9 @@ int insert_object(const char *name, struct s3_object **head)
 int free_object(struct s3_object *object)
 {
   free(object->name);
+  if(object->etag){
+    free(object->etag);
+  }
   free(object);
   object = NULL;
 
@@ -400,6 +424,16 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
+time_t get_lastmodified(const char* s)
+{
+  struct tm tm;
+  if(!s){
+    return 0L;
+  }
+  strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+  return mktime(&tm);      // GMT
+}
+
 //-------------------------------------------------------------------
 // Help
 //-------------------------------------------------------------------
@@ -467,6 +501,8 @@ void show_help (void)
     "        disable registing xml name space for response of \n"
     "        ListBucketResult and ListVersionsResult etc. Default name \n"
     "        space is looked up from \"http://s3.amazonaws.com/doc/2006-03-01\".\n"
+    "        This option should not be specified now, because s3fs looks up\n"
+    "        xmlns automatically after v1.66.\n"
     "\n"
     "   nocopyapi - for other incomplete compatibility object storage.\n"
     "        For a distributed object storage which is compatibility S3\n"

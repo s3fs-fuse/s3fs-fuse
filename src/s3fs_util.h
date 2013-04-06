@@ -5,7 +5,8 @@
 // Typedef
 //-------------------------------------------------------------------
 struct s3_object {
-  char *name;
+  char* name;
+  char* etag;
   struct s3_object *next;
 };
 
@@ -23,7 +24,7 @@ typedef struct mvnode {
 //-------------------------------------------------------------------
 std::string get_realpath(const char *path);
 
-int insert_object(const char *name, struct s3_object **head);
+int insert_object(const char* name, const char* etag, struct s3_object** head);
 int free_object(struct s3_object *object);
 int free_object_list(struct s3_object *head);
 
@@ -44,6 +45,7 @@ mode_t get_mode(const char *s);
 uid_t get_uid(const char *s);
 gid_t get_gid(const char *s);
 blkcnt_t get_blocks(off_t size);
+time_t get_lastmodified(const char* s);
 
 void show_usage(void);
 void show_help(void);

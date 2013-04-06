@@ -87,6 +87,7 @@ sets the url to use to access Amazon S3. If you want to use HTTPS, then you can 
 .TP
 \fB\-o\fR noxmlns - disable registing xml name space.
 disable registing xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
+This option should not be specified now, because s3fs looks up xmlns automatically after v1.66.
 .TP
 \fB\-o\fR nocopyapi - for other incomplete compatibility object storage.
 For a distributed object storage which is compatibility S3 API without PUT(copy api).
