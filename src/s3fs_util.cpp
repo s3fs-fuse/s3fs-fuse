@@ -304,7 +304,7 @@ string get_username(uid_t uid)
   if(NULL == (ppw = getpwuid(uid)) || NULL == ppw->pw_name){
     FGPRINT("    could not get username(errno=%d).\n", (int)errno);
     SYSLOGDBG("could not get username(errno=%d).\n", (int)errno);
-    return NULL;
+    return string("");
   }
   return string(ppw->pw_name);
 }
