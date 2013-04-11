@@ -454,7 +454,7 @@ static int get_local_fd(const char* path) {
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-    result = my_curl_easy_perform(curl, NULL, f);
+    result = my_curl_easy_perform(curl, NULL, NULL, f);
     if(result != 0) {
       destroy_curl_handle(curl);
       fclose(f);
@@ -497,7 +497,7 @@ static int put_headers(const char *path, headers_t meta) {
   string url;
   string resource;
   struct stat buf;
-  struct BodyStruct body;
+  BodyData body;
   CURL *curl = NULL;
 
   FGPRINT("   put_headers[path=%s]\n", path);
@@ -514,9 +514,6 @@ static int put_headers(const char *path, headers_t meta) {
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
-
-  body.text = (char *)malloc(1);
-  body.size = 0;
 
   auto_curl_slist headers;
   string date = get_date();
@@ -560,11 +557,7 @@ static int put_headers(const char *path, headers_t meta) {
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl, &body);
-
   destroy_curl_handle(curl);
-  if(body.text)
-    free(body.text);
-
   if(result != 0)
     return result;
 
@@ -605,7 +598,7 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   string resource;
   string upload_id;
   struct stat buf;
-  struct BodyStruct body;
+  BodyData body;
   vector <file_part> parts;
 
   FGPRINT("   put_multipart_headers[path=%s]\n", path);
@@ -614,9 +607,6 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
 
-  body.text = (char *)malloc(1);
-  body.size = 0;
-
   // already checked by check_object_access(), so only get attr.
   if(0 != (result = get_object_attribute(path, &buf))){
     return result;
@@ -624,8 +614,6 @@ static int put_multipart_headers(const char *path, headers_t meta) {
 
   upload_id = initiate_multipart_upload(path, buf.st_size, meta);
   if(upload_id.size() == 0){
-    if(body.text)
-      free(body.text);
     return(-EIO);
   }
 
@@ -653,8 +641,6 @@ static int put_multipart_headers(const char *path, headers_t meta) {
 
   result = complete_multipart_upload(path, upload_id, parts);
   if(result != 0) {
-    if(body.text)
-      free(body.text);
     return -EIO;
   }
 
@@ -668,15 +654,10 @@ static int put_multipart_headers(const char *path, headers_t meta) {
       n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
       n_mtime.actime = n_mtime.modtime;
       if((utime(cache_path.c_str(), &n_mtime)) == -1) {
-        if(body.text)
-          free(body.text);
         YIKES(-errno);
       }
     }
   }
-
-  if(body.text)
-    free(body.text);
 
   return 0;
 }
@@ -698,12 +679,9 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   url = host + resource;
 
   int result;
-  struct BodyStruct body;
+  BodyData body;
   auto_curl_slist headers;
   string date = get_date();
-
-  body.text = (char *) malloc(1);
-  body.size = 0; 
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -713,8 +691,6 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   FILE* f = fdopen(fd, "rb");
   if(f == 0){
-    if(body.text)
-      free(body.text);
     YIKES(-errno);
   }
 
@@ -749,12 +725,8 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   string my_url = prepare_url(url.c_str());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl, &body, f);
-
-  if(body.text)
-    free(body.text);
+  result = my_curl_easy_perform(curl, &body, NULL, f);
   destroy_curl_handle(curl);
-
   if(result != 0)
     return result;
 
@@ -941,13 +913,10 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
   string upload_id = "";
   string ContentType;
   string s3_realpath;
-  struct BodyStruct body;
+  BodyData body;
   struct curl_slist *slist=NULL;
 
   FGPRINT("      initiate_multipart_upload [path=%s][size=%lu]\n", path, size);
-
-  body.text = (char *)malloc(1);
-  body.size = 0; 
 
   s3_realpath = get_realpath(path);
   resource = urlEncode(service_path + bucket + s3_realpath);
@@ -1012,15 +981,13 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
   destroy_curl_handle(curl);
 
   if(result != 0) {
-    if(body.text)
-      free(body.text);
     return upload_id;
   }
 
   // XML returns UploadId
   // Parse XML body for UploadId
   upload_id.clear();
-  xmlDocPtr doc = xmlReadMemory(body.text, body.size, "", NULL, 0);
+  xmlDocPtr doc = xmlReadMemory(body.str(), body.size(), "", NULL, 0);
   if(doc != NULL && doc->children != NULL) {
     for(xmlNodePtr cur_node = doc->children->children;
          cur_node != NULL;
@@ -1044,11 +1011,6 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
   } // if (doc != NULL && doc->children != NULL)
   xmlFreeDoc(doc);
 
-  // clean up
-  if(body.text)
-    free(body.text);
-  body.size = 0;
-
   return upload_id;
 }
 
@@ -1066,7 +1028,7 @@ static int complete_multipart_upload(const char *path, string upload_id,
   string resource;
   string postContent;
   string s3_realpath;
-  struct BodyStruct body;
+  BodyData body;
   struct WriteThis pooh;
   struct curl_slist *slist = NULL;
 
@@ -1106,9 +1068,6 @@ static int complete_multipart_upload(const char *path, string upload_id,
   url = host + resource;
   my_url = prepare_url(url.c_str());
 
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -1140,9 +1099,6 @@ static int complete_multipart_upload(const char *path, string upload_id,
 
   curl_slist_free_all(slist);
   destroy_curl_handle(curl);
-
-  if(body.text)
-    free(body.text);
   free(pData);
 
   return result;
@@ -1162,8 +1118,8 @@ static string upload_part(const char *path, const char *source, int part_number,
   string ETag;
   string s3_realpath;
   struct stat st;
-  struct BodyStruct body;
-  struct BodyStruct header;
+  BodyData body;
+  BodyData header;
   struct curl_slist *slist = NULL;
 
   // Now upload the file as the nth part
@@ -1204,12 +1160,6 @@ static string upload_part(const char *path, const char *source, int part_number,
   url = host + resource;
   my_url = prepare_url(url.c_str());
 
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-
-  header.text = (char *)malloc(1);
-  header.size = 0; 
-
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
@@ -1236,50 +1186,29 @@ static string upload_part(const char *path, const char *source, int part_number,
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl, &body, part_file);
-
+  result = my_curl_easy_perform(curl, &body, &header, part_file);
   curl_slist_free_all(slist);
   destroy_curl_handle(curl);
   fclose(part_file);
 
   if(result != 0) {
-    if(header.text)
-      free(header.text);
-    if(body.text)
-      free(body.text);
     return "";
   }
 
   // calculate local md5sum, if it matches the header
   // ETag value, the upload was successful.
   if((fd = open(source, O_RDONLY)) == -1) {
-    if(header.text)
-      free(header.text);
-    if(body.text)
-      free(body.text);
     SYSLOGERR("%d###result=%d", __LINE__, -fd);
-    
     return "";
   }
 
   string md5 = md5sum(fd);
   close(fd);
-  if(!md5.empty() && strstr(header.text, md5.c_str())) {
+  if(!md5.empty() && strstr(header.str(), md5.c_str())) {
     ETag.assign(md5);
-
   } else {
-    if(header.text)
-      free(header.text);
-    if(body.text)
-      free(body.text);
     return "";
   }
-
-  // clean up
-  if(header.text)
-    free(header.text);
-  if(body.text)
-    free(body.text);
 
   return ETag;
 }
@@ -1294,8 +1223,8 @@ static string copy_part(const char *from, const char *to, int part_number, strin
   string raw_date;
   string ETag;
   string s3_realpath;
-  struct BodyStruct body;
-  struct BodyStruct header;
+  BodyData body;
+  BodyData header;
 
   // Now copy the file as the nth part
   FGPRINT("copy_part [from=%s] [to=%s]\n", from, to);
@@ -1309,11 +1238,6 @@ static string copy_part(const char *from, const char *to, int part_number, strin
   resource.append(upload_id);
   url = host + resource;
   my_url = prepare_url(url.c_str());
-
-  body.text = (char *)malloc(1);
-  body.size = 0; 
-  header.text = (char *)malloc(1);
-  header.size = 0; 
 
   auto_curl_slist headers;
   string date = get_date();
@@ -1350,29 +1274,17 @@ static string copy_part(const char *from, const char *to, int part_number, strin
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
-  result = my_curl_easy_perform(curl, &body);
+  result = my_curl_easy_perform(curl, &body, &header);
   destroy_curl_handle(curl);
-
   if(result != 0) {
-    if(body.text)
-      free(body.text);
-    if(header.text)
-      free(header.text);
     return "";
   }
 
-  char *start_etag;
-  char *end_etag;
-  start_etag = strstr(body.text, "ETag");
-  end_etag = strstr(body.text, "/ETag>");
+  char* body_data = (char*)body.str();
+  char* start_etag= strstr(body_data, "ETag");
+  char* end_etag  = strstr(body_data, "/ETag>");
   start_etag += 11;
   ETag.assign(start_etag, (size_t)(end_etag - start_etag - 7));
-
-  // clean up
-  if(body.text)
-    free(body.text);
-  if(header.text)
-    free(header.text);
 
   return ETag;
 }
@@ -1384,17 +1296,13 @@ static int list_multipart_uploads(void) {
   CURL *curl = NULL;
   string resource;
   string url;
-  struct BodyStruct body;
+  BodyData body;
   int result;
   string date;
   string raw_date;
   string auth;
   string my_url;
   struct curl_slist *slist=NULL;
-
-  // Initialization of variables
-  body.text = (char *)malloc(1);
-  body.size = 0; 
 
   printf("List Multipart Uploads\n");
   resource = urlEncode(service_path + bucket + "/");
@@ -1425,16 +1333,11 @@ static int list_multipart_uploads(void) {
   destroy_curl_handle(curl);
 
   if(result != 0) {
-    if(body.text)
-      free(body.text);
     return result;
   }
-
-  if(body.size > 0)
-    printf("body.text:\n%s\n", body.text);
-  if(body.text)
-    free(body.text);
-
+  if(body.size() > 0){
+    printf("body.text:\n%s\n", body.str());
+  }
   return 0;
 }
 
@@ -2930,16 +2833,13 @@ static int list_bucket(const char *path, struct s3_object **head, const char* de
   CURL *curl;
   int result; 
   string s3_realpath;
-  struct BodyStruct body;
+  BodyData body;
   bool truncated = true;
   string next_marker = "";
 
   FGPRINT("list_bucket [path=%s]\n", path);
 
-  body.text = (char *) malloc(1);
-  body.size = 0;
   s3_realpath = get_realpath(path);
-
   string resource = urlEncode(service_path + bucket); // this is what gets signed
   string query;
   if(delimiter && 0 < strlen(delimiter)){
@@ -2986,36 +2886,24 @@ static int list_bucket(const char *path, struct s3_object **head, const char* de
     destroy_curl_handle(curl);
 
     if(result != 0) {
-      if(body.text)
-        free(body.text);
       FGPRINT("  list_bucket my_curl_easy_perform returns with error.\n");
       return result;
     }
-
-    if((append_objects_from_xml(path, body.text, head)) != 0) {
-      if(body.text)
-        free(body.text);
+    if((append_objects_from_xml(path, body.str(), head)) != 0) {
       FGPRINT("  list_bucket append_objects_from_xml returns with error.\n");
       return -1;
     }
 
-    truncated = is_truncated(body.text);
+    truncated = is_truncated(body.str());
     if(truncated){
-      xmlChar*	tmpch = get_next_marker(body.text);
+      xmlChar*	tmpch = get_next_marker(body.str());
       if(tmpch){
         next_marker = (char*)tmpch;
         xmlFree(tmpch);
       }
     }
-
-    if(body.text)
-      free(body.text);
-    body.size = 0;
-    body.text = (char *) malloc(1);
+    body.Clear();
   }
-
-  if(body.text)
-    free(body.text);
 
   return 0;
 }
@@ -3207,6 +3095,7 @@ static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
   }
   // basepath(path) is as same as fullpath.
   if(0 == strcmp((char*)fullpath, path)){
+    xmlFree(fullpath);
     return (char*)c_strErrorObjectName;
   }
 
@@ -3534,12 +3423,9 @@ static int s3fs_check_service(void) {
   CURL *curl = NULL;
   int result = CURLE_OK;
   CURLcode responseCode;
+  BodyData body;
 
   FGPRINT("s3fs_check_service\n");
-
-  struct BodyStruct body;
-  body.text = (char *) malloc(1);
-  body.size = 0;
 
   string resource = urlEncode(service_path + bucket);
   string url = host + resource;
@@ -3551,7 +3437,6 @@ static int s3fs_check_service(void) {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("GET", "", date, headers.get(), resource));
   } else {
-     if(body.text) free(body.text);
      return EXIT_SUCCESS;
   }
 
@@ -3561,25 +3446,19 @@ static int s3fs_check_service(void) {
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  result = my_curl_easy_perform(curl);
+  result = my_curl_easy_perform(curl, &body);
 
   // connect either successful or too many timeouts
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
   if(responseCode == 403) {
     destroy_curl_handle(curl);
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
     fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
     return EXIT_FAILURE;
   }
 
   if(responseCode == 404) {
     destroy_curl_handle(curl);
-    if(body.text)
-      free(body.text);
-    body.text = NULL;
     fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
     return EXIT_FAILURE;
   }
@@ -3587,16 +3466,11 @@ static int s3fs_check_service(void) {
   // unable to connect
   if(responseCode == CURLE_OPERATION_TIMEDOUT) {
     destroy_curl_handle(curl);
-    if(body.text) free(body.text);
-    body.text = NULL;
     return EXIT_SUCCESS;
   }
 
   if(responseCode != 200 && responseCode != 301) {
     SYSLOGDBG("responseCode: %i\n", (int)responseCode);
-    if(body.text){
-      free(body.text);
-    }
     destroy_curl_handle(curl);
     fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
     return EXIT_FAILURE;
@@ -3609,17 +3483,12 @@ static int s3fs_check_service(void) {
           program_name.c_str(), mount_prefix.c_str());
 
       destroy_curl_handle(curl);
-      if(body.text)
-        free(body.text);
-      body.text = NULL;
       return EXIT_FAILURE;
     }
   }
 
   // success
   service_validated = true;
-  if(body.text) free(body.text);
-  body.text = NULL;
   destroy_curl_handle(curl);
 
   return EXIT_SUCCESS;

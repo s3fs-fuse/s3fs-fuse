@@ -43,6 +43,7 @@
 #include "common.h"
 #include "curl.h"
 #include "string_util.h"
+#include "s3fs.h"
 
 using namespace std;
 
@@ -66,6 +67,76 @@ static map<CURL*, time_t> curl_times;
 static map<CURL*, progress_t> curl_progress;
 static string curl_ca_bundle;
 static mimes_t mimeTypes;
+
+//-------------------------------------------------------------------
+// Class BodyData
+//-------------------------------------------------------------------
+#define BODYDATA_RESIZE_APPEND_MIN  (1 * 1024)         // 1KB
+#define BODYDATA_RESIZE_APPEND_MID  (1 * 1024 * 1024)  // 1MB
+#define BODYDATA_RESIZE_APPEND_MAX  (10 * 1024 * 1024) // 10MB
+
+bool BodyData::Resize(size_t addbytes)
+{
+  if(IsSafeSize(addbytes)){
+    return true;
+  }
+  // New size
+  size_t need_size = (lastpos + addbytes + 1) - bufsize;
+  if(BODYDATA_RESIZE_APPEND_MAX < bufsize){
+    need_size = (BODYDATA_RESIZE_APPEND_MAX < need_size ? need_size : BODYDATA_RESIZE_APPEND_MAX);
+  }else if(BODYDATA_RESIZE_APPEND_MID < bufsize){
+    need_size = (BODYDATA_RESIZE_APPEND_MID < need_size ? need_size : BODYDATA_RESIZE_APPEND_MID);
+  }else if(BODYDATA_RESIZE_APPEND_MIN < bufsize){
+    need_size = ((bufsize * 2) < need_size ? need_size : (bufsize * 2));
+  }else{
+    need_size = (BODYDATA_RESIZE_APPEND_MIN < need_size ? need_size : BODYDATA_RESIZE_APPEND_MIN);
+  }
+  // realloc
+  if(NULL == (text = (char*)realloc(text, (bufsize + need_size)))){
+    FGPRINT("BodyData::Resize() not enough memory (realloc returned NULL)\n");
+    SYSLOGDBGERR("not enough memory (realloc returned NULL)\n");
+    return false;
+  }
+  bufsize += need_size;
+  return true;
+}
+
+void BodyData::Clear(void)
+{
+  if(text){
+    free(text);
+    text = NULL;
+  }
+  lastpos = 0;
+  bufsize = 0;
+}
+
+bool BodyData::Append(void* ptr, size_t bytes)
+{
+  if(!ptr){
+    return false;
+  }
+  if(0 == bytes){
+    return true;
+  }
+  if(!Resize(bytes)){
+    return false;
+  }
+  memcpy(&text[lastpos], ptr, bytes);
+  lastpos += bytes;
+  text[lastpos] = '\0';
+
+  return true;
+}
+
+const char* BodyData::str(void) const
+{
+  static const char* strnull = "";
+  if(!text){
+    return strnull;
+  }
+  return text;
+}
 
 //-------------------------------------------------------------------
 // Functions
@@ -277,7 +348,7 @@ CURL *create_head_handle(head_data *request_data)
 /**
  * @return fuse return code
  */
-int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
+int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
 {
   char url[256];
   time_t now;
@@ -327,33 +398,26 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
         switch(responseCode) {
           case 400:
             SYSLOGDBGERR("HTTP response code 400 was returned");
-            if(body && body->size){
-              SYSLOGDBGERR("Body Text: %s", body->text);
-            }
+            SYSLOGDBGERR("Body Text: %s", (body ? body->str() : ""));
             SYSLOGDBG("Now returning EIO");
             return -EIO;
 
           case 403:
             SYSLOGDBGERR("HTTP response code 403 was returned");
-            if(body && body->size){
-              SYSLOGDBGERR("Body Text: %s", body->text);
-            }
+            SYSLOGDBGERR("Body Text: %s", (body ? body->str() : ""));
             return -EPERM;
 
           case 404:
             SYSLOGDBG("HTTP response code 404 was returned");
-            if(body && body->size){
-              SYSLOGDBG("Body Text: %s", body->text);
-            }
+            SYSLOGDBG("Body Text: %s", (body ? body->str() : ""));
             SYSLOGDBG("Now returning ENOENT");
             return -ENOENT;
 
           default:
             SYSLOGERR("###response=%ld", responseCode);
-            printf("responseCode %ld\n", responseCode);
-            if(body && body->size){
-              printf("Body Text %s\n", body->text);
-            }
+            SYSLOGDBG("Body Text: %s", (body ? body->str() : ""));
+            FGPRINT("responseCode %ld\n", responseCode);
+            FGPRINT("Body Text: %s", (body ? body->str() : ""));
             return -EIO;
         }
         break;
@@ -413,7 +477,8 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
            if (curl_ca_bundle.size() != 0) {
               t++;
               curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-              continue;
+              // break for switch-case, and continue loop.
+              break;
            }
         }
         SYSLOGERR("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
@@ -468,6 +533,12 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
         exit(EXIT_FAILURE);
         break;
     }
+    if(body){
+      body->Clear();
+    }
+    if(head){
+      head->Clear();
+    }
     SYSLOGERR("###retrying...");
   }
   SYSLOGERR("###giving up");
@@ -477,21 +548,14 @@ int my_curl_easy_perform(CURL* curl, BodyStruct* body, FILE* f)
 // libcurl callback
 size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data)
 {
-  size_t realsize = blockSize * numBlocks;
-  struct BodyStruct *mem = (struct BodyStruct *)data;
- 
-  mem->text = (char *)realloc(mem->text, mem->size + realsize + 1);
-  if(mem->text == NULL) {
-    /* out of memory! */ 
-    fprintf(stderr, "not enough memory (realloc returned NULL)\n");
-    exit(EXIT_FAILURE);
-  }
- 
-  memcpy(&(mem->text[mem->size]), ptr, realsize);
-  mem->size += realsize;
-  mem->text[mem->size] = 0;
+  BodyData* body  = (BodyData*)data;
 
-  return realsize;
+  if(!body->Append(ptr, blockSize, numBlocks)){
+    FGPRINT("WriteMemoryCallback(): BodyData.Append() returned false.\n");
+    S3FS_FUSE_EXIT();
+    return -1;
+  }
+  return (blockSize * numBlocks);
 }
 
 // read_callback

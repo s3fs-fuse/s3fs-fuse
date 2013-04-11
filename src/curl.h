@@ -1,10 +1,35 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
-// memory structure for curl write memory callback 
-struct BodyStruct {
-  char *text;    
-  size_t size;
+// memory class for curl write memory callback 
+class BodyData
+{
+  private:
+    char* text;    
+    size_t lastpos;
+    size_t bufsize;
+
+  private:
+    bool IsSafeSize(size_t addbytes) const {
+      return ((lastpos + addbytes + 1) > bufsize ? false : true);
+    }
+    bool Resize(size_t addbytes);
+
+  public:
+    BodyData() : text(NULL), lastpos(0), bufsize(0) {}
+    ~BodyData() {
+      Clear();
+    }
+
+    void Clear(void);
+    bool Append(void* ptr, size_t bytes);
+    bool Append(void* ptr, size_t blockSize, size_t numBlocks) {
+      return Append(ptr, (blockSize * numBlocks));
+    }
+    const char* str() const;
+    size_t size() const {
+      return lastpos;
+    }
 };
 
 // memory structure for POST
@@ -90,7 +115,7 @@ CURL *create_curl_handle(void);
 int curl_delete(const char *path);
 int curl_get_headers(const char *path, headers_t &meta);
 CURL *create_head_handle(struct head_data *request);
-int my_curl_easy_perform(CURL* curl, BodyStruct* body = NULL, FILE* f = 0);
+int my_curl_easy_perform(CURL* curl, BodyData* body = NULL, BodyData* head = NULL, FILE* f = 0);
 size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
 int my_curl_progress(
