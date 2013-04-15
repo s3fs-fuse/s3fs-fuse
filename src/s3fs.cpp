@@ -772,12 +772,13 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   // cycle through open fd, pulling off 10MB chunks at a time
   while(lSize > 0) {
     file_part part;
+    size_t totalSize;
 
-    if(lSize >= MULTIPART_SIZE)
+    if(lSize >= MULTIPART_SIZE){
        lBufferSize = MULTIPART_SIZE;
-    else
+    }else{
        lBufferSize = lSize;
-
+    }
     lSize = lSize - lBufferSize;
       
     if((buffer = (char *) malloc(sizeof(char) * lBufferSize)) == NULL) {
@@ -787,23 +788,35 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     }
 
     // copy the file portion into the buffer:
-    bytesRead = fread(buffer, 1, lBufferSize, pSourceFile);
-    if(bytesRead != lBufferSize) {
-      SYSLOGERR("%d ### bytesRead:%zu  does not match lBufferSize: %lu\n", 
-                      __LINE__, bytesRead, lBufferSize);
-
-      if(buffer)
-        free(buffer);
-
-      return(-EIO);
-    } 
+    for(totalSize = 0; totalSize < lBufferSize; totalSize += bytesRead){
+      bytesRead = fread(&buffer[totalSize], 1, (lBufferSize - totalSize), pSourceFile);
+      if(bytesRead != (lBufferSize - totalSize)){
+        int nError;
+        if(0 != (nError = ferror(pSourceFile))){
+          SYSLOGERR("%d ### read file error(%d): bytesRead:%zu does not match (lBufferSize - totalSize): %lu\n",
+                      __LINE__, nError, bytesRead, (lBufferSize - totalSize));
+          if(buffer){
+            free(buffer);
+          }
+          return(-EIO);
+        }
+        if(feof(pSourceFile)){
+          SYSLOGERR("%d ### read end of file: bytesRead:%zu does not match (lBufferSize - totalSize): %lu\n",
+                      __LINE__, bytesRead, (lBufferSize - totalSize));
+          if(buffer){
+            free(buffer);
+          }
+          return(-EIO);
+        }
+      }
+    }
 
     // create uniq temporary file
     strncpy(part.path, "/tmp/s3fs.XXXXXX", sizeof part.path);
     if((partfd = mkstemp(part.path)) == -1) {
-      if(buffer) 
+      if(buffer){
         free(buffer);
-
+      }
       YIKES(-errno);
     }
 
@@ -811,34 +824,39 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
     if((pPartFile = fdopen(partfd, "wb")) == NULL) {
       SYSLOGERR("%d ### Could not open temporary file: errno %i\n", __LINE__, errno);
       close(partfd);
-      if(buffer)
+      if(buffer){
         free(buffer);
-
+      }
       return(-errno);
     }
 
     // copy buffer to temporary file
-    bytesWritten = fwrite(buffer, 1, (size_t)lBufferSize, pPartFile);
-    if(bytesWritten != lBufferSize) {
-      SYSLOGERR("%d ### bytesWritten:%zu  does not match lBufferSize: %lu\n", 
-                      __LINE__, bytesWritten, lBufferSize);
+    for(totalSize = 0; totalSize < lBufferSize; totalSize += bytesWritten){
+      bytesWritten = fwrite(&buffer[totalSize], 1, (size_t)(lBufferSize - totalSize), pPartFile);
+      if(bytesWritten != (lBufferSize - totalSize)){
+        int nError;
+        if(0 != (nError = ferror(pPartFile))){
+          SYSLOGERR("%d ### write file error(%d): bytesWritten:%zu  does not match (lBufferSize - totalSize): %lu\n", 
+                      __LINE__, nError, bytesWritten, (lBufferSize - totalSize));
+          fclose(pPartFile);
+          if(buffer){
+            free(buffer);
+          }
+          return(-EIO);
+        }
+      }
+    }
 
-      fclose(pPartFile);
-      if(buffer)
-        free(buffer);
-
-      return(-EIO);
-    } 
-   
     fclose(pPartFile);
-    if(buffer)
+    if(buffer){
       free(buffer);  
-    
+    }
     part.etag = upload_part(path, part.path, parts.size() + 1, uploadId);
 
     // delete temporary part file
-    if(remove(part.path) != 0)
+    if(remove(part.path) != 0){
       YIKES(-errno);
+    }
 
     parts.push_back(part);
   } // while(lSize > 0)
