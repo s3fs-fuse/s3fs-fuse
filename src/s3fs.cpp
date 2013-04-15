@@ -3838,17 +3838,20 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     // the first NONOPT option is the bucket name
     if(bucket.size() == 0) {
       // extract remote mount path
-      char *bucket_name = (char *) arg;
-      if(strstr(arg, ":")) {
+      char *bucket_name = (char*)arg;
+      if(strstr(arg, ":")){
         bucket = strtok(bucket_name, ":");
-        mount_prefix = strtok(NULL, ":");
-        // remove trailing slash
-        if(mount_prefix.at(mount_prefix.size() - 1) == '/')
-          mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
-      } else {
+        char* pmount_prefix = strtok(NULL, ":");
+        if(pmount_prefix){
+          mount_prefix = pmount_prefix;
+          // remove trailing slash
+          if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
+            mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
+          }
+        }
+      }else{
         bucket = arg;
       }
-
       return 0;
     }
 
