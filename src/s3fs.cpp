@@ -91,6 +91,7 @@ static bool nomultipart           = false;
 static bool noxmlns               = false;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
+static bool nonempty              = false;
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -3833,7 +3834,8 @@ static int get_access_keys (void) {
 //
 // if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
 //  or the mountpoint. The bucket name will always come before the mountpoint
-static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs) {
+static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs)
+{
   if(key == FUSE_OPT_KEY_NONOPT) {
     // the first NONOPT option is the bucket name
     if(bucket.size() == 0) {
@@ -3873,24 +3875,25 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       return -1;
     } 
 
-    struct dirent *ent;
-    DIR *dp = opendir(mountpoint.c_str());
-    if(dp == NULL) {
-      fprintf(stderr, "%s: failed to open MOUNTPOINT: %s: %s\n", 
-              program_name.c_str(), mountpoint.c_str(), strerror(errno));
-      return -1;
-    }
-
-    while((ent = readdir(dp)) != NULL) {
-      if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
-        closedir(dp);
-        fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty\n", 
-                program_name.c_str(), mountpoint.c_str());
+    if(!nonempty){
+      struct dirent *ent;
+      DIR *dp = opendir(mountpoint.c_str());
+      if(dp == NULL) {
+        fprintf(stderr, "%s: failed to open MOUNTPOINT: %s: %s\n", 
+                program_name.c_str(), mountpoint.c_str(), strerror(errno));
         return -1;
       }
+      while((ent = readdir(dp)) != NULL) {
+        if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+          closedir(dp);
+          fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty.\n"
+                          "%s: if you are sure this is safe, can use the 'nonempty' mount option.\n", 
+                          program_name.c_str(), mountpoint.c_str(), program_name.c_str());
+          return -1;
+        }
+      }
+      closedir(dp);
     }
-
-    closedir(dp);
   }
 
   if (key == FUSE_OPT_KEY_OPT) {
@@ -3906,7 +3909,11 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       use_cache = strchr(arg, '=') + 1;
       return 0;
     }
-
+    if(strstr(arg, "nonempty") != 0) {
+      nonempty = true;
+      // need to continue for fuse.
+      return 1;
+    }
     if(strstr(arg, "nomultipart") != 0) {
       nomultipart = true;
       return 0;
