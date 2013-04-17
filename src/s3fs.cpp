@@ -875,8 +875,9 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 
   FGPRINT("   put_local_fd[path=%s][fd=%d]\n", path, fd);
 
-  if(fstat(fd, &st) == -1)
+  if(fstat(fd, &st) == -1){
     YIKES(-errno);
+  }
 
   /*
    * Make decision to do multi upload (or not) based upon file size
@@ -895,6 +896,13 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
   if(st.st_size > 68719476735LL ) { // 64GB - 1
      // close f ?
      return -ENOTSUP;
+  }
+
+  // seek to head of file.
+  if(0 != lseek(fd, 0, SEEK_SET)){
+    SYSLOGERR("line %d: lseek: %d", __LINE__, -errno);
+    FGPRINT("   put_local_fd - lseek error(%d)\n", -errno);
+    return -errno;
   }
 
   if(st.st_size >= 20971520 && !nomultipart) { // 20MB
