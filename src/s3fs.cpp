@@ -428,8 +428,15 @@ static int get_local_fd(const char* path) {
       fd = fileno(tmpfile());
     }
 
-    if(fd == -1)
+    if(fd == -1){
       YIKES(-errno);
+    }
+    // seek to head of file.
+    if(0 != lseek(fd, 0, SEEK_SET)){
+      SYSLOGERR("line %d: lseek: %d", __LINE__, -errno);
+      FGPRINT("   get_local_fd - lseek error(%d)\n", -errno);
+      return -errno;
+    }
 
     FILE *f = fdopen(fd, "w+");
     if(f == 0){
@@ -456,8 +463,8 @@ static int get_local_fd(const char* path) {
     curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
     result = my_curl_easy_perform(curl, NULL, NULL, f);
+    destroy_curl_handle(curl);
     if(result != 0) {
-      destroy_curl_handle(curl);
       fclose(f);
       return -result;
     }
@@ -465,9 +472,6 @@ static int get_local_fd(const char* path) {
     // only one of these is needed...
     fflush(f);
     fsync(fd);
-
-    if(fd == -1)
-      YIKES(-errno);
 
     if(S_ISREG(mode) && !S_ISLNK(mode)) {
       // make the file's mtime match that of the file on s3
@@ -482,8 +486,14 @@ static int get_local_fd(const char* path) {
         YIKES(-errno);
       }
     }
+
+    // seek to head of file.
+    if(0 != lseek(fd, 0, SEEK_SET)){
+      SYSLOGERR("line %d: lseek: %d", __LINE__, -errno);
+      FGPRINT("   get_local_fd - lseek error(%d)\n", -errno);
+      return -errno;
+    }
   }
-  destroy_curl_handle(curl);
 
   return fd;
 }
@@ -913,6 +923,13 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
      result = put_local_fd_big_file(path, meta, fd); 
   } else {
      result = put_local_fd_small_file(path, meta, fd); 
+  }
+
+  // seek to head of file.
+  if(0 != lseek(fd, 0, SEEK_SET)){
+    SYSLOGERR("line %d: lseek: %d", __LINE__, -errno);
+    FGPRINT("   put_local_fd - lseek error(%d)\n", -errno);
+    return -errno;
   }
 
   return result;
