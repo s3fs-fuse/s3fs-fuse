@@ -4,10 +4,53 @@
 //-------------------------------------------------------------------
 // Typedef
 //-------------------------------------------------------------------
-struct s3_object {
-  char* name;
-  char* etag;
-  struct s3_object *next;
+//
+// Struct
+//
+struct s3obj_entry{
+  std::string normalname; // normalized name: if empty, object is nomalized name.
+  std::string orgname;    // original name: if empty, object is original name.
+  std::string etag;
+  bool        is_dir;
+
+  s3obj_entry() : is_dir(false) {}
+};
+
+typedef std::map<std::string, struct s3obj_entry> s3obj_t;
+typedef std::list<std::string> s3obj_list_t;
+
+//
+// Class
+//
+class S3ObjList
+{
+  private:
+    s3obj_t objects;
+
+  private:
+    bool insert_nomalized(const char* name, const char* normalized, bool is_dir);
+    const s3obj_entry* GetS3Obj(const char* name) const;
+
+    s3obj_t::const_iterator begin(void) const {
+      return objects.begin();
+    }
+    s3obj_t::const_iterator end(void) const {
+      return objects.end();
+    }
+
+  public:
+    S3ObjList() {}
+    ~S3ObjList() {}
+
+    bool IsEmpty(void) const {
+      return objects.empty();
+    }
+    bool insert(const char* name, const char* etag = NULL, bool is_dir = false);
+    std::string GetOrgName(const char* name) const;
+    std::string GetNormalizedName(const char* name) const;
+    std::string GetETag(const char* name) const;
+    bool IsDir(const char* name) const;
+    bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
 };
 
 typedef struct mvnode {
@@ -18,15 +61,10 @@ typedef struct mvnode {
    struct mvnode *next;
 } MVNODE;
 
-
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
 std::string get_realpath(const char *path);
-
-int insert_object(const char* name, const char* etag, struct s3_object** head);
-int free_object(struct s3_object *object);
-int free_object_list(struct s3_object *head);
 
 MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir);
 MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir);

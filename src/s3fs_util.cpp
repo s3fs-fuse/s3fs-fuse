@@ -31,6 +31,7 @@
 #include <string>
 #include <sstream>
 #include <map>
+#include <list>
 
 #include "common.h"
 #include "s3fs_util.h"
@@ -54,132 +55,190 @@ string get_realpath(const char *path) {
 }
 
 //-------------------------------------------------------------------
-// Utility for listing objects
+// Class S3ObjList
 //-------------------------------------------------------------------
-// [Change]
-// The s3_object's name member can be set "dir" or "dir/" as directory name.
-// Both of names are same directory s3_object.
-// "dir/" is given priority to over "dir".
+// New class S3ObjList is base on old s3_object struct.
+// This class is for S3 compatible clients.
 //
-// [Notice]
-// If there are "dir" and "dir/" object on S3, s3fs only recognizes "dir/".
-// On this case, user can not know the "dir" object.
+// If name is terminated by "/", it is forced dir type.
+// If name is terminated by "_$folder$", it is forced dir type.
+// If is_dir is true and name is not terminated by "/", the name is added "/".
 //
-int insert_object(const char* name, const char* etag, struct s3_object** head)
+bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
 {
-  struct s3_object *cur_object;
-  struct s3_object *new_object;
-  int nLen = name ? strlen(name) : 0;
-  int is_have_ndelimiter = 0;
-
-  // search same name object
-  if(nLen && '/' == name[nLen - 1]){
-    // case of "dir/"
-    nLen--;
-    is_have_ndelimiter = 1;
+  if(!name || '\0' == name[0]){
+    return false;
   }
-  for(cur_object = *head; nLen && cur_object; cur_object = cur_object->next){
-    if(0 == strncmp(cur_object->name, name, nLen)){
-      int cLen = strlen(cur_object->name);
-      int is_have_cdelimiter = 0;
 
-      if('/' == cur_object->name[cLen - 1]){
-        cLen--;
-        is_have_cdelimiter = 1;
-      }
-      if(cLen == nLen){
-        if(is_have_cdelimiter == is_have_ndelimiter){
-          // perfect same object, replace only etag.
-        }else if(is_have_cdelimiter){
-          // already set "dir/", so not need to add this.
-          return 0;
-        }else{
-          // new object is "dir/", replace name and etag
-          free(cur_object->name);
-          if(NULL == (cur_object->name = strdup(name))){
-            printf("insert_object: could not allocate memory\n");
-            S3FS_FUSE_EXIT();
-            return -1;
-          }
-        }
-        // replace etag.
-        if(cur_object->etag){
-          free(cur_object->etag);
-          cur_object->etag = NULL;
-        }
-        if(etag){
-          if(NULL == (cur_object->etag = strdup(etag))){
-            printf("insert_object: could not allocate memory\n");
-            S3FS_FUSE_EXIT();
-            return -1;
-          }
-        }
-        return 0;
-      }
+  s3obj_t::iterator iter;
+  string newname;
+  string orgname = name;
+
+  // Normalization
+  string::size_type pos = orgname.find("_$folder$");
+  if(string::npos != pos){
+    newname = orgname.substr(0, pos);
+    is_dir  = true;
+  }else{
+    newname = orgname;
+  }
+  if(is_dir){
+    if('/' != newname[newname.length() - 1]){
+      newname += "/";
+    }
+  }else{
+    if('/' == newname[newname.length() - 1]){
+      is_dir = true;
     }
   }
 
-  // Not found same object.
-  new_object = (struct s3_object*)malloc(sizeof(struct s3_object));
-  if(new_object == NULL) {
-    printf("insert_object: could not allocate memory\n");
-    S3FS_FUSE_EXIT();
-    return -1;
-  }
-
-  if(NULL == (new_object->name = strdup(name))){
-    free(new_object);
-    printf("insert_object: could not allocate memory\n");
-    S3FS_FUSE_EXIT();
-    return -1;
-  }
-  if(etag){
-    if(NULL == (new_object->etag = strdup(etag))){
-      free(new_object->name);
-      free(new_object);
-      printf("insert_object: could not allocate memory\n");
-      S3FS_FUSE_EXIT();
-      return -1;
+  // Check derived name object.
+  if(is_dir){
+    string chkname = newname.substr(0, newname.length() - 1);
+    if(objects.end() != (iter = objects.find(chkname))){
+      // found "dir" object --> remove it.
+      objects.erase(iter);
     }
   }else{
-    new_object->etag = NULL;
+    string chkname = newname + "/";
+    if(objects.end() != (iter = objects.find(chkname))){
+      // found "dir/" object --> not add new object.
+      // and add normalization
+      return insert_nomalized(orgname.c_str(), chkname.c_str(), true);
+    }
   }
 
-  if((*head) == NULL){
-    new_object->next = NULL;
+  // Add object
+  if(objects.end() != (iter = objects.find(newname))){
+    // Found same object --> update information.
+    (*iter).second.normalname.erase();
+    (*iter).second.orgname = orgname;
+    (*iter).second.is_dir  = is_dir;
+    if(etag){
+      (*iter).second.etag = string(etag);  // over write
+    }
   }else{
-    new_object->next = (*head);
+    // add new object
+    s3obj_entry newobject;
+    newobject.orgname = orgname;
+    newobject.is_dir  = is_dir;
+    if(etag){
+      newobject.etag = etag;
+    }
+    objects[newname] = newobject;
   }
-  *head = new_object;
 
-  return 0;
+  // add normalization
+  return insert_nomalized(orgname.c_str(), newname.c_str(), is_dir);
 }
 
-int free_object(struct s3_object *object)
+bool S3ObjList::insert_nomalized(const char* name, const char* normalized, bool is_dir)
 {
-  free(object->name);
-  if(object->etag){
-    free(object->etag);
+  if(!name || '\0' == name[0] || !normalized || '\0' == normalized[0]){
+    return false;
   }
-  free(object);
-  object = NULL;
+  if(0 == strcmp(name, normalized)){
+    return true;
+  }
 
-  return 0;
+  s3obj_t::iterator iter;
+  if(objects.end() != (iter = objects.find(name))){
+    // found name --> over write
+    (*iter).second.orgname.erase();
+    (*iter).second.etag.erase();
+    (*iter).second.normalname = normalized;
+    (*iter).second.is_dir     = is_dir;
+  }else{
+    // not found --> add new object
+    s3obj_entry newobject;
+    newobject.normalname = normalized;
+    newobject.is_dir     = is_dir;
+    objects[name]        = newobject;
+  }
+  return true;
 }
 
-int free_object_list(struct s3_object *head)
+const s3obj_entry* S3ObjList::GetS3Obj(const char* name) const
 {
-  struct s3_object *tmp = NULL;
-  struct s3_object *current = head;
+  s3obj_t::const_iterator iter;
 
-  current = head;
-  while(current != NULL) {
-    tmp = current;
-    current = current->next;
-    free_object(tmp);
+  if(!name || '\0' == name[0]){
+    return NULL;
   }
+  if(objects.end() == (iter = objects.find(name))){
+    return NULL;
+  }
+  return &((*iter).second);
+}
 
-  return 0;
+string S3ObjList::GetOrgName(const char* name) const
+{
+  const s3obj_entry* ps3obj;
+
+  if(!name || '\0' == name[0]){
+    return string("");
+  }
+  if(NULL == (ps3obj = GetS3Obj(name))){
+    return string("");
+  }
+  return ps3obj->orgname;
+}
+
+string S3ObjList::GetNormalizedName(const char* name) const
+{
+  const s3obj_entry* ps3obj;
+
+  if(!name || '\0' == name[0]){
+    return string("");
+  }
+  if(NULL == (ps3obj = GetS3Obj(name))){
+    return string("");
+  }
+  if(0 == (ps3obj->normalname).length()){
+    return string(name);
+  }
+  return ps3obj->normalname;
+}
+
+string S3ObjList::GetETag(const char* name) const
+{
+  const s3obj_entry* ps3obj;
+
+  if(!name || '\0' == name[0]){
+    return string("");
+  }
+  if(NULL == (ps3obj = GetS3Obj(name))){
+    return string("");
+  }
+  return ps3obj->etag;
+}
+
+bool S3ObjList::IsDir(const char* name) const
+{
+  const s3obj_entry* ps3obj;
+
+  if(NULL == (ps3obj = GetS3Obj(name))){
+    return false;
+  }
+  return ps3obj->is_dir;
+}
+
+bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSlash) const
+{
+  s3obj_t::const_iterator iter;
+
+  for(iter = objects.begin(); objects.end() != iter; iter++){
+    if(OnlyNormalized && 0 != (*iter).second.normalname.length()){
+      continue;
+    }
+    string name = (*iter).first;
+    if(CutSlash && 1 < name.length() && '/' == name[name.length() - 1]){
+      // only "/" string is skio this.
+      name = name.substr(0, name.length() - 1);
+    }
+    list.push_back(name);
+  }
+  return true;
 }
 
 //-------------------------------------------------------------------
