@@ -11,8 +11,9 @@ struct stat_cache_entry {
   unsigned long hit_count;
   time_t        cache_date;
   headers_t     meta;
+  bool          isforce;
 
-  stat_cache_entry() : hit_count(0), cache_date(0) {
+  stat_cache_entry() : hit_count(0), cache_date(0), isforce(false) {
     memset(&stbuf, 0, sizeof(struct stat));
     meta.clear();
   }
@@ -34,7 +35,7 @@ class StatCache
     unsigned long CacheSize;
 
   private:
-    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag);
+    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
     // Truncate stat cache
     bool TruncateCache(void);
 
@@ -55,24 +56,24 @@ class StatCache
     time_t UnsetExpireTime(void);
 
     // Get stat cache
-    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true) {
-      return GetStat(key, pst, meta, overcheck, NULL);
+    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL) {
+      return GetStat(key, pst, meta, overcheck, NULL, pisforce);
     }
     bool GetStat(std::string& key, struct stat* pst, bool overcheck = true) {
-      return GetStat(key, pst, NULL, overcheck, NULL);
+      return GetStat(key, pst, NULL, overcheck, NULL, NULL);
     }
     bool GetStat(std::string& key, headers_t* meta, bool overcheck = true) {
-      return GetStat(key, NULL, meta, overcheck, NULL);
+      return GetStat(key, NULL, meta, overcheck, NULL, NULL);
     }
     bool HasStat(std::string& key, bool overcheck = true) {
-      return GetStat(key, NULL, NULL, overcheck, NULL);
+      return GetStat(key, NULL, NULL, overcheck, NULL, NULL);
     }
     bool HasStat(std::string& key, const char* etag, bool overcheck = true) {
-      return GetStat(key, NULL, NULL, overcheck, etag);
+      return GetStat(key, NULL, NULL, overcheck, etag, NULL);
     }
 
     // Add stat cache
-    bool AddStat(std::string& key, headers_t& meta);
+    bool AddStat(std::string& key, headers_t& meta, bool forcedir = false);
 
     // Delete stat cache
     bool DelStat(const char* key);
@@ -84,6 +85,6 @@ class StatCache
 //
 // Functions
 //
-bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst);
+bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst, bool forcedir = false);
 
 #endif // S3FS_CACHE_H_

@@ -101,7 +101,7 @@ time_t StatCache::UnsetExpireTime(void)
   return old;
 }
 
-bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag)
+bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
 {
   bool is_delete_cache = false;
   string strpath = key;
@@ -144,7 +144,9 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
           meta->clear();
           (*meta) = (*iter).second.meta;
         }
-
+        if(pisforce != NULL){
+          (*pisforce) = (*iter).second.isforce;
+        }
         (*iter).second.hit_count++;
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
@@ -163,7 +165,7 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
   return false;
 }
 
-bool StatCache::AddStat(std::string& key, headers_t& meta)
+bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
 {
   if(CacheSize< 1){
     return true;
@@ -177,7 +179,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta)
   }
 
   struct stat st;
-  if(!convert_header_to_stat(key.c_str(), meta, &st)){
+  if(!convert_header_to_stat(key.c_str(), meta, &st, forcedir)){
     return false;
   }
 
@@ -185,6 +187,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta)
   stat_cache[key].stbuf      = st;
   stat_cache[key].hit_count  = 0;
   stat_cache[key].cache_date = time(NULL); // Set time.
+  stat_cache[key].isforce    = forcedir;
 
   //copy only some keys
   for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
@@ -272,7 +275,7 @@ bool StatCache::DelStat(const char* key)
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst)
+bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst, bool forcedir)
 {
   headers_t::const_iterator iter;
 
@@ -295,16 +298,20 @@ bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst)
   if(iter != meta.end()){
     strConType = (*iter).second;
   }
-  if(strConType == "application/x-directory"){
+  if(forcedir){
     pst->st_mode |= S_IFDIR;
-  }else if(0 < strlen(path) && '/' == path[strlen(path) - 1]){
-    if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
+  }else{
+    if(strConType == "application/x-directory"){
       pst->st_mode |= S_IFDIR;
+    }else if(0 < strlen(path) && '/' == path[strlen(path) - 1]){
+      if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
+        pst->st_mode |= S_IFDIR;
+      }else{
+        pst->st_mode |= S_IFREG;
+      }
     }else{
       pst->st_mode |= S_IFREG;
     }
-  }else{
-    pst->st_mode |= S_IFREG;
   }
 
   // blocks

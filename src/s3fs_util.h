@@ -51,12 +51,15 @@ class S3ObjList
     std::string GetETag(const char* name) const;
     bool IsDir(const char* name) const;
     bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
+
+    static bool MakeHierarchizedList(s3obj_list_t& list, bool haveSlash);
 };
 
 typedef struct mvnode {
    char *old_path;
    char *new_path;
    bool is_dir;
+   bool is_normdir;
    struct mvnode *prev;
    struct mvnode *next;
 } MVNODE;
@@ -66,8 +69,8 @@ typedef struct mvnode {
 //-------------------------------------------------------------------
 std::string get_realpath(const char *path);
 
-MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir);
-MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir);
+MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, bool normdir = false);
+MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir, bool normdir = false);
 void free_mvnodes(MVNODE *head);
 
 std::string get_username(uid_t uid);

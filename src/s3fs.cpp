@@ -56,6 +56,10 @@ using namespace std;
 #define	DIRTYPE_NEW         0
 #define	DIRTYPE_OLD         1
 #define	DIRTYPE_FOLDER      2
+#define	DIRTYPE_NOOBJ       3
+
+#define	IS_REPLACEDIR(type) (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type)
+#define	IS_RMTYPEDIR(type)  (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type)
 
 //-------------------------------------------------------------------
 // Typedef
@@ -120,12 +124,13 @@ static s3fs_pathtofd_t s3fs_pathtofd;            // path -> fd
 // Static functions : prototype
 //-------------------------------------------------------------------
 static bool is_special_name_folder_object(const char *path);
-static int chk_dir_object_type(const char *path, string& strpath, string& strdelpath, headers_t* pmeta = NULL, int* pDirType = NULL);
-static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t* pmeta = NULL, bool overcheck = true);
+static int chk_dir_object_type(const char *path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, int* pDirType = NULL);
+static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL);
 static int check_object_access(const char *path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char *path, struct stat* pstbuf);
 static int check_parent_object_access(const char *path, int mask);
 static int list_bucket(const char *path, S3ObjList& head, const char* delimiter);
+static int directory_empty(const char *path);
 static bool is_truncated(const char *xml);
 static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
               const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head);
@@ -200,67 +205,90 @@ static bool is_special_name_folder_object(const char *path)
   return true;
 }
 
-static int chk_dir_object_type(const char *path, string& strpath, string& strdelpath, headers_t* pmeta, int* pDirType)
+// [Detail]
+// This function is complicated for checking directory object type.
+// Arguments is used for deleting cache/path, and remake directory object.
+// Please see the codes which calls this function.
+//
+// path:      target path
+// newpath:   should be object path for making/putting/getting after checking
+// nowpath:   now object name for deleting after checking
+// nowcache:  now cache path for deleting after checking
+// pmeta:     headers map
+// pDirType:  directory object type
+//
+static int chk_dir_object_type(const char *path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta, int* pDirType)
 {
-  int result = -1;
-  strpath    = path;
-  if(pDirType){
-    *pDirType= DIRTYPE_NEW;
+  int  TypeTmp;
+  int  result  = -1;
+  bool isforce = false;
+  int* pType   = pDirType ? pDirType : &TypeTmp;
+
+  // Normalize new path.
+  newpath = path;
+  if('/' != newpath[newpath.length() - 1]){
+    string::size_type Pos;
+    if(string::npos != (Pos = newpath.find("_$folder$", 0))){
+      newpath = newpath.substr(0, Pos);
+    }
+    newpath += "/";
   }
 
-  // At first, if not have "/", check path with "/".
-  if('/' != strpath[strpath.length() - 1]){
-    strpath   += "/";
-    strdelpath = strpath;
-    result     = get_object_attribute(strpath.c_str(), NULL, pmeta, false);
-  }
-  if(0 == result){
-    // Found "dir/" --> Check for "_$folder$"
-    if(is_special_name_folder_object(strpath.c_str())){
-      if(0 < strpath.length() && '/' == strpath[strpath.length() - 1]){
-        strpath     = strpath.substr(0, strpath.length() - 1);
-      }
-      strdelpath    = strpath + "_$folder$";
-      if(pDirType){
-        *pDirType   = DIRTYPE_FOLDER;
+  // Alwayes check "dir/" at first.
+  if(0 == (result = get_object_attribute(newpath.c_str(), NULL, pmeta, false, &isforce))){
+    // Found "dir/" cache --> Check for "_$folder$", "no dir object"
+    nowcache = newpath;
+    if(is_special_name_folder_object(newpath.c_str())){
+      // "_$folder$" type.
+      (*pType) = DIRTYPE_FOLDER;
+      nowpath = newpath.substr(0, newpath.length() - 1) + "_$folder$"; // cut and add
+    }else if(isforce){
+      // "no dir object" type.
+      (*pType) = DIRTYPE_NOOBJ;
+      nowpath  = "";
+    }else{
+      nowpath = path;
+      if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
+        // "dir/" type
+        (*pType) = DIRTYPE_NEW;
+      }else{
+        // "dir" type
+        (*pType) = DIRTYPE_OLD;
       }
     }
   }else{
-    // Need to chack old type directory("dir").
-    strpath    = path;
-    strdelpath = strpath;
-    if(0 == (result = get_object_attribute(strpath.c_str(), NULL, pmeta, false))){
-      if(0 < strpath.length() && '/' != strpath[strpath.length() - 1]){
-        if(pDirType){
-          *pDirType   = DIRTYPE_OLD;
-        }
+    // Check "dir"
+    nowpath = newpath.substr(0, newpath.length() - 1);
+    if(0 == (result = get_object_attribute(nowpath.c_str(), NULL, pmeta, false, &isforce))){
+      // Found "dir" cache --> this case is only "dir" type.
+      // Because, if object is "_$folder$" or "no dir object", the cache is "dir/" type.
+      // (But "no dir objet" is checked here.)
+      nowcache = nowpath;
+      if(isforce){
+        (*pType) = DIRTYPE_NOOBJ;
+        nowpath  = "";
       }else{
-        // Found "dir/" --> Check for "_$folder$"
-        if(is_special_name_folder_object(strpath.c_str())){
-          strpath       = strpath.substr(0, strpath.length() - 1);
-          strdelpath    = strpath + "_$folder$";
-          if(pDirType){
-            *pDirType   = DIRTYPE_FOLDER;
-          }
-        }
+        (*pType) = DIRTYPE_OLD;
       }
     }else{
-      // Check for "_$folder$"
-      if(is_special_name_folder_object(strpath.c_str())){
-        if(0 < strpath.length() && '/' == strpath[strpath.length() - 1]){
-          strpath = strpath.substr(0, strpath.length() - 1);
-        }
-        strdelpath    = strpath + "_$folder$";
-        if(pDirType){
-          *pDirType   = DIRTYPE_FOLDER;
-        }
-        result        = get_object_attribute(strpath.c_str(), NULL, pmeta, false);
+      // Not found cache --> check for "_$folder$" and "no dir object".
+      nowcache = "";  // This case is no cahce.
+      nowpath += "_$folder$";
+      if(is_special_name_folder_object(nowpath.c_str())){
+        // "_$folder$" type.
+        (*pType) = DIRTYPE_FOLDER;
+        result   = 0;             // result is OK.
+      }else if(-ENOTEMPTY == directory_empty(newpath.c_str())){
+        // "no dir object" type.
+        (*pType) = DIRTYPE_NOOBJ;
+        nowpath  = "";            // now path.
+        result   = 0;             // result is OK.
+      }else{
+        // Error: Unknown type.
+        (*pType) = DIRTYPE_UNKNOWN;
+        newpath = "";
+        nowpath = "";
       }
-    }
-  }
-  if(0 != result){
-    if(pDirType){
-      *pDirType   = DIRTYPE_UNKNOWN;
     }
   }
   return result;
@@ -270,7 +298,7 @@ static int chk_dir_object_type(const char *path, string& strpath, string& strdel
 // Get object attributes with stat cache.
 // This function is base for s3fs_getattr().
 //
-static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t* pmeta, bool overcheck)
+static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce)
 {
   int          result = -1;
   struct stat  tmpstbuf;
@@ -280,6 +308,7 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
   string       strpath;
   string       s3_realpath;
   string::size_type Pos;
+  bool         forcedir = false;
 
 //FGPRINT("   get_object_attribute[path=%s]\n", path);
 
@@ -299,7 +328,10 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
       strpath += "/";
     }
   }
-  if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck)){
+  if(pisforce){
+    (*pisforce) = false;
+  }
+  if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
     return 0;
   }
 
@@ -319,15 +351,32 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
     strpath     = path;
     s3_realpath = get_realpath(strpath.c_str());
     if(0 != (result = curl_get_headers(s3_realpath.c_str(), (*pheader)))){
-      if(overcheck && string::npos == strpath.find("_$folder$", 0)){
-        // check for s3fox etc
-        strpath += "_$folder$";
-        s3_realpath = get_realpath(strpath.c_str());
-        if(0 != (result = curl_get_headers(s3_realpath.c_str(), (*pheader)))){
-          return result;
+      // Not found --> check( if overcheck )
+      if(overcheck){
+        if(string::npos == strpath.find("_$folder$", 0)){
+          // path doesn't have "_$folder$" --> check for s3fox etc
+          strpath    += "_$folder$";
+          s3_realpath = get_realpath(strpath.c_str());
+          result      = curl_get_headers(s3_realpath.c_str(), (*pheader));
         }
-        strpath = path;  // reset original
-        strpath += "/";
+        if(0 == result){
+          // found "_$folder$" object.
+          strpath = path;  // reset original
+          strpath += "/";
+        }else{
+          // path does not have "_$folder$" --> check "no dir obejct".
+          if(-ENOTEMPTY == directory_empty(path)){
+            // found "no dir obejct".
+            forcedir = true;
+            strpath  = path;  // reset original
+            strpath += "/";
+            if(pisforce){
+              (*pisforce) = true;
+            }
+          }else{
+            return result;
+          }
+        }
       }else{
         return result;
       }
@@ -342,11 +391,11 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
   }
 
   // add into stat cache
-  if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader))){
+  if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
     FGPRINT("   get_object_attribute: failed adding stat cache [path=%s]\n", strpath.c_str());
     return -ENOENT;
   }
-  if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck)){
+  if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
     FGPRINT("   get_object_attribute: failed getting added stat cache [path=%s]\n", strpath.c_str());
     return -ENOENT;
   }
@@ -1821,6 +1870,8 @@ static int s3fs_rmdir(const char *path)
       StatCache::getStatCacheData()->DelStat(strpath.c_str());
     }
   }
+  // If there is no "dir" and "dir/" object(this case is made by s3cmd/s3sync),
+  // the cache key is "dir/". So we get error only onece(delete "dir/").
 
   // check for "_$folder$" object.
   // This processing is necessary for other S3 clients compatibility.
@@ -2065,13 +2116,17 @@ static int clone_directory_object(const char *from, const char *to)
   return result;
 }
 
-static int rename_directory(const char *from, const char *to) {
+static int rename_directory(const char *from, const char *to)
+{
   S3ObjList head;
   s3obj_list_t headlist;
   string strfrom  = from ? from : "";	// from is without "/".
   string strto    = to ? to : "";	// to is without "/" too.
   string basepath = strfrom + "/";
-  string strdelpath;
+  string newpath;                       // should be from name(not used)
+  string nowcache;                      // now cache path(not used)
+  int DirType;
+  bool normdir; 
   MVNODE* mn_head = NULL;
   MVNODE* mn_tail = NULL;
   MVNODE* mn_cur;
@@ -2086,12 +2141,18 @@ static int rename_directory(const char *from, const char *to) {
   // Initiate and Add base directory into MVNODE struct.
   //
   strto += "/";	
-  if(0 == chk_dir_object_type(from, strfrom, strdelpath)){
-    if(NULL == (add_mvnode(&mn_head, &mn_tail, strdelpath.c_str(), strto.c_str(), true))){
+  if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, NULL, &DirType) && DIRTYPE_UNKNOWN != DirType){
+    if(DIRTYPE_NOOBJ != DirType){
+      normdir = false;
+    }else{
+      normdir = true;
+      strfrom = from;	// from directory is not removed, but from directory attr is needed.
+    }
+    if(NULL == (add_mvnode(&mn_head, &mn_tail, strfrom.c_str(), strto.c_str(), true, normdir))){
       return -ENOMEM;
     }
   }else{
-    // No base directory: maybe a case of made no directory by s3cmd.
+    // Something wrong about "from" directory.
   }
 
   //
@@ -2103,8 +2164,9 @@ static int rename_directory(const char *from, const char *to) {
     FGPRINT(" rename_directory list_bucket returns error.\n");
     return result; 
   }
+  head.GetNameList(headlist);                       // get name without "/".
+  S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
 
-  head.GetNameList(headlist);  // get name without "/".
   s3obj_list_t::const_iterator liter;
   for(liter = headlist.begin(); headlist.end() != liter; liter++){
     // make "from" and "to" object name.
@@ -2120,17 +2182,23 @@ static int rename_directory(const char *from, const char *to) {
     }
     if(S_ISDIR(stbuf.st_mode)){
       is_dir = true;
-      if(0 != chk_dir_object_type(from_name.c_str(), from_name, strdelpath)){
-        FGPRINT(" rename_directory - failed to get %s object directory type.\n", from_name.c_str());
+      if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, NULL, &DirType) || DIRTYPE_UNKNOWN == DirType){
+        FGPRINT(" rename_directory - failed to get %s%s object directory type.\n", basepath.c_str(), (*liter).c_str());
         continue;
       }
+      if(DIRTYPE_NOOBJ != DirType){
+        normdir = false;
+      }else{
+        normdir = true;
+        from_name = basepath + (*liter);  // from directory is not removed, but from directory attr is needed.
+      }
     }else{
-      is_dir = false;
-      strdelpath = from_name;
+      is_dir  = false;
+      normdir = false;
     }
     
     // push this one onto the stack
-    if(NULL == add_mvnode(&mn_head, &mn_tail, strdelpath.c_str(), to_name.c_str(), is_dir)){
+    if(NULL == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir, normdir)){
       return -ENOMEM;
     }
   }
@@ -2140,7 +2208,7 @@ static int rename_directory(const char *from, const char *to) {
   //
   // rename directory objects.
   for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
-    if(mn_cur->is_dir){
+    if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
       if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
         FGPRINT(" rename_directory - failed(%d) to rename %s directory object to %s.\n", result, mn_cur->old_path, mn_cur->new_path);
         SYSLOGERR("clone_directory_object returned an error(%d)", result);
@@ -2170,12 +2238,17 @@ static int rename_directory(const char *from, const char *to) {
 
   // Iterate over old the directories, bottoms up and remove
   for(mn_cur = mn_tail; mn_cur; mn_cur = mn_cur->prev){
-    if(mn_cur->is_dir){
-      if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
-        FGPRINT(" rename_directory - failed(%d) to remove %s directory object.\n", result, mn_cur->old_path);
-        SYSLOGERR("s3fs_rmdir returned an error(%d)", result);
-        free_mvnodes(mn_head);
-        return -EIO;
+    if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+      if(!(mn_cur->is_normdir)){
+        if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
+          FGPRINT(" rename_directory - failed(%d) to remove %s directory object.\n", result, mn_cur->old_path);
+          SYSLOGERR("s3fs_rmdir returned an error(%d)", result);
+          free_mvnodes(mn_head);
+          return -EIO;
+        }
+      }else{
+        // cache clear.
+        StatCache::getStatCacheData()->DelStat(mn_cur->old_path);
       }
     }
   }
@@ -2229,7 +2302,8 @@ static int s3fs_chmod(const char *path, mode_t mode)
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -2244,11 +2318,11 @@ static int s3fs_chmod(const char *path, mode_t mode)
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -2256,21 +2330,22 @@ static int s3fs_chmod(const char *path, mode_t mode)
     return result;
   }
 
-  if(S_ISDIR(stbuf.st_mode) && DIRTYPE_NEW != nDirType){
-    // directory object of old version
-    // Need to remove old dir("dir") and make new dir("dir/")
+  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+    // Should rebuild directory object(except new type)
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(0 != (result = curl_delete(s3_realpath.c_str()))){
-      return result;
+    if(IS_RMTYPEDIR(nDirType)){
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
     // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(strpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+    if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
       return result;
     }
-
   }else{
     // normal object or directory object of newer version
     meta["x-amz-meta-mode"] = str(mode);
@@ -2280,7 +2355,7 @@ static int s3fs_chmod(const char *path, mode_t mode)
     if(put_headers(strpath.c_str(), meta) != 0){
       return -EIO;
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return 0;
@@ -2290,7 +2365,8 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -2306,11 +2382,11 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
 
   // Get attributes
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -2319,29 +2395,21 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    if(DIRTYPE_NEW != nDirType){
-      // directory object of old version
-      // Need to remove old dir("dir") and make new dir("dir/")
-
-      // At first, remove directory old object
+    // Should rebuild all directory object
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
+    
+    // At first, remove directory old object
+    if(IS_RMTYPEDIR(nDirType)){
       if(0 != (result = curl_delete(s3_realpath.c_str()))){
         return result;
       }
-      StatCache::getStatCacheData()->DelStat(strdel);
-
-      // Make new directory object("dir/")
-      if(0 != (result = create_directory_object(strpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-        return result;
-      }
-    }else{
-      // directory object of new version
-      // Over put directory object.
-      if(0 != (result = create_directory_object(strpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-        return result;
-      }
-      StatCache::getStatCacheData()->DelStat(strdel);
     }
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+      return result;
+    }
   }else{
     // normal object or directory object of newer version
     int fd;
@@ -2377,7 +2445,7 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
     if(isclose){
       close(fd);
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return result;
@@ -2387,7 +2455,8 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -2402,11 +2471,11 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -2423,18 +2492,20 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     gid = grdata->gr_gid;
   }
 
-  if(S_ISDIR(stbuf.st_mode) && DIRTYPE_NEW != nDirType){
-    // directory object of old version
-    // Need to remove old dir("dir") and make new dir("dir/")
+  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+    // Should rebuild directory object(except new type)
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(0 != (result = curl_delete(s3_realpath.c_str()))){
-      return result;
+    if(IS_RMTYPEDIR(nDirType)){
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
     // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
       return result;
     }
   }else{
@@ -2446,7 +2517,7 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     if(put_headers(strpath.c_str(), meta) != 0){
       return -EIO;
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return 0;
@@ -2456,7 +2527,8 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -2472,11 +2544,11 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
 
   // Get attributes
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -2494,27 +2566,20 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    if(DIRTYPE_NEW != nDirType){
-      // directory object of old version
-      // Need to remove old dir("dir") and make new dir("dir/")
+    // Should rebuild all directory object
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-      // At first, remove directory old object
+    // At first, remove directory old object
+    if(IS_RMTYPEDIR(nDirType)){
       if(0 != (result = curl_delete(s3_realpath.c_str()))){
         return result;
       }
-      StatCache::getStatCacheData()->DelStat(strdel);
+    }
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
-      // Make new directory object("dir/")
-      if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
-        return result;
-      }
-    }else{
-      // directory object of new version
-      // Over put directory object.
-      if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
-        return result;
-      }
-      StatCache::getStatCacheData()->DelStat(strdel);
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+      return result;
     }
   }else{
     // normal object or directory object of newer version
@@ -2553,7 +2618,7 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
     if(isclose){
       close(fd);
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return result;
@@ -3380,7 +3445,8 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -3395,11 +3461,11 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -3407,18 +3473,20 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
     return result;
   }
 
-  if(S_ISDIR(stbuf.st_mode) && DIRTYPE_NEW != nDirType){
-    // directory object of old version
-    // Need to remove old dir("dir") and make new dir("dir/")
+  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+    // Should rebuild directory object(except new type)
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(0 != (result = curl_delete(s3_realpath.c_str()))){
-      return result;
+    if(IS_RMTYPEDIR(nDirType)){
+      if(0 != (result = curl_delete(s3_realpath.c_str()))){
+        return result;
+      }
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
     // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
       return result;
     }
   }else{
@@ -3429,7 +3497,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
     if(put_headers(strpath.c_str(), meta) != 0){
       return -EIO;
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return 0;
@@ -3439,7 +3507,8 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
   int result;
   string s3_realpath;
   string strpath;
-  string strdel;
+  string newpath;
+  string nowcache;
   headers_t meta;
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
@@ -3455,11 +3524,11 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
 
   // Get attributes
   if(S_ISDIR(stbuf.st_mode)){
-    result      = chk_dir_object_type(path, strpath, strdel, &meta, &nDirType);
-    s3_realpath = get_realpath(strdel.c_str());
+    result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    s3_realpath = get_realpath(strpath.c_str());
   }else{
     strpath     = path;
-    strdel      = strpath;
+    nowcache    = strpath;
     s3_realpath = get_realpath(strpath.c_str());
     result      = get_object_attribute(strpath.c_str(), NULL, &meta);
   }
@@ -3468,27 +3537,20 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
   }
 
   if(S_ISDIR(stbuf.st_mode)){
-    if(DIRTYPE_NEW != nDirType){
-      // directory object of old version
-      // Need to remove old dir("dir") and make new dir("dir/")
+    // Should rebuild all directory object
+    // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-      // At first, remove directory old object
+    // At first, remove directory old object
+    if(IS_RMTYPEDIR(nDirType)){
       if(0 != (result = curl_delete(s3_realpath.c_str()))){
         return result;
       }
-      StatCache::getStatCacheData()->DelStat(strdel);
+    }
+    StatCache::getStatCacheData()->DelStat(nowcache);
 
-      // Make new directory object("dir/")
-      if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
-        return result;
-      }
-    }else{
-      // directory object of new version
-      // Over put directory object.
-      if(0 != (result = create_directory_object(strpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
-        return result;
-      }
-      StatCache::getStatCacheData()->DelStat(strdel);
+    // Make new directory object("dir/")
+    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+      return result;
     }
   }else{
     // normal object or directory object of newer version
@@ -3529,7 +3591,7 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
     if(isclose){
       close(fd);
     }
-    StatCache::getStatCacheData()->DelStat(strdel);
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
 
   return result;

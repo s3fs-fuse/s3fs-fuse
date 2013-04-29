@@ -241,10 +241,52 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
   return true;
 }
 
+typedef std::map<std::string, bool> s3obj_h_t;
+
+bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
+{
+  s3obj_h_t h_map;
+  s3obj_h_t::iterator hiter;
+  s3obj_list_t::const_iterator liter;
+
+  for(liter = list.begin(); list.end() != liter; liter++){
+    string strtmp = (*liter);
+    if(1 < strtmp.length() && '/' == strtmp[strtmp.length() - 1]){
+      strtmp = strtmp.substr(0, strtmp.length() - 1);
+    }
+    h_map[strtmp] = true;
+
+    // check hierarchized directory
+    for(string::size_type pos = strtmp.find_last_of("/"); string::npos != pos; pos = strtmp.find_last_of("/")){
+      strtmp = strtmp.substr(0, pos);
+      if(0 == strtmp.length() || "/" == strtmp){
+        break;
+      }
+      if(h_map.end() == h_map.find(strtmp)){
+        // not found
+        h_map[strtmp] = false;
+      }
+    }
+  }
+
+  // check map and add lost hierarchized directory.
+  for(hiter = h_map.begin(); hiter != h_map.end(); ++hiter){
+    if(false == (*hiter).second){
+      // add hierarchized directory.
+      string strtmp = (*hiter).first;
+      if(haveSlash){
+        strtmp += "/";
+      }
+      list.push_back(strtmp);
+    }
+  }
+  return true;
+}
+
 //-------------------------------------------------------------------
 // Utility functions for moving objects
 //-------------------------------------------------------------------
-MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir)
+MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, bool normdir)
 {
   MVNODE *p;
   char *p_old_path;
@@ -272,9 +314,10 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir)
     return NULL;
   }
 
-  p->old_path = p_old_path;
-  p->new_path = p_new_path;
-  p->is_dir = is_dir;
+  p->old_path   = p_old_path;
+  p->new_path   = p_new_path;
+  p->is_dir     = is_dir;
+  p->is_normdir = normdir;
   p->prev = NULL;
   p->next = NULL;
   return p;
@@ -283,7 +326,7 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir)
 //
 // Add sorted MVNODE data(Ascending order) 
 //
-MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir)
+MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir, bool normdir)
 {
   if(!head || !tail){
     return NULL;
@@ -308,7 +351,7 @@ MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const cha
         // Add into before cur-pos.
         // ex: cur("abc"), mvnew("ab")
         // ex: cur("abc"), mvnew("abb")
-        if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir))){
+        if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
           return NULL;
         }
         if(cur->prev){
@@ -325,7 +368,7 @@ MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const cha
     }
   }
   // Add into tail.
-  if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir))){
+  if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
     return NULL;
   }
   mvnew->prev = (*tail);
