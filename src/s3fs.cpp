@@ -389,7 +389,7 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
       }
     }
   }
-
+#ifdef	ORG_CODE_BUG
   // add into stat cache
   if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
     FGPRINT("   get_object_attribute: failed adding stat cache [path=%s]\n", strpath.c_str());
@@ -399,6 +399,28 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
     FGPRINT("   get_object_attribute: failed getting added stat cache [path=%s]\n", strpath.c_str());
     return -ENOENT;
   }
+#else
+  if(0 != StatCache::getStatCacheData()->GetCacheSize()){
+    // add into stat cache
+    if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
+      FGPRINT("   get_object_attribute: failed adding stat cache [path=%s]\n", strpath.c_str());
+      return -ENOENT;
+    }
+    if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
+      // There is not in cache.(why?) -> retry to convert.
+      if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
+        FGPRINT("   get_object_attribute: failed convert headers to stat[path=%s]\n", strpath.c_str());
+        return -ENOENT;
+      }
+    }
+  }else{
+    // cache size is Zero -> only convert.
+    if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
+      FGPRINT("   get_object_attribute: failed convert headers to stat[path=%s]\n", strpath.c_str());
+      return -ENOENT;
+    }
+  }
+#endif
   return 0;
 }
 
