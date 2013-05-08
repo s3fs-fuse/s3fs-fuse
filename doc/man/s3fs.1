@@ -23,8 +23,8 @@ If you have more than one set of credentials, this syntax is also recognized:
 .PP
 Password files can be stored in two locations:
 .RS 4
- \fB/etc/passwd-s3fs\fP     [0600]
- \fB$HOME/.passwd-s3fs\fP   [0640]
+ \fB/etc/passwd-s3fs\fP     [0640]
+ \fB$HOME/.passwd-s3fs\fP   [0600]
 .RE
 .SH OPTIONS
 .SS "general options"
@@ -79,6 +79,12 @@ maximum number of entries in the stat cache
 .TP
 \fB\-o\fR stat_cache_expire (default is no expire)
 specify expire time(seconds) for entries in the stat cache
+.TP
+\fB\-o\fR enable_noobj_cache (default is disable)
+enable cache entries for the object which does not exist.
+s3fs always has to check whether file(or sub directory) exists under object(path) when s3fs does some command, since s3fs has recognized a directory which does not exist and has files or sub directories under itself.
+It increases ListBucket request and makes performance bad.
+You can specify this option for performance, s3fs memorizes in stat cache that the object(file or directory) does not exist.
 .TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com

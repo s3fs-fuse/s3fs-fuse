@@ -12,8 +12,9 @@ struct stat_cache_entry {
   time_t        cache_date;
   headers_t     meta;
   bool          isforce;
+  bool          noobjcache;  // Flag: cache is no object for no listing.
 
-  stat_cache_entry() : hit_count(0), cache_date(0), isforce(false) {
+  stat_cache_entry() : hit_count(0), cache_date(0), isforce(false), noobjcache(false) {
     memset(&stbuf, 0, sizeof(struct stat));
     meta.clear();
   }
@@ -33,6 +34,7 @@ class StatCache
     bool IsExpireTime;
     time_t ExpireTime;
     unsigned long CacheSize;
+    bool IsCacheNoObject;
 
   private:
     bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
@@ -54,6 +56,16 @@ class StatCache
     time_t GetExpireTime(void) const;
     time_t SetExpireTime(time_t expire);
     time_t UnsetExpireTime(void);
+    bool SetCacheNoObject(bool flag);
+    bool EnableCacheNoObject(void) {
+      return SetCacheNoObject(true);
+    }
+    bool DisableCacheNoObject(void) {
+      return SetCacheNoObject(false);
+    }
+    bool GetCacheNoObject(void) const {
+      return IsCacheNoObject;
+    }
 
     // Get stat cache
     bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL) {
@@ -71,6 +83,10 @@ class StatCache
     bool HasStat(std::string& key, const char* etag, bool overcheck = true) {
       return GetStat(key, NULL, NULL, overcheck, etag, NULL);
     }
+
+    // Cache For no object
+    bool IsNoObjectCache(std::string& key, bool overcheck = true);
+    bool AddNoObjectCache(std::string& key);
 
     // Add stat cache
     bool AddStat(std::string& key, headers_t& meta, bool forcedir = false);

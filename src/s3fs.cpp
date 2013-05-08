@@ -334,6 +334,10 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
   if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
     return 0;
   }
+  if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
+    // there is the path in the cache for no object, it is no object.
+    return -ENOENT;
+  }
 
   // At first, check "object/".
   strpath = path;
@@ -374,6 +378,9 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
               (*pisforce) = true;
             }
           }else{
+            // Add no object cache.
+            strpath = path;  // reset original
+            StatCache::getStatCacheData()->AddNoObjectCache(strpath);
             return result;
           }
         }
@@ -1712,9 +1719,10 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     return result;
   }
   result = create_file_object(path, mode, pcxt->uid, pcxt->gid);
-
-  if(result != 0)
+  StatCache::getStatCacheData()->DelStat(path);
+  if(result != 0){
     return result;
+  }
 
   // object created, open it
   if((fi->fh = get_local_fd(path)) <= 0)
@@ -1804,7 +1812,9 @@ static int s3fs_mkdir(const char *path, mode_t mode)
     return result;
   }
 
-  return create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
+  result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
+  StatCache::getStatCacheData()->DelStat(path);
+  return result;
 }
 
 static int s3fs_unlink(const char *path) {
@@ -3781,6 +3791,18 @@ static int check_passwd_file_perms (void) {
         program_name.c_str(), passwd_file.c_str());
       return EXIT_FAILURE;
     }
+  }else{
+    // "/etc/passwd-s3fs" does not allow group write.
+    if((info.st_mode & S_IWGRP)){
+      fprintf (stderr, "%s: credentials file %s should not have group writable permissions\n", 
+        program_name.c_str(), passwd_file.c_str());
+      return EXIT_FAILURE;
+    }
+  }
+  if((info.st_mode & S_IXUSR) || (info.st_mode & S_IXGRP)){
+    fprintf (stderr, "%s: credentials file %s should not have executable permissions\n", 
+      program_name.c_str(), passwd_file.c_str());
+    return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
@@ -3812,7 +3834,9 @@ static int read_passwd_file (void) {
   // if you got here, the password file
   // exists and is readable by the
   // current user, check for permissions
-  check_passwd_file_perms();
+  if(EXIT_SUCCESS != check_passwd_file_perms()){
+    return EXIT_FAILURE;
+  }
 
   aws_format = check_for_aws_format();
   if(1 == aws_format){
@@ -4149,6 +4173,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     if (strstr(arg, "stat_cache_expire=") != 0) {
       time_t expr_time = strtoul(strchr(arg, '=') + 1, 0, 10);
       StatCache::getStatCacheData()->SetExpireTime(expr_time);
+      return 0;
+    }
+    if(strstr(arg, "enable_noobj_cache") != 0) {
+      StatCache::getStatCacheData()->EnableCacheNoObject();
       return 0;
     }
     if(strstr(arg, "noxmlns") != 0) {
