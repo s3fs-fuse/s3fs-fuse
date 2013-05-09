@@ -1986,6 +1986,7 @@ static int rename_object(const char *from, const char *to) {
     return result;
   }
   result = s3fs_unlink(from);
+  StatCache::getStatCacheData()->DelStat(to);
 
   return result;
 }
@@ -2104,8 +2105,10 @@ static int rename_large_object(const char *from, const char *to) {
   }
 
   result = complete_multipart_upload(to, upload_id, parts);
-  if(result != 0)
+  StatCache::getStatCacheData()->DelStat(to);
+  if(result != 0){
     return -EIO;
+  }
 
   return s3fs_unlink(from);
 }
@@ -2132,6 +2135,7 @@ static int clone_directory_object(const char *from, const char *to)
   uid  = get_uid(meta["x-amz-meta-uid"].c_str());
   gid  = get_gid(meta["x-amz-meta-gid"].c_str());
   result = create_directory_object(to, mode, time, uid, gid);
+  StatCache::getStatCacheData()->DelStat(to);
 
   return result;
 }
@@ -3378,7 +3382,7 @@ static int remote_mountpath_exists(const char *path) {
   FGPRINT("remote_mountpath_exists [path=%s]\n", path);
 
   // getattr will prefix the path with the remote mountpoint
-  if(0 != get_object_attribute("", &stbuf, NULL)){
+  if(0 != get_object_attribute("/", &stbuf, NULL)){
     return -1;
   }
   if(!S_ISDIR(stbuf.st_mode)){
@@ -4038,6 +4042,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
         bucket = strtok(bucket_name, ":");
         char* pmount_prefix = strtok(NULL, ":");
         if(pmount_prefix){
+          if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
+            fprintf(stderr, "%s: path(%s) must be prefix \"/\".\n", program_name.c_str(), pmount_prefix);
+            return -1;
+          }
           mount_prefix = pmount_prefix;
           // remove trailing slash
           if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
