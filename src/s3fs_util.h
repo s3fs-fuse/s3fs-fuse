@@ -81,12 +81,18 @@ std::string mybasename(std::string path);
 int mkdirp(const std::string& path, mode_t mode);
 
 time_t get_mtime(const char *s);
+time_t get_mtime(headers_t& meta, bool overcheck = true);
 off_t get_size(const char *s);
+off_t get_size(headers_t& meta);
 mode_t get_mode(const char *s);
+mode_t get_mode(headers_t& meta, const char* path = NULL, bool checkdir = false, bool forcedir = false);
 uid_t get_uid(const char *s);
+uid_t get_uid(headers_t& meta);
 gid_t get_gid(const char *s);
+gid_t get_gid(headers_t& meta);
 blkcnt_t get_blocks(off_t size);
 time_t get_lastmodified(const char* s);
+time_t get_lastmodified(headers_t& meta);
 
 void show_usage(void);
 void show_help(void);

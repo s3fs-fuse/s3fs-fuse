@@ -501,9 +501,30 @@ time_t get_mtime(const char *s)
   return (time_t) strtoul(s, (char **) NULL, 10);
 }
 
+time_t get_mtime(headers_t& meta, bool overcheck)
+{
+  headers_t::const_iterator iter;
+  if(meta.end() == (iter = meta.find("x-amz-meta-mtime"))){
+    if(overcheck){
+      return get_lastmodified(meta);
+    }
+    return 0;
+  }
+  return get_mtime((*iter).second.c_str());
+}
+
 off_t get_size(const char *s)
 {
   return (off_t) strtoul(s, (char **) NULL, 10);
+}
+
+off_t get_size(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+  if(meta.end() == (iter = meta.find("Content-Length"))){
+    return 0;
+  }
+  return get_size((*iter).second.c_str());
 }
 
 mode_t get_mode(const char *s)
@@ -511,14 +532,83 @@ mode_t get_mode(const char *s)
   return (mode_t) strtoul(s, (char **) NULL, 10);
 }
 
+mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
+{
+  mode_t mode = 0;
+  bool isS3sync = false;
+  headers_t::const_iterator iter;
+
+  if(meta.end() != (iter = meta.find("x-amz-meta-mode"))){
+    mode = get_mode((*iter).second.c_str());
+  }else{
+    if(meta.end() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
+      mode = get_mode((*iter).second.c_str());
+      isS3sync = true;
+    }
+  }
+  if(!isS3sync){
+    if(checkdir){
+      if(forcedir){
+        mode |= S_IFDIR;
+      }else{
+        if(meta.end() != (iter = meta.find("Content-Type"))){
+          string strConType = (*iter).second;
+          if(strConType == "application/x-directory"){
+            mode |= S_IFDIR;
+          }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
+            if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
+              mode |= S_IFDIR;
+            }else{
+              mode |= S_IFREG;
+            }
+          }else{
+            mode |= S_IFREG;
+          }
+        }else{
+          mode |= S_IFREG;
+        }
+      }
+    }
+  }else{
+    if(!checkdir){
+      // cut dir/reg flag.
+      mode &= ~S_IFDIR;
+      mode &= ~S_IFREG;
+    }
+  }
+  return mode;
+}
+
 uid_t get_uid(const char *s)
 {
   return (uid_t) strtoul(s, (char **) NULL, 10);
 }
 
+uid_t get_uid(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+  if(meta.end() == (iter = meta.find("x-amz-meta-uid"))){
+    if(meta.end() == (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
+      return 0;
+    }
+  }
+  return get_uid((*iter).second.c_str());
+}
+
 gid_t get_gid(const char *s)
 {
   return (gid_t) strtoul(s, (char **) NULL, 10);
+}
+
+gid_t get_gid(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+  if(meta.end() == (iter = meta.find("x-amz-meta-gid"))){
+    if(meta.end() == (iter = meta.find("x-amz-meta-group"))){ // for s3sync
+      return 0;
+    }
+  }
+  return get_gid((*iter).second.c_str());
 }
 
 blkcnt_t get_blocks(off_t size)
@@ -534,6 +624,15 @@ time_t get_lastmodified(const char* s)
   }
   strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
   return mktime(&tm);      // GMT
+}
+
+time_t get_lastmodified(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+  if(meta.end() == (iter = meta.find("Last-Modified"))){
+    return 0;
+  }
+  return get_lastmodified((*iter).second.c_str());
 }
 
 //-------------------------------------------------------------------

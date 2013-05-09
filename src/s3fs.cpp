@@ -573,6 +573,7 @@ static int get_local_fd(const char* path) {
   int fd = -1;
   int result;
   struct stat st;
+  struct stat stobj;
   CURL *curl = NULL;
   string url;
   string resource;
@@ -580,7 +581,6 @@ static int get_local_fd(const char* path) {
   string baseName = mybasename(path);
   string resolved_path(use_cache + "/" + bucket);
   string cache_path(resolved_path + path);
-  headers_t responseHeaders;
 
   FGPRINT("   get_local_fd[path=%s]\n", path);
 
@@ -588,7 +588,7 @@ static int get_local_fd(const char* path) {
   resource = urlEncode(service_path + bucket + s3_realpath);
   url = host + resource;
 
-  if(0 != (result = get_object_attribute(path, NULL, &responseHeaders))){
+  if(0 != (result = get_object_attribute(path, &stobj))){
     return result;
   }
 
@@ -602,8 +602,7 @@ static int get_local_fd(const char* path) {
 
       // if the local and remote mtime/size
       // do not match we have an invalid cache entry
-      if(str(st.st_size) != responseHeaders["Content-Length"] || 
-        (str(st.st_mtime) != responseHeaders["x-amz-meta-mtime"])) {
+      if(st.st_size  != stobj.st_size || st.st_mtime != stobj.st_mtime){
         if(close(fd) == -1){
           YIKES(-errno);
         }
@@ -614,13 +613,11 @@ static int get_local_fd(const char* path) {
 
   // need to download?
   if(fd == -1) {
-    mode_t mode = get_mode(responseHeaders["x-amz-meta-mode"].c_str());
-
     if(use_cache.size() > 0) {
       // only download files, not folders
-      if (S_ISREG(mode)) {
+      if (S_ISREG(stobj.st_mode)) {
         mkdirp(resolved_path + mydirname(path), 0777);
-        fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, mode);
+        fd = open(cache_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, stobj.st_mode);
       } else {
         // its a folder; do *not* create anything in local cache... 
         // TODO: do this in a better way)
@@ -675,11 +672,11 @@ static int get_local_fd(const char* path) {
     fflush(f);
     fsync(fd);
 
-    if(S_ISREG(mode) && !S_ISLNK(mode)) {
+    if(S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)) {
       // make the file's mtime match that of the file on s3
       // if fd is tmpfile, but we force tor set mtime.
       struct timeval tv[2];
-      tv[0].tv_sec = get_mtime(responseHeaders["x-amz-meta-mtime"].c_str());
+      tv[0].tv_sec = stobj.st_mtime;
       tv[0].tv_usec= 0L;
       tv[1].tv_sec = tv[0].tv_sec;
       tv[1].tv_usec= 0L;
@@ -775,29 +772,28 @@ static int put_headers(const char *path, headers_t meta) {
     return result;
 
   // Update mtime in local file cache.
-  if(meta.count("x-amz-meta-mtime") > 0){
-    int fd;
-    if(0 <= (fd = get_opened_fd(path))){
-      // The file already is opened, so update fd before close(flush);
-      struct timeval tv[2];
-      memset(tv, 0, sizeof(struct timeval) * 2);
-      tv[0].tv_sec = get_mtime(meta["x-amz-meta-mtime"].c_str());
-      tv[1].tv_sec = tv[0].tv_sec;
-      if(-1 == futimes(fd, tv)){
-        YIKES(-errno);
-      }
-    }else if(use_cache.size() > 0){
-      // Use local cache file.
-      struct stat st;
-      struct utimbuf n_mtime;
-      string cache_path(use_cache + "/" + bucket + path);
+  int fd;
+  time_t mtime = get_mtime(meta);
+  if(0 <= (fd = get_opened_fd(path))){
+    // The file already is opened, so update fd before close(flush);
+    struct timeval tv[2];
+    memset(tv, 0, sizeof(struct timeval) * 2);
+    tv[0].tv_sec = mtime;
+    tv[1].tv_sec = tv[0].tv_sec;
+    if(-1 == futimes(fd, tv)){
+      YIKES(-errno);
+    }
+  }else if(use_cache.size() > 0){
+    // Use local cache file.
+    struct stat st;
+    struct utimbuf n_mtime;
+    string cache_path(use_cache + "/" + bucket + path);
 
-      if((stat(cache_path.c_str(), &st)) == 0) {
-        n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
-        n_mtime.actime = n_mtime.modtime;
-        if((utime(cache_path.c_str(), &n_mtime)) == -1) {
-          YIKES(-errno);
-        }
+    if((stat(cache_path.c_str(), &st)) == 0) {
+      n_mtime.modtime = mtime;
+      n_mtime.actime  = n_mtime.modtime;
+      if((utime(cache_path.c_str(), &n_mtime)) == -1) {
+        YIKES(-errno);
       }
     }
   }
@@ -858,20 +854,19 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   }
 
   // Update mtime in local file cache.
-  if(meta.count("x-amz-meta-mtime") > 0 && use_cache.size() > 0) {
+  if(use_cache.size() > 0) {
     struct stat st;
     struct utimbuf n_mtime;
     string cache_path(use_cache + "/" + bucket + path);
 
     if((stat(cache_path.c_str(), &st)) == 0) {
-      n_mtime.modtime = get_mtime(meta["x-amz-meta-mtime"].c_str());
-      n_mtime.actime = n_mtime.modtime;
+      n_mtime.modtime = get_mtime(meta);
+      n_mtime.actime  = n_mtime.modtime;
       if((utime(cache_path.c_str(), &n_mtime)) == -1) {
         YIKES(-errno);
       }
     }
   }
-
   return 0;
 }
 
@@ -2116,25 +2111,16 @@ static int rename_large_object(const char *from, const char *to) {
 static int clone_directory_object(const char *from, const char *to)
 {
   int result = -1;
-  mode_t mode;
-  time_t time;
-  uid_t  uid;
-  gid_t  gid;
-  headers_t meta;
+  struct stat stbuf;
 
   FGPRINT("clone_directory_object [from=%s] [to=%s]\n", from, to);
   SYSLOGDBG("clone_directory_object [from=%s] [to=%s]", from, to);
 
   // get target's attributes
-  if(0 != (result = get_object_attribute(from, NULL, &meta))){
+  if(0 != (result = get_object_attribute(from, &stbuf))){
     return result;
   }
-
-  mode = get_mode(meta["x-amz-meta-mode"].c_str());
-  time = get_mtime(meta["x-amz-meta-mtime"].c_str());
-  uid  = get_uid(meta["x-amz-meta-uid"].c_str());
-  gid  = get_gid(meta["x-amz-meta-gid"].c_str());
-  result = create_directory_object(to, mode, time, uid, gid);
+  result = create_directory_object(to, stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid);
   StatCache::getStatCacheData()->DelStat(to);
 
   return result;

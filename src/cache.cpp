@@ -367,8 +367,6 @@ bool StatCache::DelStat(const char* key)
 //-------------------------------------------------------------------
 bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst, bool forcedir)
 {
-  headers_t::const_iterator iter;
-
   if(!path || !pst){
     return false;
   }
@@ -377,32 +375,7 @@ bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst,
   pst->st_nlink = 1; // see fuse FAQ
 
   // mode
-  iter = meta.find("x-amz-meta-mode");
-  if(iter != meta.end()){
-    pst->st_mode = get_mode((*iter).second.c_str());
-  }
-
-  // content-type
-  string strConType;
-  iter = meta.find("Content-Type");
-  if(iter != meta.end()){
-    strConType = (*iter).second;
-  }
-  if(forcedir){
-    pst->st_mode |= S_IFDIR;
-  }else{
-    if(strConType == "application/x-directory"){
-      pst->st_mode |= S_IFDIR;
-    }else if(0 < strlen(path) && '/' == path[strlen(path) - 1]){
-      if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
-        pst->st_mode |= S_IFDIR;
-      }else{
-        pst->st_mode |= S_IFREG;
-      }
-    }else{
-      pst->st_mode |= S_IFREG;
-    }
-  }
+  pst->st_mode = get_mode(meta, path, true, forcedir);
 
   // blocks
   if(S_ISREG(pst->st_mode)){
@@ -410,35 +383,14 @@ bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst,
   }
 
   // mtime
-  iter = meta.find("x-amz-meta-mtime");
-  if(iter != meta.end()){
-    pst->st_mtime = get_mtime((*iter).second.c_str());
-  }
-  if(pst->st_mtime == 0) {
-    iter = meta.find("Last-Modified");
-    if(iter != meta.end()){
-      pst->st_mtime = get_lastmodified((*iter).second.c_str());
-    }
-  }
-  if(-1 == pst->st_mtime){
-    pst->st_mtime = 0;
-  }
+  pst->st_mtime = get_mtime(meta);
 
   // size
-  iter = meta.find("Content-Length");
-  if(iter != meta.end()){
-    pst->st_size = get_size((*iter).second.c_str());
-  }
+  pst->st_size = get_size(meta);
 
   // uid/gid
-  iter = meta.find("x-amz-meta-uid");
-  if(iter != meta.end()){
-    pst->st_uid = get_uid((*iter).second.c_str());
-  }
-  iter = meta.find("x-amz-meta-gid");
-  if(iter != meta.end()){
-    pst->st_gid = get_gid((*iter).second.c_str());
-  }
+  pst->st_uid = get_uid(meta);
+  pst->st_gid = get_gid(meta);
 
   return true;
 }
