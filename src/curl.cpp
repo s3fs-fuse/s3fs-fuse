@@ -233,7 +233,7 @@ int curl_delete(const char *path)
   headers.append("Content-Type: ");
   if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("DELETE", "", date, headers.get(), resource));
+      calc_signature("DELETE", "", "", date, headers.get(), resource));
   }
   my_url = prepare_url(url.c_str());
   curl = create_curl_handle();
@@ -269,7 +269,7 @@ int curl_get_headers(const char *path, headers_t &meta)
   headers.append("Content-Type: ");
   if(public_bucket.substr(0,1) != "1") {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("HEAD", "", date, headers.get(), resource));
+      calc_signature("HEAD", "", "", date, headers.get(), resource));
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   string my_url = prepare_url(url.c_str());
@@ -334,7 +334,7 @@ CURL *create_head_handle(head_data *request_data)
   if(public_bucket.substr(0,1) != "1") {
     request_data->requestHeaders = curl_slist_append(
         request_data->requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
-          calc_signature("HEAD", "", date, request_data->requestHeaders, resource)).c_str());
+          calc_signature("HEAD", "", "", date, request_data->requestHeaders, resource)).c_str());
   }
   curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, request_data->requestHeaders);
 
@@ -616,7 +616,7 @@ int my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal
  * @param date e.g., get_date()
  * @param resource e.g., "/pub"
  */
-string calc_signature(string method, string content_type, string date, curl_slist* headers, string resource)
+string calc_signature(string method, string strMD5, string content_type, string date, curl_slist* headers, string resource)
 {
   int ret;
   int bytes_written;
@@ -626,7 +626,7 @@ string calc_signature(string method, string content_type, string date, curl_slis
   string Signature;
   string StringToSign;
   StringToSign += method + "\n";
-  StringToSign += "\n"; // md5
+  StringToSign += strMD5 + "\n"; // md5
   StringToSign += content_type + "\n";
   StringToSign += date + "\n";
   int count = 0;
@@ -766,32 +766,82 @@ void locate_bundle(void)
   return;
 }
 
-string md5sum(int fd)
+string GetContentMD5(int fd)
+{
+  BIO*     b64;
+  BIO*     bmem;
+  BUF_MEM* bptr;
+  string   Signature;
+  unsigned char* md5hex;
+
+  if(NULL == (md5hex = md5hexsum(fd))){
+    return string("");
+  }
+
+  b64  = BIO_new(BIO_f_base64());
+  bmem = BIO_new(BIO_s_mem());
+  b64  = BIO_push(b64, bmem);
+
+  BIO_write(b64, md5hex, MD5_DIGEST_LENGTH);
+  free(md5hex);
+  if(1 != BIO_flush(b64)){
+    BIO_free_all(b64);
+    return string("");
+  }
+  BIO_get_mem_ptr(b64, &bptr);
+
+  Signature.resize(bptr->length - 1);
+  memcpy(&Signature[0], bptr->data, bptr->length - 1);
+
+  BIO_free_all(b64);
+
+  return Signature;
+}
+
+unsigned char* md5hexsum(int fd)
 {
   MD5_CTX c;
-  char buf[512];
-  char hexbuf[3];
+  char    buf[512];
   ssize_t bytes;
-  char md5[2 * MD5_DIGEST_LENGTH + 1];
-  unsigned char *result = (unsigned char *) malloc(MD5_DIGEST_LENGTH);
-  
+  unsigned char* result = (unsigned char*)malloc(MD5_DIGEST_LENGTH);
+
+  // seek to top of file.
+  if(-1 == lseek(fd, 0, SEEK_SET)){
+    return NULL;
+  }
+
   memset(buf, 0, 512);
   MD5_Init(&c);
   while((bytes = read(fd, buf, 512)) > 0) {
     MD5_Update(&c, buf, bytes);
     memset(buf, 0, 512);
   }
-
   MD5_Final(result, &c);
+
+  if(-1 == lseek(fd, 0, SEEK_SET)){
+    free(result);
+    return NULL;
+  }
+
+  return result;
+}
+
+string md5sum(int fd)
+{
+  char md5[2 * MD5_DIGEST_LENGTH + 1];
+  char hexbuf[3];
+  unsigned char* md5hex;
+
+  if(NULL == (md5hex = md5hexsum(fd))){
+    return string("");
+  }
 
   memset(md5, 0, 2 * MD5_DIGEST_LENGTH + 1);
   for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-    snprintf(hexbuf, 3, "%02x", result[i]);
+    snprintf(hexbuf, 3, "%02x", md5hex[i]);
     strncat(md5, hexbuf, 2);
   }
-
-  free(result);
-  lseek(fd, 0, 0);
+  free(md5hex);
 
   return string(md5);
 }

@@ -120,9 +120,11 @@ size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
 int my_curl_progress(
     void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
-std::string calc_signature(
-    std::string method, std::string content_type, std::string date, curl_slist* headers, std::string resource);
+std::string calc_signature(std::string method, std::string strMD5, std::string content_type, 
+    std::string date, curl_slist* headers, std::string resource);
 void locate_bundle(void);
+std::string GetContentMD5(int fd);
+unsigned char* md5hexsum(int fd);
 std::string md5sum(int fd);
 bool InitMimeType(const char* file);
 std::string lookupMimeType(std::string);

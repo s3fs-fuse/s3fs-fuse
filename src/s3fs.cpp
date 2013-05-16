@@ -105,6 +105,7 @@ static bool noxmlns               = false;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
+static bool content_md5           = false;
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -653,7 +654,7 @@ static int get_local_fd(const char* path) {
     headers.append("Content-Type: ");
     if(public_bucket.substr(0,1) != "1") {
       headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-        calc_signature("GET", "", date, headers.get(), resource));
+        calc_signature("GET", "", "", date, headers.get(), resource));
     }
 
     curl = create_curl_handle();
@@ -746,12 +747,13 @@ static int put_headers(const char *path, headers_t meta) {
     }
   }
 
-  if(use_rrs.substr(0,1) == "1")
+  if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
-
-  if(public_bucket.substr(0,1) != "1")
+  }
+  if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", ContentType, date, headers.get(), resource));
+      calc_signature("PUT", "", ContentType, date, headers.get(), resource));
+  }
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -889,7 +891,11 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   int result;
   BodyData body;
   auto_curl_slist headers;
-  string date = get_date();
+  string          date = get_date();
+  string          strMD5;
+  if(content_md5){
+    strMD5 = GetContentMD5(fd);
+  }
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -908,6 +914,10 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   headers.append("Date: " + date);
   meta["x-amz-acl"] = default_acl;
 
+  if(content_md5){
+    headers.append("Content-MD5: " + strMD5);
+  }
+
   for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;
@@ -919,12 +929,13 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
       headers.append(key + ":" + value);
   }
 
-  if(use_rrs.substr(0,1) == "1")
+  if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
-  
-  if(public_bucket.substr(0,1) != "1")
+  } 
+  if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", ContentType, date, headers.get(), resource));
+      calc_signature("PUT", strMD5, ContentType, date, headers.get(), resource));
+  }
 
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -935,8 +946,9 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
 
   result = my_curl_easy_perform(curl, &body, NULL, f);
   destroy_curl_handle(curl);
-  if(result != 0)
+  if(result != 0){
     return result;
+  }
 
   return 0;
 }
@@ -1207,10 +1219,10 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
     slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
 
   if(public_bucket.substr(0,1) != "1") {
-     auth.assign("Authorization: AWS ");
-     auth.append(AWSAccessKeyId);
-     auth.append(":");
-     auth.append(calc_signature("POST", ctype_data, raw_date, slist, resource));
+    auth.assign("Authorization: AWS ");
+    auth.append(AWSAccessKeyId);
+    auth.append(":");
+    auth.append(calc_signature("POST", "", ctype_data, raw_date, slist, resource));
     slist = curl_slist_append(slist, auth.c_str());
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
@@ -1330,7 +1342,7 @@ static int complete_multipart_upload(const char *path, string upload_id,
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("POST", "", raw_date, slist, resource));
+    auth.append(calc_signature("POST", "", "", raw_date, slist, resource));
     slist = curl_slist_append(slist, auth.c_str());
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
@@ -1421,7 +1433,7 @@ static string upload_part(const char *path, const char *source, int part_number,
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("PUT", "", raw_date, slist, resource));
+    auth.append(calc_signature("PUT", "", "", raw_date, slist, resource));
     slist = curl_slist_append(slist, auth.c_str());
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
@@ -1498,12 +1510,13 @@ static string copy_part(const char *from, const char *to, int part_number, strin
       headers.append(key + ":" + value);
   }
 
-  if(use_rrs.substr(0,1) == "1")
+  if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
-
-  if(public_bucket.substr(0,1) != "1")
+  }
+  if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", ContentType, date, headers.get(), resource));
+      calc_signature("PUT", "", ContentType, date, headers.get(), resource));
+  }
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&body);
@@ -1560,11 +1573,11 @@ static int list_multipart_uploads(void) {
   slist = curl_slist_append(slist, date.c_str());
   slist = curl_slist_append(slist, "Accept:");
 
-  if (public_bucket.substr(0,1) != "1") {
-     auth.assign("Authorization: AWS ");
-     auth.append(AWSAccessKeyId);
-     auth.append(":");
-     auth.append(calc_signature("GET", "", raw_date, slist, resource));
+  if(public_bucket.substr(0,1) != "1"){
+    auth.assign("Authorization: AWS ");
+    auth.append(AWSAccessKeyId);
+    auth.append(":");
+    auth.append(calc_signature("GET", "", "", raw_date, slist, resource));
     slist = curl_slist_append(slist, auth.c_str());
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
@@ -1662,9 +1675,10 @@ static int create_file_object(const char *path, mode_t mode, uid_t uid, gid_t gi
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time(NULL)));
   headers.append("x-amz-meta-uid:" + str(uid));
-  if(public_bucket.substr(0,1) != "1")
+  if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", contentType, date, headers.get(), resource));
+      calc_signature("PUT", "", contentType, date, headers.get(), resource));
+  }
 
   curl = create_curl_handle();
   curl_easy_setopt(curl, CURLOPT_UPLOAD, true); // HTTP PUT
@@ -1768,7 +1782,7 @@ static int create_directory_object(const char *path, mode_t mode, time_t time, u
   }
   if (public_bucket.substr(0,1) != "1") {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("PUT", "application/x-directory", date, headers.get(), resource));
+      calc_signature("PUT", "", "application/x-directory", date, headers.get(), resource));
   }
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
 
@@ -3078,7 +3092,7 @@ static int list_bucket(const char *path, S3ObjList& head, const char* delimiter)
     headers.append("ContentType: ");
     if(public_bucket.substr(0,1) != "1") {
       headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-        calc_signature("GET", "", date, headers.get(), resource + "/"));
+        calc_signature("GET", "", "", date, headers.get(), resource + "/"));
     }
 
     curl = create_curl_handle();
@@ -3623,7 +3637,7 @@ static int s3fs_check_service(void) {
   headers.append("Date: " + date);
   if (public_bucket.substr(0,1) != "1") {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("GET", "", date, headers.get(), resource));
+      calc_signature("GET", "", "", date, headers.get(), resource));
   } else {
      return EXIT_SUCCESS;
   }
@@ -4183,6 +4197,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if(strstr(arg, "norenameapi") != 0) {
       norenameapi = true;
+      return 0;
+    }
+    if(strstr(arg, "enable_content_md5") != 0) {
+      content_md5 = true;
       return 0;
     }
     if (strstr(arg, "url=") != 0) {
