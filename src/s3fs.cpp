@@ -106,6 +106,8 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool content_md5           = false;
+static uid_t s3fs_uid             = 0; // default = root.
+static gid_t s3fs_gid             = 0; // default = root.
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -450,20 +452,28 @@ static int check_object_access(const char *path, int mask, struct stat* pstbuf)
     // root is allowed all accessing.
     return 0;
   }
+  if(0 != s3fs_uid && s3fs_uid == pcxt->uid){
+    // "uid" user is allowed all accessing.
+    return 0;
+  }
   if(F_OK == mask){
     // if there is a file, always return allowed.
     return 0;
   }
 
+  // for "uid", "gid" option
+  uid_t  obj_uid = (0 != s3fs_uid ? s3fs_uid : pst->st_uid);
+  gid_t  obj_gid = (0 != s3fs_gid ? s3fs_gid : pst->st_gid);
+
   // compare file mode and uid/gid + mask.
   mode_t mode = pst->st_mode;
   mode_t base_mask = 0;
-  if(pcxt->uid == pst->st_uid){
+  if(pcxt->uid == obj_uid){
     base_mask = S_IRWXU;
-  }else if(pcxt->gid == pst->st_gid){
+  }else if(pcxt->gid == obj_gid){
     base_mask = S_IRWXG;
   }else{
-    if(1 == is_uid_inculde_group(pcxt->uid, pst->st_gid)){
+    if(1 == is_uid_inculde_group(pcxt->uid, obj_gid)){
       base_mask = S_IRWXG;
     }else{
       base_mask = S_IRWXO;
@@ -513,7 +523,11 @@ static int check_object_owner(const char *path, struct stat* pstbuf)
     // root is allowed all accessing.
     return 0;
   }
-  if(pcxt->uid == pst->st_uid){
+  if(0 != s3fs_uid && s3fs_uid == pcxt->uid){
+    // "uid" user is allowed all accessing.
+    return 0;
+  }
+  if(pcxt->uid == (0 != s3fs_uid ? s3fs_uid : pst->st_uid)){
     return 0;
   }
   return -EPERM;
@@ -4095,9 +4109,15 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       }
       closedir(dp);
     }
-  }
-
-  if (key == FUSE_OPT_KEY_OPT) {
+  }else if(key == FUSE_OPT_KEY_OPT){
+    if(strstr(arg, "uid=") != 0){
+      s3fs_uid = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 1; // continue for fuse option
+    }
+    if(strstr(arg, "gid=") != 0){
+      s3fs_gid = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 1; // continue for fuse option
+    }
     if (strstr(arg, "default_acl=") != 0) {
       default_acl = strchr(arg, '=') + 1;
       return 0;
