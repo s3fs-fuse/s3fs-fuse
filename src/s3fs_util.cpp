@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <libgen.h>
+#include <sys/stat.h>
 #include <pwd.h>
 #include <grp.h>
 #include <syslog.h>

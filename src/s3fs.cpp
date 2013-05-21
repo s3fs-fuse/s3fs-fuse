@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 #include <libxml/tree.h>
@@ -106,6 +107,7 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool content_md5           = false;
+static bool allow_other           = false;
 static uid_t s3fs_uid             = 0; // default = root.
 static gid_t s3fs_gid             = 0; // default = root.
 
@@ -316,9 +318,9 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
 //FGPRINT("   get_object_attribute[path=%s]\n", path);
 
   memset(pstat, 0, sizeof(struct stat));
-  if(strcmp(path, "/") == 0) {
+  if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
     pstat->st_nlink = 1; // see fuse faq
-    pstat->st_mode  = root_mode | S_IFDIR;
+    pstat->st_mode  = root_mode;
     return 0;
   }
 
@@ -466,18 +468,16 @@ static int check_object_access(const char *path, int mask, struct stat* pstbuf)
   gid_t  obj_gid = (0 != s3fs_gid ? s3fs_gid : pst->st_gid);
 
   // compare file mode and uid/gid + mask.
-  mode_t mode = pst->st_mode;
-  mode_t base_mask = 0;
+  mode_t mode      = pst->st_mode;
+  mode_t base_mask = S_IRWXO;
   if(pcxt->uid == obj_uid){
-    base_mask = S_IRWXU;
-  }else if(pcxt->gid == obj_gid){
-    base_mask = S_IRWXG;
-  }else{
-    if(1 == is_uid_inculde_group(pcxt->uid, obj_gid)){
-      base_mask = S_IRWXG;
-    }else{
-      base_mask = S_IRWXO;
-    }
+    base_mask |= S_IRWXU;
+  }
+  if(pcxt->gid == obj_gid){
+    base_mask |= S_IRWXG;
+  }
+  if(1 == is_uid_inculde_group(pcxt->uid, obj_gid)){
+    base_mask |= S_IRWXG;
   }
   mode &= base_mask;
 
@@ -543,6 +543,10 @@ static int check_parent_object_access(const char *path, int mask)
 
 //FGPRINT("  check_parent_object_access[path=%s]\n", path);
 
+  if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+    // path is mount point.
+    return 0;
+  }
   if(X_OK == (mask & X_OK)){
     for(parent = mydirname(path); 0 < parent.size(); parent = mydirname(parent.c_str())){
       if(parent == "."){
@@ -2508,6 +2512,12 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     return result;
   }
 
+  if((uid_t)(-1) == uid){
+    uid = stbuf.st_uid;
+  }
+  if((gid_t)(-1) == gid){
+    gid = stbuf.st_gid;
+  }
   if(S_ISDIR(stbuf.st_mode)){
     result      = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
     s3_realpath = get_realpath(strpath.c_str());
@@ -4081,14 +4091,17 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
           program_name.c_str(), mountpoint.c_str(), strerror(errno));
       return -1;
     }
-
-    root_mode = stbuf.st_mode; // save mode for later usage
-    
-    if(!(S_ISDIR(stbuf.st_mode ))) {
+    if(!(S_ISDIR(stbuf.st_mode))){
       fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
               program_name.c_str(), mountpoint.c_str());
       return -1;
     } 
+    root_mode = stbuf.st_mode; // save mode for later usage
+    if(allow_other){
+      root_mode |= (S_IXUSR | S_IXGRP | S_IXOTH | S_IFDIR);
+    }else{
+      root_mode |= S_IFDIR;
+    }
 
     if(!nonempty){
       struct dirent *ent;
@@ -4116,6 +4129,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if(strstr(arg, "gid=") != 0){
       s3fs_gid = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 1; // continue for fuse option
+    }
+    if(strstr(arg, "allow_other") != 0){
+      allow_other = true;
       return 1; // continue for fuse option
     }
     if (strstr(arg, "default_acl=") != 0) {
