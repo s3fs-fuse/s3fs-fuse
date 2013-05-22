@@ -108,8 +108,9 @@ static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool content_md5           = false;
 static bool allow_other           = false;
-static uid_t s3fs_uid             = 0; // default = root.
-static gid_t s3fs_gid             = 0; // default = root.
+static uid_t s3fs_uid             = 0;    // default = root.
+static gid_t s3fs_gid             = 0;    // default = root.
+static bool dns_cache             = true; // default = true
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -2961,6 +2962,7 @@ static int s3fs_readdir(
     head_data request_data;
     request_data.path = fullorg;
     CURL* curl_handle = create_head_handle(&request_data);
+    my_set_curl_share(curl_handle);  // set dns cache
     request_data.path = fullpath;    // Notice: replace org to normalized for cache key.
     curl_map.get()[curl_handle] = request_data;
 
@@ -3452,6 +3454,7 @@ static void* s3fs_init(struct fuse_conn_info *conn)
   pthread_mutex_init(&s3fs_descriptors_lock, NULL);
   init_curl_handles_mutex();
   InitMimeType("/etc/mime.types");
+  init_curl_share(dns_cache);
 
   // Investigate system capabilities
   if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
@@ -3473,6 +3476,7 @@ static void s3fs_destroy(void*)
   }
   free(mutex_buf);
   mutex_buf = NULL;
+  destroy_curl_share(dns_cache);
   curl_global_cleanup();
   pthread_mutex_destroy(&s3fs_descriptors_lock);
   destroy_curl_handles_mutex();
@@ -4222,6 +4226,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if(strstr(arg, "enable_noobj_cache") != 0) {
       StatCache::getStatCacheData()->EnableCacheNoObject();
+      return 0;
+    }
+    if(strstr(arg, "nodnscache") != 0) {
+      dns_cache = false;
       return 0;
     }
     if(strstr(arg, "noxmlns") != 0) {

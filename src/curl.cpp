@@ -62,6 +62,8 @@ typedef pair<double, double> progress_t;
 // Static valiables
 //-------------------------------------------------------------------
 static pthread_mutex_t curl_handles_lock;
+static pthread_mutex_t curl_share_lock;
+static CURLSH* hCurlShare = NULL;
 static const EVP_MD* evp_md = EVP_sha1();
 static map<CURL*, time_t> curl_times;
 static map<CURL*, progress_t> curl_progress;
@@ -149,6 +151,71 @@ int init_curl_handles_mutex(void)
 int destroy_curl_handles_mutex(void)
 {
   return pthread_mutex_destroy(&curl_handles_lock);
+}
+
+static void lock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
+{
+  if(hCurlShare && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_lock(&curl_share_lock);
+  }
+}
+
+static void unlock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
+{
+  if(hCurlShare && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_unlock(&curl_share_lock);
+  }
+}
+
+int init_curl_share(bool isCache)
+{
+  CURLSHcode nSHCode;
+
+  if(!isCache){
+    return 0;
+  }
+  if(NULL == (hCurlShare = curl_share_init())){
+    FGPRINT(" init_curl_share: curl_share_init failed\n");
+    SYSLOGERR("init_curl_share: curl_share_init failed\n");
+    return -1;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_LOCKFUNC, lock_curl_share))){
+    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    return nSHCode;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_UNLOCKFUNC, unlock_curl_share))){
+    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    return nSHCode;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
+    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    return nSHCode;
+  }
+  return pthread_mutex_init(&curl_share_lock, NULL);
+}
+
+int destroy_curl_share(bool isCache)
+{
+  int result = 0;
+
+  if(!isCache){
+    return result;
+  }
+  result = pthread_mutex_destroy(&curl_share_lock);
+  if(hCurlShare && CURLSHE_OK != curl_share_cleanup(hCurlShare) && 0 == result){
+    result = -1;
+  }
+  return result;
+}
+
+void my_set_curl_share(CURL* curl)
+{
+  if(curl && hCurlShare){
+    curl_easy_setopt(curl, CURLOPT_SHARE, hCurlShare);
+  }
 }
 
 size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr)
@@ -364,6 +431,8 @@ int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
   if(curl_ca_bundle.size() != 0){
     curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
   }
+  // set dns cache
+  my_set_curl_share(curl);
 
   long responseCode;
 

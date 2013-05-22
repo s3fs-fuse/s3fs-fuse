@@ -86,6 +86,9 @@ s3fs always has to check whether file(or sub directory) exists under object(path
 It increases ListBucket request and makes performance bad.
 You can specify this option for performance, s3fs memorizes in stat cache that the object(file or directory) does not exist.
 .TP
+\fB\-o\fR nodnscache - disable dns cache.
+s3fs is always using dns cache, this option make dns cache disable.
+.TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
 .TP

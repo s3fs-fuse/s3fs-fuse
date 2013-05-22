@@ -110,6 +110,9 @@ class auto_head {
 //
 int init_curl_handles_mutex(void);
 int destroy_curl_handles_mutex(void);
+int init_curl_share(bool isCache);
+int destroy_curl_share(bool isCache);
+void my_set_curl_share(CURL* curl);
 size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
 CURL *create_curl_handle(void);
 int curl_delete(const char *path);
