@@ -55,6 +55,7 @@ class auto_curl_slist {
 
 // header data
 struct head_data {
+  std::string base_path;
   std::string path;
   std::string *url;
   struct curl_slist *requestHeaders;
@@ -81,7 +82,7 @@ class auto_head {
  public:
   auto_head() {}
   ~auto_head() {
-    for_each(headMap.begin(), headMap.end(), cleanup_head_data());
+    removeAll();
   }
 
   headMap_t& get() { return headMap; }
@@ -99,6 +100,10 @@ class auto_head {
     destroy_curl_handle(curl_handle);
 
     headMap.erase(iter);
+  }
+
+  void removeAll(void) {
+    for_each(headMap.begin(), headMap.end(), cleanup_head_data());
   }
 
   private:
