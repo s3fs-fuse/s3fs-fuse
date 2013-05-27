@@ -39,11 +39,13 @@
 #include <string>
 #include <map>
 #include <algorithm>
+#include <list>
 
 #include "common.h"
 #include "curl.h"
 #include "string_util.h"
 #include "s3fs.h"
+#include "s3fs_util.h"
 
 using namespace std;
 
@@ -378,9 +380,10 @@ int curl_get_headers(const char *path, headers_t &meta)
 
 CURL *create_head_handle(head_data *request_data)
 {
-  CURL *curl_handle = create_curl_handle();
-  string resource = urlEncode(service_path + bucket + request_data->path);
-  string url = host + resource;
+  CURL *curl_handle= create_curl_handle();
+  string realpath  = get_realpath(request_data->path.c_str());
+  string resource  = urlEncode(service_path + bucket + realpath);
+  string url       = host + resource;
 
   // libcurl 7.17 does deep copy of url, deep copy "stable" url
   string my_url = prepare_url(url.c_str());
