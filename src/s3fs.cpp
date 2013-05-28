@@ -47,6 +47,7 @@
 #include "cache.h"
 #include "string_util.h"
 #include "s3fs_util.h"
+#include "fdcache.h"
 
 using namespace std;
 
@@ -73,9 +74,6 @@ struct file_part {
 
   file_part() : uploaded(false) {}
 };
-
-typedef std::map<int, int>         s3fs_descriptors_t;
-typedef std::map<std::string, int> s3fs_pathtofd_t;
 
 //-------------------------------------------------------------------
 // Global valiables
@@ -121,11 +119,8 @@ static std::string use_rrs;
 // private, public-read, public-read-write, authenticated-read
 static std::string default_acl("private");
 
-// file discripter
+// mutex
 static pthread_mutex_t *mutex_buf = NULL;
-static pthread_mutex_t s3fs_descriptors_lock;
-static s3fs_descriptors_t s3fs_descriptors;      // fd -> flags
-static s3fs_pathtofd_t s3fs_pathtofd;            // path -> fd
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -581,13 +576,9 @@ static int get_opened_fd(const char* path)
 {
   int fd = -1;
 
-  pthread_mutex_lock( &s3fs_descriptors_lock );
-  if(s3fs_pathtofd.find(string(path)) != s3fs_pathtofd.end()){
-    fd = s3fs_pathtofd[string(path)];
+  if(FdCache::getFdCacheData()->Get(path, &fd)){
     FGPRINT("  get_opened_fd: found fd [path=%s] [fd=%d]\n", path, fd);
   }
-  pthread_mutex_unlock( &s3fs_descriptors_lock );
-
   return fd;
 }
 
@@ -1619,6 +1610,7 @@ static int list_multipart_uploads(void) {
 static int s3fs_getattr(const char *path, struct stat *stbuf)
 {
   int result;
+  int fd = -1;
 
   FGPRINT("s3fs_getattr[path=%s]\n", path);
 
@@ -1626,7 +1618,18 @@ static int s3fs_getattr(const char *path, struct stat *stbuf)
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
-  return check_object_access(path, F_OK, stbuf);
+  if(0 != (result = check_object_access(path, F_OK, stbuf))){
+    return result;
+  }
+  // If has already opened fd, the st_size shuld be instead.
+  // (See: Issue 241)
+  if(stbuf && FdCache::getFdCacheData()->Get(path, &fd) && -1 != fd){
+    struct stat tmpstbuf;
+    if(0 == fstat(fd, &tmpstbuf)){
+      stbuf->st_size = tmpstbuf.st_size;
+    }
+  }
+  return result;
 }
 
 static int s3fs_readlink(const char *path, char *buf, size_t size) {
@@ -1755,14 +1758,11 @@ static int s3fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   }
 
   // object created, open it
-  if((fi->fh = get_local_fd(path)) <= 0)
+  if((fi->fh = get_local_fd(path)) <= 0){
     return -EIO;
-
+  }
   // remember flags and headers...
-  pthread_mutex_lock( &s3fs_descriptors_lock );
-  s3fs_descriptors[fi->fh] = fi->flags;
-  s3fs_pathtofd[string(path)] = fi->fh;
-  pthread_mutex_unlock( &s3fs_descriptors_lock );
+  FdCache::getFdCacheData()->Add(path, fi->fh, fi->flags);
 
   return 0;
 }
@@ -2758,14 +2758,11 @@ static int s3fs_open(const char *path, struct fuse_file_info *fi) {
         return result;
   }
 
-  if((fi->fh = get_local_fd(path)) <= 0)
+  if((fi->fh = get_local_fd(path)) <= 0){
     return -EIO;
-
+  }
   // remember flags and headers...
-  pthread_mutex_lock( &s3fs_descriptors_lock );
-  s3fs_descriptors[fi->fh] = fi->flags;
-  s3fs_pathtofd[string(path)] = fi->fh;
-  pthread_mutex_unlock( &s3fs_descriptors_lock );
+  FdCache::getFdCacheData()->Add(path, fi->fh, fi->flags);
 
   return 0;
 }
@@ -2806,11 +2803,10 @@ static int s3fs_statfs(const char *path, struct statvfs *stbuf) {
   return 0;
 }
 
-static int get_flags(int fd) {
-  int flags;
-  pthread_mutex_lock( &s3fs_descriptors_lock );
-  flags = s3fs_descriptors[fd];
-  pthread_mutex_unlock( &s3fs_descriptors_lock );
+static int get_flags(int fd)
+{
+  int flags = 0;
+  FdCache::getFdCacheData()->Get(fd, &flags);
   return flags;
 }
 
@@ -2868,16 +2864,9 @@ static int s3fs_release(const char *path, struct fuse_file_info *fi)
   FGPRINT("s3fs_release[path=%s][fd=%ld]\n", path, fi->fh);
 
   // clear file discriptor mapping.
-  s3fs_pathtofd_t::iterator it;
-  pthread_mutex_lock( &s3fs_descriptors_lock );
-  if(s3fs_pathtofd.end() != (it = s3fs_pathtofd.find(string(path)))){
-    if(fi->fh == (uint)s3fs_pathtofd[string(path)]){
-      s3fs_pathtofd.erase(it);
-    }else{
-      FGPRINT("s3fs_release line %d: file discriptor is not same(%d : %d)\n", __LINE__, (int)fi->fh, s3fs_pathtofd[string(path)]);
-    }
+  if(!FdCache::getFdCacheData()->Del(path, fi->fh)){
+    FGPRINT("  s3fs_release: failed to release fd[path=%s][fd=%ld]\n", path, fi->fh);
   }
-  pthread_mutex_unlock( &s3fs_descriptors_lock );
 
   if(close(fi->fh) == -1){
     YIKES(-errno);
@@ -3475,7 +3464,6 @@ static void* s3fs_init(struct fuse_conn_info *conn)
   CRYPTO_set_locking_callback(locking_function);
   CRYPTO_set_id_callback(id_function);
   curl_global_init(CURL_GLOBAL_ALL);
-  pthread_mutex_init(&s3fs_descriptors_lock, NULL);
   init_curl_handles_mutex();
   InitMimeType("/etc/mime.types");
   init_curl_share(dns_cache);
@@ -3502,7 +3490,6 @@ static void s3fs_destroy(void*)
   mutex_buf = NULL;
   destroy_curl_share(dns_cache);
   curl_global_cleanup();
-  pthread_mutex_destroy(&s3fs_descriptors_lock);
   destroy_curl_handles_mutex();
 }
 
