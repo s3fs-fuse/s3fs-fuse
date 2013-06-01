@@ -4471,9 +4471,15 @@ int main(int argc, char *argv[]) {
   // exists. skip check if mounting a public bucket
   if(public_bucket.substr(0,1) != "1"){
      int result;
+     // Initiate curl global for ssl.
+     if(!init_curl_global_all()){
+       exit(EXIT_FAILURE);
+     }
      if(EXIT_SUCCESS != (result = s3fs_check_service())){
+       cleanup_curl_global_all();
        exit(result);
      }
+     cleanup_curl_global_all();
   }
 
   if (utility_mode) {
@@ -4515,9 +4521,15 @@ int main(int argc, char *argv[]) {
   s3fs_oper.access = s3fs_access;
   s3fs_oper.create = s3fs_create;
 
+   // Re-Initiate curl global for ssl before calling fuse.
+   if(!init_curl_global_all()){
+     exit(EXIT_FAILURE);
+   }
+
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
+  cleanup_curl_global_all();
 
   exit(fuse_res);
 }

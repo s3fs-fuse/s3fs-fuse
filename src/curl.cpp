@@ -155,6 +155,21 @@ int destroy_curl_handles_mutex(void)
   return pthread_mutex_destroy(&curl_handles_lock);
 }
 
+bool init_curl_global_all(void)
+{
+  if(CURLE_OK != curl_global_init(CURL_GLOBAL_ALL)){
+    FGPRINT("init_curl_global_all returns error.\n");
+    SYSLOGERR("init_curl_global_all returns error.");
+    return false;
+  }
+  return true;
+}
+
+void cleanup_curl_global_all(void)
+{
+  curl_global_cleanup();
+}
+
 static void lock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
 {
   if(hCurlShare && CURL_LOCK_DATA_DNS == nLockData){

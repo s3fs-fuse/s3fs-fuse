@@ -115,6 +115,8 @@ class auto_head {
 //
 int init_curl_handles_mutex(void);
 int destroy_curl_handles_mutex(void);
+bool init_curl_global_all(void);
+void cleanup_curl_global_all(void);
 int init_curl_share(bool isCache);
 int destroy_curl_share(bool isCache);
 void my_set_curl_share(CURL* curl);
