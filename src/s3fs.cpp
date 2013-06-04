@@ -4218,6 +4218,11 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       use_rrs = strchr(arg, '=') + 1;
       if (strcmp(use_rrs.c_str(), "1") == 0 || 
           strcmp(use_rrs.c_str(), "")  == 0 ) {
+        if(use_sse.substr(0,1) == "1"){
+          fprintf(stderr, "%s: use_rrs option could not be specified with use_sse.\n", 
+                 program_name.c_str());
+          return -1;
+        }
         return 0;
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
@@ -4229,6 +4234,11 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
       use_sse = strchr(arg, '=') + 1;
       if (strcmp(use_sse.c_str(), "1") == 0 || 
           strcmp(use_sse.c_str(), "")  == 0 ) {
+        if(use_rrs.substr(0,1) == "1"){
+          fprintf(stderr, "%s: use_sse option could not be specified with use_rss.\n", 
+                 program_name.c_str());
+          return -1;
+        }
         return 0;
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", 
