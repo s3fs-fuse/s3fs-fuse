@@ -114,6 +114,7 @@ static bool dns_cache             = true; // default = true
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
 static std::string use_rrs;
+static std::string use_sse;
 
 // TODO(apetresc): make this an enum
 // private, public-read, public-read-write, authenticated-read
@@ -144,10 +145,13 @@ static xmlChar* get_prefix(const char *xml);
 static xmlChar* get_next_marker(const char *xml);
 static char *get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
 
-static int put_headers(const char *path, headers_t meta);
-static int put_multipart_headers(const char *path, headers_t meta);
+static int put_headers(const char *path, headers_t meta, bool ow_sse_flg);
+static int put_multipart_headers(const char *path, headers_t meta, bool ow_sse_flg);
+static int put_local_fd_small_file(const char* path, headers_t meta, int fd, bool ow_sse_flg);
+static int put_local_fd_big_file(const char* path, headers_t meta, int fd, bool ow_sse_flg);
+static int put_local_fd(const char* path, headers_t meta, int fd, bool ow_sse_flg);
+static std::string initiate_multipart_upload(const char *path, off_t size, headers_t meta, bool ow_sse_flg);
 static int complete_multipart_upload(const char *path, std::string upload_id, std::vector <file_part> parts);
-static std::string initiate_multipart_upload(const char *path, off_t size, headers_t meta);
 static std::string upload_part(const char *path, const char *source, int part_number, string upload_id);
 static std::string copy_part(const char *from, const char *to, int part_number, std::string upload_id, headers_t meta);
 static int list_multipart_uploads(void);
@@ -712,9 +716,11 @@ static int get_local_fd(const char* path) {
 
 /**
  * create or update s3 meta
+ * ow_sse_flg is for over writing sse header by use_sse option.
  * @return fuse return code
  */
-static int put_headers(const char *path, headers_t meta) {
+static int put_headers(const char *path, headers_t meta, bool ow_sse_flg)
+{
   int result;
   string s3_realpath;
   string url;
@@ -731,7 +737,7 @@ static int put_headers(const char *path, headers_t meta) {
   get_object_attribute(path, &buf);
 
   if(buf.st_size >= FIVE_GB){
-    return(put_multipart_headers(path, meta));
+    return(put_multipart_headers(path, meta, ow_sse_flg));
   }
 
   s3_realpath = get_realpath(path);
@@ -756,11 +762,17 @@ static int put_headers(const char *path, headers_t meta) {
       headers.append(key + ":" + value);
     }else if(key == "x-amz-copy-source"){
       headers.append(key + ":" + value);
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      headers.append(key + ":" + value);
     }
   }
 
   if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(ow_sse_flg && use_sse.substr(0,1) == "1"){
+    headers.append("x-amz-server-side-encryption:AES256");
   }
   if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
@@ -814,7 +826,8 @@ static int put_headers(const char *path, headers_t meta) {
   return 0;
 }
 
-static int put_multipart_headers(const char *path, headers_t meta) {
+static int put_multipart_headers(const char *path, headers_t meta, bool ow_sse_flg)
+{
   int result;
   string s3_realpath;
   string url;
@@ -835,7 +848,7 @@ static int put_multipart_headers(const char *path, headers_t meta) {
     return result;
   }
 
-  upload_id = initiate_multipart_upload(path, buf.st_size, meta);
+  upload_id = initiate_multipart_upload(path, buf.st_size, meta, ow_sse_flg);
   if(upload_id.size() == 0){
     return(-EIO);
   }
@@ -884,7 +897,8 @@ static int put_multipart_headers(const char *path, headers_t meta) {
   return 0;
 }
 
-static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
+static int put_local_fd_small_file(const char* path, headers_t meta, int fd, bool ow_sse_flg)
+{
   string resource;
   string url;
   string s3_realpath;
@@ -933,17 +947,24 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;
-    if (key == "Content-Type")
+    if(key == "Content-Type"){
       headers.append(key + ":" + value);
-    if (key.substr(0,9) == "x-amz-acl")
+    }else if(key.substr(0,9) == "x-amz-acl"){
       headers.append(key + ":" + value);
-    if (key.substr(0,10) == "x-amz-meta")
+    }else if(key.substr(0,10) == "x-amz-meta"){
       headers.append(key + ":" + value);
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      headers.append(key + ":" + value);
+    }
   }
 
   if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
   } 
+  if(ow_sse_flg && use_sse.substr(0,1) == "1"){
+    headers.append("x-amz-server-side-encryption:AES256");
+  }
   if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", strMD5, ContentType, date, headers.get(), resource));
@@ -965,7 +986,8 @@ static int put_local_fd_small_file(const char* path, headers_t meta, int fd) {
   return 0;
 }
 
-static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
+static int put_local_fd_big_file(const char* path, headers_t meta, int fd, bool ow_sse_flg)
+{
   struct stat st;
   off_t lSize;
   int partfd = -1;
@@ -983,7 +1005,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
   if(fstat(fd, &st) == -1)
     YIKES(-errno);
 
-  uploadId = initiate_multipart_upload(path, st.st_size, meta);
+  uploadId = initiate_multipart_upload(path, st.st_size, meta, ow_sse_flg);
   if(uploadId.size() == 0) {
     SYSLOGERR("Could not determine UploadId");
     return(-EIO);
@@ -1100,7 +1122,8 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd) {
  * create or update s3 object
  * @return fuse return code
  */
-static int put_local_fd(const char* path, headers_t meta, int fd) {
+static int put_local_fd(const char* path, headers_t meta, int fd, bool ow_sse_flg)
+{
   int result;
   struct stat st;
 
@@ -1138,12 +1161,12 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
 
   if(st.st_size >= 20971520 && !nomultipart) { // 20MB
      // Additional time is needed for large files
-     if(readwrite_timeout < 120)
+     if(readwrite_timeout < 120){
        readwrite_timeout = 120;
-
-     result = put_local_fd_big_file(path, meta, fd); 
+     }
+     result = put_local_fd_big_file(path, meta, fd, ow_sse_flg); 
   } else {
-     result = put_local_fd_small_file(path, meta, fd); 
+     result = put_local_fd_small_file(path, meta, fd, ow_sse_flg); 
   }
 
   // seek to head of file.
@@ -1165,7 +1188,8 @@ static int put_local_fd(const char* path, headers_t meta, int fd) {
  *   Date: Mon, 1 Nov 2010 20:34:56 GMT
  *   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
  */
-static string initiate_multipart_upload(const char *path, off_t size, headers_t meta) {
+static string initiate_multipart_upload(const char *path, off_t size, headers_t meta, bool ow_sse_flg)
+{
   CURL *curl = NULL;
   int result;
   string auth;
@@ -1218,7 +1242,9 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
     string key = (*iter).first;
     string value = (*iter).second;
 
-    if(key.substr(0,10) == "x-amz-meta") {
+    if(key.substr(0,10) == "x-amz-meta" ||
+       (!ow_sse_flg && key == "x-amz-server-side-encryption"))
+    {
       string entry;
       entry.assign(key);
       entry.append(":");
@@ -1227,9 +1253,12 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
     }
   }
 
-  if(use_rrs.substr(0,1) == "1")
+  if(use_rrs.substr(0,1) == "1"){
     slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
-
+  }
+  if(ow_sse_flg && use_sse.substr(0,1) == "1"){
+    slist = curl_slist_append(slist, "x-amz-server-side-encryption:AES256");
+  }
   if(public_bucket.substr(0,1) != "1") {
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
@@ -1280,7 +1309,8 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
 }
 
 static int complete_multipart_upload(const char *path, string upload_id,
-                                     vector <file_part> parts) {
+                                     vector <file_part> parts)
+{
   CURL *curl = NULL;
   char *pData;
   int result;
@@ -1369,7 +1399,8 @@ static int complete_multipart_upload(const char *path, string upload_id,
   return result;
 }
 
-static string upload_part(const char *path, const char *source, int part_number, string upload_id) {
+static string upload_part(const char *path, const char *source, int part_number, string upload_id)
+{
   int fd;
   CURL *curl = NULL;
   FILE *part_file;
@@ -1478,7 +1509,8 @@ static string upload_part(const char *path, const char *source, int part_number,
   return ETag;
 }
 
-static string copy_part(const char *from, const char *to, int part_number, string upload_id, headers_t meta) {
+static string copy_part(const char *from, const char *to, int part_number, string upload_id, headers_t meta)
+{
   CURL *curl = NULL;
   int result;
   string url;
@@ -1514,12 +1546,13 @@ static string copy_part(const char *from, const char *to, int part_number, strin
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
     string key = (*iter).first;
     string value = (*iter).second;
-    if (key == "Content-Type")
+    if(key == "Content-Type"){
       headers.append(key + ":" + value);
-    if (key == "x-amz-copy-source")
+    }else if(key == "x-amz-copy-source"){
       headers.append(key + ":" + value);
-    if (key == "x-amz-copy-source-range")
+    }else if(key == "x-amz-copy-source-range"){
       headers.append(key + ":" + value);
+    }
   }
 
   if(use_rrs.substr(0,1) == "1"){
@@ -1699,6 +1732,12 @@ static int create_file_object(const char *path, mode_t mode, uid_t uid, gid_t gi
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time(NULL)));
   headers.append("x-amz-meta-uid:" + str(uid));
+  if(use_rrs.substr(0,1) == "1"){
+    headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(use_sse.substr(0,1) == "1"){
+    headers.append("x-amz-server-side-encryption:AES256");
+  }
   if(public_bucket.substr(0,1) != "1"){
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
       calc_signature("PUT", "", contentType, date, headers.get(), resource));
@@ -1798,8 +1837,11 @@ static int create_directory_object(const char *path, mode_t mode, time_t time, u
   headers.append("x-amz-meta-mode:" + str(mode));
   headers.append("x-amz-meta-mtime:" + str(time));
   headers.append("x-amz-meta-uid:" + str(uid));
-  if (use_rrs.substr(0,1) == "1") {
+  if(use_rrs.substr(0,1) == "1"){
     headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(use_sse.substr(0,1) == "1"){
+    headers.append("x-amz-server-side-encryption:AES256");
   }
   if (public_bucket.substr(0,1) != "1") {
     headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
@@ -1965,24 +2007,23 @@ static int s3fs_symlink(const char *from, const char *to) {
     return -errno;
   }
 
-  if(pwrite(fd, from, strlen(from), 0) == -1) {
+  if(pwrite(fd, from, strlen(from), 0) == -1){
     SYSLOGERR("line %d: error: pwrite: %d", __LINE__, -errno);
-    if(fd > 0)
+    if(fd > 0){
       close(fd);
-
+    }
     return -errno;
   }
 
-  result = put_local_fd(to, headers, fd);
-  if(result != 0) {
-    if(fd > 0)
+  if(0 != (result = put_local_fd(to, headers, fd, true))){
+    if(fd > 0){
       close(fd);
-
+    }
     return result;
   }
-
-  if(fd > 0)
+  if(fd > 0){
     close(fd);
+  }
 
   return 0;
 }
@@ -2012,7 +2053,7 @@ static int rename_object(const char *from, const char *to) {
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-metadata-directive"] = "REPLACE";
 
-  if(0 != (result = put_headers(to, meta))){
+  if(0 != (result = put_headers(to, meta, false))){
     return result;
   }
   result = s3fs_unlink(from);
@@ -2062,7 +2103,7 @@ static int rename_object_nocopy(const char *from, const char *to) {
   meta["Content-Type"] = lookupMimeType(to);
 
   // Re-uploading
-  result = put_local_fd(to, meta, fd);
+  result = put_local_fd(to, meta, fd, false);
   if(isclose){
     close(fd);
   }
@@ -2108,7 +2149,7 @@ static int rename_large_object(const char *from, const char *to) {
   meta["Content-Type"] = lookupMimeType(to);
   meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
 
-  upload_id = initiate_multipart_upload(to, buf.st_size, meta);
+  upload_id = initiate_multipart_upload(to, buf.st_size, meta, false);
   if(upload_id.size() == 0)
     return(-EIO);
 
@@ -2397,7 +2438,7 @@ static int s3fs_chmod(const char *path, mode_t mode)
     meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta) != 0){
+    if(put_headers(strpath.c_str(), meta, false) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -2484,7 +2525,7 @@ static int s3fs_chmod_nocopy(const char *path, mode_t mode) {
     }
 
     // Re-uploading
-    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd))){
+    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd, false))){
       FGPRINT("  s3fs_chmod_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
     }
     if(isclose){
@@ -2565,7 +2606,7 @@ static int s3fs_chown(const char *path, uid_t uid, gid_t gid) {
     meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta) != 0){
+    if(put_headers(strpath.c_str(), meta, false) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -2663,7 +2704,7 @@ static int s3fs_chown_nocopy(const char *path, uid_t uid, gid_t gid) {
     }
 
     // Re-uploading
-    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd))){
+    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd, false))){
       FGPRINT("  s3fs_chown_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
     }
     if(isclose){
@@ -2721,7 +2762,7 @@ static int s3fs_truncate(const char *path, off_t size) {
   }
 
   // Re-uploading
-  if(0 != (result = put_local_fd(path, meta, fd))){
+  if(0 != (result = put_local_fd(path, meta, fd, false))){
     FGPRINT("  s3fs_truncate line %d: put_local_fd result: %d\n", __LINE__, result);
   }
   if(isclose){
@@ -2853,7 +2894,8 @@ static int s3fs_flush(const char *path, struct fuse_file_info *fi) {
       meta["x-amz-meta-mtime"] = str(st.st_mtime);
     }
 
-    return put_local_fd(path, meta, fd);
+    // when updates file, always updates sse mode.
+    return put_local_fd(path, meta, fd, true);
   }
 
   return 0;
@@ -3557,7 +3599,7 @@ static int s3fs_utimens(const char *path, const struct timespec ts[2]) {
     meta["x-amz-copy-source"] = urlEncode("/" + bucket + s3_realpath);
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta) != 0){
+    if(put_headers(strpath.c_str(), meta, false) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -3648,7 +3690,7 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
     }
 
     // Re-uploading
-    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd))){
+    if(0 != (result = put_local_fd(strpath.c_str(), meta, fd, false))){
       FGPRINT("  s3fs_utimens_nocopy line %d: put_local_fd result: %d\n", __LINE__, result);
     }
     if(isclose){
@@ -4179,6 +4221,17 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
         return 0;
       } else {
          fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
+                 program_name.c_str());
+         return -1;
+      }
+    }
+    if(strstr(arg, "use_sse=") != 0){
+      use_sse = strchr(arg, '=') + 1;
+      if (strcmp(use_sse.c_str(), "1") == 0 || 
+          strcmp(use_sse.c_str(), "")  == 0 ) {
+        return 0;
+      } else {
+         fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", 
                  program_name.c_str());
          return -1;
       }
