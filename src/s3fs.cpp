@@ -3705,7 +3705,7 @@ static int s3fs_utimens_nocopy(const char *path, const struct timespec ts[2]) {
 static int s3fs_check_service(void) {
   CURL *curl = NULL;
   int result = CURLE_OK;
-  CURLcode responseCode;
+  long responseCode;
   BodyData body;
 
   FGPRINT("s3fs_check_service\n");
