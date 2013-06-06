@@ -3505,7 +3505,7 @@ static void* s3fs_init(struct fuse_conn_info *conn)
   }
   CRYPTO_set_locking_callback(locking_function);
   CRYPTO_set_id_callback(id_function);
-  curl_global_init(CURL_GLOBAL_ALL);
+  init_curl_global_all();
   init_curl_handles_mutex();
   InitMimeType("/etc/mime.types");
   init_curl_share(dns_cache);
@@ -3531,7 +3531,7 @@ static void s3fs_destroy(void*)
   free(mutex_buf);
   mutex_buf = NULL;
   destroy_curl_share(dns_cache);
-  curl_global_cleanup();
+  cleanup_curl_global_all();
   destroy_curl_handles_mutex();
 }
 
@@ -4584,15 +4584,9 @@ int main(int argc, char *argv[]) {
   s3fs_oper.access = s3fs_access;
   s3fs_oper.create = s3fs_create;
 
-   // Re-Initiate curl global for ssl before calling fuse.
-   if(!init_curl_global_all()){
-     exit(EXIT_FAILURE);
-   }
-
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
-  cleanup_curl_global_all();
 
   exit(fuse_res);
 }
