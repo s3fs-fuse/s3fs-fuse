@@ -1204,7 +1204,7 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
   string ContentType;
   string s3_realpath;
   BodyData body;
-  struct curl_slist *slist=NULL;
+  auto_curl_slist headers;
 
   FGPRINT("      initiate_multipart_upload [path=%s][size=%lu]\n", path, size);
 
@@ -1224,20 +1224,20 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
   raw_date = get_date();
   date.append(raw_date);
 
-  slist = curl_slist_append(slist, date.c_str());
-  slist = curl_slist_append(slist, "Accept:");
-  slist = curl_slist_append(slist, "Content-Length:");
+  headers.append(date);
+  headers.append("Accept:");
+  headers.append("Content-Length:");
 
   ContentType.assign("Content-Type: ");
   string ctype_data;
   ctype_data.assign(lookupMimeType(path));
   ContentType.append(ctype_data);
-  slist = curl_slist_append(slist, ContentType.c_str());
+  headers.append(ContentType);
 
   // x-amz headers: (a) alphabetical order and (b) no spaces after colon
   acl.assign("x-amz-acl:");
   acl.append(default_acl);
-  slist = curl_slist_append(slist, acl.c_str());
+  headers.append(acl.c_str());
 
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
     string key = (*iter).first;
@@ -1250,29 +1250,28 @@ static string initiate_multipart_upload(const char *path, off_t size, headers_t 
       entry.assign(key);
       entry.append(":");
       entry.append(value);
-      slist = curl_slist_append(slist, entry.c_str());
+      headers.append(entry);
     }
   }
 
   if(use_rrs.substr(0,1) == "1"){
-    slist = curl_slist_append(slist, "x-amz-storage-class:REDUCED_REDUNDANCY");
+    headers.append("x-amz-storage-class:REDUCED_REDUNDANCY");
   }
   if(ow_sse_flg && use_sse.substr(0,1) == "1"){
-    slist = curl_slist_append(slist, "x-amz-server-side-encryption:AES256");
+    headers.append("x-amz-server-side-encryption:AES256");
   }
   if(public_bucket.substr(0,1) != "1") {
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("POST", "", ctype_data, raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
+    auth.append(calc_signature("POST", "", ctype_data, raw_date, headers.get(), resource));
+    headers.append(auth.c_str());
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl, &body);
 
-  curl_slist_free_all(slist);
   destroy_curl_handle(curl);
 
   if(result != 0) {
@@ -1326,7 +1325,7 @@ static int complete_multipart_upload(const char *path, string upload_id,
   string s3_realpath;
   BodyData body;
   struct WriteThis pooh;
-  struct curl_slist *slist = NULL;
+  auto_curl_slist headers;
 
   FGPRINT("      complete_multipart_upload [path=%s]\n", path);
 
@@ -1375,25 +1374,22 @@ static int complete_multipart_upload(const char *path, string upload_id,
   date.assign("Date: ");
   raw_date = get_date();
   date.append(raw_date);
-  slist = NULL;
-  slist = curl_slist_append(slist, date.c_str());
-
-  slist = curl_slist_append(slist, "Accept:");
-  slist = curl_slist_append(slist, "Content-Type:");
+  headers.append(date);
+  headers.append("Accept:");
+  headers.append("Content-Type:");
 
   if(public_bucket.substr(0,1) != "1") {
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("POST", "", "", raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
+    auth.append(calc_signature("POST", "", "", raw_date, headers.get(), resource));
+    headers.append(auth);
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl, &body);
 
-  curl_slist_free_all(slist);
   destroy_curl_handle(curl);
   free(pData);
 
@@ -1417,7 +1413,7 @@ static string upload_part(const char *path, const char *source, int part_number,
   struct stat st;
   BodyData body;
   BodyData header;
-  struct curl_slist *slist = NULL;
+  auto_curl_slist headers;
 
   // Now upload the file as the nth part
   FGPRINT("      multipart upload [path=%s][part=%d]\n", path, part_number);
@@ -1469,22 +1465,20 @@ static string upload_part(const char *path, const char *source, int part_number,
   date.assign("Date: ");
   raw_date = get_date();
   date.append(raw_date);
-  slist = NULL;
-  slist = curl_slist_append(slist, date.c_str());
-  slist = curl_slist_append(slist, "Accept:");
+  headers.append(date);
+  headers.append("Accept:");
 
   if(public_bucket.substr(0,1) != "1") {
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("PUT", "", "", raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
+    auth.append(calc_signature("PUT", "", "", raw_date, headers.get(), resource));
+    headers.append(auth);
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
 
   result = my_curl_easy_perform(curl, &body, &header, part_file);
-  curl_slist_free_all(slist);
   destroy_curl_handle(curl);
   fclose(part_file);
 
@@ -1602,7 +1596,7 @@ static int list_multipart_uploads(void) {
   string raw_date;
   string auth;
   string my_url;
-  struct curl_slist *slist=NULL;
+  auto_curl_slist headers;
 
   printf("List Multipart Uploads\n");
   resource = urlEncode(service_path + bucket + "/");
@@ -1616,20 +1610,19 @@ static int list_multipart_uploads(void) {
   date.assign("Date: ");
   raw_date = get_date();
   date.append(raw_date);
-  slist = curl_slist_append(slist, date.c_str());
-  slist = curl_slist_append(slist, "Accept:");
+  headers.append(date);
+  headers.append("Accept:");
 
   if(public_bucket.substr(0,1) != "1"){
     auth.assign("Authorization: AWS ");
     auth.append(AWSAccessKeyId);
     auth.append(":");
-    auth.append(calc_signature("GET", "", "", raw_date, slist, resource));
-    slist = curl_slist_append(slist, auth.c_str());
+    auth.append(calc_signature("GET", "", "", raw_date, headers.get(), resource));
+    headers.append(auth);
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
   curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
   result = my_curl_easy_perform(curl, &body);
-  curl_slist_free_all(slist);
   destroy_curl_handle(curl);
 
   if(result != 0) {
