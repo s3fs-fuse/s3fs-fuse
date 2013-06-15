@@ -623,6 +623,7 @@ time_t get_lastmodified(const char* s)
   if(!s){
     return 0L;
   }
+  memset(&tm, 0, sizeof(struct tm));
   strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
   return mktime(&tm);      // GMT
 }

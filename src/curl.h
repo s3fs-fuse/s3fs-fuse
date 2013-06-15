@@ -55,11 +55,36 @@ class auto_curl_slist {
 
 // header data
 struct head_data {
-  std::string base_path;
-  std::string path;
-  std::string *url;
-  struct curl_slist *requestHeaders;
-  headers_t *responseHeaders;
+  std::string* base_path;
+  std::string* path;
+  std::string* url;
+  struct curl_slist* requestHeaders;
+  headers_t*   responseHeaders;
+
+  head_data() : base_path(NULL), path(NULL), url(NULL), requestHeaders(NULL), responseHeaders(NULL) {}
+
+  void clear(void) {
+    if(base_path){
+      delete base_path;
+      base_path = NULL;
+    }
+    if(path){
+      delete path;
+      path = NULL;
+    }
+    if(url){
+      delete url;
+      url = NULL;
+    }
+    if(requestHeaders){
+      curl_slist_free_all(requestHeaders);
+      requestHeaders = NULL;
+    }
+    if(responseHeaders){
+      delete responseHeaders;
+      responseHeaders = NULL;
+    }
+  }
 };
 
 typedef std::map<CURL*, head_data> headMap_t;
@@ -69,11 +94,7 @@ void destroy_curl_handle(CURL *curl_handle);
 struct cleanup_head_data {
   void operator()(std::pair<CURL*, head_data> qqq) {
     CURL* curl_handle  = qqq.first;
-
-    head_data response = qqq.second;
-    delete response.url;
-    curl_slist_free_all(response.requestHeaders);
-    delete response.responseHeaders;
+    (qqq.second).clear();
     destroy_curl_handle(curl_handle);
   }
 };
@@ -92,13 +113,8 @@ class auto_head {
     if(iter == headMap.end()){
       return;
     }
-
-    head_data response = iter->second;
-    delete response.url;
-    curl_slist_free_all(response.requestHeaders);
-    delete response.responseHeaders;
+    (iter->second).clear();
     destroy_curl_handle(curl_handle);
-
     headMap.erase(iter);
   }
 

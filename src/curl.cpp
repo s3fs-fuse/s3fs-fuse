@@ -172,15 +172,17 @@ void cleanup_curl_global_all(void)
 
 static void lock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
 {
-  if(hCurlShare && CURL_LOCK_DATA_DNS == nLockData){
-    pthread_mutex_lock(&curl_share_lock);
+  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_t* lockmutex = (pthread_mutex_t*)useptr;
+    pthread_mutex_lock(lockmutex);
   }
 }
 
-static void unlock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
+static void unlock_curl_share(CURL* handle, curl_lock_data nLockData, void* useptr)
 {
-  if(hCurlShare && CURL_LOCK_DATA_DNS == nLockData){
-    pthread_mutex_unlock(&curl_share_lock);
+  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_t* lockmutex = (pthread_mutex_t*)useptr;
+    pthread_mutex_unlock(lockmutex);
   }
 }
 
@@ -191,27 +193,34 @@ int init_curl_share(bool isCache)
   if(!isCache){
     return 0;
   }
+  pthread_mutex_init(&curl_share_lock, NULL);
+
   if(NULL == (hCurlShare = curl_share_init())){
     FGPRINT(" init_curl_share: curl_share_init failed\n");
     SYSLOGERR("init_curl_share: curl_share_init failed\n");
     return -1;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_LOCKFUNC, lock_curl_share))){
-    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    FGPRINT(" init_curl_share: curl_share_setopt(LOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     return nSHCode;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_UNLOCKFUNC, unlock_curl_share))){
-    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    FGPRINT(" init_curl_share: curl_share_setopt(UNLOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     return nSHCode;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
-    FGPRINT(" init_curl_share: curl_share_setopt returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    FGPRINT(" init_curl_share: curl_share_setopt(DNS) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
     return nSHCode;
   }
-  return pthread_mutex_init(&curl_share_lock, NULL);
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_USERDATA, (void*)&curl_share_lock))){
+    FGPRINT(" init_curl_share: curl_share_setopt(USERDATA) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    return nSHCode;
+  }
+  return 0;
 }
 
 int destroy_curl_share(bool isCache)
@@ -221,8 +230,10 @@ int destroy_curl_share(bool isCache)
   if(!isCache){
     return result;
   }
-  result = pthread_mutex_destroy(&curl_share_lock);
-  if(hCurlShare && CURLSHE_OK != curl_share_cleanup(hCurlShare) && 0 == result){
+  if(hCurlShare && CURLSHE_OK != curl_share_cleanup(hCurlShare)){
+    result = -1;
+  }
+  if(0 != pthread_mutex_destroy(&curl_share_lock)){
     result = -1;
   }
   return result;
@@ -396,7 +407,7 @@ int curl_get_headers(const char *path, headers_t &meta)
 CURL *create_head_handle(head_data *request_data)
 {
   CURL *curl_handle= create_curl_handle();
-  string realpath  = get_realpath(request_data->path.c_str());
+  string realpath  = get_realpath(request_data->path->c_str());
   string resource  = urlEncode(service_path + bucket + realpath);
   string url       = host + resource;
 
@@ -435,12 +446,13 @@ CURL *create_head_handle(head_data *request_data)
  */
 int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
 {
-  char url[256];
   time_t now;
-  char* ptr_url = url;
-  curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
 
-  SYSLOGDBG("connecting to URL %s", ptr_url);
+  if(debug){
+    char* ptr_url = NULL;
+    curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
+    SYSLOGDBG("connecting to URL %s", ptr_url ? ptr_url : "unknown");
+  }
 
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
   if(ssl_verify_hostname.substr(0,1) == "0"){

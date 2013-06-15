@@ -1096,6 +1096,7 @@ static int put_local_fd_big_file(const char* path, headers_t meta, int fd, bool 
           if(buffer){
             free(buffer);
           }
+          remove(part.path);
           return(-EIO);
         }
       }
@@ -2975,11 +2976,12 @@ static int readdir_multi_head(const char *path, S3ObjList& head)
 
       // file not cached, prepare a call to get_headers
       head_data request_data;
-      request_data.base_path      = (*liter);
-      request_data.path           = fullorg;
+      request_data.base_path      = new string(*liter);
+      request_data.path           = new string(fullorg);
       CURL* curl_handle           = create_head_handle(&request_data);
       my_set_curl_share(curl_handle);  // set dns cache
-      request_data.path           = fullpath;    // Notice: replace org to normalized for cache key.
+      delete request_data.path;
+      request_data.path           = new string(fullpath);    // Notice: replace org to normalized for cache key.
       curl_map.get()[curl_handle] = request_data;
 
       // add this handle to the multi handle
@@ -3051,22 +3053,23 @@ static int readdir_multi_head(const char *path, S3ObjList& head)
         curl_multi_cleanup(mh);
         return -EIO;
       }
+      CURL* hSingle = msg->easy_handle;
 
       if(CURLE_OK == msg->data.result){
-        head_data response= curl_map.get()[msg->easy_handle];
+        head_data response= curl_map.get()[hSingle];
         long responseCode = -1;
 
-        if(CURLE_OK == curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &responseCode) && 400 > responseCode){
+        if(CURLE_OK == curl_easy_getinfo(hSingle, CURLINFO_RESPONSE_CODE, &responseCode) && 400 > responseCode){
           // add into stat cache
-          if(!StatCache::getStatCacheData()->AddStat(response.path, (*response.responseHeaders))){
-            FGPRINT("  readdir_multi_head: failed adding stat cache [path=%s]\n", response.path.c_str());
+          if(!StatCache::getStatCacheData()->AddStat((*response.path), (*response.responseHeaders))){
+            FGPRINT("  readdir_multi_head: failed adding stat cache [path=%s]\n", response.path->c_str());
           }
         }else{
           // This case is directory object("dir", "non dir object", "_$folder$", etc)
-          //FGPRINT("  readdir_multi_head: failed a request(%s)\n", response.base_path.c_str());
+          //FGPRINT("  readdir_multi_head: failed a request(%s)\n", response.base_path->c_str());
         }
         // remove request path.
-        headlist.remove(response.base_path);
+        headlist.remove((*response.base_path));
 
       }else{
         SYSLOGDBGERR("readdir_multi_head: failed to read - remaining_msgs: %i code: %d  msg: %s", 
@@ -3076,8 +3079,8 @@ static int readdir_multi_head(const char *path, S3ObjList& head)
       }
 
       // Cleanup this curl handle and headers
-      curl_multi_remove_handle(mh, msg->easy_handle);
-      curl_map.remove(msg->easy_handle);  // with destroy curl handle.
+      curl_multi_remove_handle(mh, hSingle);
+      curl_map.remove(hSingle);  // with destroy curl handle.
     }
     curl_multi_cleanup(mh);
     curl_map.removeAll();  // with destroy curl handle.
@@ -3505,10 +3508,8 @@ static void* s3fs_init(struct fuse_conn_info *conn)
   }
   CRYPTO_set_locking_callback(locking_function);
   CRYPTO_set_id_callback(id_function);
-  init_curl_global_all();
   init_curl_handles_mutex();
   InitMimeType("/etc/mime.types");
-  init_curl_share(dns_cache);
 
   // Investigate system capabilities
   if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
@@ -3530,8 +3531,6 @@ static void s3fs_destroy(void*)
   }
   free(mutex_buf);
   mutex_buf = NULL;
-  destroy_curl_share(dns_cache);
-  cleanup_curl_global_all();
   destroy_curl_handles_mutex();
 }
 
@@ -4584,9 +4583,15 @@ int main(int argc, char *argv[]) {
   s3fs_oper.access = s3fs_access;
   s3fs_oper.create = s3fs_create;
 
+  init_curl_global_all();
+  init_curl_share(dns_cache);
+
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
+
+  destroy_curl_share(dns_cache);
+  cleanup_curl_global_all();
 
   exit(fuse_res);
 }
