@@ -109,6 +109,8 @@ static bool content_md5           = false;
 static bool allow_other           = false;
 static uid_t s3fs_uid             = 0;    // default = root.
 static gid_t s3fs_gid             = 0;    // default = root.
+static bool is_s3fs_umask         = false;// default does not set.
+static mode_t s3fs_umask          = 0;
 static bool dns_cache             = true; // default = true
 
 // if .size()==0 then local file cache is disabled
@@ -480,6 +482,10 @@ static int check_object_access(const char *path, int mask, struct stat* pstbuf)
   }
   if(1 == is_uid_inculde_group(pcxt->uid, obj_gid)){
     base_mask |= S_IRWXG;
+  }
+  if(is_s3fs_umask){
+    // If umask is set, all object attributes set ~umask.
+    mode |= ((S_IRWXU | S_IRWXG | S_IRWXO) & ~s3fs_umask);
   }
   mode &= base_mask;
 
@@ -4178,6 +4184,12 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if(strstr(arg, "gid=") != 0){
       s3fs_gid = strtoul(strchr(arg, '=') + 1, 0, 10);
+      return 1; // continue for fuse option
+    }
+    if(strstr(arg, "umask=") != 0){
+      s3fs_umask = (mode_t)strtoul(strchr(arg, '=') + 1, 0, 8);
+      s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+      is_s3fs_umask = true;
       return 1; // continue for fuse option
     }
     if(strstr(arg, "allow_other") != 0){
