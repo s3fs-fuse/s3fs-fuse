@@ -93,6 +93,7 @@ gid_t get_gid(headers_t& meta);
 blkcnt_t get_blocks(off_t size);
 time_t get_lastmodified(const char* s);
 time_t get_lastmodified(headers_t& meta);
+bool is_need_check_obj_detail(headers_t& meta);
 
 void show_usage(void);
 void show_help(void);

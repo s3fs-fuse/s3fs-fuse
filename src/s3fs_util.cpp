@@ -637,6 +637,41 @@ time_t get_lastmodified(headers_t& meta)
   return get_lastmodified((*iter).second.c_str());
 }
 
+//
+// Returns it whether it is an object with need checking in detail.
+// If this function returns true, the object is possible to be directory
+// and is needed checking detail(searching sub object).
+//
+bool is_need_check_obj_detail(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+
+  // directory object is Content-Length as 0.
+  if(0 != get_size(meta)){
+    return false;
+  }
+  // if the object has x-amz-meta information, checking is no more.
+  if(meta.end() != meta.find("x-amz-meta-mode")  ||
+     meta.end() != meta.find("x-amz-meta-mtime") ||
+     meta.end() != meta.find("x-amz-meta-uid")   ||
+     meta.end() != meta.find("x-amz-meta-gid")   ||
+     meta.end() != meta.find("x-amz-meta-owner") ||
+     meta.end() != meta.find("x-amz-meta-group") ||
+     meta.end() != meta.find("x-amz-meta-permissions") )
+  {
+    return false;
+  }
+  // if there is not Content-Type, or Content-Type is "x-directory",
+  // checking is no more.
+  if(meta.end() == (iter = meta.find("Content-Type"))){
+    return false;
+  }
+  if("application/x-directory" == (*iter).second){
+    return false;
+  }
+  return true;
+}
+
 //-------------------------------------------------------------------
 // Help
 //-------------------------------------------------------------------
@@ -710,6 +745,9 @@ void show_help (void)
     "\n"
     "   nodnscache - disable dns cache\n"
     "      - s3fs is always using dns cache, this option make dns cache disable.\n"
+    "\n"
+    "   multireq_max (default=\"500\")\n"
+    "      - maximum number of parallel request for listing objects.\n"
     "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"

@@ -92,6 +92,9 @@ You can specify this option for performance, s3fs memorizes in stat cache that t
 \fB\-o\fR nodnscache - disable dns cache.
 s3fs is always using dns cache, this option make dns cache disable.
 .TP
+\fB\-o\fR multireq_max (default="500")
+maximum number of parallel request for listing objects.
+.TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
 .TP

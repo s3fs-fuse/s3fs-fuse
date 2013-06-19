@@ -54,7 +54,7 @@ using namespace std;
 //-------------------------------------------------------------------
 // Define
 //-------------------------------------------------------------------
-#define	MAX_MULTI_HEADREQ   500   // max request count in readdir curl_multi.
+#define	MAX_MULTI_HEADREQ   500   // default: max request count in readdir curl_multi.
 #define	DIRTYPE_UNKNOWN    -1
 #define	DIRTYPE_NEW         0
 #define	DIRTYPE_OLD         1
@@ -112,6 +112,7 @@ static gid_t s3fs_gid             = 0;    // default = root.
 static bool is_s3fs_umask         = false;// default does not set.
 static mode_t s3fs_umask          = 0;
 static bool dns_cache             = true; // default = true
+static int multireq_maxcnt        = MAX_MULTI_HEADREQ;
 
 // if .size()==0 then local file cache is disabled
 static std::string use_cache;
@@ -307,6 +308,12 @@ static int chk_dir_object_type(const char *path, string& newpath, string& nowpat
 // Get object attributes with stat cache.
 // This function is base for s3fs_getattr().
 //
+// [NOTICE]
+// Checking order is changed following list because of reducing the number of the requests.
+// 1) "dir"
+// 2) "dir/"
+// 3) "dir_$folder$"
+//
 static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce)
 {
   int          result = -1;
@@ -321,6 +328,10 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
 
 //FGPRINT("   get_object_attribute[path=%s]\n", path);
 
+  if(!path || '\0' == path[0]){
+    return -ENOENT;
+  }
+
   memset(pstat, 0, sizeof(struct stat));
   if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
     pstat->st_nlink = 1; // see fuse faq
@@ -330,12 +341,9 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
 
   // Check cache.
   strpath = path;
-  if(overcheck){
-    Pos = strpath.find("_$folder$", 0);
-    if(string::npos != Pos){
-      strpath = strpath.substr(0, Pos);
-      strpath += "/";
-    }
+  if(overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
+    strpath = strpath.substr(0, Pos);
+    strpath += "/";
   }
   if(pisforce){
     (*pisforce) = false;
@@ -348,63 +356,80 @@ static int get_object_attribute(const char *path, struct stat *pstbuf, headers_t
     return -ENOENT;
   }
 
-  // At first, check "object/".
-  strpath = path;
-  if(overcheck && 0 < strpath.length() && '/' != strpath[strpath.length() - 1]){
-    strpath    += "/";
-    s3_realpath = get_realpath(strpath.c_str());
-    if(0 != (result = curl_get_headers(s3_realpath.c_str(), (*pheader)))){
-      string strSp= path;
-      strSp      += "_$folder$";
-      s3_realpath = get_realpath(strSp.c_str());
-      result = curl_get_headers(s3_realpath.c_str(), (*pheader));
+  // At first, check path
+  strpath     = path;
+  s3_realpath = get_realpath(strpath.c_str());
+  result      = curl_get_headers(s3_realpath.c_str(), (*pheader));
+
+  // overcheck
+  if(overcheck && 0 != result){
+    if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
+      // path is "object", check "object/" for overcheck
+      strpath    += "/";
+      s3_realpath = get_realpath(strpath.c_str());
+      result      = curl_get_headers(s3_realpath.c_str(), (*pheader));
     }
-  }
-  if(0 != result){
-    strpath     = path;
-    s3_realpath = get_realpath(strpath.c_str());
-    if(0 != (result = curl_get_headers(s3_realpath.c_str(), (*pheader)))){
-      // Not found --> check( if overcheck )
-      if(overcheck){
-        if(string::npos == strpath.find("_$folder$", 0)){
-          // path doesn't have "_$folder$" --> check for s3fox etc
-          strpath    += "_$folder$";
-          s3_realpath = get_realpath(strpath.c_str());
-          result      = curl_get_headers(s3_realpath.c_str(), (*pheader));
+    if(0 != result){
+      // not found "object/", check "_$folder$"
+      strpath = path;
+      if(string::npos == strpath.find("_$folder$", 0)){
+        if('/' == strpath[strpath.length() - 1]){
+          strpath = strpath.substr(0, strpath.length() - 1);
         }
-        if(0 == result){
-          // found "_$folder$" object.
-          strpath = path;  // reset original
+        strpath    += "_$folder$";
+        s3_realpath = get_realpath(strpath.c_str());
+        result      = curl_get_headers(s3_realpath.c_str(), (*pheader));
+      }
+    }
+    if(0 != result){
+      // not found "object/" and "object_$folder$", check no dir object.
+      strpath = path;
+      if(string::npos == strpath.find("_$folder$", 0)){
+        if('/' == strpath[strpath.length() - 1]){
+          strpath = strpath.substr(0, strpath.length() - 1);
+        }
+        if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+          // found "no dir obejct".
           strpath += "/";
-        }else{
-          // path does not have "_$folder$" --> check "no dir obejct".
-          if(-ENOTEMPTY == directory_empty(path)){
-            // found "no dir obejct".
-            forcedir = true;
-            strpath  = path;  // reset original
-            strpath += "/";
-            if(pisforce){
-              (*pisforce) = true;
-            }
-          }else{
-            // Add no object cache.
-            strpath = path;  // reset original
-            StatCache::getStatCacheData()->AddNoObjectCache(strpath);
-            return result;
+          forcedir = true;
+          if(pisforce){
+            (*pisforce) = true;
           }
+          result = 0;
         }
-      }else{
-        return result;
       }
-    }else{
-      // if path has "_$folder$", need to cut it.
-      Pos = strpath.find("_$folder$", 0);
-      if(string::npos != Pos){
-        strpath = strpath.substr(0, Pos);
-        strpath += "/";
+    }
+  }else{
+    // found "path" object.
+    if('/' != strpath[strpath.length() - 1]){
+      // check a case of that "object" does not have attribute and "object" is possible to be directory.
+      if(is_need_check_obj_detail(*pheader)){
+        if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+          strpath += "/";
+          forcedir = true;
+          if(pisforce){
+            (*pisforce) = true;
+          }
+          result = 0;
+        }
       }
     }
   }
+
+  if(0 != result){
+    // finally, "path" object did not find. Add no object cache.
+    strpath = path;  // reset original
+    StatCache::getStatCacheData()->AddNoObjectCache(strpath);
+    return result;
+  }
+
+  // if path has "_$folder$", need to cut it.
+  if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+    strpath = strpath.substr(0, Pos);
+    strpath += "/";
+  }
+
+  // Set into cache
   if(0 != StatCache::getStatCacheData()->GetCacheSize()){
     // add into stat cache
     if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
@@ -2963,7 +2988,7 @@ static int readdir_multi_head(const char *path, S3ObjList& head)
     mh = curl_multi_init();
 
     // Make single head request.
-    for(liter = headlist.begin(), cnt = 0; headlist.end() != liter && cnt < MAX_MULTI_HEADREQ; ){
+    for(liter = headlist.begin(), cnt = 0; headlist.end() != liter && cnt < multireq_maxcnt; ){
       string fullpath = path + (*liter);
       string fullorg  = path + head.GetOrgName((*liter).c_str());
       string etag     = head.GetETag((*liter).c_str());
@@ -2991,7 +3016,7 @@ static int readdir_multi_head(const char *path, S3ObjList& head)
         return -EIO;
       }
       liter++;
-      cnt++;     // max request count in multi-request is MAX_MULTI_HEADREQ.
+      cnt++;     // max request count in multi-request is multireq_maxcnt.
     }
 
     // Send multi request.
@@ -4206,6 +4231,10 @@ static int my_fuse_opt_proc(void *data, const char *arg, int key, struct fuse_ar
     }
     if (strstr(arg, "use_cache=") != 0) {
       use_cache = strchr(arg, '=') + 1;
+      return 0;
+    }
+    if (strstr(arg, "multireq_max=") != 0) {
+      multireq_maxcnt = atoi(strchr(arg, '=') + 1);
       return 0;
     }
     if(strstr(arg, "nonempty") != 0) {
