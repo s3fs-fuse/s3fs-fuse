@@ -29,11 +29,95 @@
 #include <iostream>
 #include <sstream>
 #include <map>
+#include <list>
 
 #include "fdcache.h"
 #include "s3fs.h"
 
 using namespace std;
+
+//-------------------------------------------------------------------
+// Utility for fd_cache_entlist_t
+//-------------------------------------------------------------------
+static int get_fdlist_entlist(fd_cache_entlist_t* list, fd_list_t& fdlist);
+static fd_cache_entlist_t::iterator find_entlist(fd_cache_entlist_t* list, int fd);
+static fd_cache_entlist_t::iterator find_writable_fd_entlist(fd_cache_entlist_t* list);
+static bool add_fd_entlist(fd_cache_entlist_t* list, int fd, int flags);
+static bool erase_fd_entlist(fd_cache_entlist_t* list, int fd, bool force = false);
+
+static int get_fdlist_entlist(fd_cache_entlist_t* list, fd_list_t& fdlist)
+{
+  fd_cache_entlist_t::iterator iter;
+  int count = 0;
+
+  for(count = 0, iter = list->begin(); list->end() != iter; iter++, count++){
+    fdlist.push_back((*iter).fd);
+  }
+  return count;
+}
+
+static fd_cache_entlist_t::iterator find_entlist(fd_cache_entlist_t* list, int fd)
+{
+  fd_cache_entlist_t::iterator iter;
+
+  for(iter = list->begin(); list->end() != iter; iter++){
+    if(fd == (*iter).fd){
+      break;
+    }
+  }
+  return iter;
+}
+
+static fd_cache_entlist_t::iterator find_writable_fd_entlist(fd_cache_entlist_t* list)
+{
+  fd_cache_entlist_t::iterator iter;
+  fd_cache_entlist_t::iterator titer;
+  int flags;
+
+  for(flags = -1, iter = list->begin(), titer = list->end(); list->end() != iter; iter++){
+    if(flags < ((*iter).flags & O_ACCMODE)){
+      flags = (*iter).flags & O_ACCMODE;
+      titer = iter;
+    }
+  }
+  return titer;
+}
+
+static bool add_fd_entlist(fd_cache_entlist_t* list, int fd, int flags)
+{
+  fd_cache_entlist_t::iterator iter = find_entlist(list, fd);
+
+  if(list->end() == iter){
+    // not found, add new entry.
+    fd_cache_entry ent;
+    ent.refcnt = 1;
+    ent.fd     = fd;
+    ent.flags  = flags;
+    list->push_back(ent);
+  }else{
+    // found same fd, need to check flags.
+    (*iter).refcnt++;
+    if(flags != (*iter).flags){
+      (*iter).flags = flags;
+    }
+  }
+  return true;
+}
+
+static bool erase_fd_entlist(fd_cache_entlist_t* list, int fd, bool force)
+{
+  fd_cache_entlist_t::iterator iter = find_entlist(list, fd);
+
+  if(list->end() == iter){
+    return false;
+  }
+  (*iter).refcnt--;
+  if(!force && 0 < (*iter).refcnt){
+    return false;
+  }
+  list->erase(iter);
+  return true;
+}
 
 //-------------------------------------------------------------------
 // Static
@@ -57,6 +141,12 @@ FdCache::~FdCache()
 {
   if(this == FdCache::getFdCacheData()){
     pthread_mutex_destroy(&(FdCache::fd_cache_lock));
+
+    for(fd_cache_t::iterator iter = fd_cache.begin(); fd_cache.end() != iter; iter++){
+      fd_cache_entlist_t* entlist = (*iter).second;
+      delete entlist;
+    }
+    fd_cache.clear();
   }else{
     assert(false);
   }
@@ -65,59 +155,27 @@ FdCache::~FdCache()
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
-bool FdCache::makeKey(const char* path, string& strkey)
-{
-  struct fuse_context* pcxt;
-
-  if(NULL == (pcxt = fuse_get_context())){
-    return false;
-  }
-  if(!path){
-    return false;
-  }
-  // make key string
-  ostringstream stream;
-  stream << pcxt->pid;
-  strkey = stream.str();
-  strkey += "#";
-  strkey += path;
-
-  return true;
-}
-
 bool FdCache::Add(const char* path, int fd, int flags)
 {
   fd_cache_t::iterator iter;
+  string strkey = path;
 
-  // make key string
-  string strkey;
-  if(!FdCache::makeKey(path, strkey)){
-    return false;
-  }
   FGPRINT("    FdCache::Add[path=%s] fd(%d),flags(%d)\n", path, fd, flags);
 
   pthread_mutex_lock(&FdCache::fd_cache_lock);
-  if(fd_cache.end() != (iter = fd_cache.find(strkey))){
-    if(fd == (*iter).second.fd && flags == (*iter).second.flags){
-      // Do nothing
 
-    }else if(fd == (*iter).second.fd && flags != (*iter).second.flags){
-      // Check and Set flags
-      if(((*iter).second.flags & O_ACCMODE) < (flags & O_ACCMODE)){
-        (*iter).second.flags = flags;
-      }
-    }else{
-      // Check, Set fd & flags
-      if(((*iter).second.flags & O_ACCMODE) < (flags & O_ACCMODE)){
-        (*iter).second.fd    = fd;
-        (*iter).second.flags = flags;
-      }
-    }
+  // Add path->fd
+  fd_cache_entlist_t* entlist;
+  if(fd_cache.end() != (iter = fd_cache.find(strkey))){
+    // found same key. set into fd(or over write)
+    entlist = (*iter).second;
   }else{
-    // Set new data
-    fd_cache[strkey].fd    = fd;
-    fd_cache[strkey].flags = flags;
+    // not found, set into new entry.
+    entlist = new fd_cache_entlist_t();
+    fd_cache[strkey] = entlist;
   }
+  add_fd_entlist(entlist, fd, flags);
+
   // Set fd->flags
   fd_flags[fd] = flags;
 
@@ -131,30 +189,22 @@ bool FdCache::Del(const char* path, int fd)
 {
   fd_cache_t::iterator fd_iter;
   fd_flags_t::iterator flags_iter;
+  string strkey = path;
 
-  // make key string
-  string strkey;
-  if(!FdCache::makeKey(path, strkey)){
-    return false;
-  }
   FGPRINT("    FdCache::Del[path=%s][fd=%d]\n", path, fd);
 
   pthread_mutex_lock(&FdCache::fd_cache_lock);
 
   // Delete path->fd
   if(fd_cache.end() != (fd_iter = fd_cache.find(strkey))){
-    Del((*fd_iter).second.fd);
-    fd_cache.erase(fd_iter);
-  }
-  // search same fd in fd_cache and remove it (for case of pid=0).
-  for(fd_iter = fd_cache.begin(); fd_cache.end() != fd_iter; ){
-    if((*fd_iter).second.fd == fd){
-      // found same fd
-      fd_cache.erase(fd_iter++);
-    }else{
-      fd_iter++;
+    fd_cache_entlist_t* entlist = (*fd_iter).second;
+    erase_fd_entlist(entlist, fd);
+    if(0 == entlist->size()){
+      delete entlist;
+      fd_cache.erase(fd_iter);
     }
   }
+
   // Delete fd->flags
   if(fd_flags.end() != (flags_iter = fd_flags.find(fd))){
     fd_flags.erase(flags_iter);
@@ -170,17 +220,23 @@ bool FdCache::Del(const char* path, int fd)
 bool FdCache::Del(const char* path)
 {
   fd_cache_t::iterator fd_iter;
+  string strkey = path;
 
-  // make key string
-  string strkey;
-  if(!FdCache::makeKey(path, strkey)){
-    return false;
-  }
   FGPRINT("    FdCache::Del[path=%s]\n", path);
 
   pthread_mutex_lock(&FdCache::fd_cache_lock);
+
   if(fd_cache.end() != (fd_iter = fd_cache.find(strkey))){
-    Del((*fd_iter).second.fd);
+    fd_cache_entlist_t* entlist = (*fd_iter).second;
+    fd_list_t fdlist;
+    if(0 != get_fdlist_entlist(entlist, fdlist)){
+      // remove fd->flags map
+      for(fd_list_t::iterator fdlist_iter; fdlist.end() != fdlist_iter; fdlist_iter++){
+        Del(*fdlist_iter);
+      }
+    }
+    // remove path->fd_entlist
+    delete entlist;
     fd_cache.erase(fd_iter);
   }
   pthread_mutex_unlock(&FdCache::fd_cache_lock);
@@ -207,26 +263,26 @@ bool FdCache::Del(int fd)
 
 bool FdCache::Get(const char* path, int* pfd, int* pflags) const
 {
-  bool result = true;
   fd_cache_t::const_iterator iter;
-
-  // make key string
-  string strkey;
-  if(!FdCache::makeKey(path, strkey)){
-    return false;
-  }
+  bool result   = false;
+  string strkey = path;
   
   pthread_mutex_lock(&FdCache::fd_cache_lock);
+
   if(fd_cache.end() != (iter = fd_cache.find(strkey))){
-    if(pfd){
-      *pfd = (*iter).second.fd;
+    fd_cache_entlist_t* entlist        = (*iter).second;
+    fd_cache_entlist_t::iterator titer = find_writable_fd_entlist(entlist);
+    if(titer != entlist->end()){
+      // returns writable fd.
+      result = true;
+      if(pfd){
+        *pfd = (*titer).fd;
+      }
+      if(pflags){
+        *pflags = (*titer).flags;
+      }
+      FGPRINT("    FdCache::Get[path=%s] fd=%d,flags=%d\n", path, (*titer).fd, (*titer).flags);
     }
-    if(pflags){
-      *pflags = (*iter).second.flags;
-    }
-    FGPRINT("    FdCache::Get[path=%s] fd=%d,flags=%d\n", path, (*iter).second.fd, (*iter).second.flags);
-  }else{
-    result = false;
   }
   pthread_mutex_unlock(&FdCache::fd_cache_lock);
 

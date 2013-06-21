@@ -7,14 +7,17 @@
 // Struct for fuse file handle cache
 //
 struct fd_cache_entry {
+  int refcnt;
   int fd;
   int flags;
 
-  fd_cache_entry() : fd(0), flags(0) {}
+  fd_cache_entry() : refcnt(0), fd(0), flags(0) {}
 };
 
-typedef std::map<std::string, struct fd_cache_entry> fd_cache_t; // key="pid(oct)#path"
-typedef std::map<int, int> fd_flags_t;                           // key=file discriptor
+typedef std::list<int> fd_list_t;
+typedef std::list<struct fd_cache_entry> fd_cache_entlist_t;
+typedef std::map<std::string, fd_cache_entlist_t*> fd_cache_t;   // key=path, value=<list>*
+typedef std::map<int, int> fd_flags_t;                           // key=file discriptor, value=flags
 
 //
 // Class for fuse file handle cache
@@ -26,9 +29,6 @@ class FdCache
     static pthread_mutex_t fd_cache_lock;
     fd_cache_t fd_cache;
     fd_flags_t fd_flags;
-
-  private:
-    static bool makeKey(const char* path, std::string& strkey);
 
   public:
     FdCache();
