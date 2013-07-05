@@ -1,7 +1,11 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
+//----------------------------------------------
+// class BodyData
+//----------------------------------------------
 // memory class for curl write memory callback 
+//
 class BodyData
 {
   private:
@@ -32,127 +36,217 @@ class BodyData
     }
 };
 
-// memory structure for POST
-struct WriteThis {
-  const char *readptr;
-  int sizeleft;
+//----------------------------------------------
+// Utility structs & typedefs
+//----------------------------------------------
+// Each part information for Multipart upload
+struct filepart
+{
+  bool        uploaded;
+  std::string partfile;
+  std::string etag;
+
+  filepart() : uploaded(false) {}
 };
+typedef std::vector<filepart> filepartList_t;
 
-class auto_curl_slist {
- public:
-  auto_curl_slist() : slist(0) { }
-  ~auto_curl_slist() { curl_slist_free_all(slist); }
-
-  struct curl_slist* get() const { return slist; }
-
-  void append(const std::string& s) {
-    slist = curl_slist_append(slist, s.c_str());
-  }
-
- private:
-  struct curl_slist* slist;
-};
-
-// header data
-struct head_data {
-  std::string* base_path;
-  std::string* path;
-  std::string* url;
-  struct curl_slist* requestHeaders;
-  headers_t*   responseHeaders;
-
-  head_data() : base_path(NULL), path(NULL), url(NULL), requestHeaders(NULL), responseHeaders(NULL) {}
-
-  void clear(void) {
-    if(base_path){
-      delete base_path;
-      base_path = NULL;
-    }
-    if(path){
-      delete path;
-      path = NULL;
-    }
-    if(url){
-      delete url;
-      url = NULL;
-    }
-    if(requestHeaders){
-      curl_slist_free_all(requestHeaders);
-      requestHeaders = NULL;
-    }
-    if(responseHeaders){
-      delete responseHeaders;
-      responseHeaders = NULL;
-    }
+// for progress
+struct case_insensitive_compare_func
+{
+  bool operator()(const std::string& a, const std::string& b){
+    return strcasecmp(a.c_str(), b.c_str()) < 0;
   }
 };
+typedef std::map<std::string, std::string, case_insensitive_compare_func> mimes_t;
+typedef std::pair<double, double>   progress_t;
+typedef std::map<CURL*, time_t>     curltime_t;
+typedef std::map<CURL*, progress_t> curlprogress_t;
 
-typedef std::map<CURL*, head_data> headMap_t;
+class S3fsMultiCurl;
 
-void destroy_curl_handle(CURL *curl_handle);
-
-struct cleanup_head_data {
-  void operator()(std::pair<CURL*, head_data> qqq) {
-    CURL* curl_handle  = qqq.first;
-    (qqq.second).clear();
-    destroy_curl_handle(curl_handle);
-  }
-};
-
-class auto_head {
- public:
-  auto_head() {}
-  ~auto_head() {
-    removeAll();
-  }
-
-  headMap_t& get() { return headMap; }
-
-  void remove(CURL* curl_handle) {
-    headMap_t::iterator iter = headMap.find(curl_handle);
-    if(iter == headMap.end()){
-      return;
-    }
-    (iter->second).clear();
-    destroy_curl_handle(curl_handle);
-    headMap.erase(iter);
-  }
-
-  void removeAll(void) {
-    for_each(headMap.begin(), headMap.end(), cleanup_head_data());
-  }
+//----------------------------------------------
+// class S3fsCurl
+//----------------------------------------------
+// Class for lapping curl
+//
+class S3fsCurl
+{
+    friend class S3fsMultiCurl;  
 
   private:
-    headMap_t headMap;
+    // class variables
+    static pthread_mutex_t curl_handles_lock;
+    static pthread_mutex_t curl_share_lock;
+    static bool            is_initglobal_done;
+    static CURLSH*         hCurlShare;
+    static bool            is_dns_cache;
+    static long            connect_timeout;
+    static time_t          readwrite_timeout;
+    static int             retries;
+    static bool            is_public_bucket;
+    static std::string     default_acl;             // TODO: to enum
+    static bool            is_use_rrs;
+    static bool            is_use_sse;
+    static bool            is_content_md5;
+    static std::string     AWSAccessKeyId;
+    static std::string     AWSSecretAccessKey;
+    static long            ssl_verify_hostname;
+    static const EVP_MD*   evp_md;
+    static curltime_t      curl_times;
+    static curlprogress_t  curl_progress;
+    static std::string     curl_ca_bundle;
+    static mimes_t         mimeTypes;
+
+    // variables
+    CURL*                hCurl;
+    std::string          path;               // target object path
+    std::string          base_path;          // base path (for multi curl head request)
+    std::string          saved_path;         // saved path = cache key (for multi curl head request)
+    std::string          url;                // target object path(url)
+    struct curl_slist*   requestHeaders;
+    headers_t            responseHeaders;    // header data by HeaderCallback
+    BodyData*            bodydata;           // body data by WriteMemoryCallback
+    BodyData*            headdata;           // header data by WriteMemoryCallback
+    long                 LastResponseCode;
+    const unsigned char* postdata;           // use by post method and read callback function.
+    int                  postdata_remaining; // use by post method and read callback function.
+
+  public:
+    // constructor/destructor
+    S3fsCurl();
+    ~S3fsCurl();
+
+  private:
+    // class methods
+    static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr);
+    static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr);
+    static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
+
+    static bool InitMimeType(const char* MimeFile = NULL);
+    static bool LocateBundle(void);
+    static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
+    static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
+    static size_t ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
+
+    // methods
+    bool ClearInternalData(void);
+    std::string CalcSignature(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
+    bool GetUploadId(std::string& upload_id);
+
+    int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool ow_sse_flg);
+    int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, filepartList_t& parts);
+    int UploadMultipartPostRequest(const char* tpath, const char* part_path, int part_num, std::string& upload_id, std::string& ETag);
+    int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta, std::string& ETag, bool ow_sse_flg);
+
+  public:
+    // class methods
+    static bool InitS3fsCurl(const char* MimeFile = NULL, bool reinit = false);
+    static bool DestroyS3fsCurl(bool reinit = false);
+    static bool InitGlobalCurl(void);
+    static bool DestroyGlobalCurl(void);
+    static bool InitShareCurl(void);
+    static bool DestroyShareCurl(void);
+
+    // class methods(valiables)
+    static std::string LookupMimeType(std::string name);
+    static bool SetDnsCache(bool isCache);
+    static long SetConnectTimeout(long timeout);
+    static time_t SetReadwriteTimeout(time_t timeout);
+    static time_t GetReadwriteTimeout(void) { return S3fsCurl::readwrite_timeout; }
+    static int SetRetries(int count);
+    static bool SetPublicBucket(bool flag);
+    static bool IsPublicBucket(void) { return S3fsCurl::is_public_bucket; }
+    static std::string SetDefaultAcl(const char* acl);
+    static bool SetUseRrs(bool flag);
+    static bool GetUseRrs(void) { return S3fsCurl::is_use_rrs; }
+    static bool SetUseSse(bool flag);
+    static bool GetUseSse(void) { return S3fsCurl::is_use_sse; }
+    static bool SetContentMd5(bool flag);
+    static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
+    static bool IsSetAccessKeyId(void) { return (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()); }
+    static long SetSslVerifyHostname(long value);
+    static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
+
+    // methods
+    bool CreateCurlHandle(bool force = false);
+    bool DestroyCurlHandle(void);
+
+    bool GetResponseCode(long& responseCode);
+    int RequestPerform(FILE* file = NULL);
+    int DeleteRequest(const char* tpath);
+    bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL);
+    bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath) {
+      return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str());
+    }
+    int HeadRequest(const char* tpath, headers_t& meta);
+    int PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg);
+    int PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    int GetObjectRequest(const char* tpath, int fd);
+    int CheckBucket(void);
+    int ListBucketRequest(const char* tpath, const char* query);
+    int MultipartListRequest(std::string& body);
+    int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool ow_sse_flg);
+    int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
+
+    // methods(valiables)
+    CURL* GetCurlHandle(void) const { return hCurl; }
+    std::string GetPath(void) const { return path; }
+    std::string GetBasePath(void) const { return base_path; }
+    std::string GetSpacialSavedPath(void) const { return saved_path; }
+    std::string GetUrl(void) const { return url; }
+    headers_t* GetResponseHeaders(void) { return &responseHeaders; }
+    BodyData* GetBodyData(void) const { return bodydata; }
+    BodyData* GetHeadData(void) const { return headdata; }
+    long GetLastResponseCode(void) const { return LastResponseCode; }
 };
 
+//----------------------------------------------
+// class S3fsMultiCurl
+//----------------------------------------------
+// Class for lapping multi curl
 //
-// Functions
-//
-int init_curl_handles_mutex(void);
-int destroy_curl_handles_mutex(void);
-bool init_curl_global_all(void);
-void cleanup_curl_global_all(void);
-int init_curl_share(bool isCache);
-int destroy_curl_share(bool isCache);
-void my_set_curl_share(CURL* curl);
-size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
-CURL *create_curl_handle(void);
-int curl_delete(const char *path);
-int curl_get_headers(const char *path, headers_t &meta);
-CURL *create_head_handle(struct head_data *request);
-int my_curl_easy_perform(CURL* curl, BodyData* body = NULL, BodyData* head = NULL, FILE* f = 0);
-size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
-size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
-int my_curl_progress(
-    void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
-std::string calc_signature(std::string method, std::string strMD5, std::string content_type, 
-    std::string date, curl_slist* headers, std::string resource);
-void locate_bundle(void);
+typedef std::map<CURL*, S3fsCurl*> s3fscurlmap_t;
+typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl);    // callback for succeed multi request
+typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl); // callback for failuer and retrying
+
+class S3fsMultiCurl
+{
+  private:
+    static int    max_multireq;
+
+    CURLM*        hMulti;
+    s3fscurlmap_t cMap_all;  // all of curl requests
+    s3fscurlmap_t cMap_req;  // curl requests are sent
+
+    S3fsMultiSuccessCallback SuccessCallback;
+    S3fsMultiRetryCallback   RetryCallback;
+
+  private:
+    int MultiPerform(void);
+    int MultiRead(void);
+
+  public:
+    S3fsMultiCurl();
+    ~S3fsMultiCurl();
+
+    static int SetMaxMultiRequest(int max);
+    static int GetMaxMultiRequest(void) { return S3fsMultiCurl::max_multireq; }
+
+    S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
+    S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
+    bool Clear(void);
+    bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
+    int Request(void);
+};
+
+//----------------------------------------------
+// Utility Functions
+//----------------------------------------------
 std::string GetContentMD5(int fd);
 unsigned char* md5hexsum(int fd);
 std::string md5sum(int fd);
-bool InitMimeType(const char* file);
-std::string lookupMimeType(std::string);
+struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
+bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 
 #endif // S3FS_CURL_H_

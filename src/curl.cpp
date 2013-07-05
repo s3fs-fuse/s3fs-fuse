@@ -34,12 +34,16 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
+#include <libxml/tree.h>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <map>
 #include <algorithm>
 #include <list>
+#include <vector>
 
 #include "common.h"
 #include "curl.h"
@@ -48,29 +52,6 @@
 #include "s3fs_util.h"
 
 using namespace std;
-
-//-------------------------------------------------------------------
-// Typedef
-//-------------------------------------------------------------------
-struct case_insensitive_compare_func {
-  bool operator ()(const string &a, const string &b) {
-    return strcasecmp(a.c_str(), b.c_str()) < 0;
-  }
-};
-typedef map<string, string, case_insensitive_compare_func> mimes_t;
-typedef pair<double, double> progress_t;
-
-//-------------------------------------------------------------------
-// Static valiables
-//-------------------------------------------------------------------
-static pthread_mutex_t curl_handles_lock;
-static pthread_mutex_t curl_share_lock;
-static CURLSH* hCurlShare = NULL;
-static const EVP_MD* evp_md = EVP_sha1();
-static map<CURL*, time_t> curl_times;
-static map<CURL*, progress_t> curl_progress;
-static string curl_ca_bundle;
-static mimes_t mimeTypes;
 
 //-------------------------------------------------------------------
 // Class BodyData
@@ -143,117 +124,389 @@ const char* BodyData::str(void) const
 }
 
 //-------------------------------------------------------------------
-// Functions
+// Class S3fsCurl
 //-------------------------------------------------------------------
-int init_curl_handles_mutex(void)
-{
-  return pthread_mutex_init(&curl_handles_lock, NULL);
-}
+#define MULTIPART_SIZE              10485760          // 10MB
+#define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
-int destroy_curl_handles_mutex(void)
-{
-  return pthread_mutex_destroy(&curl_handles_lock);
-}
+pthread_mutex_t S3fsCurl::curl_handles_lock;
+pthread_mutex_t S3fsCurl::curl_share_lock;
+bool            S3fsCurl::is_initglobal_done  = false;
+CURLSH*         S3fsCurl::hCurlShare          = NULL;
+bool            S3fsCurl::is_dns_cache        = true; // default
+long            S3fsCurl::connect_timeout     = 10;   // default
+time_t          S3fsCurl::readwrite_timeout   = 30;   // default
+int             S3fsCurl::retries             = 3;    // default
+bool            S3fsCurl::is_public_bucket    = false;
+string          S3fsCurl::default_acl         = "private";
+bool            S3fsCurl::is_use_rrs          = false;
+bool            S3fsCurl::is_use_sse          = false;
+bool            S3fsCurl::is_content_md5      = false;
+string          S3fsCurl::AWSAccessKeyId;
+string          S3fsCurl::AWSSecretAccessKey;
+long            S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
+const EVP_MD*   S3fsCurl::evp_md              = EVP_sha1();
+curltime_t      S3fsCurl::curl_times;
+curlprogress_t  S3fsCurl::curl_progress;
+string          S3fsCurl::curl_ca_bundle;
+mimes_t         S3fsCurl::mimeTypes;
 
-bool init_curl_global_all(void)
+//-------------------------------------------------------------------
+// Class methods for S3fsCurl
+//-------------------------------------------------------------------
+bool S3fsCurl::InitS3fsCurl(const char* MimeFile, bool reinit)
 {
-  if(CURLE_OK != curl_global_init(CURL_GLOBAL_ALL)){
-    FGPRINT("init_curl_global_all returns error.\n");
-    SYSLOGERR("init_curl_global_all returns error.");
+  if(!reinit){
+    if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, NULL)){
+      return false;
+    }
+    if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock, NULL)){
+      return false;
+    }
+    if(!S3fsCurl::InitMimeType(MimeFile)){
+      return false;
+    }
+  }
+  if(!S3fsCurl::InitGlobalCurl()){
+    return false;
+  }
+  if(!S3fsCurl::InitShareCurl()){
     return false;
   }
   return true;
 }
 
-void cleanup_curl_global_all(void)
+bool S3fsCurl::DestroyS3fsCurl(bool reinit)
 {
-  curl_global_cleanup();
-}
+  bool result = true;
 
-static void lock_curl_share(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
-{
-  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
-    pthread_mutex_t* lockmutex = (pthread_mutex_t*)useptr;
-    pthread_mutex_lock(lockmutex);
+  if(!S3fsCurl::DestroyShareCurl()){
+    return false;
   }
-}
-
-static void unlock_curl_share(CURL* handle, curl_lock_data nLockData, void* useptr)
-{
-  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
-    pthread_mutex_t* lockmutex = (pthread_mutex_t*)useptr;
-    pthread_mutex_unlock(lockmutex);
+  if(!S3fsCurl::DestroyGlobalCurl()){
+    return false;
   }
-}
-
-int init_curl_share(bool isCache)
-{
-  CURLSHcode nSHCode;
-
-  if(!isCache){
-    return 0;
-  }
-  pthread_mutex_init(&curl_share_lock, NULL);
-
-  if(NULL == (hCurlShare = curl_share_init())){
-    FGPRINT(" init_curl_share: curl_share_init failed\n");
-    SYSLOGERR("init_curl_share: curl_share_init failed\n");
-    return -1;
-  }
-  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_LOCKFUNC, lock_curl_share))){
-    FGPRINT(" init_curl_share: curl_share_setopt(LOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    return nSHCode;
-  }
-  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_UNLOCKFUNC, unlock_curl_share))){
-    FGPRINT(" init_curl_share: curl_share_setopt(UNLOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    return nSHCode;
-  }
-  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
-    FGPRINT(" init_curl_share: curl_share_setopt(DNS) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    return nSHCode;
-  }
-  if(CURLSHE_OK != (nSHCode = curl_share_setopt(hCurlShare, CURLSHOPT_USERDATA, (void*)&curl_share_lock))){
-    FGPRINT(" init_curl_share: curl_share_setopt(USERDATA) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("init_curl_share: %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    return nSHCode;
-  }
-  return 0;
-}
-
-int destroy_curl_share(bool isCache)
-{
-  int result = 0;
-
-  if(!isCache){
-    return result;
-  }
-  if(hCurlShare && CURLSHE_OK != curl_share_cleanup(hCurlShare)){
-    result = -1;
-  }
-  if(0 != pthread_mutex_destroy(&curl_share_lock)){
-    result = -1;
+  if(!reinit){
+    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_share_lock)){
+      result = false;
+    }
+    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
+      result = false;
+    }
   }
   return result;
 }
 
-void my_set_curl_share(CURL* curl)
+bool S3fsCurl::InitGlobalCurl(void)
 {
-  if(curl && hCurlShare){
-    curl_easy_setopt(curl, CURLOPT_SHARE, hCurlShare);
+  if(S3fsCurl::is_initglobal_done){
+    return false;
+  }
+  if(CURLE_OK != curl_global_init(CURL_GLOBAL_ALL)){
+    FGPRINT("init_curl_global_all returns error.\n");
+    SYSLOGERR("init_curl_global_all returns error.");
+    return false;
+  }
+  S3fsCurl::is_initglobal_done = true;
+  return true;
+}
+
+bool S3fsCurl::DestroyGlobalCurl(void)
+{
+  if(!S3fsCurl::is_initglobal_done){
+    return false;
+  }
+  curl_global_cleanup();
+  S3fsCurl::is_initglobal_done = false;
+  return true;
+}
+
+bool S3fsCurl::InitShareCurl(void)
+{
+  CURLSHcode nSHCode;
+
+  if(!S3fsCurl::is_dns_cache){
+    return false;
+  }
+  if(!S3fsCurl::is_initglobal_done){
+    FGPRINT("S3fsCurl::InitShareCurl : Dose not initialize global curl.\n");
+    SYSLOGERR("S3fsCurl::InitShareCurl : Dose not initialize global curl.");
+    return false;
+  }
+  if(S3fsCurl::hCurlShare){
+    FGPRINT("S3fsCurl::InitShareCurl : already initiated.\n");
+    SYSLOGERR("S3fsCurl::InitShareCurl : already initiated.");
+    return false;
+  }
+  if(NULL == (S3fsCurl::hCurlShare = curl_share_init())){
+    FGPRINT("S3fsCurl::InitShareCurl : curl_share_init failed\n");
+    SYSLOGERR("S3fsCurl::InitShareCurl : curl_share_init failed");
+    return false;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_LOCKFUNC, S3fsCurl::LockCurlShare))){
+    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(LOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    return false;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_UNLOCKFUNC, S3fsCurl::UnlockCurlShare))){
+    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(UNLOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    return false;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
+    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(DNS) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    return false;
+  }
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_USERDATA, (void*)&S3fsCurl::curl_share_lock))){
+    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(USERDATA) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
+    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    return false;
+  }
+  return true;
+}
+
+bool S3fsCurl::DestroyShareCurl(void)
+{
+  if(!S3fsCurl::is_initglobal_done){
+    FGPRINT("S3fsCurl::DestroyShareCurl : already destroy global curl.\n");
+    SYSLOGERR("S3fsCurl::DestroyShareCurl : already destroy global curl.");
+    return false;
+  }
+  if(!S3fsCurl::hCurlShare){
+    if(S3fsCurl::is_dns_cache){
+      FGPRINT("S3fsCurl::DestroyShareCurl : already destroy share curl.\n");
+      SYSLOGERR("S3fsCurl::DestroyShareCurl : already destroy share curl.");
+    }
+    return false;
+  }
+  if(CURLSHE_OK != curl_share_cleanup(S3fsCurl::hCurlShare)){
+    return false;
+  }
+  S3fsCurl::hCurlShare = NULL;
+  return true;
+}
+
+void S3fsCurl::LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
+{
+  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_t* lockmutex = static_cast<pthread_mutex_t*>(useptr);
+    pthread_mutex_lock(lockmutex);
   }
 }
 
-size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *userPtr)
+void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr)
+{
+  if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
+    pthread_mutex_t* lockmutex = static_cast<pthread_mutex_t*>(useptr);
+    pthread_mutex_unlock(lockmutex);
+  }
+}
+
+// homegrown timeout mechanism
+int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+{
+  CURL* curl = static_cast<CURL*>(clientp);
+  time_t now = time(0);
+  progress_t p(dlnow, ulnow);
+
+  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+
+  // any progress?
+  if(p != S3fsCurl::curl_progress[curl]){
+    // yes!
+    S3fsCurl::curl_times[curl]    = now;
+    S3fsCurl::curl_progress[curl] = p;
+  }else{
+    // timeout?
+    if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
+      pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+      SYSLOGERR("timeout now: %li, curl_times[curl]: %lil, readwrite_timeout: %li",
+                      (long int)now, S3fsCurl::curl_times[curl], (long int)readwrite_timeout);
+      return CURLE_ABORTED_BY_CALLBACK;
+    }
+  }
+
+  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+  return 0;
+}
+
+bool S3fsCurl::InitMimeType(const char* MimeFile)
+{
+  if(!MimeFile){
+    MimeFile = "/etc/mime.types";  // default
+  }
+
+  string line;
+  ifstream MT(MimeFile);
+  if(MT.good()){
+    while(getline(MT, line)){
+      if(line[0]=='#'){
+        continue;
+      }
+      if(line.size() == 0){
+        continue;
+      }
+
+      stringstream tmp(line);
+      string mimeType;
+      tmp >> mimeType;
+      while(tmp){
+        string ext;
+        tmp >> ext;
+        if(ext.size() == 0){
+          continue;
+        }
+        S3fsCurl::mimeTypes[ext] = mimeType;
+      }
+    }
+  }
+  return true;
+}
+
+//
+// @param s e.g., "index.html"
+// @return e.g., "text/html"
+//
+string S3fsCurl::LookupMimeType(string name)
+{
+  string result("application/octet-stream");
+  string::size_type last_pos = name.find_last_of('.');
+  string::size_type first_pos = name.find_first_of('.');
+  string prefix, ext, ext2;
+
+  // No dots in name, just return
+  if(last_pos == string::npos){
+    return result;
+  }
+  // extract the last extension
+  if(last_pos != string::npos){
+    ext = name.substr(1+last_pos, string::npos);
+  }
+  if (last_pos != string::npos) {
+     // one dot was found, now look for another
+     if (first_pos != string::npos && first_pos < last_pos) {
+        prefix = name.substr(0, last_pos);
+        // Now get the second to last file extension
+        string::size_type next_pos = prefix.find_last_of('.');
+        if (next_pos != string::npos) {
+           ext2 = prefix.substr(1+next_pos, string::npos);
+        }
+     }
+  }
+
+  // if we get here, then we have an extension (ext)
+  mimes_t::const_iterator iter = S3fsCurl::mimeTypes.find(ext);
+  // if the last extension matches a mimeType, then return
+  // that mime type
+  if (iter != S3fsCurl::mimeTypes.end()) {
+    result = (*iter).second;
+    return result;
+  }
+
+  // return with the default result if there isn't a second extension
+  if(first_pos == last_pos){
+     return result;
+  }
+
+  // Didn't find a mime-type for the first extension
+  // Look for second extension in mimeTypes, return if found
+  iter = S3fsCurl::mimeTypes.find(ext2);
+  if (iter != S3fsCurl::mimeTypes.end()) {
+     result = (*iter).second;
+     return result;
+  }
+
+  // neither the last extension nor the second-to-last extension
+  // matched a mimeType, return the default mime type 
+  return result;
+}
+
+bool S3fsCurl::LocateBundle(void)
+{
+  // See if environment variable CURL_CA_BUNDLE is set
+  // if so, check it, if it is a good path, then set the
+  // curl_ca_bundle variable to it
+  char *CURL_CA_BUNDLE; 
+
+  if(0 == S3fsCurl::curl_ca_bundle.size()){
+    CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
+    if(CURL_CA_BUNDLE != NULL)  {
+      // check for existance and readability of the file
+      ifstream BF(CURL_CA_BUNDLE);
+      if(!BF.good()){
+        SYSLOGERR("%s: file specified by CURL_CA_BUNDLE environment variable is not readable", program_name.c_str());
+        return false;
+      }
+      BF.close();
+      S3fsCurl::curl_ca_bundle.assign(CURL_CA_BUNDLE); 
+      return true;
+    }
+  }
+
+  // not set via environment variable, look in likely locations
+
+  ///////////////////////////////////////////
+  // from curl's (7.21.2) acinclude.m4 file
+  ///////////////////////////////////////////
+  // dnl CURL_CHECK_CA_BUNDLE
+  // dnl -------------------------------------------------
+  // dnl Check if a default ca-bundle should be used
+  // dnl
+  // dnl regarding the paths this will scan:
+  // dnl /etc/ssl/certs/ca-certificates.crt Debian systems
+  // dnl /etc/pki/tls/certs/ca-bundle.crt Redhat and Mandriva
+  // dnl /usr/share/ssl/certs/ca-bundle.crt old(er) Redhat
+  // dnl /usr/local/share/certs/ca-root.crt FreeBSD
+  // dnl /etc/ssl/cert.pem OpenBSD
+  // dnl /etc/ssl/certs/ (ca path) SUSE
+  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
+  if(BF.good()){
+     BF.close();
+     S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
+  }
+  return true;
+}
+
+size_t S3fsCurl::WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data)
+{
+  BodyData* body  = (BodyData*)data;
+
+  if(!body->Append(ptr, blockSize, numBlocks)){
+    FGPRINT("WriteMemoryCallback(): BodyData.Append() returned false.\n");
+    S3FS_FUSE_EXIT();
+    return -1;
+  }
+  return (blockSize * numBlocks);
+}
+
+size_t S3fsCurl::ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp)
+{
+  S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+
+  if(1 > (size * nmemb)){
+    return 0;
+  }
+  if(0 >= pCurl->postdata_remaining){
+    return 0;
+  }
+  int copysize = std::min((int)(size * nmemb), pCurl->postdata_remaining);
+  memcpy(ptr, pCurl->postdata, copysize);
+
+  pCurl->postdata_remaining = (pCurl->postdata_remaining > copysize ? (pCurl->postdata_remaining - copysize) : 0);
+  pCurl->postdata          += static_cast<size_t>(copysize);
+
+  return copysize;
+}
+
+size_t S3fsCurl::HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr)
 {
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
   string key;
   stringstream ss(header);
 
-  if (getline(ss, key, ':')) {
+  if(getline(ss, key, ':')){
     // Force to lower, only "x-amz"
     string lkey = key;
     transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
@@ -267,256 +520,277 @@ size_t header_callback(void *data, size_t blockSize, size_t numBlocks, void *use
   return blockSize * numBlocks;
 }
 
-CURL *create_curl_handle(void)
+bool S3fsCurl::SetDnsCache(bool isCache)
 {
-  time_t now;
-  CURL *curl_handle;
-
-  pthread_mutex_lock(&curl_handles_lock);
-  curl_handle = curl_easy_init();
-  curl_easy_reset(curl_handle);
-  curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
-  curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, connect_timeout);
-  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
-  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, my_curl_progress);
-  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSDATA, curl_handle);
-  // curl_easy_setopt(curl_handle, CURLOPT_FORBID_REUSE, 1);
-  
-  if(ssl_verify_hostname.substr(0,1) == "0"){
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0);
-  }
-  if(curl_ca_bundle.size() != 0){
-    curl_easy_setopt(curl_handle, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-  }
-  now = time(0);
-  curl_times[curl_handle] = now;
-  curl_progress[curl_handle] = progress_t(-1, -1);
-  pthread_mutex_unlock(&curl_handles_lock);
-
-  return curl_handle;
+  bool old = S3fsCurl::is_dns_cache;
+  S3fsCurl::is_dns_cache = isCache;
+  return old;
 }
 
-void destroy_curl_handle(CURL *curl_handle)
+long S3fsCurl::SetConnectTimeout(long timeout)
 {
-  if(curl_handle != NULL) {
-    pthread_mutex_lock(&curl_handles_lock);
-    curl_times.erase(curl_handle);
-    curl_progress.erase(curl_handle);
-    curl_easy_cleanup(curl_handle);
-    pthread_mutex_unlock(&curl_handles_lock);
-  }
-
-  return;
+  long old = S3fsCurl::connect_timeout;
+  S3fsCurl::connect_timeout = timeout;
+  return old;
 }
 
-int curl_delete(const char *path)
+time_t S3fsCurl::SetReadwriteTimeout(time_t timeout)
 {
-  int result;
-  string date;
-  string url;
-  string my_url;
-  string resource;
-  auto_curl_slist headers;
-  CURL *curl = NULL;
-
-  resource = urlEncode(service_path + bucket + path);
-  url = host + resource;
-  date = get_date();
-
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if(public_bucket.substr(0,1) != "1"){
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("DELETE", "", "", date, headers.get(), resource));
-  }
-  my_url = prepare_url(url.c_str());
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-  result = my_curl_easy_perform(curl);
-  destroy_curl_handle(curl);
-
-  return result;
+  time_t old = S3fsCurl::readwrite_timeout;
+  S3fsCurl::readwrite_timeout = timeout;
+  return old;
 }
 
-int curl_get_headers(const char *path, headers_t &meta)
+int S3fsCurl::SetRetries(int count)
 {
-  int result;
-  CURL *curl;
+  int old = S3fsCurl::retries;
+  S3fsCurl::retries = count;
+  return old;
+}
 
-  FGPRINT("  curl_headers[path=%s]\n", path);
+bool S3fsCurl::SetPublicBucket(bool flag)
+{
+  bool old = S3fsCurl::is_public_bucket;
+  S3fsCurl::is_public_bucket = flag;
+  return old;
+}
 
-  string resource(urlEncode(service_path + bucket + path));
-  string url(host + resource);
+string S3fsCurl::SetDefaultAcl(const char* acl)
+{
+  string old = S3fsCurl::default_acl;
+  S3fsCurl::default_acl = acl ? acl : "";
+  return old;
+}
 
-  headers_t responseHeaders;
-  curl = create_curl_handle();
-  curl_easy_setopt(curl, CURLOPT_NOBODY, true);   // HEAD
-  curl_easy_setopt(curl, CURLOPT_FILETIME, true); // Last-Modified
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &responseHeaders);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+bool S3fsCurl::SetUseRrs(bool flag)
+{
+  bool old = S3fsCurl::is_use_rrs;
+  S3fsCurl::is_use_rrs = flag;
+  return old;
+}
 
-  auto_curl_slist headers;
-  string date = get_date();
-  headers.append("Date: " + date);
-  headers.append("Content-Type: ");
-  if(public_bucket.substr(0,1) != "1") {
-    headers.append("Authorization: AWS " + AWSAccessKeyId + ":" +
-      calc_signature("HEAD", "", "", date, headers.get(), resource));
+bool S3fsCurl::SetUseSse(bool flag)
+{
+  bool old = S3fsCurl::is_use_sse;
+  S3fsCurl::is_use_sse = flag;
+  return old;
+}
+
+bool S3fsCurl::SetContentMd5(bool flag)
+{
+  bool old = S3fsCurl::is_content_md5;
+  S3fsCurl::is_content_md5 = flag;
+  return old;
+}
+
+bool S3fsCurl::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
+{
+  if(!AccessKeyId || '\0' == AccessKeyId[0] || !SecretAccessKey || '\0' == SecretAccessKey[0]){
+    return false;
   }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers.get());
-  string my_url = prepare_url(url.c_str());
-  curl_easy_setopt(curl, CURLOPT_URL, my_url.c_str());
-  result = my_curl_easy_perform(curl);
-  destroy_curl_handle(curl);
+  AWSAccessKeyId     = AccessKeyId;
+  AWSSecretAccessKey = SecretAccessKey;
+  return true;
+}
 
-  if(result != 0){
-     return result;
+long S3fsCurl::SetSslVerifyHostname(long value)
+{
+  if(0 != value && 1 != value){
+    return -1;
   }
+  long old = S3fsCurl::ssl_verify_hostname;
+  S3fsCurl::ssl_verify_hostname = value;
+  return old;
+}
 
-  // file exists in s3
-  // fixme: clean this up.
-  meta.clear();
-  for (headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter) {
-    string key = (*iter).first;
-    string value = (*iter).second;
-    if(key == "Content-Type"){
-      meta[key] = value;
-    }else if(key == "Content-Length"){
-      meta[key] = value;
-    }else if(key == "ETag"){
-      meta[key] = value;
-    }else if(key == "Last-Modified"){
-      meta[key] = value;
-    }else if(key.substr(0, 5) == "x-amz"){
-      meta[key] = value;
-    }else{
-      // Check for upper case
-      transform(key.begin(), key.end(), key.begin(), static_cast<int (*)(int)>(std::tolower));
-      if(key.substr(0, 5) == "x-amz"){
-        meta[key] = value;
-      }
+//-------------------------------------------------------------------
+// Methods for S3fsCurl
+//-------------------------------------------------------------------
+S3fsCurl::S3fsCurl() : 
+    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL), 
+    bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0)
+{
+}
+
+S3fsCurl::~S3fsCurl()
+{
+  DestroyCurlHandle();
+}
+
+bool S3fsCurl::CreateCurlHandle(bool force)
+{
+  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+
+  if(hCurl){
+    if(!force){
+      FGPRINT("S3fsCurl::CreateCurlHandle: already create handle.\n");
+      return false;
     }
+    if(!DestroyCurlHandle()){
+      FGPRINT("S3fsCurl::CreateCurlHandle: could not destroy handle.\n");
+      return false;
+    }
+    ClearInternalData();
+    FGPRINT("S3fsCurl::CreateCurlHandle: has handle, so destroied it.\n");
   }
 
-  return 0;
-}
-
-CURL *create_head_handle(head_data *request_data)
-{
-  CURL *curl_handle= create_curl_handle();
-  string realpath  = get_realpath(request_data->path->c_str());
-  string resource  = urlEncode(service_path + bucket + realpath);
-  string url       = host + resource;
-
-  // libcurl 7.17 does deep copy of url, deep copy "stable" url
-  string my_url = prepare_url(url.c_str());
-  request_data->url = new string(my_url.c_str());
-  request_data->requestHeaders = 0;
-  request_data->responseHeaders = new headers_t;
-
-  curl_easy_setopt(curl_handle, CURLOPT_URL, request_data->url->c_str());
-  curl_easy_setopt(curl_handle, CURLOPT_NOBODY, true); // HEAD
-  curl_easy_setopt(curl_handle, CURLOPT_FILETIME, true); // Last-Modified
-
-  // requestHeaders
-  string date = get_date();
-  request_data->requestHeaders = curl_slist_append(
-      request_data->requestHeaders, string("Date: " + date).c_str());
-  request_data->requestHeaders = curl_slist_append(
-      request_data->requestHeaders, string("Content-Type: ").c_str());
-  if(public_bucket.substr(0,1) != "1") {
-    request_data->requestHeaders = curl_slist_append(
-        request_data->requestHeaders, string("Authorization: AWS " + AWSAccessKeyId + ":" +
-          calc_signature("HEAD", "", "", date, request_data->requestHeaders, resource)).c_str());
+  if(NULL == (hCurl = curl_easy_init())){
+    FGPRINT("S3fsCurl::CreateCurlHandle: Failed to create handle.\n");
+    return false;
   }
-  curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, request_data->requestHeaders);
+  curl_easy_reset(hCurl);
+  curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
+  curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(hCurl, CURLOPT_CONNECTTIMEOUT, S3fsCurl::connect_timeout);
+  curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0);
+  curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress);
+  curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
+  // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
+  
+  if(0 == S3fsCurl::ssl_verify_hostname){
+    curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
+  }
+  if(S3fsCurl::curl_ca_bundle.size() != 0){
+    curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
+  }
+  if(S3fsCurl::is_dns_cache && S3fsCurl::hCurlShare){
+    curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
+  }
 
-  // responseHeaders
-  curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, request_data->responseHeaders);
-  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, header_callback);
+  S3fsCurl::curl_times[hCurl]    = time(0);
+  S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
-  return curl_handle;
+  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+
+  return true;
 }
 
-/**
- * @return fuse return code
- */
-int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
+bool S3fsCurl::DestroyCurlHandle(void)
 {
-  time_t now;
+  if(!hCurl){
+    return false;
+  }
+  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
 
+  S3fsCurl::curl_times.erase(hCurl);
+  S3fsCurl::curl_progress.erase(hCurl);
+  curl_easy_cleanup(hCurl);
+  hCurl = NULL;
+  ClearInternalData();
+
+  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+  return true;
+}
+
+bool S3fsCurl::ClearInternalData(void)
+{
+  if(hCurl){
+    return false;
+  }
+  path      = "";
+  base_path = "";
+  saved_path= "";
+  url       = "";
+  if(requestHeaders){
+    curl_slist_free_all(requestHeaders);
+    requestHeaders = NULL;
+  }
+  responseHeaders.clear();
+  if(bodydata){
+    delete bodydata;
+    bodydata = NULL;
+  }
+  if(headdata){
+    delete headdata;
+    headdata = NULL;
+  }
+  LastResponseCode = -1;
+  return true;
+}
+
+bool S3fsCurl::GetResponseCode(long& responseCode)
+{
+  if(!hCurl){
+    return false;
+  }
+  responseCode = -1;
+  if(CURLE_OK != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
+    return false;
+  }
+  responseCode = LastResponseCode;
+  return true;
+}
+
+//
+// returns curl return code
+//
+int S3fsCurl::RequestPerform(FILE* file)
+{
   if(debug){
     char* ptr_url = NULL;
-    curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL , &ptr_url);
-    SYSLOGDBG("connecting to URL %s", ptr_url ? ptr_url : "unknown");
+    curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
+    SYSLOGDBG("connecting to URL %s", SAFESTRPTR(ptr_url));
   }
-
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
-  if(ssl_verify_hostname.substr(0,1) == "0"){
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-  }
-  if(curl_ca_bundle.size() != 0){
-    curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-  }
-  // set dns cache
-  my_set_curl_share(curl);
-
-  long responseCode;
 
   // 1 attempt + retries...
-  int t = retries + 1;
-  while (t-- > 0) {
-    if (f) {
-      rewind(f);
+  for(int retrycnt = S3fsCurl::retries; 0 < retrycnt; retrycnt--){
+    if(file){
+      rewind(file);
     }
-    CURLcode curlCode = curl_easy_perform(curl);
+    if(bodydata){
+      bodydata->Clear();
+    }
+    if(headdata){
+      headdata->Clear();
+    }
 
-    switch (curlCode) {
+    // Requests
+    CURLcode curlCode = curl_easy_perform(hCurl);
+
+    // Check result
+    switch(curlCode){
       case CURLE_OK:
         // Need to look at the HTTP response code
-
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
+        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
           SYSLOGERR("curl_easy_getinfo failed while trying to retrieve HTTP response code");
           return -EIO;
         }
-        SYSLOGDBG("HTTP response code %ld", responseCode);
+        SYSLOGDBG("HTTP response code %ld", LastResponseCode);
 
-        if (responseCode < 400) {
+        if(400 > LastResponseCode){
           return 0;
         }
-        if (responseCode >= 500) {
-          SYSLOGERR("###HTTP response=%ld", responseCode);
+        if(500 <= LastResponseCode){
+          SYSLOGERR("###HTTP response=%ld", LastResponseCode);
           sleep(4);
           break; 
         }
 
         // Service response codes which are >= 400 && < 500
-        switch(responseCode) {
+        switch(LastResponseCode){
           case 400:
             SYSLOGDBGERR("HTTP response code 400 was returned");
-            SYSLOGDBGERR("Body Text: %s", (body ? body->str() : ""));
+            SYSLOGDBGERR("Body Text: %s", (bodydata ? bodydata->str() : ""));
             SYSLOGDBG("Now returning EIO");
             return -EIO;
 
           case 403:
             SYSLOGDBGERR("HTTP response code 403 was returned");
-            SYSLOGDBGERR("Body Text: %s", (body ? body->str() : ""));
+            SYSLOGDBGERR("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EPERM;
 
           case 404:
             SYSLOGDBG("HTTP response code 404 was returned");
-            SYSLOGDBG("Body Text: %s", (body ? body->str() : ""));
+            SYSLOGDBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
             SYSLOGDBG("Now returning ENOENT");
             return -ENOENT;
 
           default:
-            SYSLOGERR("###response=%ld", responseCode);
-            SYSLOGDBG("Body Text: %s", (body ? body->str() : ""));
-            FGPRINT("responseCode %ld\n", responseCode);
-            FGPRINT("Body Text: %s", (body ? body->str() : ""));
+            SYSLOGERR("###response=%ld", LastResponseCode);
+            SYSLOGDBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
+            FGPRINT("responseCode %ld\n", LastResponseCode);
+            FGPRINT("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EIO;
         }
         break;
@@ -549,8 +823,7 @@ int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
       case CURLE_ABORTED_BY_CALLBACK:
         SYSLOGERR("### CURLE_ABORTED_BY_CALLBACK");
         sleep(4);
-        now = time(0);
-        curl_times[curl] = now;
+        S3fsCurl::curl_times[hCurl] = time(0);
         break; 
 
       case CURLE_PARTIAL_FILE:
@@ -571,37 +844,33 @@ int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
       case CURLE_SSL_CACERT:
         // try to locate cert, if successful, then set the
         // option and continue
-        if (curl_ca_bundle.size() == 0) {
-           locate_bundle();
-           if (curl_ca_bundle.size() != 0) {
-              t++;
-              curl_easy_setopt(curl, CURLOPT_CAINFO, curl_ca_bundle.c_str());
-              // break for switch-case, and continue loop.
-              break;
-           }
+        if(0 == S3fsCurl::curl_ca_bundle.size()){
+          if(!S3fsCurl::LocateBundle()){
+            exit(EXIT_FAILURE);
+          }
+          if(0 != S3fsCurl::curl_ca_bundle.size()){
+            retrycnt++;
+            curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
+            // break for switch-case, and continue loop.
+            break;
+          }
         }
         SYSLOGERR("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        fprintf (stderr, "%s: curlCode: %i -- %s\n", 
-           program_name.c_str(),
-           curlCode,
-           curl_easy_strerror(curlCode));
+        FGPRINT("%s: curlCode: %i -- %s\n", program_name.c_str(), curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
       case CURLE_PEER_FAILED_VERIFICATION:
         first_pos = bucket.find_first_of(".");
-        if (first_pos != string::npos) {
-          fprintf (stderr, "%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-          fprintf (stderr, "%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-          fprintf (stderr, "%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-          fprintf (stderr, "%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-          fprintf (stderr, "%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-        } else {
-          fprintf (stderr, "%s: my_curl_easy_perform: curlCode: %i -- %s\n", 
-             program_name.c_str(),
-             curlCode,
-             curl_easy_strerror(curlCode));
+        if(first_pos != string::npos){
+          FGPRINT("%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
+          FGPRINT("%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
+          FGPRINT("%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
+          FGPRINT("%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
+          FGPRINT("%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
+        }else{
+          FGPRINT("%s: my_curl_easy_perform: curlCode: %i -- %s\n", program_name.c_str(), curlCode, curl_easy_strerror(curlCode));
         }
         exit(EXIT_FAILURE);
         break;
@@ -611,17 +880,16 @@ int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
       case CURLE_HTTP_RETURNED_ERROR:
         SYSLOGERR("### CURLE_HTTP_RETURNED_ERROR");
 
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode) != 0) {
+        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
           return -EIO;
         }
-        SYSLOGERR("###response=%ld", responseCode);
+        SYSLOGERR("###response=%ld", LastResponseCode);
 
         // Let's try to retrieve the 
-
-        if (responseCode == 404) {
+        if(404 == LastResponseCode){
           return -ENOENT;
         }
-        if (responseCode < 500) {
+        if(500 > LastResponseCode){
           return -EIO;
         }
         break;
@@ -632,149 +900,76 @@ int my_curl_easy_perform(CURL* curl, BodyData* body, BodyData* head, FILE* f)
         exit(EXIT_FAILURE);
         break;
     }
-    if(body){
-      body->Clear();
-    }
-    if(head){
-      head->Clear();
-    }
     SYSLOGERR("###retrying...");
   }
   SYSLOGERR("###giving up");
   return -EIO;
 }
 
-// libcurl callback
-size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data)
-{
-  BodyData* body  = (BodyData*)data;
-
-  if(!body->Append(ptr, blockSize, numBlocks)){
-    FGPRINT("WriteMemoryCallback(): BodyData.Append() returned false.\n");
-    S3FS_FUSE_EXIT();
-    return -1;
-  }
-  return (blockSize * numBlocks);
-}
-
-// read_callback
-// http://curl.haxx.se/libcurl/c/post-callback.html
-size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
-{
-  struct WriteThis *pooh = (struct WriteThis *)userp;
- 
-  if(size*nmemb < 1){
-    return 0;
-  }
-  if(pooh->sizeleft) {
-    *(char *)ptr = pooh->readptr[0]; /* copy one single byte */ 
-    pooh->readptr++;                 /* advance pointer */ 
-    pooh->sizeleft--;                /* less data left */ 
-    return 1;                        /* we return 1 byte at a time! */ 
-  }
- 
-  return 0;                          /* no more data left to deliver */ 
-}
-
-// homegrown timeout mechanism
-int my_curl_progress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
-{
-  CURL* curl = static_cast<CURL*>(clientp);
-
-  time_t now = time(0);
-  progress_t p(dlnow, ulnow);
-
-  pthread_mutex_lock(&curl_handles_lock);
-
-  // any progress?
-  if(p != curl_progress[curl]) {
-    // yes!
-    curl_times[curl] = now;
-    curl_progress[curl] = p;
-  } else {
-    // timeout?
-    if (now - curl_times[curl] > readwrite_timeout) {
-      pthread_mutex_unlock( &curl_handles_lock );
-
-      SYSLOGERR("timeout  now: %li  curl_times[curl]: %lil  readwrite_timeout: %li",
-                      (long int)now, curl_times[curl], (long int)readwrite_timeout);
-
-      return CURLE_ABORTED_BY_CALLBACK;
-    }
-  }
-
-  pthread_mutex_unlock(&curl_handles_lock);
-  return 0;
-}
-
-/**
- * Returns the Amazon AWS signature for the given parameters.
- *
- * @param method e.g., "GET"
- * @param content_type e.g., "application/x-directory"
- * @param date e.g., get_date()
- * @param resource e.g., "/pub"
- */
-string calc_signature(string method, string strMD5, string content_type, string date, curl_slist* headers, string resource)
+//
+// Returns the Amazon AWS signature for the given parameters.
+//
+// @param method e.g., "GET"
+// @param content_type e.g., "application/x-directory"
+// @param date e.g., get_date()
+// @param resource e.g., "/pub"
+//
+string S3fsCurl::CalcSignature(string method, string strMD5, string content_type, string date, string resource)
 {
   int ret;
   int bytes_written;
   int offset;
   int write_attempts = 0;
-
   string Signature;
   string StringToSign;
+
   StringToSign += method + "\n";
-  StringToSign += strMD5 + "\n"; // md5
+  StringToSign += strMD5 + "\n";        // md5
   StringToSign += content_type + "\n";
   StringToSign += date + "\n";
-  int count = 0;
-  if(headers != 0) {
-    do {
-      if(strncmp(headers->data, "x-amz", 5) == 0) {
-        ++count;
-        StringToSign += headers->data;
-        StringToSign += 10; // linefeed
-      }
-    } while ((headers = headers->next) != 0);
+  for(curl_slist* headers = requestHeaders; headers; headers = headers->next){
+    if(0 == strncmp(headers->data, "x-amz", 5)){
+      StringToSign += headers->data;
+      StringToSign += "\n";
+    }
   }
-
   StringToSign += resource;
 
-  const void* key = AWSSecretAccessKey.data();
-  int key_len = AWSSecretAccessKey.size();
-  const unsigned char* d = reinterpret_cast<const unsigned char*>(StringToSign.data());
-  int n = StringToSign.size();
-  unsigned int md_len;
+  const void* key            = S3fsCurl::AWSSecretAccessKey.data();
+  int key_len                = S3fsCurl::AWSSecretAccessKey.size();
+  const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
+  int sdata_len              = StringToSign.size();
   unsigned char md[EVP_MAX_MD_SIZE];
+  unsigned int md_len;
 
-  HMAC(evp_md, key, key_len, d, n, md, &md_len);
+  HMAC(S3fsCurl::evp_md, key, key_len, sdata, sdata_len, md, &md_len);
 
-  BIO* b64 = BIO_new(BIO_f_base64());
+  BIO* b64  = BIO_new(BIO_f_base64());
   BIO* bmem = BIO_new(BIO_s_mem());
-  b64 = BIO_push(b64, bmem);
+  b64       = BIO_push(b64, bmem);
 
   offset = 0;
-  for(;;) {
+  for(;;){
     bytes_written = BIO_write(b64, &(md[offset]), md_len);
     write_attempts++;
     // -1 indicates that an error occurred, or a temporary error, such as
     // the server is busy, occurred and we need to retry later.
     // BIO_write can do a short write, this code addresses this condition
-    if(bytes_written <= 0) {
+    if(bytes_written <= 0){
       // Indicates whether a temporary error occurred or a failure to
       // complete the operation occurred
-      if ((ret = BIO_should_retry(b64))) {
+      if((ret = BIO_should_retry(b64))){
         // Wait until the write can be accomplished
-        if(write_attempts <= 10)
+        if(write_attempts <= 10){
           continue;
-
+        }
         // Too many write attempts
         SYSLOGERR("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
         Signature.clear();
         return Signature;
-      } else {
+
+      }else{
         // If not a retry then it is an error
         SYSLOGERR("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
@@ -796,7 +991,7 @@ string calc_signature(string method, string strMD5, string content_type, string 
 
   // Flush the data
   ret = BIO_flush(b64);
-  if ( ret <= 0) { 
+  if(ret <= 0){ 
     SYSLOGERR("Failure during BIO_flush, returning null String");  
     BIO_free_all(b64);
     Signature.clear();
@@ -804,7 +999,6 @@ string calc_signature(string method, string strMD5, string content_type, string 
   } 
 
   BUF_MEM *bptr;
-
   BIO_get_mem_ptr(b64, &bptr);
 
   Signature.resize(bptr->length - 1);
@@ -815,56 +1009,1363 @@ string calc_signature(string method, string strMD5, string content_type, string 
   return Signature;
 }
 
-void locate_bundle(void)
+// XML in BodyData has UploadId, Parse XML body for UploadId
+bool S3fsCurl::GetUploadId(string& upload_id)
 {
-  // See if environment variable CURL_CA_BUNDLE is set
-  // if so, check it, if it is a good path, then set the
-  // curl_ca_bundle variable to it
-  char *CURL_CA_BUNDLE; 
+  bool result = false;
 
-  if(curl_ca_bundle.size() == 0) {
-    CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
-    if(CURL_CA_BUNDLE != NULL)  {
-      // check for existance and readability of the file
-      ifstream BF(CURL_CA_BUNDLE);
-      if(BF.good()) {
-         BF.close();
-         curl_ca_bundle.assign(CURL_CA_BUNDLE); 
-      } else {
-        fprintf(stderr, "%s: file specified by CURL_CA_BUNDLE environment variable is not readable\n",
-                program_name.c_str());
-        exit(EXIT_FAILURE);
+  if(!bodydata){
+    return result;
+  }
+  upload_id.clear();
+
+  xmlDocPtr doc = xmlReadMemory(bodydata->str(), bodydata->size(), "", NULL, 0);
+  if(NULL == doc || NULL == doc->children){
+    return result;
+  }
+  for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
+    // For DEBUG
+    // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+    // printf("cur_node_name: %s\n", cur_node_name.c_str());
+
+    if(XML_ELEMENT_NODE == cur_node->type){
+      string elementName = reinterpret_cast<const char*>(cur_node->name);
+      // For DEBUG
+      // printf("elementName: %s\n", elementName.c_str());
+
+      if(cur_node->children){
+        if(XML_TEXT_NODE == cur_node->children->type){
+          if(elementName == "UploadId") {
+            upload_id = reinterpret_cast<const char *>(cur_node->children->content);
+            result    = true;
+            break;
+          }
+        }
       }
-      return;
     }
   }
+  xmlFreeDoc(doc);
 
-  // not set via environment variable, look in likely locations
-
-  ///////////////////////////////////////////
-  // from curl's (7.21.2) acinclude.m4 file
-  ///////////////////////////////////////////
-  // dnl CURL_CHECK_CA_BUNDLE
-  // dnl -------------------------------------------------
-  // dnl Check if a default ca-bundle should be used
-  // dnl
-  // dnl regarding the paths this will scan:
-  // dnl /etc/ssl/certs/ca-certificates.crt Debian systems
-  // dnl /etc/pki/tls/certs/ca-bundle.crt Redhat and Mandriva
-  // dnl /usr/share/ssl/certs/ca-bundle.crt old(er) Redhat
-  // dnl /usr/local/share/certs/ca-root.crt FreeBSD
-  // dnl /etc/ssl/cert.pem OpenBSD
-  // dnl /etc/ssl/certs/ (ca path) SUSE
-  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
-  if(BF.good()) {
-     BF.close();
-     curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
-     return;
-  }
-
-  return;
+  return result;
 }
 
+int S3fsCurl::DeleteRequest(const char* tpath)
+{
+  FGPRINT("S3fsCurl::DeleteRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type: ");
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("DELETE", "", "", date, resource)).c_str());
+  }
+
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  return RequestPerform();
+}
+
+//
+// tpath :      target path for head request
+// bpath :      saved into base_path
+// savedpath :  saved into saved_path
+//
+bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath)
+{
+//FGPRINT("S3fsCurl::PreHeadRequest [tpath=%s][bpath=%s][save=%s]\n", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
+
+  if(!tpath){
+    return false;
+  }
+  if(!CreateCurlHandle(true)){
+    return false;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  // libcurl 7.17 does deep copy of url, deep copy "stable" url
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  base_path       = SAFESTRPTR(bpath);
+  saved_path      = SAFESTRPTR(savedpath);
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+
+  // requestHeaders
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type: ");
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("HEAD", "", "", date, resource)).c_str());
+  }
+
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_NOBODY, true);   // HEAD
+  curl_easy_setopt(hCurl, CURLOPT_FILETIME, true); // Last-Modified
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  // responseHeaders
+  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
+
+  return true;
+}
+
+int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
+{
+  int result;
+
+  FGPRINT("S3fsCurl::HeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!PreHeadRequest(tpath)){
+    return -1;
+  }
+  // Requests
+  if(0 != (result = RequestPerform())){
+    return result;
+  }
+  // file exists in s3
+  // fixme: clean this up.
+  meta.clear();
+  for(headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter){
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if(key == "Content-Type"){
+      meta[key] = value;
+    }else if(key == "Content-Length"){
+      meta[key] = value;
+    }else if(key == "ETag"){
+      meta[key] = value;
+    }else if(key == "Last-Modified"){
+      meta[key] = value;
+    }else if(key.substr(0, 5) == "x-amz"){
+      meta[key] = value;
+    }else{
+      // Check for upper case
+      transform(key.begin(), key.end(), key.begin(), static_cast<int (*)(int)>(std::tolower));
+      if(key.substr(0, 5) == "x-amz"){
+        meta[key] = value;
+      }
+    }
+  }
+  return 0;
+}
+
+int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg)
+{
+  FGPRINT("S3fsCurl::PutHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  // Make request headers
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+
+  string ContentType;
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if(key == "Content-Type"){
+      ContentType    = value;
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key.substr(0,9) == "x-amz-acl"){
+      // not set value, but after set it.
+    }else if(key.substr(0,10) == "x-amz-meta"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key == "x-amz-copy-source"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }
+  }
+  // "x-amz-acl", rrs, sse
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
+  if(S3fsCurl::is_use_rrs){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(ow_sse_flg && S3fsCurl::is_use_sse){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("PUT", "", ContentType, date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);                // HTTP PUT
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  FGPRINT("  copying... [path=%s]\n", tpath);
+  SYSLOGDBG("copy path=%s", tpath);
+
+  int result = RequestPerform();
+  delete bodydata;
+  bodydata = NULL;
+
+  return result;
+}
+
+int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg)
+{
+  struct stat st;
+  FILE*       file = NULL;
+
+  FGPRINT("S3fsCurl::PutRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  if(-1 != fd){
+    if(-1 == fstat(fd, &st) || NULL == (file = fdopen(fd, "rb"))){
+      FGPRINT("S3fsCurl::PutRequest : Invalid file discriptor(errno=%d)\n", errno);
+      SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+      return -errno;
+    }
+  }else{
+    // This case is creating zero byte obejct.(calling by create_file_object())
+    FGPRINT("S3fsCurl::PutRequest : create zero byte file object.\n");
+  }
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  // Make request headers
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+
+  string strMD5;
+  if(-1 != fd && S3fsCurl::is_content_md5){
+    strMD5         = GetContentMD5(fd);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, string("Content-MD5: " + strMD5).c_str());
+  }
+
+  string ContentType;
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if(key == "Content-Type"){
+      ContentType    = value;
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key.substr(0,9) == "x-amz-acl"){
+      // not set value, but after set it.
+    }else if(key.substr(0,10) == "x-amz-meta"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }
+  }
+  // "x-amz-acl", rrs, sse
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
+  if(S3fsCurl::is_use_rrs){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(ow_sse_flg && S3fsCurl::is_use_sse){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("PUT", strMD5, ContentType, date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);                // HTTP PUT
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  if(file){
+    curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
+    curl_easy_setopt(hCurl, CURLOPT_INFILE, file);
+  }else{
+    curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);             // Content-Length: 0
+  }
+
+  FGPRINT("  uploading... [path=%s][fd=%d][size=%zd]\n", tpath, fd, (-1 != fd ? st.st_size : 0));
+  SYSLOGDBG("upload path=%s", tpath);
+
+  int result = RequestPerform();
+  delete bodydata;
+  bodydata = NULL;
+
+  return result;
+}
+
+int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
+{
+  FILE* file;
+  int   fd2;
+  FGPRINT("S3fsCurl::GetRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  // duplicate fd
+  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "w+"))){
+    FGPRINT("S3fsCurl::GetRequest : Cloud not duplicate file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    return -errno;
+  }
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type: ");
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("GET", "", "", date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  curl_easy_setopt(hCurl, CURLOPT_FILE, file);
+
+  FGPRINT("  downloading... [path=%s][fd=%d]\n", tpath, fd);
+  SYSLOGDBG("LOCAL FD");
+
+  int result = RequestPerform();
+
+  fflush(file);
+  fclose(file);
+  if(0 != lseek(fd, 0, SEEK_SET)){
+    FGPRINT("S3fsCurl::GetRequest : Cloud not seek file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Cloud not seek file discriptor(errno=%d)", errno);
+    return -errno;
+  }
+
+  return result;
+}
+
+int S3fsCurl::CheckBucket(void)
+{
+  FGPRINT("S3fsCurl::CheckBucket\n");
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource("", resource, turl);  // must be path = "".
+
+  url             = turl;               // don't use prepare_url() function.
+  path            = "";
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("GET", "", "", date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_FAILONERROR, true);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  int result = RequestPerform();
+  delete bodydata;
+  bodydata = NULL;
+
+  return result;
+}
+
+int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
+{
+  FGPRINT("S3fsCurl::ListBucketRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource("", resource, turl);    // NOTICE: path is "".
+  if(query){
+    turl += "?";
+    turl += query;
+  }
+
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type: ");
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("GET", "", "", date, (resource + "/"))).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  return RequestPerform();
+}
+
+//
+// Initialize multipart upload
+//
+// Example :
+//   POST /example-object?uploads HTTP/1.1
+//   Host: example-bucket.s3.amazonaws.com
+//   Date: Mon, 1 Nov 2010 20:34:56 GMT
+//   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
+//
+int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string& upload_id, bool ow_sse_flg)
+{
+  FGPRINT("S3fsCurl::PreMultipartPostRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(!tpath){
+    return -1;
+  }
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  turl           += "?uploads";
+  resource       += "?uploads";
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  string date    = get_date();
+  string contype = S3fsCurl::LookupMimeType(string(tpath));
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept: ");
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length: ");
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Content-Type: " + contype).c_str());
+
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key   = (*iter).first;
+    string value = (*iter).second;
+
+    if(key.substr(0,9) == "x-amz-acl"){
+      // not set value, but after set it.
+    }else if(key.substr(0,10) == "x-amz-meta"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }
+  }
+  // "x-amz-acl", rrs, sse
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
+  if(S3fsCurl::is_use_rrs){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(ow_sse_flg && S3fsCurl::is_use_sse){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("POST", "", contype, date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_POST, true);              // POST
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  // request
+  int result;
+  if(0 != (result = RequestPerform())){
+    delete bodydata;
+    bodydata = NULL;
+    return result;
+  }
+
+  // Parse XML body for UploadId
+  if(!S3fsCurl::GetUploadId(upload_id)){
+    delete bodydata;
+    bodydata = NULL;
+    return -1;
+  }
+
+  delete bodydata;
+  bodydata = NULL;
+  return 0;
+}
+
+int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, filepartList_t& parts)
+{
+  FGPRINT("S3fsCurl::CompleteMultipartPostRequest [tpath=%s][parts=%zd]\n", SAFESTRPTR(tpath), parts.size());
+
+  if(!tpath){
+    return -1;
+  }
+
+  // make contents
+  string postContent;
+  postContent += "<CompleteMultipartUpload>\n";
+  for(int cnt = 0; cnt < (int)parts.size(); cnt++){
+    if(!parts[cnt].uploaded){
+      FGPRINT("S3fsCurl::CompleteMultipartPostRequest : %d file part is not uploaded.\n", cnt + 1);
+      return false;
+    }
+    postContent += "<Part>\n";
+    postContent += "  <PartNumber>" + IntToStr(cnt + 1) + "</PartNumber>\n";
+    postContent += "  <ETag>\""     + parts[cnt].etag   + "\"</ETag>\n";
+    postContent += "</Part>\n";
+  }  
+  postContent += "</CompleteMultipartUpload>\n";
+
+  // set postdata
+  postdata           = reinterpret_cast<const unsigned char*>(postContent.c_str());
+  postdata_remaining = postContent.size(); // without null
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  turl           += "?uploadId=" + upload_id;
+  resource       += "?uploadId=" + upload_id;
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept:");
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type:");
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("POST", "", "", date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  curl_easy_setopt(hCurl, CURLOPT_POST, true);              // POST
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, (curl_off_t)postdata_remaining);
+  curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
+  curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+
+  // request
+  int result = RequestPerform();
+  delete bodydata;
+  bodydata = NULL;
+  postdata = NULL;
+
+  return result;
+}
+
+int S3fsCurl::MultipartListRequest(string& body)
+{
+  FGPRINT("S3fsCurl::MultipartListRequest\n");
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string resource;
+  string turl;
+  path            = "/";
+  MakeUrlResource(get_realpath(path.c_str()).c_str(), resource, turl);
+
+  turl           += "?uploads";
+  resource       += "?uploads";
+  url             = prepare_url(turl.c_str());
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept: ");
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("GET", "", "", date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  int result;
+  if(0 == (result = RequestPerform()) && 0 < bodydata->size()){
+    body = bodydata->str();
+  }else{
+    body = "";
+  }
+  delete bodydata;
+  bodydata = NULL;
+
+  return result;
+}
+
+//
+// PUT /ObjectName?partNumber=PartNumber&uploadId=UploadId HTTP/1.1
+// Host: BucketName.s3.amazonaws.com
+// Date: date
+// Content-Length: Size
+// Authorization: Signature
+//
+// PUT /my-movie.m2ts?partNumber=1&uploadId=VCVsb2FkIElEIGZvciBlbZZpbmcncyBteS1tb3ZpZS5tMnRzIHVwbG9hZR HTTP/1.1
+// Host: example-bucket.s3.amazonaws.com
+// Date:  Mon, 1 Nov 2010 20:34:56 GMT
+// Content-Length: 10485760
+// Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
+// Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
+//
+int S3fsCurl::UploadMultipartPostRequest(const char* tpath, const char* part_path, int part_num, string& upload_id, string& ETag)
+{
+  int         part_fd;
+  FILE*       part_file;
+  struct stat st;
+  string      md5;
+
+  FGPRINT("S3fsCurl::UploadMultipartPostRequest [tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), SAFESTRPTR(part_path), part_num);
+
+  // make md5 and file pointer
+  if(-1 == (part_fd = open(part_path, O_RDONLY))){
+    FGPRINT("S3fsCurl::UploadMultipartPostRequest : Could not open file(%s) - errorno(%d)\n", part_path, errno);
+    SYSLOGERR("Could not open file(%s) - errno(%d)", part_path, errno);
+    return -errno;
+  }
+  if(-1 == fstat(part_fd, &st)){
+    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Invalid file(%s) discriptor(errno=%d)\n", part_path, errno);
+    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", part_path, errno);
+    close(part_fd);
+    return -errno;
+  }
+  md5 = md5sum(part_fd);
+  if(md5.empty()){
+    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Could not make md5 for file(%s)\n", part_path);
+    SYSLOGERR("Could not make md5 for file(%s)", part_path);
+    close(part_fd);
+    return -1;
+  }
+  if(NULL == (part_file = fdopen(part_fd, "rb"))){
+    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Invalid file(%s) discriptor(errno=%d)\n", part_path, errno);
+    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", part_path, errno);
+    close(part_fd);
+    return -errno;
+  }
+
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+
+  resource       += urlargs;
+  turl           += urlargs;
+  url             = prepare_url(turl.c_str());
+  path            = tpath;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+  headdata        = new BodyData();
+
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept: ");
+
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("PUT", "", "", date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);              // HTTP PUT
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
+  curl_easy_setopt(hCurl, CURLOPT_INFILE, part_file);
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  // request
+  int result = RequestPerform();
+  if(NULL != strstr(headdata->str(), md5.c_str())){
+    ETag = md5;
+  }
+  // closing
+  fclose(part_file);
+  delete bodydata;
+  bodydata = NULL;
+  delete headdata;
+  headdata = NULL;
+
+  if(0 != result){
+    return result;
+  }
+  return 0;
+}
+
+int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta, string& ETag, bool ow_sse_flg)
+{
+  FGPRINT("S3fsCurl::CopyMultipartPostRequest [from=%s][to=%s][part=%d]\n", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
+
+  if(!from || !to){
+    return -1;
+  }
+  if(!CreateCurlHandle(true)){
+    return -1;
+  }
+  string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string resource;
+  string turl;
+  MakeUrlResource(get_realpath(to).c_str(), resource, turl);
+
+  resource       += urlargs;
+  turl           += urlargs;
+  url             = prepare_url(turl.c_str());
+  path            = to;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+  headdata        = new BodyData();
+
+  // Make request headers
+  string date    = get_date();
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
+
+  string ContentType;
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key = (*iter).first;
+    string value = (*iter).second;
+    if(key == "Content-Type"){
+      ContentType    = value;
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key == "x-amz-copy-source"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key == "x-amz-copy-source-range"){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }else if(key.substr(0,9) == "x-amz-acl"){
+      // not set value, but after set it.
+    }else if(!ow_sse_flg && key == "x-amz-server-side-encryption"){
+      // If ow_sse_flg is false, SSE inherit from meta.
+      requestHeaders = curl_slist_sort_insert(requestHeaders, string(key + ":" + value).c_str());
+    }
+  }
+  // "x-amz-acl", rrs, sse
+  requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
+  if(S3fsCurl::is_use_rrs){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class:REDUCED_REDUNDANCY");
+  }
+  if(ow_sse_flg && S3fsCurl::is_use_sse){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(!S3fsCurl::IsPublicBucket()){
+    requestHeaders = curl_slist_sort_insert(
+          requestHeaders,
+          string("Authorization: AWS " + AWSAccessKeyId + ":" +
+          CalcSignature("PUT", "", ContentType, date, resource)).c_str());
+  }
+
+  // setopt
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);                // HTTP PUT
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
+  curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  // request
+  FGPRINT("  copying... [from=%s][to=%s][part=%d]\n", from, to, part_num);
+  SYSLOGDBG("copy path from=%s, to=%s, part=%d", from, to, part_num);
+
+  int result = RequestPerform();
+  if(0 == result){
+    const char* start_etag= strstr(bodydata->str(), "ETag");
+    const char* end_etag  = strstr(bodydata->str(), "/ETag>");
+    ETag.assign((start_etag + 11), (size_t)(end_etag - (start_etag + 11) - 7));
+  }
+  delete bodydata;
+  bodydata = NULL;
+  delete headdata;
+  headdata = NULL;
+
+  return result;
+}
+
+int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool ow_sse_flg)
+{
+  int            result;
+  string         upload_id;
+  off_t          chunk;
+  off_t          bytes_remaining;
+  filepart       part;
+  filepartList_t list;
+  stringstream   strrange;
+
+  FGPRINT("S3fsCurl::MultipartHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+
+  if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
+    return result;
+  }
+  DestroyCurlHandle();
+
+  part.uploaded = true;
+  part.partfile = "";
+  for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
+    chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
+
+    strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
+    meta["x-amz-copy-source-range"] = strrange.str();
+    strrange.clear(stringstream::goodbit);
+
+    if(0 != (result = CopyMultipartPostRequest(tpath, tpath, (list.size() + 1), upload_id, meta, part.etag, ow_sse_flg))){
+      return result;
+    }
+    DestroyCurlHandle();
+    list.push_back(part);
+  }
+
+  if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
+    return result;
+  }
+  return 0;
+}
+
+int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg)
+{
+  int            result;
+  string         upload_id;
+  struct stat    st;
+  int            fd2;
+  FILE*          file;
+  int            partfd;
+  FILE*          partfile;
+  filepart       part;
+  filepartList_t list;
+  off_t          remaining_bytes;
+  off_t          chunk;
+  unsigned char* buf;
+  char           tmpfile[256];
+
+  FGPRINT("S3fsCurl::MultipartUploadRequest [tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+
+  // duplicate fd
+  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
+    FGPRINT("S3fsCurl::MultipartUploadRequest : Cloud not duplicate file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    return -errno;
+  }
+  if(-1 == fstat(fd2, &st)){
+    FGPRINT("S3fsCurl::MultipartUploadRequest: Invalid file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    return -errno;
+  }
+
+  // make Tempolary buf(maximum size + 4)
+  if(NULL == (buf = (unsigned char*)malloc(sizeof(unsigned char) * (MULTIPART_SIZE + 4)))){
+    SYSLOGCRIT("Could not allocate memory for buffer\n");
+    S3FS_FUSE_EXIT();
+    return -ENOMEM;
+  }
+
+  if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
+    return result;
+  }
+  DestroyCurlHandle();
+
+  // cycle through open fd, pulling off 10MB chunks at a time
+  for(remaining_bytes = st.st_size; 0 < remaining_bytes; remaining_bytes -= chunk){
+    off_t copy_total;
+    off_t copied;
+    chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+
+    // copy the file portion into the buffer
+    for(copy_total = 0; copy_total < chunk; copy_total += copied){
+      copied = fread(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), file);
+      if(copied != (chunk - copy_total)){
+        if(0 != ferror(file) || feof(file)){
+          FGPRINT("S3fsCurl::MultipartUploadRequest: read file error(%d)\n", ferror(file));
+          SYSLOGERR("read file error(%d)", ferror(file));
+          free(buf);
+          fclose(file);
+          return -EIO;
+        }
+      }
+    }
+
+    // create uniq temporary file
+    strncpy(tmpfile, "/tmp/s3fs.XXXXXX", sizeof(tmpfile));
+    if(-1 == (partfd = mkstemp(tmpfile))){
+      FGPRINT("S3fsCurl::MultipartUploadRequest: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
+      SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
+      free(buf);
+      fclose(file);
+      return -errno;
+    }
+    if(NULL == (partfile = fdopen(partfd, "wb"))){
+      FGPRINT("S3fsCurl::MultipartUploadRequest: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
+      SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
+      free(buf);
+      fclose(file);
+      close(partfd);
+      return -errno;
+    }
+
+    // copy buffer to temporary file
+    for(copy_total = 0; copy_total < chunk; copy_total += copied){
+      copied = fwrite(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), partfile);
+      if(copied != (chunk - copy_total)){
+        if(0 != ferror(partfile)){
+          FGPRINT("S3fsCurl::MultipartUploadRequest: write file error(%d)\n", ferror(partfile));
+          SYSLOGERR("write file error(%d)", ferror(partfile));
+          free(buf);
+          fclose(file);
+          fclose(partfile);
+          remove(tmpfile);
+          return -EIO;
+        }
+      }
+    }
+    fclose(partfile);
+
+    // upload part
+    if(0 != (result = UploadMultipartPostRequest(tpath, tmpfile, (list.size() + 1), upload_id, part.etag))){
+      FGPRINT("S3fsCurl::MultipartUploadRequest: failed uploading part(%d)\n", result);
+      SYSLOGERR("failed uploading part(%d)", result);
+      free(buf);
+      fclose(file);
+      remove(tmpfile);
+      return result;
+    }
+    remove(tmpfile);
+    DestroyCurlHandle();
+
+    part.uploaded = true;
+    part.partfile = tmpfile;
+    list.push_back(part);
+  }
+  free(buf);
+  fclose(file);
+
+  if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
+    return result;
+  }
+  return 0;
+}
+
+int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size)
+{
+  int            result;
+  string         upload_id;
+  off_t          chunk;
+  off_t          bytes_remaining;
+  filepart       part;
+  filepartList_t list;
+  stringstream   strrange;
+
+  FGPRINT("S3fsCurl::MultipartRenameRequest [from=%s][to=%s]\n", SAFESTRPTR(from), SAFESTRPTR(to));
+
+  string srcresource;
+  string srcurl;
+  MakeUrlResource(get_realpath(from).c_str(), srcresource, srcurl);
+
+  meta["Content-Type"]      = S3fsCurl::LookupMimeType(string(to));
+  meta["x-amz-copy-source"] = srcresource;
+
+  if(0 != (result = PreMultipartPostRequest(to, meta, upload_id, false))){
+    return result;
+  }
+  DestroyCurlHandle();
+
+  part.uploaded = true;
+  part.partfile = "";
+  for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
+    chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
+
+    strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
+    meta["x-amz-copy-source-range"] = strrange.str();
+    strrange.clear(stringstream::goodbit);
+
+    if(0 != (result = CopyMultipartPostRequest(from, to, list.size(), upload_id, meta, part.etag, false))){
+      return result;
+    }
+    DestroyCurlHandle();
+    list.push_back(part);
+  }
+
+  if(0 != (result = CompleteMultipartPostRequest(to, upload_id, list))){
+    return result;
+  }
+  return 0;
+}
+
+//-------------------------------------------------------------------
+// Class S3fsMultiCurl 
+//-------------------------------------------------------------------
+#define MAX_MULTI_HEADREQ   500   // default: max request count in readdir curl_multi.
+
+//-------------------------------------------------------------------
+// Class method for S3fsMultiCurl 
+//-------------------------------------------------------------------
+int S3fsMultiCurl::max_multireq = MAX_MULTI_HEADREQ;
+
+int S3fsMultiCurl::SetMaxMultiRequest(int max)
+{
+  int old = S3fsMultiCurl::max_multireq;
+  S3fsMultiCurl::max_multireq= max;
+  return old;
+}
+
+//-------------------------------------------------------------------
+// method for S3fsMultiCurl 
+//-------------------------------------------------------------------
+S3fsMultiCurl::S3fsMultiCurl() : hMulti(NULL), SuccessCallback(NULL), RetryCallback(NULL)
+{
+}
+
+S3fsMultiCurl::~S3fsMultiCurl()
+{
+  Clear();
+}
+
+bool S3fsMultiCurl::Clear(void)
+{
+  if(hMulti){
+    curl_multi_cleanup(hMulti);
+    hMulti = NULL;
+  }
+
+  s3fscurlmap_t::iterator iter;
+  for(iter = cMap_all.begin(); iter != cMap_all.end(); iter++){
+    S3fsCurl* s3fscurl = (*iter).second;
+    s3fscurl->DestroyCurlHandle();
+    delete s3fscurl;
+  }
+  cMap_all.clear();
+
+  for(iter = cMap_req.begin(); iter != cMap_req.end(); iter++){
+    S3fsCurl* s3fscurl = (*iter).second;
+    s3fscurl->DestroyCurlHandle();
+    delete s3fscurl;
+  }
+  cMap_req.clear();
+  return true;
+}
+
+S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(S3fsMultiSuccessCallback function)
+{
+  S3fsMultiSuccessCallback old = SuccessCallback;
+  SuccessCallback = function;
+  return old;
+}
+  
+S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback function)
+{
+  S3fsMultiRetryCallback old = RetryCallback;
+  RetryCallback = function;
+  return old;
+}
+  
+bool S3fsMultiCurl::SetS3fsCurlObject(S3fsCurl* s3fscurl)
+{
+  if(!s3fscurl){
+    return false;
+  }
+  if(cMap_all.end() != cMap_all.find(s3fscurl->hCurl)){
+    return false;
+  }
+  cMap_all[s3fscurl->hCurl] = s3fscurl;
+  return true;
+}
+
+int S3fsMultiCurl::MultiPerform(void)
+{
+  CURLMcode curlm_code;
+  int       still_running;
+
+  if(!hMulti){
+    return -1;
+  }
+
+  // Send multi request.
+  do{
+    // Start making requests and check running.
+    still_running = 0;
+    do {
+      curlm_code = curl_multi_perform(hMulti, &still_running);
+    } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
+
+    if(curlm_code != CURLM_OK) {
+      FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_perform code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
+      SYSLOGERR("curl_multi_perform code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+    }
+
+    // Set timer when still running
+    if(still_running) {
+      long milliseconds;
+      fd_set r_fd;
+      fd_set w_fd;
+      fd_set e_fd;
+      FD_ZERO(&r_fd);
+      FD_ZERO(&w_fd);
+      FD_ZERO(&e_fd);
+
+      if(CURLM_OK != (curlm_code = curl_multi_timeout(hMulti, &milliseconds))){
+        FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_timeout code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
+        SYSLOGERR("curl_multi_timeout code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+      }
+      if(milliseconds < 0){
+        milliseconds = 50;
+      }
+      if(milliseconds > 0) {
+        int max_fd;
+        struct timeval timeout;
+        timeout.tv_sec  = 1000 * milliseconds / 1000000;
+        timeout.tv_usec = 1000 * milliseconds % 1000000;
+
+        if(CURLM_OK != (curlm_code = curl_multi_fdset(hMulti, &r_fd, &w_fd, &e_fd, &max_fd))){
+          FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_fdset code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
+          SYSLOGERR("curl_multi_fdset code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+          return -EIO;
+        }
+        if(-1 == select(max_fd + 1, &r_fd, &w_fd, &e_fd, &timeout)){
+          FGPRINT("S3fsMultiCurl::MultiPerform: failed select - errno(%d)\n", errno);
+          SYSLOGERR("failed select - errno(%d)", errno);
+          return -errno;
+        }
+      }
+    }
+  }while(still_running);
+
+  return 0;
+}
+
+int S3fsMultiCurl::MultiRead(void)
+{
+  CURLMsg*  msg;
+  int       remaining_messages;
+  CURL*     hCurl    = NULL;
+  S3fsCurl* s3fscurl = NULL;
+  S3fsCurl* retrycurl= NULL;
+
+  while(NULL != (msg = curl_multi_info_read(hMulti, &remaining_messages))){
+    if(CURLMSG_DONE != msg->msg){
+      FGPRINT("S3fsMultiCurl::MultiRead: curl_multi_info_read code: %d\n", msg->msg);
+      SYSLOGERR("curl_multi_info_read code: %d", msg->msg);
+      return -EIO;
+    }
+    hCurl    = msg->easy_handle;
+    s3fscurl = cMap_req[hCurl];
+    retrycurl= NULL;
+
+    if(CURLE_OK == msg->data.result && s3fscurl){
+      long responseCode;
+      if(s3fscurl->GetResponseCode(responseCode) && 400 > responseCode){
+        // add into stat cache
+        if(SuccessCallback && !SuccessCallback(s3fscurl)){
+          FGPRINT("S3fsMultiCurl::MultiRead: error from callback function(%s).\n", s3fscurl->base_path.c_str());
+        }
+      }else{
+        // This case is directory object("dir", "non dir object", "_$folder$", etc)
+        //FGPRINT("S3fsMultiCurl::MultiRead: failed a request(%s)\n", s3fscurl->base_path.c_str());
+      }
+
+    }else{
+      FGPRINT("S3fsMultiCurl::MultiRead: failed to read(remaining: %i code: %d  msg: %s), so retry this.\n",
+              remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
+      SYSLOGDBGERR("failed to read(remaining: %i code: %d  msg: %s), so retry this.",
+              remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
+
+      // For retry
+      if(RetryCallback){
+        retrycurl = RetryCallback(s3fscurl);
+      }
+    }
+
+    // Cleanup this curl object and set retrying object(if there is).
+    curl_multi_remove_handle(hMulti, hCurl);
+    cMap_req.erase(hCurl);
+    if(s3fscurl && s3fscurl != retrycurl){
+      delete s3fscurl;     // with destroy curl handle.
+    }
+    if(retrycurl){
+      cMap_all[retrycurl->hCurl] = retrycurl;
+    }
+  }
+  return 0;
+}
+
+int S3fsMultiCurl::Request(void)
+{
+  int       result;
+  CURLMcode curlm_code;
+
+  FGPRINT("S3fsMultiCurl::Request[count=%ld]\n", cMap_all.size());
+
+  if(hMulti){
+    Clear();
+  }
+
+  // Make request list.
+  //
+  // Send multi request loop( with retry )
+  // (When many request is sends, sometimes gets "Couldn't connect to server")
+  //
+  while(0 < cMap_all.size()){
+    // populate the multi interface with an initial set of requests
+    if(NULL == (hMulti = curl_multi_init())){
+      Clear();
+      return -1;
+    }
+
+    // set curl handle to multi handle
+    int                     cnt;
+    s3fscurlmap_t::iterator iter;
+    for(cnt = 0, iter = cMap_all.begin(); cnt < S3fsMultiCurl::max_multireq && iter != cMap_all.end(); cMap_all.erase(iter++), cnt++){
+      CURL*     hCurl    = (*iter).first;
+      S3fsCurl* s3fscurl = (*iter).second;
+
+      if(CURLM_OK != (curlm_code = curl_multi_add_handle(hMulti, hCurl))){
+        FGPRINT("S3fsMultiCurl::Request: curl_multi_add_handle code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
+        SYSLOGERR("curl_multi_add_handle code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+        Clear();
+        return -EIO;
+      }
+      cMap_req[hCurl] = s3fscurl;
+    }
+
+    // Send multi request.
+    if(0 != (result = MultiPerform())){
+      Clear();
+      return result;
+    }
+
+    // Read the result
+    if(0 != (result = MultiRead())){
+      Clear();
+      return result;
+    }
+
+    // cleanup
+    curl_multi_cleanup(hMulti);
+  }
+  return 0;
+}
+
+//-------------------------------------------------------------------
+// Utility functions
+//-------------------------------------------------------------------
 string GetContentMD5(int fd)
 {
   BIO*     b64;
@@ -945,94 +2446,75 @@ string md5sum(int fd)
   return string(md5);
 }
 
-bool InitMimeType(const char* file)
+//
+// curl_slist_sort_insert
+// This function is like curl_slist_append function, but this adds data by a-sorting.
+// Because AWS signature needs sorted header.
+//
+struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data)
 {
-  if(!file){
-    return false;
+  struct curl_slist* curpos;
+  struct curl_slist* lastpos;
+  struct curl_slist* new_item;
+
+  if(!data){
+    return list;
   }
+  if(NULL == (new_item = (struct curl_slist*)malloc(sizeof(struct curl_slist)))){
+    return list;
+  }
+  if(NULL == (new_item->data = strdup(data))){
+    free(new_item);
+    return list;
+  }
+  new_item->next = NULL;
 
-  string line;
-  ifstream MT(file);
-  if (MT.good()) {
-    while (getline(MT, line)) {
-      if(line[0]=='#'){
-        continue;
+  for(lastpos = NULL, curpos = list; curpos; curpos = curpos->next){
+    int result = strcmp(data, curpos->data);
+    if(0 == result){
+      // same data, so replace it.
+      if(lastpos){
+        lastpos->next = new_item;
+      }else{
+        list = new_item;
       }
-      if(line.size() == 0){
-        continue;
-      }
+      new_item->next = curpos->next;
+      free(curpos);
+      break;
 
-      stringstream tmp(line);
-      string mimeType;
-      tmp >> mimeType;
-      while (tmp) {
-        string ext;
-        tmp >> ext;
-        if (ext.size() == 0){
-          continue;
-        }
-        mimeTypes[ext] = mimeType;
+    }else if(0 > result){
+      // add data before curpos.
+      if(lastpos){
+        lastpos->next = new_item;
+      }else{
+        list = new_item;
       }
+      new_item->next = curpos;
+      break;
+    }
+    lastpos = curpos;
+  }
+  if(!curpos){
+    // append to last pos
+    if(lastpos){
+      lastpos->next = new_item;
+    }else{
+      // a case of list is null
+      list = new_item;
     }
   }
+  return list;
+}
+
+// function for using global values
+bool MakeUrlResource(const char* realpath, string& resourcepath, string& url)
+{
+  if(!realpath){
+    return false;
+  }
+  resourcepath = urlEncode(service_path + bucket + realpath);
+  url          = host + resourcepath;
   return true;
 }
 
-/**
- * @param s e.g., "index.html"
- * @return e.g., "text/html"
- */
-string lookupMimeType(string s)
-{
-  string result("application/octet-stream");
-  string::size_type last_pos = s.find_last_of('.');
-  string::size_type first_pos = s.find_first_of('.');
-  string prefix, ext, ext2;
-
-  // No dots in name, just return
-  if(last_pos == string::npos){
-    return result;
-  }
-  // extract the last extension
-  if(last_pos != string::npos){
-    ext = s.substr(1+last_pos, string::npos);
-  }
-  if (last_pos != string::npos) {
-     // one dot was found, now look for another
-     if (first_pos != string::npos && first_pos < last_pos) {
-        prefix = s.substr(0, last_pos);
-        // Now get the second to last file extension
-        string::size_type next_pos = prefix.find_last_of('.');
-        if (next_pos != string::npos) {
-           ext2 = prefix.substr(1+next_pos, string::npos);
-        }
-     }
-  }
-
-  // if we get here, then we have an extension (ext)
-  mimes_t::const_iterator iter = mimeTypes.find(ext);
-  // if the last extension matches a mimeType, then return
-  // that mime type
-  if (iter != mimeTypes.end()) {
-    result = (*iter).second;
-    return result;
-  }
-
-  // return with the default result if there isn't a second extension
-  if(first_pos == last_pos){
-     return result;
-  }
-
-  // Didn't find a mime-type for the first extension
-  // Look for second extension in mimeTypes, return if found
-  iter = mimeTypes.find(ext2);
-  if (iter != mimeTypes.end()) {
-     result = (*iter).second;
-     return result;
-  }
-
-  // neither the last extension nor the second-to-last extension
-  // matched a mimeType, return the default mime type 
-  return result;
-}
-
+/// END
