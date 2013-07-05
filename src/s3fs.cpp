@@ -3242,7 +3242,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(strstr(arg, "use_rrs") != 0){
       int rrs = 1;
       // for an old format.
-      if(strstr(arg, "use_rrs=1") != 0){
+      if(strstr(arg, "use_rrs=") != 0){
         rrs = atoi(strchr(arg, '=') + sizeof(char));
       }
       if(0 == rrs){
