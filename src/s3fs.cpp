@@ -3239,37 +3239,45 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       nomultipart = true;
       return 0;
     }
-    if(strstr(arg, "use_rrs=") != 0){
-      int rrs = atoi(strchr(arg, '=') + sizeof(char));
-      if(0 == rrs || 1 == rrs){
-        if(1 == rrs && S3fsCurl::GetUseSse()){
-          fprintf(stderr, "%s: use_rrs option could not be specified with use_sse.\n", 
-                 program_name.c_str());
+    if(strstr(arg, "use_rrs") != 0){
+      int rrs = 1;
+      // for an old format.
+      if(strstr(arg, "use_rrs=1") != 0){
+        rrs = atoi(strchr(arg, '=') + sizeof(char));
+      }
+      if(0 == rrs){
+        S3fsCurl::SetUseRrs(false);
+      }else if(1 == rrs){
+        if(S3fsCurl::GetUseSse()){
+          fprintf(stderr, "%s: use_rrs option could not be specified with use_sse.\n", program_name.c_str());
           return -1;
-        }else{
-          S3fsCurl::SetUseRrs(0 == rrs ? false : true);
         }
+        S3fsCurl::SetUseRrs(true);
       }else{
-        fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", 
-                program_name.c_str());
+        fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", program_name.c_str());
         return -1;
       }
+      return 0;
     }
-    if(strstr(arg, "use_sse=") != 0){
-      int sse = atoi(strchr(arg, '=') + sizeof(char));
-      if(0 == sse || 1 == sse){
-        if(1 == sse && S3fsCurl::GetUseRrs()){
-          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", 
-                 program_name.c_str());
+    if(strstr(arg, "use_sse") != 0){
+      int sse = 1;
+      // for an old format.
+      if(strstr(arg, "use_sse=") != 0){
+        sse = atoi(strchr(arg, '=') + sizeof(char));
+      }
+      if(0 == sse){
+        S3fsCurl::SetUseSse(false);
+      }else if(1 == sse){
+        if(S3fsCurl::GetUseRrs()){
+          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
           return -1;
-        }else{
-          S3fsCurl::SetUseRrs(0 == sse ? false : true);
         }
+        S3fsCurl::SetUseSse(true);
       }else{
-        fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", 
-                program_name.c_str());
+        fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", program_name.c_str());
         return -1;
       }
+      return 0;
     }
     if(strstr(arg, "ssl_verify_hostname=") != 0){
       long sslvh = strtol(strchr(arg, '=') + sizeof(char), 0, 10);

@@ -59,11 +59,15 @@ number of times to retry a failed S3 transaction.
 \fB\-o\fR use_cache (default="" which means disabled)
 local folder to use for local file cache.
 .TP
-\fB\-o\fR use_rrs (default="" which means disabled)
+\fB\-o\fR use_rrs (default is disable)
 use Amazon's Reduced Redundancy Storage.
+this option can not be specified with use_sse.
+(can specify use_rrs=1 for old version)
 .TP
-\fB\-o\fR use_sse (default="" which means disabled)
+\fB\-o\fR use_sse (default is disable)
 use Amazon's Server Site Encryption.
+this option can not be specified with use_rrs.
+(can specify use_sse=1 for old version)
 .TP
 \fB\-o\fR passwd_file (default="")
 specify the path to the password file, which which takes precedence over the password in $HOME/.passwd-s3fs and /etc/passwd-s3fs

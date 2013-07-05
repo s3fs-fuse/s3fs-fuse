@@ -2479,6 +2479,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
         list = new_item;
       }
       new_item->next = curpos->next;
+      free(curpos->data);
       free(curpos);
       break;
 
