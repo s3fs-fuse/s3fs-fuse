@@ -1964,22 +1964,29 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
     FGPRINT("S3fsCurl::MultipartUploadRequest : Cloud not duplicate file discriptor(errno=%d)\n", errno);
     SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    if(-1 != fd2){
+      close(fd2);
+    }
     return -errno;
   }
   if(-1 == fstat(fd2, &st)){
     FGPRINT("S3fsCurl::MultipartUploadRequest: Invalid file discriptor(errno=%d)\n", errno);
     SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    fclose(file);
     return -errno;
   }
 
   // make Tempolary buf(maximum size + 4)
   if(NULL == (buf = (unsigned char*)malloc(sizeof(unsigned char) * (MULTIPART_SIZE + 4)))){
     SYSLOGCRIT("Could not allocate memory for buffer\n");
+    fclose(file);
     S3FS_FUSE_EXIT();
     return -ENOMEM;
   }
 
   if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
+    free(buf);
+    fclose(file);
     return result;
   }
   DestroyCurlHandle();
