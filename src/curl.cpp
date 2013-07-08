@@ -1051,7 +1051,7 @@ bool S3fsCurl::GetUploadId(string& upload_id)
 
 int S3fsCurl::DeleteRequest(const char* tpath)
 {
-  FGPRINT("S3fsCurl::DeleteRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::DeleteRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1092,7 +1092,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 //
 bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath)
 {
-//FGPRINT("S3fsCurl::PreHeadRequest [tpath=%s][bpath=%s][save=%s]\n", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
+//FGPRINT("  S3fsCurl::PreHeadRequest [tpath=%s][bpath=%s][save=%s]\n", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
 
   if(!tpath){
     return false;
@@ -1139,7 +1139,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
 {
   int result;
 
-  FGPRINT("S3fsCurl::HeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::HeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!PreHeadRequest(tpath)){
     return -1;
@@ -1177,7 +1177,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
 
 int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg)
 {
-  FGPRINT("S3fsCurl::PutHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::PutHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1254,24 +1254,29 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
 {
   struct stat st;
   FILE*       file = NULL;
+  int         fd2;
 
-  FGPRINT("S3fsCurl::PutRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::PutRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
   }
   if(-1 != fd){
-    if(-1 == fstat(fd, &st) || NULL == (file = fdopen(fd, "rb"))){
-      FGPRINT("S3fsCurl::PutRequest : Invalid file discriptor(errno=%d)\n", errno);
-      SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    // duplicate fd
+    if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
+      FGPRINT("S3fsCurl::PutRequest : Could not duplicate file discriptor(errno=%d)\n", errno);
+      SYSLOGERR("Could not duplicate file discriptor(errno=%d)", errno);
       return -errno;
     }
   }else{
     // This case is creating zero byte obejct.(calling by create_file_object())
-    FGPRINT("S3fsCurl::PutRequest : create zero byte file object.\n");
+    FGPRINT("  S3fsCurl::PutRequest : create zero byte file object.\n");
   }
 
   if(!CreateCurlHandle(true)){
+    if(file){
+      fclose(file);
+    }
     return -1;
   }
   string resource;
@@ -1344,6 +1349,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   int result = RequestPerform();
   delete bodydata;
   bodydata = NULL;
+  if(file){
+    fclose(file);
+  }
 
   return result;
 }
@@ -1352,7 +1360,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
 {
   FILE* file;
   int   fd2;
-  FGPRINT("S3fsCurl::GetRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::GetRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1410,7 +1418,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
 
 int S3fsCurl::CheckBucket(void)
 {
-  FGPRINT("S3fsCurl::CheckBucket\n");
+  FGPRINT("  S3fsCurl::CheckBucket\n");
 
   if(!CreateCurlHandle(true)){
     return -1;
@@ -1451,7 +1459,7 @@ int S3fsCurl::CheckBucket(void)
 
 int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 {
-  FGPRINT("S3fsCurl::ListBucketRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::ListBucketRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1504,7 +1512,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 //
 int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string& upload_id, bool ow_sse_flg)
 {
-  FGPRINT("S3fsCurl::PreMultipartPostRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::PreMultipartPostRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1589,7 +1597,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
 
 int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, filepartList_t& parts)
 {
-  FGPRINT("S3fsCurl::CompleteMultipartPostRequest [tpath=%s][parts=%zd]\n", SAFESTRPTR(tpath), parts.size());
+  FGPRINT("  S3fsCurl::CompleteMultipartPostRequest [tpath=%s][parts=%zd]\n", SAFESTRPTR(tpath), parts.size());
 
   if(!tpath){
     return -1;
@@ -1662,7 +1670,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
 
 int S3fsCurl::MultipartListRequest(string& body)
 {
-  FGPRINT("S3fsCurl::MultipartListRequest\n");
+  FGPRINT("  S3fsCurl::MultipartListRequest\n");
 
   if(!CreateCurlHandle(true)){
     return -1;
@@ -1729,7 +1737,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, const char* part_pat
   struct stat st;
   string      md5;
 
-  FGPRINT("S3fsCurl::UploadMultipartPostRequest [tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), SAFESTRPTR(part_path), part_num);
+  FGPRINT("  S3fsCurl::UploadMultipartPostRequest [tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), SAFESTRPTR(part_path), part_num);
 
   // make md5 and file pointer
   if(-1 == (part_fd = open(part_path, O_RDONLY))){
@@ -1816,7 +1824,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, const char* part_pat
 
 int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta, string& ETag, bool ow_sse_flg)
 {
-  FGPRINT("S3fsCurl::CopyMultipartPostRequest [from=%s][to=%s][part=%d]\n", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
+  FGPRINT("  S3fsCurl::CopyMultipartPostRequest [from=%s][to=%s][part=%d]\n", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
 
   if(!from || !to){
     return -1;
@@ -1913,7 +1921,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   filepartList_t list;
   stringstream   strrange;
 
-  FGPRINT("S3fsCurl::MultipartHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::MultipartHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
 
   if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
     return result;
@@ -1958,7 +1966,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   unsigned char* buf;
   char           tmpfile[256];
 
-  FGPRINT("S3fsCurl::MultipartUploadRequest [tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+  FGPRINT("  S3fsCurl::MultipartUploadRequest [tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
 
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
@@ -2081,7 +2089,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   filepartList_t list;
   stringstream   strrange;
 
-  FGPRINT("S3fsCurl::MultipartRenameRequest [from=%s][to=%s]\n", SAFESTRPTR(from), SAFESTRPTR(to));
+  FGPRINT("  S3fsCurl::MultipartRenameRequest [from=%s][to=%s]\n", SAFESTRPTR(from), SAFESTRPTR(to));
 
   string srcresource;
   string srcurl;
@@ -2318,7 +2326,7 @@ int S3fsMultiCurl::Request(void)
   int       result;
   CURLMcode curlm_code;
 
-  FGPRINT("S3fsMultiCurl::Request[count=%ld]\n", cMap_all.size());
+  FGPRINT("  S3fsMultiCurl::Request[count=%ld]\n", cMap_all.size());
 
   if(hMulti){
     Clear();
