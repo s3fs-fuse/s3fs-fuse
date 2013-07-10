@@ -97,6 +97,32 @@ string urlEncode(const string &s)
   return result;
 }
 
+//
+// ex. target="http://......?keyword=value&..."
+//
+bool get_keyword_value(string& target, const char* keyword, string& value)
+{
+  if(!keyword){
+    return false;
+  }
+  size_t spos;
+  size_t epos;
+  if(string::npos == (spos = target.find(keyword))){
+    return false;
+  }
+  spos += strlen(keyword);
+  if('=' != target.at(spos)){
+    return false;
+  }
+  spos++;
+  if(string::npos == (epos = target.find('&', spos))){
+    value = target.substr(spos);
+  }else{
+    value = target.substr(spos, (epos - spos));
+  }
+  return true;
+}
+
 string prepare_url(const char* url)
 {
   SYSLOGDBG("URL is %s", url);

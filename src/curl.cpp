@@ -150,6 +150,7 @@ curltime_t      S3fsCurl::curl_times;
 curlprogress_t  S3fsCurl::curl_progress;
 string          S3fsCurl::curl_ca_bundle;
 mimes_t         S3fsCurl::mimeTypes;
+int             S3fsCurl::max_parallel_upload = 5;    // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -603,6 +604,180 @@ long S3fsCurl::SetSslVerifyHostname(long value)
   return old;
 }
 
+int S3fsCurl::SetMaxParallelUpload(int value)
+{
+  int old = S3fsCurl::max_parallel_upload;
+  S3fsCurl::max_parallel_upload = value;
+  return old;
+}
+
+bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
+{
+  if(!s3fscurl){
+    return false;
+  }
+  // check etag(md5);
+  if(NULL == strstr(s3fscurl->headdata->str(), s3fscurl->partdata.etag.c_str())){
+    return false;
+  }
+  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign(s3fscurl->partdata.etag);
+  s3fscurl->partdata.uploaded = true;
+
+  return true;
+}
+
+S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
+{
+  if(!s3fscurl){
+    return NULL;
+  }
+
+  // parse and get part_num, upload_id.
+  string upload_id;
+  string part_num_str;
+  int    part_num;
+  if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
+    return NULL;
+  }
+  if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
+    return NULL;
+  }
+  part_num = atoi(part_num_str.c_str());
+
+  // duplicate request
+  S3fsCurl* newcurl          = new S3fsCurl();
+  newcurl->partdata.partfile = s3fscurl->partdata.partfile;
+  newcurl->partdata.etaglist = s3fscurl->partdata.etaglist;
+  newcurl->partdata.etagpos  = s3fscurl->partdata.etagpos;
+
+  // setup new curl object
+  if(!newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
+    FGPRINT("  S3fsCurl::UploadMultipartPostRetryCallback : Could not duplicate curl object(%s:%d).\n", s3fscurl->path.c_str(), part_num);
+    SYSLOGERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
+    newcurl->partdata.partfile = "";  // for do not removing tmp file.
+    delete newcurl;
+    return NULL;
+  }
+  s3fscurl->partdata.partfile = "";   // for do not removing tmp file.
+
+  return newcurl;
+}
+
+int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg)
+{
+  int            result;
+  string         upload_id;
+  struct stat    st;
+  int            fd2;
+  FILE*          file;
+  etaglist_t     list;
+  off_t          remaining_bytes;
+  unsigned char* buf;
+  char           tmpfile[256];
+  S3fsCurl       s3fscurl;
+
+  FGPRINT("  S3fsCurl::ParallelMultipartUploadRequest[tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+
+  // duplicate fd
+  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
+    FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Cloud not duplicate file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    if(-1 != fd2){
+      close(fd2);
+    }
+    return -errno;
+  }
+  if(-1 == fstat(fd2, &st)){
+    FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Invalid file discriptor(errno=%d)\n", errno);
+    SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    fclose(file);
+    return -errno;
+  }
+
+  // make Tempolary buf(maximum size + 4)
+  if(NULL == (buf = (unsigned char*)malloc(sizeof(unsigned char) * (MULTIPART_SIZE + 4)))){
+    SYSLOGCRIT("Could not allocate memory for buffer\n");
+    fclose(file);
+    S3FS_FUSE_EXIT();
+    return -ENOMEM;
+  }
+
+  if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
+    free(buf);
+    fclose(file);
+    return result;
+  }
+  s3fscurl.DestroyCurlHandle();
+
+  // cycle through open fd, pulling off 10MB chunks at a time
+  for(remaining_bytes = st.st_size; 0 < remaining_bytes; ){
+    S3fsMultiCurl curlmulti;
+    int           para_cnt;
+    off_t         chunk;
+
+    // Initialize S3fsMultiCurl
+    curlmulti.SetSuccessCallback(S3fsCurl::UploadMultipartPostCallback);
+    curlmulti.SetRetryCallback(S3fsCurl::UploadMultipartPostRetryCallback);
+
+    // Loop for setup parallel upload(multipart) request.
+    for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_upload && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
+      // chunk size
+      chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+
+      // s3fscurl sub object
+      S3fsCurl* s3fscurl_para = new S3fsCurl();
+      s3fscurl_para->partdata.add_etag_list(&list);
+
+      // make temp file
+      if(0 != (result = copy_chunk_tempfile(file, buf, chunk, s3fscurl_para->partdata.partfile))){
+        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: failed to make temp file(%d)\n", ferror(file));
+        SYSLOGERR("failed to make temp file(%d)", ferror(file));
+        free(buf);
+        fclose(file);
+        delete s3fscurl_para;
+        return result;
+      }
+
+      // initiate upload part for parallel
+      if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
+        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: failed uploading part setup(%d)\n", result);
+        SYSLOGERR("failed uploading part setup(%d)", result);
+        free(buf);
+        fclose(file);
+        delete s3fscurl_para;
+        return result;
+      }
+
+      // set into parallel object
+      if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Could not set curl object into multi curl(%s).\n", tmpfile);
+        SYSLOGERR("Could not make curl object into multi curl(%s).", tmpfile);
+        free(buf);
+        fclose(file);
+        delete s3fscurl_para;
+        return result;
+      }
+    }
+
+    // Multi request
+    if(0 != (result = curlmulti.Request())){
+      FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: error occuered in multi request(errno=%d).\n", result);
+      SYSLOGERR("error occuered in multi request(errno=%d).", result);
+      break;
+    }
+
+    // reinit for loop.
+    curlmulti.Clear();
+  }
+  free(buf);
+  fclose(file);
+
+  if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
+    return result;
+  }
+  return 0;
+}
+
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
@@ -705,6 +880,8 @@ bool S3fsCurl::ClearInternalData(void)
     headdata = NULL;
   }
   LastResponseCode = -1;
+  partdata.clear();
+
   return true;
 }
 
@@ -1595,7 +1772,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   return 0;
 }
 
-int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, filepartList_t& parts)
+int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, etaglist_t& parts)
 {
   FGPRINT("  S3fsCurl::CompleteMultipartPostRequest [tpath=%s][parts=%zd]\n", SAFESTRPTR(tpath), parts.size());
 
@@ -1607,13 +1784,13 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   string postContent;
   postContent += "<CompleteMultipartUpload>\n";
   for(int cnt = 0; cnt < (int)parts.size(); cnt++){
-    if(!parts[cnt].uploaded){
-      FGPRINT("S3fsCurl::CompleteMultipartPostRequest : %d file part is not uploaded.\n", cnt + 1);
+    if(0 == parts[cnt].length()){
+      FGPRINT("S3fsCurl::CompleteMultipartPostRequest : %d file part is not finished uploading.\n", cnt + 1);
       return false;
     }
     postContent += "<Part>\n";
     postContent += "  <PartNumber>" + IntToStr(cnt + 1) + "</PartNumber>\n";
-    postContent += "  <ETag>\""     + parts[cnt].etag   + "\"</ETag>\n";
+    postContent += "  <ETag>\""     + parts[cnt]        + "\"</ETag>\n";
     postContent += "</Part>\n";
   }  
   postContent += "</CompleteMultipartUpload>\n";
@@ -1730,42 +1907,42 @@ int S3fsCurl::MultipartListRequest(string& body)
 // Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
 // Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
 //
-int S3fsCurl::UploadMultipartPostRequest(const char* tpath, const char* part_path, int part_num, string& upload_id, string& ETag)
+int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& upload_id)
 {
-  int         part_fd;
-  FILE*       part_file;
+  int         para_fd;
   struct stat st;
-  string      md5;
 
-  FGPRINT("  S3fsCurl::UploadMultipartPostRequest [tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), SAFESTRPTR(part_path), part_num);
+  FGPRINT("  S3fsCurl::UploadMultipartPostSetup[tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), partdata.partfile.c_str(), part_num);
 
   // make md5 and file pointer
-  if(-1 == (part_fd = open(part_path, O_RDONLY))){
-    FGPRINT("S3fsCurl::UploadMultipartPostRequest : Could not open file(%s) - errorno(%d)\n", part_path, errno);
-    SYSLOGERR("Could not open file(%s) - errno(%d)", part_path, errno);
+  if(-1 == (para_fd = open(partdata.partfile.c_str(), O_RDONLY))){
+    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not open file(%s) - errorno(%d)\n", partdata.partfile.c_str(), errno);
+    SYSLOGERR("Could not open file(%s) - errno(%d)", partdata.partfile.c_str(), errno);
     return -errno;
   }
-  if(-1 == fstat(part_fd, &st)){
-    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Invalid file(%s) discriptor(errno=%d)\n", part_path, errno);
-    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", part_path, errno);
-    close(part_fd);
+  if(-1 == fstat(para_fd, &st)){
+    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Invalid file(%s) discriptor(errno=%d)\n", partdata.partfile.c_str(), errno);
+    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", partdata.partfile.c_str(), errno);
+    close(para_fd);
     return -errno;
   }
-  md5 = md5sum(part_fd);
-  if(md5.empty()){
-    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Could not make md5 for file(%s)\n", part_path);
-    SYSLOGERR("Could not make md5 for file(%s)", part_path);
-    close(part_fd);
+  partdata.etag = md5sum(para_fd);
+  if(partdata.etag.empty()){
+    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not make md5 for file(%s)\n", partdata.partfile.c_str());
+    SYSLOGERR("Could not make md5 for file(%s)", partdata.partfile.c_str());
+    close(para_fd);
     return -1;
   }
-  if(NULL == (part_file = fdopen(part_fd, "rb"))){
-    FGPRINT("S3fsCurl::UploadMultipartPostRequest: Invalid file(%s) discriptor(errno=%d)\n", part_path, errno);
-    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", part_path, errno);
-    close(part_fd);
+  if(NULL == (partdata.fppart = fdopen(para_fd, "rb"))){
+    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Invalid file(%s) discriptor(errno=%d)\n", partdata.partfile.c_str(), errno);
+    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", partdata.partfile.c_str(), errno);
+    close(para_fd);
     return -errno;
   }
 
   if(!CreateCurlHandle(true)){
+    fclose(partdata.fppart);
+    partdata.fppart = NULL;
     return -1;
   }
   string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
@@ -1801,28 +1978,42 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, const char* part_pat
   curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
   curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
-  curl_easy_setopt(hCurl, CURLOPT_INFILE, part_file);
+  curl_easy_setopt(hCurl, CURLOPT_INFILE, partdata.fppart);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  return 0;
+}
+
+int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string& upload_id)
+{
+  int result;
+
+  FGPRINT("  S3fsCurl::UploadMultipartPostRequest[tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), partdata.partfile.c_str(), part_num);
+
+  // setup
+  if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
+    return result;
+  }
+
   // request
-  int result = RequestPerform();
-  if(NULL != strstr(headdata->str(), md5.c_str())){
-    ETag = md5;
+  if(0 == (result = RequestPerform())){
+    // check etag
+    if(NULL != strstr(headdata->str(), partdata.etag.c_str())){
+      partdata.uploaded = true;
+    }else{
+      result = -1;
+    }
   }
   // closing
-  fclose(part_file);
   delete bodydata;
   bodydata = NULL;
   delete headdata;
   headdata = NULL;
 
-  if(0 != result){
-    return result;
-  }
-  return 0;
+  return result;
 }
 
-int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta, string& ETag, bool ow_sse_flg)
+int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta, bool ow_sse_flg)
 {
   FGPRINT("  S3fsCurl::CopyMultipartPostRequest [from=%s][to=%s][part=%d]\n", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
 
@@ -1901,7 +2092,9 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   if(0 == result){
     const char* start_etag= strstr(bodydata->str(), "ETag");
     const char* end_etag  = strstr(bodydata->str(), "/ETag>");
-    ETag.assign((start_etag + 11), (size_t)(end_etag - (start_etag + 11) - 7));
+
+    partdata.etag.assign((start_etag + 11), (size_t)(end_etag - (start_etag + 11) - 7));
+    partdata.uploaded = true;
   }
   delete bodydata;
   bodydata = NULL;
@@ -1917,8 +2110,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   string         upload_id;
   off_t          chunk;
   off_t          bytes_remaining;
-  filepart       part;
-  filepartList_t list;
+  etaglist_t     list;
   stringstream   strrange;
 
   FGPRINT("  S3fsCurl::MultipartHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
@@ -1928,8 +2120,6 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   }
   DestroyCurlHandle();
 
-  part.uploaded = true;
-  part.partfile = "";
   for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
     chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
@@ -1937,11 +2127,11 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     meta["x-amz-copy-source-range"] = strrange.str();
     strrange.clear(stringstream::goodbit);
 
-    if(0 != (result = CopyMultipartPostRequest(tpath, tpath, (list.size() + 1), upload_id, meta, part.etag, ow_sse_flg))){
+    if(0 != (result = CopyMultipartPostRequest(tpath, tpath, (list.size() + 1), upload_id, meta, ow_sse_flg))){
       return result;
     }
+    list.push_back(partdata.etag);
     DestroyCurlHandle();
-    list.push_back(part);
   }
 
   if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
@@ -1957,14 +2147,10 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   struct stat    st;
   int            fd2;
   FILE*          file;
-  int            partfd;
-  FILE*          partfile;
-  filepart       part;
-  filepartList_t list;
+  etaglist_t     list;
   off_t          remaining_bytes;
   off_t          chunk;
   unsigned char* buf;
-  char           tmpfile[256];
 
   FGPRINT("  S3fsCurl::MultipartUploadRequest [tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
 
@@ -2001,74 +2187,28 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
 
   // cycle through open fd, pulling off 10MB chunks at a time
   for(remaining_bytes = st.st_size; 0 < remaining_bytes; remaining_bytes -= chunk){
-    off_t copy_total;
-    off_t copied;
+    // chunk size
     chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
-    // copy the file portion into the buffer
-    for(copy_total = 0; copy_total < chunk; copy_total += copied){
-      copied = fread(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), file);
-      if(copied != (chunk - copy_total)){
-        if(0 != ferror(file) || feof(file)){
-          FGPRINT("S3fsCurl::MultipartUploadRequest: read file error(%d)\n", ferror(file));
-          SYSLOGERR("read file error(%d)", ferror(file));
-          free(buf);
-          fclose(file);
-          return -EIO;
-        }
-      }
-    }
-
-    // create uniq temporary file
-    strncpy(tmpfile, "/tmp/s3fs.XXXXXX", sizeof(tmpfile));
-    if(-1 == (partfd = mkstemp(tmpfile))){
-      FGPRINT("S3fsCurl::MultipartUploadRequest: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
-      SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
+    // make temp file
+    if(0 != (result = copy_chunk_tempfile(file, buf, chunk, partdata.partfile))){
+      FGPRINT("S3fsCurl::MultipartUploadRequest: failed to make temp file(%d)\n", ferror(file));
+      SYSLOGERR("failed to make temp file(%d)", ferror(file));
       free(buf);
       fclose(file);
-      return -errno;
+      return result;
     }
-    if(NULL == (partfile = fdopen(partfd, "wb"))){
-      FGPRINT("S3fsCurl::MultipartUploadRequest: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
-      SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
-      free(buf);
-      fclose(file);
-      close(partfd);
-      return -errno;
-    }
-
-    // copy buffer to temporary file
-    for(copy_total = 0; copy_total < chunk; copy_total += copied){
-      copied = fwrite(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), partfile);
-      if(copied != (chunk - copy_total)){
-        if(0 != ferror(partfile)){
-          FGPRINT("S3fsCurl::MultipartUploadRequest: write file error(%d)\n", ferror(partfile));
-          SYSLOGERR("write file error(%d)", ferror(partfile));
-          free(buf);
-          fclose(file);
-          fclose(partfile);
-          remove(tmpfile);
-          return -EIO;
-        }
-      }
-    }
-    fclose(partfile);
 
     // upload part
-    if(0 != (result = UploadMultipartPostRequest(tpath, tmpfile, (list.size() + 1), upload_id, part.etag))){
+    if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
       FGPRINT("S3fsCurl::MultipartUploadRequest: failed uploading part(%d)\n", result);
       SYSLOGERR("failed uploading part(%d)", result);
       free(buf);
       fclose(file);
-      remove(tmpfile);
       return result;
     }
-    remove(tmpfile);
+    list.push_back(partdata.etag);
     DestroyCurlHandle();
-
-    part.uploaded = true;
-    part.partfile = tmpfile;
-    list.push_back(part);
   }
   free(buf);
   fclose(file);
@@ -2085,8 +2225,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   string         upload_id;
   off_t          chunk;
   off_t          bytes_remaining;
-  filepart       part;
-  filepartList_t list;
+  etaglist_t     list;
   stringstream   strrange;
 
   FGPRINT("  S3fsCurl::MultipartRenameRequest [from=%s][to=%s]\n", SAFESTRPTR(from), SAFESTRPTR(to));
@@ -2103,8 +2242,6 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   }
   DestroyCurlHandle();
 
-  part.uploaded = true;
-  part.partfile = "";
   for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
     chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
@@ -2112,11 +2249,11 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     meta["x-amz-copy-source-range"] = strrange.str();
     strrange.clear(stringstream::goodbit);
 
-    if(0 != (result = CopyMultipartPostRequest(from, to, list.size(), upload_id, meta, part.etag, false))){
+    if(0 != (result = CopyMultipartPostRequest(from, to, list.size(), upload_id, meta, false))){
       return result;
     }
+    list.push_back(partdata.etag);
     DestroyCurlHandle();
-    list.push_back(part);
   }
 
   if(0 != (result = CompleteMultipartPostRequest(to, upload_id, list))){

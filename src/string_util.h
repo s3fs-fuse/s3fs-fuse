@@ -26,5 +26,6 @@ std::string IntToStr(int);
 std::string get_date();
 std::string urlEncode(const std::string &s);
 std::string prepare_url(const char* url);
+bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
 
 #endif // S3FS_STRING_UTIL_H_

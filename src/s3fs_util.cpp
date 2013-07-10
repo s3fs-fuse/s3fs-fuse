@@ -673,6 +673,67 @@ bool is_need_check_obj_detail(headers_t& meta)
 }
 
 //-------------------------------------------------------------------
+// Utility functions for convert
+//-------------------------------------------------------------------
+// Copy file(file pointer) to tmpfile
+int copy_chunk_tempfile(FILE* file, unsigned char* buf, off_t chunk, string& tmpname)
+{
+  char  tmpfile[256];
+  off_t copy_total;
+  off_t copied;
+  int   fd;
+  FILE* fptmp;
+
+  if(!file || !buf || 0 == chunk){
+    return 0;
+  }
+
+  // copy the file portion into the buffer
+  for(copy_total = 0; copy_total < chunk; copy_total += copied){
+    copied = fread(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), file);
+    if(copied != (chunk - copy_total)){
+      if(0 != ferror(file) || feof(file)){
+        FGPRINT("copy_part_tempfile: read file error(%d)\n", ferror(file));
+        SYSLOGERR("read file error(%d)", ferror(file));
+        return -(ferror(file));
+      }
+    }
+  }
+
+  // create uniq temporary file
+  strncpy(tmpfile, "/tmp/s3fs.XXXXXX", sizeof(tmpfile));
+  if(-1 == (fd = mkstemp(tmpfile))){
+    FGPRINT("copy_part_tempfile: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
+    SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
+    return -errno;
+  }
+  if(NULL == (fptmp = fdopen(fd, "wb"))){
+    FGPRINT("copy_part_tempfile: Could not open tempolary file(%s) - errno(%d)\n", tmpfile, errno);
+    SYSLOGERR("Could not open tempolary file(%s) - errno(%d)", tmpfile, errno);
+    close(fd);
+    return -errno;
+  }
+
+  // copy buffer to temporary file
+  for(copy_total = 0; copy_total < chunk; copy_total += copied){
+    copied = fwrite(&buf[copy_total], sizeof(unsigned char), (chunk - copy_total), fptmp);
+    if(copied != (chunk - copy_total)){
+      if(0 != ferror(fptmp)){
+        FGPRINT("copy_part_tempfile: write file error(%d)\n", ferror(fptmp));
+        SYSLOGERR("write file error(%d)", ferror(fptmp));
+        fclose(fptmp);
+        remove(tmpfile);
+        return -(ferror(fptmp));
+      }
+    }
+  }
+  fclose(fptmp);
+  tmpname = tmpfile;
+
+  return 0;
+}
+
+//-------------------------------------------------------------------
 // Help
 //-------------------------------------------------------------------
 void show_usage (void)
@@ -748,6 +809,14 @@ void show_help (void)
     "\n"
     "   multireq_max (default=\"500\")\n"
     "      - maximum number of parallel request for listing objects.\n"
+    "\n"
+    "   parallel_upload (default=\"5\")\n"
+    "      - number of parallel request for uploading big objects.\n"
+    "      s3fs uploads large object(over 20MB) by multipart post request, \n"
+    "      and sends parallel requests.\n"
+    "      This option limits parallel request count which s3fs requests \n"
+    "      at once. It is necessary to set this value depending on a CPU \n"
+    "      and a network band.\n"
     "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"

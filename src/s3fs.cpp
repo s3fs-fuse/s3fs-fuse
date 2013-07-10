@@ -828,8 +828,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd, bool ow_sse_fl
      if(120 > S3fsCurl::GetReadwriteTimeout()){
        backup = S3fsCurl::SetReadwriteTimeout(120);
      }
-     S3fsCurl s3fscurl;
-     result = s3fscurl.MultipartUploadRequest(path, meta, fd, ow_sse_flg);
+     result = S3fsCurl::ParallelMultipartUploadRequest(path, meta, fd, ow_sse_flg);
      if(0 != backup){
        S3fsCurl::SetReadwriteTimeout(backup);
      }
@@ -2076,7 +2075,8 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 {
   int res;
 
-  FGPRINT("s3fs_read[path=%s][size=%zd][offset=%zd]\n", path, size, offset);
+  // Commented - This message is output too much
+//FGPRINT("s3fs_read[path=%s][size=%zd][offset=%zd][fd=%zd]\n", path, size, offset, fi->fh);
 
   if(-1 == (res = pread(fi->fh, buf, size, offset))){
     FGPRINT("  s3fs_read: pread failed. errno(%d)\n", errno);
@@ -2091,7 +2091,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
   int res;
 
   // Commented - This message is output too much
-//FGPRINT("s3fs_write[path=%s]\n", path);
+//FGPRINT("s3fs_write[path=%s][size=%zd][offset=%zd][fd=%zd]\n", path, size, offset, fi->fh);
 
   if(-1 == (res = pwrite(fi->fh, buf, size, offset))){
     FGPRINT("  s3fs_write: pwrite failed. errno(%d)\n", errno);
@@ -3338,6 +3338,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(strstr(arg, "nodnscache") != 0){
       S3fsCurl::SetDnsCache(false);
+      return 0;
+    }
+    if(strstr(arg, "parallel_upload=") != 0){
+      int maxpara = (int)strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      if(0 >= maxpara){
+        fprintf(stderr, "%s: argument should be over 1: parallel_upload\n", 
+           program_name.c_str());
+        return -1;
+      }
+      S3fsCurl::SetMaxParallelUpload(maxpara);
       return 0;
     }
     if(strstr(arg, "noxmlns") != 0){
