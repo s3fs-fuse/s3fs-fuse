@@ -63,6 +63,9 @@ using namespace std;
 #define	IS_REPLACEDIR(type) (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type)
 #define	IS_RMTYPEDIR(type)  (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type)
 
+#define	MAX_OBJECT_SIZE     68719476735LL       // 64GB - 1L
+#define MULTIPART_LOWLIMIT  (20 * 1024 * 1024)  // 20MB
+
 //-------------------------------------------------------------------
 // Global valiables
 //-------------------------------------------------------------------
@@ -810,7 +813,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd, bool ow_sse_fl
    * 
    * If file is > 20MB, then multipart will kick in
    */
-  if(st.st_size > 68719476735LL){ // 64GB - 1
+  if(st.st_size > MAX_OBJECT_SIZE){ // 64GB - 1
      // close f ?
      return -ENOTSUP;
   }
@@ -822,7 +825,7 @@ static int put_local_fd(const char* path, headers_t meta, int fd, bool ow_sse_fl
     return -errno;
   }
 
-  if(st.st_size >= 20971520 && !nomultipart){ // 20MB
+  if(st.st_size >= MULTIPART_LOWLIMIT && !nomultipart){ // 20MB
      // Additional time is needed for large files
      time_t backup = 0;
      if(120 > S3fsCurl::GetReadwriteTimeout()){

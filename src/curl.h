@@ -44,14 +44,15 @@ typedef std::vector<std::string> etaglist_t;
 // Each part information for Multipart upload
 struct filepart
 {
-  bool        uploaded;
-  std::string partfile;
-  std::string etag;
-  FILE*       fppart;
+  bool        uploaded;     // does finish uploading
+  std::string etag;         // expected etag value
+  int         fd;           // base file(temporary full file) discriptor
+  off_t       startpos;     // seek fd point for uploading
+  ssize_t     size;         // uploading size
   etaglist_t* etaglist;     // use only parallel upload
   int         etagpos;      // use only parallel upload
 
-  filepart() : uploaded(false), fppart(NULL), etaglist(NULL), etagpos(-1) {}
+  filepart() : uploaded(false), fd(-1), startpos(0), size(-1), etaglist(NULL), etagpos(-1) {}
   ~filepart()
   {
     clear();
@@ -59,16 +60,11 @@ struct filepart
 
   void clear(bool isfree = true)
   {
-    if(isfree && fppart){
-      fclose(fppart);
-    }
-    if(isfree && 0 < partfile.size()){
-      remove(partfile.c_str());
-    }
     uploaded = false;
-    partfile = "";
     etag     = "";
-    fppart   = NULL;
+    fd       = -1;
+    startpos = 0;
+    size     = -1;
     etaglist = NULL;
     etagpos  = - 1;
   }
@@ -165,6 +161,7 @@ class S3fsCurl
     static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
     static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
     static size_t ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
+    static size_t UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
 
     static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
@@ -288,8 +285,8 @@ class S3fsMultiCurl
 // Utility Functions
 //----------------------------------------------
 std::string GetContentMD5(int fd);
-unsigned char* md5hexsum(int fd);
-std::string md5sum(int fd);
+unsigned char* md5hexsum(int fd, off_t start = 0, ssize_t size = -1);
+std::string md5sum(int fd, off_t start = 0, ssize_t size = -1);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 

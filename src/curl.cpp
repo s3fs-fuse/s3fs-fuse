@@ -521,6 +521,39 @@ size_t S3fsCurl::HeaderCallback(void *data, size_t blockSize, size_t numBlocks, 
   return blockSize * numBlocks;
 }
 
+size_t S3fsCurl::UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp)
+{
+  S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+
+  if(1 > (size * nmemb)){
+    return 0;
+  }
+  if(-1 == pCurl->partdata.fd || 0 >= pCurl->partdata.size){
+    return 0;
+  }
+  // read size
+  ssize_t copysize = (size * nmemb) < (size_t)pCurl->partdata.size ? (size * nmemb) : (size_t)pCurl->partdata.size;
+  ssize_t readbytes;
+  ssize_t totalread;
+  // read and set
+  for(totalread = 0, readbytes = 0; totalread < copysize; totalread += readbytes){
+    readbytes = pread(pCurl->partdata.fd, &((char*)ptr)[totalread], (copysize - totalread), pCurl->partdata.startpos + totalread);
+    if(0 == readbytes){
+      // eof
+      break;
+    }else if(-1 == readbytes){
+      // error
+      FGPRINT("S3fsCurl::UploadReadCallback: read file error(%d).\n", errno);
+      SYSLOGERR("read file error(%d).", errno);
+      return 0;
+    }
+  }
+  pCurl->partdata.startpos += totalread;
+  pCurl->partdata.size     -= totalread;
+
+  return totalread;
+}
+
 bool S3fsCurl::SetDnsCache(bool isCache)
 {
   bool old = S3fsCurl::is_dns_cache;
@@ -646,20 +679,19 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
   // duplicate request
   S3fsCurl* newcurl          = new S3fsCurl();
-  newcurl->partdata.partfile = s3fscurl->partdata.partfile;
   newcurl->partdata.etaglist = s3fscurl->partdata.etaglist;
   newcurl->partdata.etagpos  = s3fscurl->partdata.etagpos;
+  newcurl->partdata.fd       = s3fscurl->partdata.fd;
+  newcurl->partdata.startpos = s3fscurl->partdata.startpos;
+  newcurl->partdata.size     = s3fscurl->partdata.size;
 
   // setup new curl object
   if(!newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
     FGPRINT("  S3fsCurl::UploadMultipartPostRetryCallback : Could not duplicate curl object(%s:%d).\n", s3fscurl->path.c_str(), part_num);
     SYSLOGERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
-    newcurl->partdata.partfile = "";  // for do not removing tmp file.
     delete newcurl;
     return NULL;
   }
-  s3fscurl->partdata.partfile = "";   // for do not removing tmp file.
-
   return newcurl;
 }
 
@@ -725,18 +757,11 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
       chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
       // s3fscurl sub object
-      S3fsCurl* s3fscurl_para = new S3fsCurl();
+      S3fsCurl* s3fscurl_para          = new S3fsCurl();
+      s3fscurl_para->partdata.fd       = fd2;
+      s3fscurl_para->partdata.startpos = st.st_size - remaining_bytes;
+      s3fscurl_para->partdata.size     = chunk;
       s3fscurl_para->partdata.add_etag_list(&list);
-
-      // make temp file
-      if(0 != (result = copy_chunk_tempfile(file, buf, chunk, s3fscurl_para->partdata.partfile))){
-        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: failed to make temp file(%d)\n", ferror(file));
-        SYSLOGERR("failed to make temp file(%d)", ferror(file));
-        free(buf);
-        fclose(file);
-        delete s3fscurl_para;
-        return result;
-      }
 
       // initiate upload part for parallel
       if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
@@ -1907,44 +1932,30 @@ int S3fsCurl::MultipartListRequest(string& body)
 // Content-MD5: pUNXr/BjKK5G2UKvaRRrOA==
 // Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
 //
+
 int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& upload_id)
 {
-  int         para_fd;
-  struct stat st;
+  FGPRINT("  S3fsCurl::UploadMultipartPostSetup[tpath=%s][start=%zd][size=%zd][part=%d]\n", 
+          SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
 
-  FGPRINT("  S3fsCurl::UploadMultipartPostSetup[tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), partdata.partfile.c_str(), part_num);
+  if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
+    return -1;
+  }
 
   // make md5 and file pointer
-  if(-1 == (para_fd = open(partdata.partfile.c_str(), O_RDONLY))){
-    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not open file(%s) - errorno(%d)\n", partdata.partfile.c_str(), errno);
-    SYSLOGERR("Could not open file(%s) - errno(%d)", partdata.partfile.c_str(), errno);
-    return -errno;
-  }
-  if(-1 == fstat(para_fd, &st)){
-    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Invalid file(%s) discriptor(errno=%d)\n", partdata.partfile.c_str(), errno);
-    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", partdata.partfile.c_str(), errno);
-    close(para_fd);
-    return -errno;
-  }
-  partdata.etag = md5sum(para_fd);
+  partdata.etag = md5sum(partdata.fd, partdata.startpos, partdata.size);
   if(partdata.etag.empty()){
-    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not make md5 for file(%s)\n", partdata.partfile.c_str());
-    SYSLOGERR("Could not make md5 for file(%s)", partdata.partfile.c_str());
-    close(para_fd);
+    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not make md5 for file(part %d)\n", part_num);
+    SYSLOGERR("Could not make md5 for file(part %d)", part_num);
     return -1;
-  }
-  if(NULL == (partdata.fppart = fdopen(para_fd, "rb"))){
-    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Invalid file(%s) discriptor(errno=%d)\n", partdata.partfile.c_str(), errno);
-    SYSLOGERR("Invalid file(%s) discriptor(errno=%d)", partdata.partfile.c_str(), errno);
-    close(para_fd);
-    return -errno;
   }
 
+  // create handle
   if(!CreateCurlHandle(true)){
-    fclose(partdata.fppart);
-    partdata.fppart = NULL;
     return -1;
   }
+
+  // make request
   string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
   string resource;
   string turl;
@@ -1977,8 +1988,9 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
   curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size)); // Content-Length
-  curl_easy_setopt(hCurl, CURLOPT_INFILE, partdata.fppart);
+  curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, partdata.size); // Content-Length
+  curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
+  curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
   return 0;
@@ -1988,7 +2000,8 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string
 {
   int result;
 
-  FGPRINT("  S3fsCurl::UploadMultipartPostRequest[tpath=%s][fpath=%s][part=%d]\n", SAFESTRPTR(tpath), partdata.partfile.c_str(), part_num);
+  FGPRINT("  S3fsCurl::UploadMultipartPostRequest[tpath=%s][start=%zd][size=%zd][part=%d]\n", 
+          SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
 
   // setup
   if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
@@ -2190,14 +2203,10 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
     // chunk size
     chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
-    // make temp file
-    if(0 != (result = copy_chunk_tempfile(file, buf, chunk, partdata.partfile))){
-      FGPRINT("S3fsCurl::MultipartUploadRequest: failed to make temp file(%d)\n", ferror(file));
-      SYSLOGERR("failed to make temp file(%d)", ferror(file));
-      free(buf);
-      fclose(file);
-      return result;
-    }
+    // set
+    partdata.fd       = fd2;
+    partdata.startpos = st.st_size - remaining_bytes;
+    partdata.size     = chunk;
 
     // upload part
     if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
@@ -2550,7 +2559,7 @@ string GetContentMD5(int fd)
   return Signature;
 }
 
-unsigned char* md5hexsum(int fd)
+unsigned char* md5hexsum(int fd, off_t start, off_t size)
 {
   MD5_CTX c;
   char    buf[512];
@@ -2558,19 +2567,30 @@ unsigned char* md5hexsum(int fd)
   unsigned char* result = (unsigned char*)malloc(MD5_DIGEST_LENGTH);
 
   // seek to top of file.
-  if(-1 == lseek(fd, 0, SEEK_SET)){
+  if(-1 == lseek(fd, start, SEEK_SET)){
     return NULL;
   }
 
   memset(buf, 0, 512);
   MD5_Init(&c);
-  while((bytes = read(fd, buf, 512)) > 0) {
+  for(ssize_t total = 0; total < size; total += bytes){
+    bytes = 512 < (size - total) ? 512 : (size - total);
+    bytes = read(fd, buf, bytes);
+    if(0 == bytes){
+      // end of file
+      break;
+    }else if(-1 == bytes){
+      // error
+      FGPRINT("md5hexsum: : file read error(%d)\n", errno);
+      free(result);
+      return NULL;
+    }
     MD5_Update(&c, buf, bytes);
     memset(buf, 0, 512);
   }
   MD5_Final(result, &c);
 
-  if(-1 == lseek(fd, 0, SEEK_SET)){
+  if(-1 == lseek(fd, start, SEEK_SET)){
     free(result);
     return NULL;
   }
@@ -2578,13 +2598,13 @@ unsigned char* md5hexsum(int fd)
   return result;
 }
 
-string md5sum(int fd)
+string md5sum(int fd, off_t start, off_t size)
 {
   char md5[2 * MD5_DIGEST_LENGTH + 1];
   char hexbuf[3];
   unsigned char* md5hex;
 
-  if(NULL == (md5hex = md5hexsum(fd))){
+  if(NULL == (md5hex = md5hexsum(fd, start, size))){
     return string("");
   }
 
