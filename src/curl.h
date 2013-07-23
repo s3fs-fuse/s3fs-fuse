@@ -58,7 +58,7 @@ struct filepart
     clear();
   }
 
-  void clear(bool isfree = true)
+  void clear(void)
   {
     uploaded = false;
     etag     = "";
@@ -128,7 +128,7 @@ class S3fsCurl
     static curlprogress_t  curl_progress;
     static std::string     curl_ca_bundle;
     static mimes_t         mimeTypes;
-    static int             max_parallel_upload;
+    static int             max_parallel_cnt;
 
     // variables
     CURL*                hCurl;
@@ -143,7 +143,7 @@ class S3fsCurl
     long                 LastResponseCode;
     const unsigned char* postdata;           // use by post method and read callback function.
     int                  postdata_remaining; // use by post method and read callback function.
-    filepart             partdata;           // use by multipart upload
+    filepart             partdata;           // use by multipart upload/get object callback
 
   public:
     // constructor/destructor
@@ -162,9 +162,11 @@ class S3fsCurl
     static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
     static size_t ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
     static size_t UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
+    static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
 
     static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+    static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
     // methods
     bool ClearInternalData(void);
@@ -186,6 +188,7 @@ class S3fsCurl
     static bool InitShareCurl(void);
     static bool DestroyShareCurl(void);
     static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
 
     // class methods(valiables)
     static std::string LookupMimeType(std::string name);
@@ -206,7 +209,7 @@ class S3fsCurl
     static bool IsSetAccessKeyId(void) { return (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()); }
     static long SetSslVerifyHostname(long value);
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
-    static int SetMaxParallelUpload(int value);
+    static int SetMaxParallelCount(int value);
 
     // methods
     bool CreateCurlHandle(bool force = false);
@@ -222,7 +225,8 @@ class S3fsCurl
     int HeadRequest(const char* tpath, headers_t& meta);
     int PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg);
     int PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
-    int GetObjectRequest(const char* tpath, int fd);
+    int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
+    int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
     int MultipartListRequest(std::string& body);

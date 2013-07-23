@@ -23,6 +23,11 @@
           printf(__VA_ARGS__); \
        }
 
+#define FGPRINT2(...) \
+       if(foreground2){ \
+          printf(__VA_ARGS__); \
+       }
+
 #define SAFESTRPTR(strptr) (strptr ? strptr : "")
 
 //
@@ -35,6 +40,8 @@ typedef std::map<std::string, std::string> headers_t;
 //
 extern bool debug;
 extern bool foreground;
+extern bool foreground2;
+extern bool nomultipart;
 extern std::string program_name;
 extern std::string service_path;
 extern std::string host;

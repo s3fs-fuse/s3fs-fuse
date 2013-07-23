@@ -59,6 +59,9 @@ number of times to retry a failed S3 transaction.
 \fB\-o\fR use_cache (default="" which means disabled)
 local folder to use for local file cache.
 .TP
+\fB\-o\fR del_cache - delete local file cache
+delete local file cache when s3fs starts and exits.
+.TP
 \fB\-o\fR use_rrs (default is disable)
 use Amazon's Reduced Redundancy Storage.
 this option can not be specified with use_sse.
@@ -99,11 +102,16 @@ s3fs is always using dns cache, this option make dns cache disable.
 \fB\-o\fR multireq_max (default="500")
 maximum number of parallel request for listing objects.
 .TP
-\fB\-o\fR parallel_upload (default="5")
+\fB\-o\fR parallel_count (default="5")
 number of parallel request for uploading big objects.
 s3fs uploads large object(over 20MB) by multipart post request, and sends parallel requests.
 This option limits parallel request count which s3fs requests at once.
 It is necessary to set this value depending on a CPU and a network band.
+.TP
+\fB\-o\fR fd_page_size(default="52428800"(50MB))
+number of internal management page size for each file discriptor.
+For delayed reading and writing by s3fs, s3fs manages pages which is separated from object. Each pages has a status that data is already loaded(or not loaded yet).
+This option should not be changed when you don't have a trouble with performance.
 .TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com

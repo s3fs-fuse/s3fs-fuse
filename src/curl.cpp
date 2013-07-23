@@ -150,7 +150,7 @@ curltime_t      S3fsCurl::curl_times;
 curlprogress_t  S3fsCurl::curl_progress;
 string          S3fsCurl::curl_ca_bundle;
 mimes_t         S3fsCurl::mimeTypes;
-int             S3fsCurl::max_parallel_upload = 5;    // default
+int             S3fsCurl::max_parallel_cnt    = 5;    // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -469,7 +469,7 @@ bool S3fsCurl::LocateBundle(void)
   return true;
 }
 
-size_t S3fsCurl::WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data)
+size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBlocks, void* data)
 {
   BodyData* body  = (BodyData*)data;
 
@@ -481,7 +481,7 @@ size_t S3fsCurl::WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBloc
   return (blockSize * numBlocks);
 }
 
-size_t S3fsCurl::ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp)
+size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
   S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
 
@@ -500,7 +500,7 @@ size_t S3fsCurl::ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp)
   return copysize;
 }
 
-size_t S3fsCurl::HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr)
+size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr)
 {
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
@@ -521,7 +521,7 @@ size_t S3fsCurl::HeaderCallback(void *data, size_t blockSize, size_t numBlocks, 
   return blockSize * numBlocks;
 }
 
-size_t S3fsCurl::UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp)
+size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
   S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
 
@@ -552,6 +552,41 @@ size_t S3fsCurl::UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *
   pCurl->partdata.size     -= totalread;
 
   return totalread;
+}
+
+size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp)
+{
+  S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+
+  if(1 > (size * nmemb)){
+    return 0;
+  }
+  if(-1 == pCurl->partdata.fd || 0 >= pCurl->partdata.size){
+    return 0;
+  }
+
+  // write size
+  ssize_t copysize = (size * nmemb) < (size_t)pCurl->partdata.size ? (size * nmemb) : (size_t)pCurl->partdata.size;
+  ssize_t writebytes;
+  ssize_t totalwrite;
+
+  // write
+  for(totalwrite = 0, writebytes = 0; totalwrite < copysize; totalwrite += writebytes){
+    writebytes = pwrite(pCurl->partdata.fd, &((char*)ptr)[totalwrite], (copysize - totalwrite), pCurl->partdata.startpos + totalwrite);
+    if(0 == writebytes){
+      // eof?
+      break;
+    }else if(-1 == writebytes){
+      // error
+      FGPRINT("S3fsCurl::DownloadWriteCallback: write file error(%d).\n", errno);
+      SYSLOGERR("write file error(%d).", errno);
+      return 0;
+    }
+  }
+  pCurl->partdata.startpos += totalwrite;
+  pCurl->partdata.size     -= totalwrite;
+
+  return totalwrite;
 }
 
 bool S3fsCurl::SetDnsCache(bool isCache)
@@ -637,10 +672,10 @@ long S3fsCurl::SetSslVerifyHostname(long value)
   return old;
 }
 
-int S3fsCurl::SetMaxParallelUpload(int value)
+int S3fsCurl::SetMaxParallelCount(int value)
 {
-  int old = S3fsCurl::max_parallel_upload;
-  S3fsCurl::max_parallel_upload = value;
+  int old = S3fsCurl::max_parallel_cnt;
+  S3fsCurl::max_parallel_cnt = value;
   return old;
 }
 
@@ -705,7 +740,6 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   etaglist_t     list;
   off_t          remaining_bytes;
   unsigned char* buf;
-  char           tmpfile[256];
   S3fsCurl       s3fscurl;
 
   FGPRINT("  S3fsCurl::ParallelMultipartUploadRequest[tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
@@ -752,7 +786,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
     curlmulti.SetRetryCallback(S3fsCurl::UploadMultipartPostRetryCallback);
 
     // Loop for setup parallel upload(multipart) request.
-    for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_upload && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
+    for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_cnt && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
       // chunk size
       chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
@@ -775,12 +809,12 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
       // set into parallel object
       if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
-        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Could not set curl object into multi curl(%s).\n", tmpfile);
-        SYSLOGERR("Could not make curl object into multi curl(%s).", tmpfile);
+        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Could not set curl object into multi curl(%s).\n", tpath);
+        SYSLOGERR("Could not make curl object into multi curl(%s).", tpath);
         free(buf);
         fclose(file);
         delete s3fscurl_para;
-        return result;
+        return -1;
       }
     }
 
@@ -801,6 +835,78 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
     return result;
   }
   return 0;
+}
+
+S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
+{
+  int result;
+
+  if(!s3fscurl){
+    return NULL;
+  }
+  // duplicate request(setup new curl object)
+  S3fsCurl* newcurl = new S3fsCurl();
+  if(0 != (result = newcurl->PreGetObjectRequest(
+           s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size))){
+    FGPRINT("S3fsCurl::ParallelGetObjectRetryCallback: failed downloading part setup(%d)\n", result);
+    SYSLOGERR("failed downloading part setup(%d)", result);
+    delete newcurl;
+    return NULL;;
+  }
+  return newcurl;
+}
+
+int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
+{
+  FGPRINT("  S3fsCurl::ParallelGetObjectRequest[tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+
+  int     result = 0;
+  ssize_t remaining_bytes;
+
+  // cycle through open fd, pulling off 10MB chunks at a time
+  for(remaining_bytes = size; 0 < remaining_bytes; ){
+    S3fsMultiCurl curlmulti;
+    int           para_cnt;
+    off_t         chunk;
+
+    // Initialize S3fsMultiCurl
+    //curlmulti.SetSuccessCallback(NULL);   // not need to set success callback
+    curlmulti.SetRetryCallback(S3fsCurl::ParallelGetObjectRetryCallback);
+
+    // Loop for setup parallel upload(multipart) request.
+    for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_cnt && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
+      // chunk size
+      chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+
+      // s3fscurl sub object
+      S3fsCurl* s3fscurl_para = new S3fsCurl();
+      if(0 != (result = s3fscurl_para->PreGetObjectRequest(tpath, fd, (start + size - remaining_bytes), chunk))){
+        FGPRINT("S3fsCurl::ParallelGetObjectRequest: failed downloading part setup(%d)\n", result);
+        SYSLOGERR("failed downloading part setup(%d)", result);
+        delete s3fscurl_para;
+        return result;
+      }
+
+      // set into parallel object
+      if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+        FGPRINT("S3fsCurl::ParallelGetObjectRequest: Could not set curl object into multi curl(%s).\n", tpath);
+        SYSLOGERR("Could not make curl object into multi curl(%s).", tpath);
+        delete s3fscurl_para;
+        return -1;
+      }
+    }
+
+    // Multi request
+    if(0 != (result = curlmulti.Request())){
+      FGPRINT("S3fsCurl::ParallelGetObjectRequest: error occuered in multi request(errno=%d).\n", result);
+      SYSLOGERR("error occuered in multi request(errno=%d).", result);
+      break;
+    }
+
+    // reinit for loop.
+    curlmulti.Clear();
+  }
+  return result;
 }
 
 //-------------------------------------------------------------------
@@ -1558,20 +1664,12 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   return result;
 }
 
-int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
+int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
 {
-  FILE* file;
-  int   fd2;
-  FGPRINT("  S3fsCurl::GetRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FGPRINT("  S3fsCurl::PreGetRequest [tpath=%s][start=%zd][size=%zd]\n", SAFESTRPTR(tpath), start, size);
 
-  if(!tpath){
+  if(!tpath || -1 == fd || 0 > start || 0 >= size){
     return -1;
-  }
-  // duplicate fd
-  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "w+"))){
-    FGPRINT("S3fsCurl::GetRequest : Cloud not duplicate file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
-    return -errno;
   }
 
   if(!CreateCurlHandle(true)){
@@ -1589,6 +1687,13 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
   string date    = get_date();
   requestHeaders = curl_slist_sort_insert(requestHeaders, string("Date: " + date).c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type: ");
+  if(-1 != start && -1 != size){
+    string range = "Range: bytes=";
+    range       += str(start);
+    range       += "-";
+    range       += str(start + size - 1);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, range.c_str());
+  }
 
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
@@ -1600,20 +1705,37 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd)
   // setopt
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
-  curl_easy_setopt(hCurl, CURLOPT_FILE, file);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, S3fsCurl::DownloadWriteCallback);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)this);
+
+  // set info for callback func.
+  // (use only fd, startpos and size, other member is not used.)
+  partdata.clear();
+  partdata.fd       = fd;
+  partdata.startpos = start;
+  partdata.size     = size;
+
+  return 0;
+}
+
+int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
+{
+  int result;
+
+  FGPRINT("  S3fsCurl::GetRequest [tpath=%s][start=%zd][size=%zd]\n", SAFESTRPTR(tpath), start, size);
+
+  if(!tpath){
+    return -1;
+  }
+  if(0 != (result = PreGetObjectRequest(tpath, fd, start, size))){
+    return result;
+  }
 
   FGPRINT("  downloading... [path=%s][fd=%d]\n", tpath, fd);
   SYSLOGDBG("LOCAL FD");
 
-  int result = RequestPerform();
-
-  fflush(file);
-  fclose(file);
-  if(0 != lseek(fd, 0, SEEK_SET)){
-    FGPRINT("S3fsCurl::GetRequest : Cloud not seek file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Cloud not seek file discriptor(errno=%d)", errno);
-    return -errno;
-  }
+  result = RequestPerform();
+  partdata.clear();
 
   return result;
 }
@@ -1811,7 +1933,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   for(int cnt = 0; cnt < (int)parts.size(); cnt++){
     if(0 == parts[cnt].length()){
       FGPRINT("S3fsCurl::CompleteMultipartPostRequest : %d file part is not finished uploading.\n", cnt + 1);
-      return false;
+      return -1;
     }
     postContent += "<Part>\n";
     postContent += "  <PartNumber>" + IntToStr(cnt + 1) + "</PartNumber>\n";
