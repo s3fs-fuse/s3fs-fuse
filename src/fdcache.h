@@ -14,6 +14,8 @@ class CacheFileStat
     static bool MakeCacheFileStatPath(const char* path, std::string& sfile_path, bool is_create_dir = true);
 
   public:
+    static bool DeleteCacheFileStat(const char* path);
+
     CacheFileStat(const char* tpath = NULL);
     ~CacheFileStat();
 

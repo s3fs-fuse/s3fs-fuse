@@ -75,6 +75,26 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
   return true;
 }
 
+bool CacheFileStat::DeleteCacheFileStat(const char* path)
+{
+  if(!path || '\0' == path[0]){
+    return false;
+  }
+  // stat path
+  string sfile_path;
+  if(!CacheFileStat::MakeCacheFileStatPath(path, sfile_path, false)){
+    //FGPRINT("CacheFileStat::DeleteCacheFileStat: failed to create cache stat file path(%s)\n", path.c_str());
+    //SYSLOGERR("failed to create cache stat file path(%s)", path.c_str());
+    return false;
+  }
+  if(0 != unlink(sfile_path.c_str())){
+    //FGPRINT("CacheFileStat::DeleteCacheFileStat: failed to delete file(%s): errno=%d\n", path, errno);
+    //SYSLOGERR("failed to delete file(%s): errno=%d", path, errno);
+    return false;
+  }
+  return true;
+}
+
 //------------------------------------------------
 // CacheFileStat methods
 //------------------------------------------------
@@ -1063,12 +1083,22 @@ int FdManager::DeleteCacheFile(const char* path)
   if(!FdManager::MakeCachePath(path, cache_path, false)){
     return 0;
   }
+  int result = 0;
   if(0 != unlink(cache_path.c_str())){
     //FGPRINT("FdManager::DeleteCacheFile: failed to delete file(%s): errno=%d\n", path, errno);
     //SYSLOGERR("failed to delete file(%s): errno=%d", path, errno);
-    return -errno;
+    result = -errno;
   }
-  return 0;
+  if(!CacheFileStat::DeleteCacheFileStat(path)){
+    //FGPRINT("FdManager::DeleteCacheFile: failed to delete stat file(%s): errno=%d\n", path, errno);
+    //SYSLOGERR("failed to delete stat file(%s): errno=%d", path, errno);
+    if(0 != errno){
+      result = -errno;
+    }else{
+      result = -EIO;
+    }
+  }
+  return result;
 }
 
 bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_create_dir)
