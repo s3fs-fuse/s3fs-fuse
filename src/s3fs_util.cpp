@@ -647,34 +647,39 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
       isS3sync = true;
     }
   }
-  if(!isS3sync){
-    if(checkdir){
-      if(forcedir){
-        mode |= S_IFDIR;
-      }else{
-        if(meta.end() != (iter = meta.find("Content-Type"))){
-          string strConType = (*iter).second;
-          if(strConType == "application/x-directory"){
-            mode |= S_IFDIR;
-          }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
-            if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
+  // Checking the bitmask, if the last 3 bits are all zero then process as a regular
+  // file type (S_IFDIR or S_IFREG), otherwise return mode unmodified so that S_IFIFO, 
+  // S_IFSOCK, S_IFCHR, S_IFLNK and S_IFBLK devices can be processed properly by fuse.
+  if(!(mode & S_IFMT)){ 
+    if(!isS3sync){
+      if(checkdir){
+        if(forcedir){
+          mode |= S_IFDIR;
+        }else{
+          if(meta.end() != (iter = meta.find("Content-Type"))){
+            string strConType = (*iter).second;
+            if(strConType == "application/x-directory"){
               mode |= S_IFDIR;
+            }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
+              if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
+                mode |= S_IFDIR;
+              }else{
+                mode |= S_IFREG;
+              }
             }else{
               mode |= S_IFREG;
             }
           }else{
             mode |= S_IFREG;
           }
-        }else{
-          mode |= S_IFREG;
         }
       }
-    }
-  }else{
-    if(!checkdir){
-      // cut dir/reg flag.
-      mode &= ~S_IFDIR;
-      mode &= ~S_IFREG;
+    }else{
+      if(!checkdir){
+        // cut dir/reg flag.
+        mode &= ~S_IFDIR;
+        mode &= ~S_IFREG;
+      }
     }
   }
   return mode;

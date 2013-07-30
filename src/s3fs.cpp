@@ -744,13 +744,26 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
   return s3fscurl.PutRequest(path, meta, -1, false);    // fd=-1 means for creating zero byte object.
 }
 
-static int s3fs_mknod(const char* path, mode_t mode, dev_t rdev)
+static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-  FGPRINT("s3fs_mknod[path=%s][mode=%d]\n", path, mode);
+  int       result;
+  headers_t meta;
+  struct fuse_context* pcxt;
 
-  // Could not make block or character special files on S3,
-  // always return a error.
-  return -EPERM;
+  FGPRINT("s3fs_mknod[path=%s][mode=0%o][dev=%lu]\n", path, mode, rdev);
+
+  if(NULL == (pcxt = fuse_get_context())){
+    return -EIO;
+  }
+
+  if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid))){
+    FGPRINT("s3fs_mknod: could not create object for special file(result=%d)\n", result);
+    SYSLOGERR("could not create object for special file(result=%d)", result);
+    return result;
+  }
+  StatCache::getStatCacheData()->DelStat(path);
+
+  return result;
 }
 
 static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
