@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <assert.h>
+#include <syslog.h>
 #include <string>
 #include <map>
 #include <algorithm>
@@ -147,12 +148,12 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       }
       if(is_delete_cache){
         // not hit by different ETag
-        FGPRINT("    stat cache not hit by ETag[path=%s][time=%ld][hit count=%lu][ETag(%s)!=(%s)]\n",
+        DPRNNN("stat cache not hit by ETag[path=%s][time=%ld][hit count=%lu][ETag(%s)!=(%s)]",
           strpath.c_str(), (*iter).second.cache_date, (*iter).second.hit_count,
           petag ? petag : "null", (*iter).second.meta["ETag"].c_str());
       }else{
         // hit 
-        FGPRINT("    stat cache hit [path=%s] [time=%ld] [hit count=%lu]\n",
+        DPRNNN("stat cache hit [path=%s] [time=%ld] [hit count=%lu]",
           strpath.c_str(), (*iter).second.cache_date, (*iter).second.hit_count);
 
         if(pst!= NULL){
@@ -229,7 +230,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   if(CacheSize< 1){
     return true;
   }
-  FGPRINT("    add_stat_cache_entry[path=%s]\n", key.c_str());
+  DPRNNN("add stat cache entry[path=%s]", key.c_str());
 
   if(stat_cache.size() > CacheSize){
     if(!TruncateCache()){
@@ -284,7 +285,7 @@ bool StatCache::AddNoObjectCache(string& key)
   if(CacheSize < 1){
     return true;
   }
-  FGPRINT("    add_stat_cache_entry - noobjcache[path=%s]\n", key.c_str());
+  DPRNNN("add no object cache entry[path=%s]", key.c_str());
 
   if(stat_cache.size() > CacheSize){
     if(!TruncateCache()){
@@ -326,7 +327,7 @@ bool StatCache::TruncateCache(void)
   stat_cache.erase(path_to_delete);
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
-  FGPRINT("    truncate_stat_cache_entry[path=%s]\n", path_to_delete.c_str());
+  DPRNNN("truncate stat cache[path=%s]", path_to_delete.c_str());
 
   return true;
 }
@@ -336,7 +337,7 @@ bool StatCache::DelStat(const char* key)
   if(!key){
     return false;
   }
-  FGPRINT("    delete_stat_cache_entry[path=%s]\n", key);
+  DPRNNN("delete stat cache entry[path=%s]", key);
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
   stat_cache_t::iterator iter = stat_cache.find(key);

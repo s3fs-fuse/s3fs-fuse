@@ -78,8 +78,7 @@ bool BodyData::Resize(size_t addbytes)
   }
   // realloc
   if(NULL == (text = (char*)realloc(text, (bufsize + need_size)))){
-    FGPRINT("BodyData::Resize() not enough memory (realloc returned NULL)\n");
-    SYSLOGDBGERR("not enough memory (realloc returned NULL)\n");
+    DPRNCRIT("not enough memory (realloc returned NULL)");
     return false;
   }
   bufsize += need_size;
@@ -204,8 +203,7 @@ bool S3fsCurl::InitGlobalCurl(void)
     return false;
   }
   if(CURLE_OK != curl_global_init(CURL_GLOBAL_ALL)){
-    FGPRINT("init_curl_global_all returns error.\n");
-    SYSLOGERR("init_curl_global_all returns error.");
+    DPRN("init_curl_global_all returns error.");
     return false;
   }
   S3fsCurl::is_initglobal_done = true;
@@ -230,38 +228,31 @@ bool S3fsCurl::InitShareCurl(void)
     return false;
   }
   if(!S3fsCurl::is_initglobal_done){
-    FGPRINT("S3fsCurl::InitShareCurl : Dose not initialize global curl.\n");
-    SYSLOGERR("S3fsCurl::InitShareCurl : Dose not initialize global curl.");
+    DPRN("could not initialize global curl.");
     return false;
   }
   if(S3fsCurl::hCurlShare){
-    FGPRINT("S3fsCurl::InitShareCurl : already initiated.\n");
-    SYSLOGERR("S3fsCurl::InitShareCurl : already initiated.");
+    DPRN("already initiated.");
     return false;
   }
   if(NULL == (S3fsCurl::hCurlShare = curl_share_init())){
-    FGPRINT("S3fsCurl::InitShareCurl : curl_share_init failed\n");
-    SYSLOGERR("S3fsCurl::InitShareCurl : curl_share_init failed");
+    DPRN("curl_share_init failed");
     return false;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_LOCKFUNC, S3fsCurl::LockCurlShare))){
-    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(LOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    DPRN("curl_share_setopt(LOCKFUNC) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_UNLOCKFUNC, S3fsCurl::UnlockCurlShare))){
-    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(UNLOCKFUNC) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    DPRN("curl_share_setopt(UNLOCKFUNC) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
-    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(DNS) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    DPRN("curl_share_setopt(DNS) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
   if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_USERDATA, (void*)&S3fsCurl::curl_share_lock))){
-    FGPRINT("S3fsCurl::InitShareCurl : curl_share_setopt(USERDATA) returns %d(%s)\n", nSHCode, curl_share_strerror(nSHCode));
-    SYSLOGERR("S3fsCurl::InitShareCurl : %d(%s)", nSHCode, curl_share_strerror(nSHCode));
+    DPRN("curl_share_setopt(USERDATA) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
   return true;
@@ -270,14 +261,12 @@ bool S3fsCurl::InitShareCurl(void)
 bool S3fsCurl::DestroyShareCurl(void)
 {
   if(!S3fsCurl::is_initglobal_done){
-    FGPRINT("S3fsCurl::DestroyShareCurl : already destroy global curl.\n");
-    SYSLOGERR("S3fsCurl::DestroyShareCurl : already destroy global curl.");
+    DPRN("already destroy global curl.");
     return false;
   }
   if(!S3fsCurl::hCurlShare){
     if(S3fsCurl::is_dns_cache){
-      FGPRINT("S3fsCurl::DestroyShareCurl : already destroy share curl.\n");
-      SYSLOGERR("S3fsCurl::DestroyShareCurl : already destroy share curl.");
+      DPRN("already destroy share curl.");
     }
     return false;
   }
@@ -322,7 +311,7 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
     // timeout?
     if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
       pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
-      SYSLOGERR("timeout now: %li, curl_times[curl]: %lil, readwrite_timeout: %li",
+      DPRN("timeout now: %li, curl_times[curl]: %lil, readwrite_timeout: %li",
                       (long int)now, S3fsCurl::curl_times[curl], (long int)readwrite_timeout);
       return CURLE_ABORTED_BY_CALLBACK;
     }
@@ -436,7 +425,7 @@ bool S3fsCurl::LocateBundle(void)
       // check for existance and readability of the file
       ifstream BF(CURL_CA_BUNDLE);
       if(!BF.good()){
-        SYSLOGERR("%s: file specified by CURL_CA_BUNDLE environment variable is not readable", program_name.c_str());
+        DPRN("%s: file specified by CURL_CA_BUNDLE environment variable is not readable", program_name.c_str());
         return false;
       }
       BF.close();
@@ -474,7 +463,7 @@ size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBloc
   BodyData* body  = (BodyData*)data;
 
   if(!body->Append(ptr, blockSize, numBlocks)){
-    FGPRINT("WriteMemoryCallback(): BodyData.Append() returned false.\n");
+    DPRNCRIT("BodyData.Append() returned false.");
     S3FS_FUSE_EXIT();
     return -1;
   }
@@ -543,8 +532,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
       break;
     }else if(-1 == readbytes){
       // error
-      FGPRINT("S3fsCurl::UploadReadCallback: read file error(%d).\n", errno);
-      SYSLOGERR("read file error(%d).", errno);
+      DPRN("read file error(%d).", errno);
       return 0;
     }
   }
@@ -578,8 +566,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
       break;
     }else if(-1 == writebytes){
       // error
-      FGPRINT("S3fsCurl::DownloadWriteCallback: write file error(%d).\n", errno);
-      SYSLOGERR("write file error(%d).", errno);
+      DPRN("write file error(%d).", errno);
       return 0;
     }
   }
@@ -722,8 +709,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
   // setup new curl object
   if(!newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
-    FGPRINT("  S3fsCurl::UploadMultipartPostRetryCallback : Could not duplicate curl object(%s:%d).\n", s3fscurl->path.c_str(), part_num);
-    SYSLOGERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
+    DPRN("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
     delete newcurl;
     return NULL;
   }
@@ -742,27 +728,25 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   unsigned char* buf;
   S3fsCurl       s3fscurl;
 
-  FGPRINT("  S3fsCurl::ParallelMultipartUploadRequest[tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+  FPRNNN("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
-    FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Cloud not duplicate file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    DPRN("Cloud not duplicate file discriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
     }
     return -errno;
   }
   if(-1 == fstat(fd2, &st)){
-    FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Invalid file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    DPRN("Invalid file discriptor(errno=%d)", errno);
     fclose(file);
     return -errno;
   }
 
   // make Tempolary buf(maximum size + 4)
   if(NULL == (buf = (unsigned char*)malloc(sizeof(unsigned char) * (MULTIPART_SIZE + 4)))){
-    SYSLOGCRIT("Could not allocate memory for buffer\n");
+    DPRNCRIT("Could not allocate memory for buffer");
     fclose(file);
     S3FS_FUSE_EXIT();
     return -ENOMEM;
@@ -799,8 +783,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
       // initiate upload part for parallel
       if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
-        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: failed uploading part setup(%d)\n", result);
-        SYSLOGERR("failed uploading part setup(%d)", result);
+        DPRN("failed uploading part setup(%d)", result);
         free(buf);
         fclose(file);
         delete s3fscurl_para;
@@ -809,8 +792,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
       // set into parallel object
       if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
-        FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: Could not set curl object into multi curl(%s).\n", tpath);
-        SYSLOGERR("Could not make curl object into multi curl(%s).", tpath);
+        DPRN("Could not make curl object into multi curl(%s).", tpath);
         free(buf);
         fclose(file);
         delete s3fscurl_para;
@@ -820,8 +802,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
     // Multi request
     if(0 != (result = curlmulti.Request())){
-      FGPRINT("S3fsCurl::ParallelMultipartUploadRequest: error occuered in multi request(errno=%d).\n", result);
-      SYSLOGERR("error occuered in multi request(errno=%d).", result);
+      DPRN("error occuered in multi request(errno=%d).", result);
       break;
     }
 
@@ -848,8 +829,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
   S3fsCurl* newcurl = new S3fsCurl();
   if(0 != (result = newcurl->PreGetObjectRequest(
            s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size))){
-    FGPRINT("S3fsCurl::ParallelGetObjectRetryCallback: failed downloading part setup(%d)\n", result);
-    SYSLOGERR("failed downloading part setup(%d)", result);
+    DPRN("failed downloading part setup(%d)", result);
     delete newcurl;
     return NULL;;
   }
@@ -858,7 +838,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
 
 int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
 {
-  FGPRINT("  S3fsCurl::ParallelGetObjectRequest[tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+  FPRNNN("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
   int     result = 0;
   ssize_t remaining_bytes;
@@ -881,16 +861,14 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
       // s3fscurl sub object
       S3fsCurl* s3fscurl_para = new S3fsCurl();
       if(0 != (result = s3fscurl_para->PreGetObjectRequest(tpath, fd, (start + size - remaining_bytes), chunk))){
-        FGPRINT("S3fsCurl::ParallelGetObjectRequest: failed downloading part setup(%d)\n", result);
-        SYSLOGERR("failed downloading part setup(%d)", result);
+        DPRN("failed downloading part setup(%d)", result);
         delete s3fscurl_para;
         return result;
       }
 
       // set into parallel object
       if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
-        FGPRINT("S3fsCurl::ParallelGetObjectRequest: Could not set curl object into multi curl(%s).\n", tpath);
-        SYSLOGERR("Could not make curl object into multi curl(%s).", tpath);
+        DPRN("Could not make curl object into multi curl(%s).", tpath);
         delete s3fscurl_para;
         return -1;
       }
@@ -898,8 +876,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 
     // Multi request
     if(0 != (result = curlmulti.Request())){
-      FGPRINT("S3fsCurl::ParallelGetObjectRequest: error occuered in multi request(errno=%d).\n", result);
-      SYSLOGERR("error occuered in multi request(errno=%d).", result);
+      DPRN("error occuered in multi request(errno=%d).", result);
       break;
     }
 
@@ -929,19 +906,19 @@ bool S3fsCurl::CreateCurlHandle(bool force)
 
   if(hCurl){
     if(!force){
-      FGPRINT("S3fsCurl::CreateCurlHandle: already create handle.\n");
+      DPRN("already create handle.");
       return false;
     }
     if(!DestroyCurlHandle()){
-      FGPRINT("S3fsCurl::CreateCurlHandle: could not destroy handle.\n");
+      DPRN("could not destroy handle.");
       return false;
     }
     ClearInternalData();
-    FGPRINT("S3fsCurl::CreateCurlHandle: has handle, so destroied it.\n");
+    DPRN("already has handle, so destroied it.");
   }
 
   if(NULL == (hCurl = curl_easy_init())){
-    FGPRINT("S3fsCurl::CreateCurlHandle: Failed to create handle.\n");
+    DPRN("Failed to create handle.");
     return false;
   }
   curl_easy_reset(hCurl);
@@ -1037,7 +1014,7 @@ int S3fsCurl::RequestPerform(FILE* file)
   if(debug){
     char* ptr_url = NULL;
     curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
-    SYSLOGDBG("connecting to URL %s", SAFESTRPTR(ptr_url));
+    DPRNNN("connecting to URL %s", SAFESTRPTR(ptr_url));
   }
   // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
 
@@ -1061,16 +1038,16 @@ int S3fsCurl::RequestPerform(FILE* file)
       case CURLE_OK:
         // Need to look at the HTTP response code
         if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
-          SYSLOGERR("curl_easy_getinfo failed while trying to retrieve HTTP response code");
+          DPRNNN("curl_easy_getinfo failed while trying to retrieve HTTP response code");
           return -EIO;
         }
-        SYSLOGDBG("HTTP response code %ld", LastResponseCode);
+        DPRNNN("HTTP response code %ld", LastResponseCode);
 
         if(400 > LastResponseCode){
           return 0;
         }
         if(500 <= LastResponseCode){
-          SYSLOGERR("###HTTP response=%ld", LastResponseCode);
+          DPRNNN("###HTTP response=%ld", LastResponseCode);
           sleep(4);
           break; 
         }
@@ -1078,74 +1055,70 @@ int S3fsCurl::RequestPerform(FILE* file)
         // Service response codes which are >= 400 && < 500
         switch(LastResponseCode){
           case 400:
-            SYSLOGDBGERR("HTTP response code 400 was returned");
-            SYSLOGDBGERR("Body Text: %s", (bodydata ? bodydata->str() : ""));
-            SYSLOGDBG("Now returning EIO");
+            DPRNNN("HTTP response code 400 was returned, returing EIO.");
+            DPRNINFO("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EIO;
 
           case 403:
-            SYSLOGDBGERR("HTTP response code 403 was returned");
-            SYSLOGDBGERR("Body Text: %s", (bodydata ? bodydata->str() : ""));
+            DPRNNN("HTTP response code 403 was returned, returning EPERM");
+            DPRNINFO("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EPERM;
 
           case 404:
-            SYSLOGDBG("HTTP response code 404 was returned");
-            SYSLOGDBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
-            SYSLOGDBG("Now returning ENOENT");
+            DPRNNN("HTTP response code 404 was returned, returning ENOENT");
+            DPRNINFO("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -ENOENT;
 
           default:
-            SYSLOGERR("###response=%ld", LastResponseCode);
-            SYSLOGDBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
-            FGPRINT("responseCode %ld\n", LastResponseCode);
-            FGPRINT("Body Text: %s", (bodydata ? bodydata->str() : ""));
+            DPRNNN("HTTP response code = %ld, returning EIO", LastResponseCode);
+            DPRNINFO("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EIO;
         }
         break;
 
       case CURLE_WRITE_ERROR:
-        SYSLOGERR("### CURLE_WRITE_ERROR");
+        DPRN("### CURLE_WRITE_ERROR");
         sleep(2);
         break; 
 
       case CURLE_OPERATION_TIMEDOUT:
-        SYSLOGERR("### CURLE_OPERATION_TIMEDOUT");
+        DPRN("### CURLE_OPERATION_TIMEDOUT");
         sleep(2);
         break; 
 
       case CURLE_COULDNT_RESOLVE_HOST:
-        SYSLOGERR("### CURLE_COULDNT_RESOLVE_HOST");
+        DPRN("### CURLE_COULDNT_RESOLVE_HOST");
         sleep(2);
         break; 
 
       case CURLE_COULDNT_CONNECT:
-        SYSLOGERR("### CURLE_COULDNT_CONNECT");
+        DPRN("### CURLE_COULDNT_CONNECT");
         sleep(4);
         break; 
 
       case CURLE_GOT_NOTHING:
-        SYSLOGERR("### CURLE_GOT_NOTHING");
+        DPRN("### CURLE_GOT_NOTHING");
         sleep(4);
         break; 
 
       case CURLE_ABORTED_BY_CALLBACK:
-        SYSLOGERR("### CURLE_ABORTED_BY_CALLBACK");
+        DPRN("### CURLE_ABORTED_BY_CALLBACK");
         sleep(4);
         S3fsCurl::curl_times[hCurl] = time(0);
         break; 
 
       case CURLE_PARTIAL_FILE:
-        SYSLOGERR("### CURLE_PARTIAL_FILE");
+        DPRN("### CURLE_PARTIAL_FILE");
         sleep(4);
         break; 
 
       case CURLE_SEND_ERROR:
-        SYSLOGERR("### CURLE_SEND_ERROR");
+        DPRN("### CURLE_SEND_ERROR");
         sleep(2);
         break;
 
       case CURLE_RECV_ERROR:
-        SYSLOGERR("### CURLE_RECV_ERROR");
+        DPRN("### CURLE_RECV_ERROR");
         sleep(2);
         break;
 
@@ -1163,8 +1136,7 @@ int S3fsCurl::RequestPerform(FILE* file)
             break;
           }
         }
-        SYSLOGERR("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        FGPRINT("%s: curlCode: %i -- %s\n", program_name.c_str(), curlCode, curl_easy_strerror(curlCode));
+        DPRNCRIT("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
 
@@ -1172,13 +1144,13 @@ int S3fsCurl::RequestPerform(FILE* file)
       case CURLE_PEER_FAILED_VERIFICATION:
         first_pos = bucket.find_first_of(".");
         if(first_pos != string::npos){
-          FGPRINT("%s: curl returned a CURL_PEER_FAILED_VERIFICATION error\n", program_name.c_str());
-          FGPRINT("%s: security issue found: buckets with periods in their name are incompatible with https\n", program_name.c_str());
-          FGPRINT("%s: This check can be over-ridden by using the -o ssl_verify_hostname=0\n", program_name.c_str());
-          FGPRINT("%s: The certificate will still be checked but the hostname will not be verified.\n", program_name.c_str());
-          FGPRINT("%s: A more secure method would be to use a bucket name without periods.\n", program_name.c_str());
-        }else{
-          FGPRINT("%s: my_curl_easy_perform: curlCode: %i -- %s\n", program_name.c_str(), curlCode, curl_easy_strerror(curlCode));
+          FPRNNN("curl returned a CURL_PEER_FAILED_VERIFICATION error");
+          FPRNNN("security issue found: buckets with periods in their name are incompatible with http");
+          FPRNNN("This check can be over-ridden by using the -o ssl_verify_hostname=0");
+          FPRNNN("The certificate will still be checked but the hostname will not be verified.");
+          FPRNNN("A more secure method would be to use a bucket name without periods.");
+        }else
+          DPRNNN("my_curl_easy_perform: curlCode: %i -- %s", curlCode, curl_easy_strerror(curlCode));
         }
         exit(EXIT_FAILURE);
         break;
@@ -1186,12 +1158,12 @@ int S3fsCurl::RequestPerform(FILE* file)
 
       // This should be invalid since curl option HTTP FAILONERROR is now off
       case CURLE_HTTP_RETURNED_ERROR:
-        SYSLOGERR("### CURLE_HTTP_RETURNED_ERROR");
+        DPRN("### CURLE_HTTP_RETURNED_ERROR");
 
         if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
           return -EIO;
         }
-        SYSLOGERR("###response=%ld", LastResponseCode);
+        DPRN("HTTP response code =%ld", LastResponseCode);
 
         // Let's try to retrieve the 
         if(404 == LastResponseCode){
@@ -1204,13 +1176,13 @@ int S3fsCurl::RequestPerform(FILE* file)
 
       // Unknown CURL return code
       default:
-        SYSLOGERR("###curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
+        DPRNCRIT("###curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
     }
-    SYSLOGERR("###retrying...");
+    DPRNNN("### retrying...");
   }
-  SYSLOGERR("###giving up");
+  DPRN("### giving up");
   return -EIO;
 }
 
@@ -1272,14 +1244,14 @@ string S3fsCurl::CalcSignature(string method, string strMD5, string content_type
           continue;
         }
         // Too many write attempts
-        SYSLOGERR("Failure during BIO_write, returning null String");  
+        DPRNNN("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
         Signature.clear();
         return Signature;
 
       }else{
         // If not a retry then it is an error
-        SYSLOGERR("Failure during BIO_write, returning null String");  
+        DPRNNN("Failure during BIO_write, returning null String");  
         BIO_free_all(b64);
         Signature.clear();
         return Signature;
@@ -1300,7 +1272,7 @@ string S3fsCurl::CalcSignature(string method, string strMD5, string content_type
   // Flush the data
   ret = BIO_flush(b64);
   if(ret <= 0){ 
-    SYSLOGERR("Failure during BIO_flush, returning null String");  
+    DPRNNN("Failure during BIO_flush, returning null String");  
     BIO_free_all(b64);
     Signature.clear();
     return Signature;
@@ -1359,7 +1331,7 @@ bool S3fsCurl::GetUploadId(string& upload_id)
 
 int S3fsCurl::DeleteRequest(const char* tpath)
 {
-  FGPRINT("  S3fsCurl::DeleteRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1400,7 +1372,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 //
 bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath)
 {
-//FGPRINT("  S3fsCurl::PreHeadRequest [tpath=%s][bpath=%s][save=%s]\n", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
+  FPRNINFO("[tpath=%s][bpath=%s][save=%s]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
 
   if(!tpath){
     return false;
@@ -1447,7 +1419,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
 {
   int result;
 
-  FGPRINT("  S3fsCurl::HeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!PreHeadRequest(tpath)){
     return -1;
@@ -1485,7 +1457,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
 
 int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg)
 {
-  FGPRINT("  S3fsCurl::PutHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1548,8 +1520,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
-  FGPRINT("  copying... [path=%s]\n", tpath);
-  SYSLOGDBG("copy path=%s", tpath);
+  DPRNNN("copying... [path=%s]", tpath);
 
   int result = RequestPerform();
   delete bodydata;
@@ -1564,7 +1535,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   FILE*       file = NULL;
   int         fd2;
 
-  FGPRINT("  S3fsCurl::PutRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1572,13 +1543,12 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   if(-1 != fd){
     // duplicate fd
     if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
-      FGPRINT("S3fsCurl::PutRequest : Could not duplicate file discriptor(errno=%d)\n", errno);
-      SYSLOGERR("Could not duplicate file discriptor(errno=%d)", errno);
+      DPRN("Could not duplicate file discriptor(errno=%d)", errno);
       return -errno;
     }
   }else{
     // This case is creating zero byte obejct.(calling by create_file_object())
-    FGPRINT("  S3fsCurl::PutRequest : create zero byte file object.\n");
+    DPRNNN("create zero byte file object.");
   }
 
   if(!CreateCurlHandle(true)){
@@ -1651,8 +1621,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
     curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);             // Content-Length: 0
   }
 
-  FGPRINT("  uploading... [path=%s][fd=%d][size=%zd]\n", tpath, fd, (-1 != fd ? st.st_size : 0));
-  SYSLOGDBG("upload path=%s", tpath);
+  DPRNNN("uploading... [path=%s][fd=%d][size=%zd]", tpath, fd, (-1 != fd ? st.st_size : 0));
 
   int result = RequestPerform();
   delete bodydata;
@@ -1666,7 +1635,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
 
 int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
 {
-  FGPRINT("  S3fsCurl::PreGetRequest [tpath=%s][start=%zd][size=%zd]\n", SAFESTRPTR(tpath), start, size);
+  FPRNNN("[tpath=%s][start=%zd][size=%zd]", SAFESTRPTR(tpath), start, size);
 
   if(!tpath || -1 == fd || 0 > start || 0 >= size){
     return -1;
@@ -1722,7 +1691,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 {
   int result;
 
-  FGPRINT("  S3fsCurl::GetRequest [tpath=%s][start=%zd][size=%zd]\n", SAFESTRPTR(tpath), start, size);
+  FPRNNN("[tpath=%s][start=%zd][size=%zd]", SAFESTRPTR(tpath), start, size);
 
   if(!tpath){
     return -1;
@@ -1731,8 +1700,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
     return result;
   }
 
-  FGPRINT("  downloading... [path=%s][fd=%d]\n", tpath, fd);
-  SYSLOGDBG("LOCAL FD");
+  DPRNNN("downloading... [path=%s][fd=%d]", tpath, fd);
 
   result = RequestPerform();
   partdata.clear();
@@ -1742,7 +1710,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 
 int S3fsCurl::CheckBucket(void)
 {
-  FGPRINT("  S3fsCurl::CheckBucket\n");
+  FPRNNN("check a bucket.");
 
   if(!CreateCurlHandle(true)){
     return -1;
@@ -1783,7 +1751,7 @@ int S3fsCurl::CheckBucket(void)
 
 int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 {
-  FGPRINT("  S3fsCurl::ListBucketRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1836,7 +1804,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 //
 int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string& upload_id, bool ow_sse_flg)
 {
-  FGPRINT("  S3fsCurl::PreMultipartPostRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(!tpath){
     return -1;
@@ -1921,7 +1889,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
 
 int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, etaglist_t& parts)
 {
-  FGPRINT("  S3fsCurl::CompleteMultipartPostRequest [tpath=%s][parts=%zd]\n", SAFESTRPTR(tpath), parts.size());
+  FPRNNN("[tpath=%s][parts=%zd]", SAFESTRPTR(tpath), parts.size());
 
   if(!tpath){
     return -1;
@@ -1932,7 +1900,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   postContent += "<CompleteMultipartUpload>\n";
   for(int cnt = 0; cnt < (int)parts.size(); cnt++){
     if(0 == parts[cnt].length()){
-      FGPRINT("S3fsCurl::CompleteMultipartPostRequest : %d file part is not finished uploading.\n", cnt + 1);
+      DPRN("%d file part is not finished uploading.", cnt + 1);
       return -1;
     }
     postContent += "<Part>\n";
@@ -1994,7 +1962,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
 
 int S3fsCurl::MultipartListRequest(string& body)
 {
-  FGPRINT("  S3fsCurl::MultipartListRequest\n");
+  FPRNNN("list request(multipart)");
 
   if(!CreateCurlHandle(true)){
     return -1;
@@ -2057,8 +2025,7 @@ int S3fsCurl::MultipartListRequest(string& body)
 
 int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& upload_id)
 {
-  FGPRINT("  S3fsCurl::UploadMultipartPostSetup[tpath=%s][start=%zd][size=%zd][part=%d]\n", 
-          SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
+  FPRNNN("[tpath=%s][start=%zd][size=%zd][part=%d]", SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
 
   if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
     return -1;
@@ -2067,8 +2034,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   // make md5 and file pointer
   partdata.etag = md5sum(partdata.fd, partdata.startpos, partdata.size);
   if(partdata.etag.empty()){
-    FGPRINT("S3fsCurl::UploadMultipartPostSetup: Could not make md5 for file(part %d)\n", part_num);
-    SYSLOGERR("Could not make md5 for file(part %d)", part_num);
+    DPRN("Could not make md5 for file(part %d)", part_num);
     return -1;
   }
 
@@ -2122,8 +2088,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string
 {
   int result;
 
-  FGPRINT("  S3fsCurl::UploadMultipartPostRequest[tpath=%s][start=%zd][size=%zd][part=%d]\n", 
-          SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
+  FPRNNN("[tpath=%s][start=%zd][size=%zd][part=%d]", SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
 
   // setup
   if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
@@ -2150,7 +2115,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string
 
 int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta, bool ow_sse_flg)
 {
-  FGPRINT("  S3fsCurl::CopyMultipartPostRequest [from=%s][to=%s][part=%d]\n", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
+  FPRNNN("[from=%s][to=%s][part=%d]", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
 
   if(!from || !to){
     return -1;
@@ -2220,8 +2185,7 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
   // request
-  FGPRINT("  copying... [from=%s][to=%s][part=%d]\n", from, to, part_num);
-  SYSLOGDBG("copy path from=%s, to=%s, part=%d", from, to, part_num);
+  DPRNNN("copying... [from=%s][to=%s][part=%d]", from, to, part_num);
 
   int result = RequestPerform();
   if(0 == result){
@@ -2248,7 +2212,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   etaglist_t     list;
   stringstream   strrange;
 
-  FGPRINT("  S3fsCurl::MultipartHeadRequest [tpath=%s]\n", SAFESTRPTR(tpath));
+  FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
   if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, ow_sse_flg))){
     return result;
@@ -2287,27 +2251,25 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   off_t          chunk;
   unsigned char* buf;
 
-  FGPRINT("  S3fsCurl::MultipartUploadRequest [tpath=%s][fd=%d]\n", SAFESTRPTR(tpath), fd);
+  FPRNNN("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
-    FGPRINT("S3fsCurl::MultipartUploadRequest : Cloud not duplicate file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Cloud not duplicate file discriptor(errno=%d)", errno);
+    DPRN("Cloud not duplicate file discriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
     }
     return -errno;
   }
   if(-1 == fstat(fd2, &st)){
-    FGPRINT("S3fsCurl::MultipartUploadRequest: Invalid file discriptor(errno=%d)\n", errno);
-    SYSLOGERR("Invalid file discriptor(errno=%d)", errno);
+    DPRN("Invalid file discriptor(errno=%d)", errno);
     fclose(file);
     return -errno;
   }
 
   // make Tempolary buf(maximum size + 4)
   if(NULL == (buf = (unsigned char*)malloc(sizeof(unsigned char) * (MULTIPART_SIZE + 4)))){
-    SYSLOGCRIT("Could not allocate memory for buffer\n");
+    DPRNCRIT("Could not allocate memory for buffer");
     fclose(file);
     S3FS_FUSE_EXIT();
     return -ENOMEM;
@@ -2332,8 +2294,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
 
     // upload part
     if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
-      FGPRINT("S3fsCurl::MultipartUploadRequest: failed uploading part(%d)\n", result);
-      SYSLOGERR("failed uploading part(%d)", result);
+      DPRN("failed uploading part(%d)", result);
       free(buf);
       fclose(file);
       return result;
@@ -2359,7 +2320,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   etaglist_t     list;
   stringstream   strrange;
 
-  FGPRINT("  S3fsCurl::MultipartRenameRequest [from=%s][to=%s]\n", SAFESTRPTR(from), SAFESTRPTR(to));
+  FPRNNN("[from=%s][to=%s]", SAFESTRPTR(from), SAFESTRPTR(to));
 
   string srcresource;
   string srcurl;
@@ -2490,8 +2451,7 @@ int S3fsMultiCurl::MultiPerform(void)
     } while(curlm_code == CURLM_CALL_MULTI_PERFORM);
 
     if(curlm_code != CURLM_OK) {
-      FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_perform code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
-      SYSLOGERR("curl_multi_perform code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+      DPRNNN("curl_multi_perform code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
     }
 
     // Set timer when still running
@@ -2505,8 +2465,7 @@ int S3fsMultiCurl::MultiPerform(void)
       FD_ZERO(&e_fd);
 
       if(CURLM_OK != (curlm_code = curl_multi_timeout(hMulti, &milliseconds))){
-        FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_timeout code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
-        SYSLOGERR("curl_multi_timeout code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+        DPRNNN("curl_multi_timeout code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
       }
       if(milliseconds < 0){
         milliseconds = 50;
@@ -2518,13 +2477,11 @@ int S3fsMultiCurl::MultiPerform(void)
         timeout.tv_usec = 1000 * milliseconds % 1000000;
 
         if(CURLM_OK != (curlm_code = curl_multi_fdset(hMulti, &r_fd, &w_fd, &e_fd, &max_fd))){
-          FGPRINT("S3fsMultiCurl::MultiPerform: curl_multi_fdset code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
-          SYSLOGERR("curl_multi_fdset code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+          DPRN("curl_multi_fdset code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
           return -EIO;
         }
         if(-1 == select(max_fd + 1, &r_fd, &w_fd, &e_fd, &timeout)){
-          FGPRINT("S3fsMultiCurl::MultiPerform: failed select - errno(%d)\n", errno);
-          SYSLOGERR("failed select - errno(%d)", errno);
+          DPRN("failed select - errno(%d)", errno);
           return -errno;
         }
       }
@@ -2544,8 +2501,7 @@ int S3fsMultiCurl::MultiRead(void)
 
   while(NULL != (msg = curl_multi_info_read(hMulti, &remaining_messages))){
     if(CURLMSG_DONE != msg->msg){
-      FGPRINT("S3fsMultiCurl::MultiRead: curl_multi_info_read code: %d\n", msg->msg);
-      SYSLOGERR("curl_multi_info_read code: %d", msg->msg);
+      DPRN("curl_multi_info_read code: %d", msg->msg);
       return -EIO;
     }
     hCurl    = msg->easy_handle;
@@ -2557,17 +2513,15 @@ int S3fsMultiCurl::MultiRead(void)
       if(s3fscurl->GetResponseCode(responseCode) && 400 > responseCode){
         // add into stat cache
         if(SuccessCallback && !SuccessCallback(s3fscurl)){
-          FGPRINT("S3fsMultiCurl::MultiRead: error from callback function(%s).\n", s3fscurl->base_path.c_str());
+          DPRNNN("S3fsMultiCurl::MultiRead: error from callback function(%s).", s3fscurl->base_path.c_str());
         }
       }else{
         // This case is directory object("dir", "non dir object", "_$folder$", etc)
-        //FGPRINT("S3fsMultiCurl::MultiRead: failed a request(%s)\n", s3fscurl->base_path.c_str());
+        DPRNINFO("S3fsMultiCurl::MultiRead: failed a request(%s)", s3fscurl->base_path.c_str());
       }
 
     }else{
-      FGPRINT("S3fsMultiCurl::MultiRead: failed to read(remaining: %i code: %d  msg: %s), so retry this.\n",
-              remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
-      SYSLOGDBGERR("failed to read(remaining: %i code: %d  msg: %s), so retry this.",
+      DPRNNN("failed to read(remaining: %i code: %d  msg: %s), so retry this.",
               remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
 
       // For retry
@@ -2594,7 +2548,7 @@ int S3fsMultiCurl::Request(void)
   int       result;
   CURLMcode curlm_code;
 
-  FGPRINT("  S3fsMultiCurl::Request[count=%ld]\n", cMap_all.size());
+  FPRNNN("[count=%ld]", cMap_all.size());
 
   if(hMulti){
     Clear();
@@ -2620,8 +2574,7 @@ int S3fsMultiCurl::Request(void)
       S3fsCurl* s3fscurl = (*iter).second;
 
       if(CURLM_OK != (curlm_code = curl_multi_add_handle(hMulti, hCurl))){
-        FGPRINT("S3fsMultiCurl::Request: curl_multi_add_handle code: %d msg: %s\n", curlm_code, curl_multi_strerror(curlm_code));
-        SYSLOGERR("curl_multi_add_handle code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
+        DPRN("curl_multi_add_handle code: %d msg: %s", curlm_code, curl_multi_strerror(curlm_code));
         Clear();
         return -EIO;
       }
@@ -2703,7 +2656,7 @@ unsigned char* md5hexsum(int fd, off_t start, off_t size)
       break;
     }else if(-1 == bytes){
       // error
-      FGPRINT("md5hexsum: : file read error(%d)\n", errno);
+      DPRNNN("file read error(%d)", errno);
       free(result);
       return NULL;
     }

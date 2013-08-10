@@ -83,13 +83,11 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
   // stat path
   string sfile_path;
   if(!CacheFileStat::MakeCacheFileStatPath(path, sfile_path, false)){
-    //FGPRINT("CacheFileStat::DeleteCacheFileStat: failed to create cache stat file path(%s)\n", path.c_str());
-    //SYSLOGERR("failed to create cache stat file path(%s)", path.c_str());
+    DPRNINFO("failed to create cache stat file path(%s)", path);
     return false;
   }
   if(0 != unlink(sfile_path.c_str())){
-    //FGPRINT("CacheFileStat::DeleteCacheFileStat: failed to delete file(%s): errno=%d\n", path, errno);
-    //SYSLOGERR("failed to delete file(%s): errno=%d", path, errno);
+    DPRNINFO("failed to delete file(%s): errno=%d", path, errno);
     return false;
   }
   return true;
@@ -140,34 +138,30 @@ bool CacheFileStat::Open(void)
   // stat path
   string sfile_path;
   if(!CacheFileStat::MakeCacheFileStatPath(path.c_str(), sfile_path, true)){
-    FGPRINT("CacheFileStat::Open: failed to create cache stat file path(%s)\n", path.c_str());
-    SYSLOGERR("failed to create cache stat file path(%s)", path.c_str());
+    DPRN("failed to create cache stat file path(%s)", path.c_str());
     return false;
   }
   // open
   if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
-    FGPRINT2("CacheFileStat::Open: failed to open cache stat file(%s) - errno(%d)\n", path.c_str(), errno);
-    //SYSLOGERR("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
+    DPRNINFO("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
     return false;
   }
   // lock
   if(-1 == flock(fd, LOCK_EX)){
-    FGPRINT("CacheFileStat::Open: failed to lock cache stat file(%s) - errno(%d)\n", path.c_str(), errno);
-    SYSLOGERR("failed to lock cache stat file(%s) - errno(%d)", path.c_str(), errno);
+    DPRN("failed to lock cache stat file(%s) - errno(%d)", path.c_str(), errno);
     close(fd);
     fd = -1;
     return false;
   }
   // seek top
   if(0 != lseek(fd, 0, SEEK_SET)){
-    FGPRINT("CacheFileStat::Open: failed to lseek cache stat file(%s) - errno(%d)\n", path.c_str(), errno);
-    SYSLOGERR("failed to lseek cache stat file(%s) - errno(%d)", path.c_str(), errno);
+    DPRN("failed to lseek cache stat file(%s) - errno(%d)", path.c_str(), errno);
     flock(fd, LOCK_UN);
     close(fd);
     fd = -1;
     return false;
   }
-  FGPRINT2("    CacheFileStat::Open: file locked(%s - %s)\n", path.c_str(), sfile_path.c_str());
+  DPRNINFO("file locked(%s - %s)", path.c_str(), sfile_path.c_str());
 
   return true;
 }
@@ -180,15 +174,13 @@ bool CacheFileStat::Release(void)
   }
   // unlock
   if(-1 == flock(fd, LOCK_UN)){
-    FGPRINT("CacheFileStat::Open: failed to unlock cache stat file(%s) - errno(%d)\n", path.c_str(), errno);
-    SYSLOGERR("failed to unlock cache stat file(%s) - errno(%d)", path.c_str(), errno);
+    DPRN("failed to unlock cache stat file(%s) - errno(%d)", path.c_str(), errno);
     return false;
   }
-  FGPRINT2("    CacheFileStat::Open: file unlocked(%s)\n", path.c_str());
+  DPRNINFO("file unlocked(%s)", path.c_str());
 
   if(-1 == close(fd)){
-    FGPRINT("CacheFileStat::Open: failed to close cache stat file(%s) - errno(%d)\n", path.c_str(), errno);
-    SYSLOGERR("failed to close cache stat file(%s) - errno(%d)", path.c_str(), errno);
+    DPRN("failed to close cache stat file(%s) - errno(%d)", path.c_str(), errno);
     return false;
   }
   fd = -1;
@@ -391,8 +383,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
 
     string strall = ssall.str();
     if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
-      FGPRINT("PageList::Serialize: failed to write stats(%d)\n", errno);
-      SYSLOGERR("failed to write stats(%d)", errno);
+      DPRN("failed to write stats(%d)", errno);
       return false;
     }
 
@@ -403,8 +394,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
     if(-1 == fstat(file.GetFd(), &st)){
-      FGPRINT("PageList::Serialize: fstat is failed. errno(%d)\n", errno);
-      SYSLOGERR("fstat is failed. errno(%d)", errno);
+      DPRN("fstat is failed. errno(%d)", errno);
       return false;
     }
     if(0 >= st.st_size){
@@ -414,15 +404,13 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     }
     char* ptmp;
     if(NULL == (ptmp = (char*)calloc(st.st_size + 1, sizeof(char)))){
-      FGPRINT("PageList::Serialize: could not allocate memory.\n");
-      SYSLOGERR("could not allocate memory.");
+      DPRNCRIT("could not allocate memory.");
       S3FS_FUSE_EXIT();
       return false;
     }
     // read from file
     if(0 >= pread(file.GetFd(), ptmp, st.st_size, 0)){
-      FGPRINT("PageList::Serialize: failed to read stats(%d)\n", errno);
-      SYSLOGERR("failed to read stats(%d)", errno);
+      DPRN("failed to read stats(%d)", errno);
       free(ptmp);
       return false;
     }
@@ -435,8 +423,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
 
     // load(size)
     if(!getline(ssall, oneline, '\n')){
-      FGPRINT("PageList::Serialize: failed to parse stats.\n");
-      SYSLOGERR("failed to parse stats.");
+      DPRN("failed to parse stats.");
       return false;
     }
     size_t total = static_cast<size_t>(atoi(oneline.c_str()));
@@ -468,16 +455,14 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       SetInit(offset, size, is_init);
     }
     if(is_err){
-      FGPRINT("PageList::Serialize: failed to parse stats.\n");
-      SYSLOGERR("failed to parse stats.");
+      DPRN("failed to parse stats.");
       Clear();
       return false;
     }
 
     // check size
     if(total != Size()){
-      FGPRINT("PageList::Serialize: different size(%zd - %zd).\n", total, Size());
-      SYSLOGERR("different size(%zd - %zd).", total, Size());
+      DPRN("different size(%zd - %zd).", total, Size());
       Clear();
       return false;
     }
@@ -489,11 +474,11 @@ void PageList::Dump(void)
 {
   int cnt = 0;
 
-  FGPRINT2("  FdEntity::Dump = {\n");
+  DPRNINFO("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++, cnt++){
-    FGPRINT2("    [%08d] -> {%014zd - %014zd : %s}\n", cnt, (*iter)->offset, (*iter)->bytes, (*iter)->init ? "true" : "false");
+    DPRNINFO("  [%08d] -> {%014zd - %014zd : %s}", cnt, (*iter)->offset, (*iter)->bytes, (*iter)->init ? "true" : "false");
   }
-  FGPRINT2("  }\n");
+  DPRNINFO("}");
 }
 
 //------------------------------------------------
@@ -506,8 +491,7 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
     pthread_mutex_init(&fdent_lock, NULL);
     is_lock_init = true;
   }catch(exception& e){
-    FGPRINT("FdEntity::FdEntity: failed to init mutex\n");
-    SYSLOGERR("failed to init mutex");
+    DPRNCRIT("failed to init mutex");
   }
 }
 
@@ -519,8 +503,7 @@ FdEntity::~FdEntity()
     try{
       pthread_mutex_destroy(&fdent_lock);
     }catch(exception& e){
-      FGPRINT("FdEntity::~FdEntity: failed to destroy mutex\n");
-      SYSLOGERR("failed to destroy mutex");
+      DPRNCRIT("failed to destroy mutex");
     }
     is_lock_init = false;
   }
@@ -534,8 +517,7 @@ void FdEntity::Clear(void)
     {
       CacheFileStat cfstat(path.c_str());
       if(!pagelist.Serialize(cfstat, true)){
-        FGPRINT("FdEntity::Clear: failed to save cache stat file(%s).\n", path.c_str());
-        SYSLOGERR("failed to save cache stat file(%s).", path.c_str());
+        DPRN("failed to save cache stat file(%s).", path.c_str());
       }
     }
     fclose(file);
@@ -551,7 +533,7 @@ void FdEntity::Clear(void)
 
 void FdEntity::Close(void)
 {
-  FGPRINT2("  FdEntity::Close[path=%s][fd=%d][refcnt=%d]\n", path.c_str(), fd, (-1 != fd ? refcnt - 1 : refcnt));
+  FPRNINFO("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt - 1 : refcnt));
 
   if(-1 != fd){
     AutoLock auto_lock(&fdent_lock);
@@ -563,8 +545,7 @@ void FdEntity::Close(void)
       {
         CacheFileStat cfstat(path.c_str());
         if(!pagelist.Serialize(cfstat, true)){
-          FGPRINT("FdEntity::Close: failed to save cache stat file(%s).\n", path.c_str());
-          SYSLOGERR("failed to save cache stat file(%s).", path.c_str());
+          DPRN("failed to save cache stat file(%s).", path.c_str());
         }
       }
       fclose(file);
@@ -576,7 +557,7 @@ void FdEntity::Close(void)
 
 int FdEntity::Dup(void)
 {
-  FGPRINT2("  FdEntity::Dup[path=%s][fd=%d][refcnt=%d]\n", path.c_str(), fd, (-1 != fd ? refcnt + 1 : refcnt));
+  FPRNINFO("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt + 1 : refcnt));
 
   if(-1 != fd){
     AutoLock auto_lock(&fdent_lock);
@@ -592,7 +573,7 @@ int FdEntity::Open(ssize_t size, time_t time)
   bool is_truncate    = false;  // need to truncate
   bool init_value     = false;  // value for pagelist
 
-  FGPRINT2("  FdEntity::Open[path=%s][fd=%d][size=%zd][time=%zd]\n", path.c_str(), fd, size, time);
+  FPRNINFO("[path=%s][fd=%d][size=%zd][time=%zd]", path.c_str(), fd, size, time);
 
   if(-1 != fd){
     // already opened, needs to increment refcnt.
@@ -613,8 +594,7 @@ int FdEntity::Open(ssize_t size, time_t time)
         struct stat st;
         memset(&st, 0, sizeof(struct stat));
         if(-1 == fstat(fd, &st)){
-          FGPRINT("FdEntity::Open: fstat is failed. errno(%d)\n", errno);
-          SYSLOGERR("fstat is failed. errno(%d)", errno);
+          DPRN("fstat is failed. errno(%d)", errno);
           fclose(file);
           file = NULL;
           fd   = -1;
@@ -634,8 +614,7 @@ int FdEntity::Open(ssize_t size, time_t time)
       }else{
         // file does not exist -> create & open
         if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
-          FGPRINT("FdEntity::Open: failed to open file(%s). errno(%d)\n", cachepath.c_str(), errno);
-          SYSLOGERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
+          DPRN("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
           return (0 == errno ? -EIO : -errno);
         }
         if(-1 == size){
@@ -647,8 +626,7 @@ int FdEntity::Open(ssize_t size, time_t time)
       }
       // make file pointer(for being same tmpfile)
       if(NULL == (file = fdopen(fd, "wb"))){
-        FGPRINT("FdEntity::Open: failed to get fileno(%s). errno(%d)\n", cachepath.c_str(), errno);
-        SYSLOGERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
+        DPRN("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
         close(fd);
         fd = -1;
         return (0 == errno ? -EIO : -errno);
@@ -657,8 +635,7 @@ int FdEntity::Open(ssize_t size, time_t time)
     }else{
       // open temporary file
       if(NULL == (file = tmpfile()) || -1 ==(fd = fileno(file))){
-        FGPRINT("FdEntity::Open: failed to open tmp file. err(%d)\n", errno);
-        SYSLOGERR("failed to open tmp file. err(%d)", errno);
+        DPRN("failed to open tmp file. err(%d)", errno);
         if(file){
           fclose(file);
           file = NULL;
@@ -676,8 +653,7 @@ int FdEntity::Open(ssize_t size, time_t time)
   // truncate
   if(is_truncate){
     if(0 != ftruncate(fd, size) || 0 != fsync(fd)){
-      FGPRINT("FdEntity::Open: ftruncate(%s) or fsync returned err(%d)\n", cachepath.c_str(), errno);
-      SYSLOGERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
+      DPRN("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
       fclose(file);
       file = NULL;
       fd   = -1;
@@ -688,8 +664,7 @@ int FdEntity::Open(ssize_t size, time_t time)
   // set mtime
   if(-1 != time){
     if(0 != SetMtime(time)){
-      FGPRINT("FdEntity::Open: failed to set mtime. errno(%d)\n", errno);
-      SYSLOGERR("failed to set mtime. errno(%d)", errno);
+      DPRN("failed to set mtime. errno(%d)", errno);
       fclose(file);
       file = NULL;
       fd   = -1;
@@ -712,7 +687,7 @@ int FdEntity::Open(ssize_t size, time_t time)
 
 int FdEntity::SetMtime(time_t time)
 {
-  FGPRINT2("  FdEntity::SetMtime[path=%s][fd=%d][time=%zd]\n", path.c_str(), fd, time);
+  FPRNINFO("[path=%s][fd=%d][time=%zd]", path.c_str(), fd, time);
 
   if(-1 == time){
     return 0;
@@ -726,8 +701,7 @@ int FdEntity::SetMtime(time_t time)
     tv[1].tv_sec = tv[0].tv_sec;
     tv[1].tv_usec= 0L;
     if(-1 == futimes(fd, tv)){
-      FGPRINT("FdEntity::Set: futimes failed. errno(%d)\n", errno);
-      SYSLOGERR("futimes failed. errno(%d)", errno);
+      DPRN("futimes failed. errno(%d)", errno);
       return -errno;
     }
   }else if(0 < cachepath.size()){
@@ -736,8 +710,7 @@ int FdEntity::SetMtime(time_t time)
     n_mtime.modtime = time;
     n_mtime.actime  = time;
     if(-1 == utime(cachepath.c_str(), &n_mtime)){
-      //FGPRINT("FdEntity::Set: utime failed. errno(%d)\n", errno);
-      //SYSLOGERR("utime failed. errno(%d)", errno);
+      DPRNINFO("utime failed. errno(%d)", errno);
       return -errno;
     }
   }
@@ -775,8 +748,7 @@ bool FdEntity::GetStats(struct stat& st)
 
   memset(&st, 0, sizeof(struct stat)); 
   if(-1 == fstat(fd, &st)){
-    FGPRINT("FdEntity::GetStats: fstat failed. errno(%d)\n", errno);
-    SYSLOGERR("fstat failed. errno(%d)", errno);
+    DPRN("fstat failed. errno(%d)", errno);
     return false;
   }
   return true;
@@ -784,7 +756,7 @@ bool FdEntity::GetStats(struct stat& st)
 
 bool FdEntity::SetAllStatus(bool is_enable)
 {
-  FGPRINT2("  FdEntity::SetAllStatus[path=%s][fd=%d][%s]\n", path.c_str(), fd, is_enable ? "enable" : "disable");
+  FPRNINFO("[path=%s][fd=%d][%s]", path.c_str(), fd, is_enable ? "enable" : "disable");
 
   if(-1 == fd){
     return false;
@@ -795,8 +767,7 @@ bool FdEntity::SetAllStatus(bool is_enable)
   struct stat st;
   memset(&st, 0, sizeof(struct stat));
   if(-1 == fstat(fd, &st)){
-    FGPRINT("FdEntity::SetAllEnable: fstat is failed. errno(%d)\n", errno);
-    SYSLOGERR("fstat is failed. errno(%d)", errno);
+    DPRN("fstat is failed. errno(%d)", errno);
     return false;
   }
   // Reinit
@@ -809,7 +780,7 @@ int FdEntity::Load(off_t start, ssize_t size)
 {
   int result = 0;
 
-  FGPRINT2("  FdEntity::Load[path=%s][fd=%d][offset=%zd][size=%zd]\n", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -856,7 +827,7 @@ bool FdEntity::LoadFull(size_t* size, bool force_load)
 {
   int result;
 
-  FGPRINT2("  FdEntity::LoadFull[path=%s][fd=%d]\n", path.c_str(), fd);
+  FPRNINFO("[path=%s][fd=%d]", path.c_str(), fd);
 
   if(-1 == fd){
     if(0 != Open()){
@@ -870,8 +841,7 @@ bool FdEntity::LoadFull(size_t* size, bool force_load)
   // TODO: possibly do background for delay loading
   //
   if(0 != (result = Load(0, pagelist.Size()))){
-    FGPRINT("FdEntity::FullDownload: could not download, result(%d)\n", result);
-    SYSLOGERR("could not download, result(%d)", result);
+    DPRN("could not download, result(%d)", result);
     return false;
   }
   if(is_modify){
@@ -888,7 +858,7 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
 {
   int result;
 
-  FGPRINT2("  FdEntity::RowFlush[tpath=%s][path=%s][fd=%d]\n", SAFESTRPTR(tpath), path.c_str(), fd);
+  FPRNINFO("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd);
 
   if(-1 == fd){
     return -EBADF;
@@ -921,8 +891,7 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
 
   // seek to head of file.
   if(0 != lseek(fd, 0, SEEK_SET)){
-    FGPRINT("FdEntity::RowFlush: lseek error(%d)\n", errno);
-    SYSLOGERR("lseek error(%d)\n", errno);
+    DPRN("lseek error(%d)", errno);
     return -errno;
   }
 
@@ -943,8 +912,7 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
 
   // seek to head of file.
   if(0 == result && 0 != lseek(fd, 0, SEEK_SET)){
-    FGPRINT("FdEntity::RowFlush: lseek error(%d)\n", errno);
-    SYSLOGERR("lseek error(%d)\n", errno);
+    DPRN("lseek error(%d)", errno);
     return -errno;
   }
 
@@ -959,7 +927,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   int     result;
   ssize_t rsize;
 
-  FGPRINT2("  FdEntity::Read[path=%s][fd=%d][offset=%zd][size=%zd]\n", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -970,8 +938,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   }
   // Loading
   if(0 != (result = Load(start, size))){
-    FGPRINT("FdEntity::Read: could not download. start(%zd), size(%zd), errno(%d)\n", start, size, result);
-    SYSLOGERR("could not download. start(%zd), size(%zd), errno(%d)", start, size, result);
+    DPRN("could not download. start(%zd), size(%zd), errno(%d)", start, size, result);
     return -EIO;
   }
   // Reading
@@ -979,8 +946,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     AutoLock auto_lock(&fdent_lock);
 
     if(-1 == (rsize = pread(fd, bytes, size, start))){
-      FGPRINT("FdEntity::Read: pread failed. errno(%d)\n", errno);
-      SYSLOGERR("pread failed. errno(%d)", errno);
+      DPRN("pread failed. errno(%d)", errno);
       return -errno;
     }
   }
@@ -992,7 +958,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   int     result;
   ssize_t wsize;
 
-  FGPRINT2("  FdEntity::Write[path=%s][fd=%d][offset=%zd][size=%zd]\n", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -1000,8 +966,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
   // Load unitialized area which starts from 0 to (start + size) before writing.
   if(0 != (result = Load(0, start))){
-    FGPRINT("FdEntity::Write: failed to load uninitialized area before writing(errno=%d)\n", result);
-    SYSLOGERR("failed to load uninitialized area before writing(errno=%d)", result);
+    DPRN("failed to load uninitialized area before writing(errno=%d)", result);
     return static_cast<ssize_t>(result);
   }
 
@@ -1010,8 +975,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     AutoLock auto_lock(&fdent_lock);
 
     if(-1 == (wsize = pwrite(fd, bytes, size, start))){
-      FGPRINT("FdEntity::Write: pwrite failed. errno(%d)\n", errno);
-      SYSLOGERR("pwrite failed. errno(%d)", errno);
+      DPRN("pwrite failed. errno(%d)", errno);
       return -errno;
     }
     if(!is_modify){
@@ -1071,7 +1035,7 @@ bool FdManager::DeleteCacheDirectory(void)
 
 int FdManager::DeleteCacheFile(const char* path)
 {
-  FGPRINT2("  FdManager::DeleteCacheFile[path=%s]\n", SAFESTRPTR(path));
+  FPRNINFO("[path=%s]", SAFESTRPTR(path));
 
   if(!path){
     return -EIO;
@@ -1085,13 +1049,11 @@ int FdManager::DeleteCacheFile(const char* path)
   }
   int result = 0;
   if(0 != unlink(cache_path.c_str())){
-    //FGPRINT("FdManager::DeleteCacheFile: failed to delete file(%s): errno=%d\n", path, errno);
-    //SYSLOGERR("failed to delete file(%s): errno=%d", path, errno);
+    DPRNINFO("failed to delete file(%s): errno=%d", path, errno);
     result = -errno;
   }
   if(!CacheFileStat::DeleteCacheFileStat(path)){
-    //FGPRINT("FdManager::DeleteCacheFile: failed to delete stat file(%s): errno=%d\n", path, errno);
-    //SYSLOGERR("failed to delete stat file(%s): errno=%d", path, errno);
+    DPRNINFO("failed to delete stat file(%s): errno=%d", path, errno);
     if(0 != errno){
       result = -errno;
     }else{
@@ -1130,8 +1092,7 @@ FdManager::FdManager()
       FdManager::is_lock_init = true;
     }catch(exception& e){
       FdManager::is_lock_init = false;
-      FGPRINT("FdManager::FdManager: failed to init mutex\n");
-      SYSLOGERR("failed to init mutex");
+      DPRNCRIT("failed to init mutex");
     }
   }else{
     assert(false);
@@ -1151,8 +1112,7 @@ FdManager::~FdManager()
       try{
         pthread_mutex_destroy(&FdManager::fd_manager_lock);
       }catch(exception& e){
-        FGPRINT("FdManager::FdManager: failed to init mutex\n");
-        SYSLOGERR("failed to init mutex");
+        DPRNCRIT("failed to init mutex");
       }
       FdManager::is_lock_init = false;
     }
@@ -1163,7 +1123,7 @@ FdManager::~FdManager()
 
 FdEntity* FdManager::GetFdEntity(const char* path)
 {
-  FGPRINT2("  FdManager::GetFdEntity[path=%s]\n", SAFESTRPTR(path));
+  FPRNINFO("[path=%s]", SAFESTRPTR(path));
 
   if(!path || '\0' == path[0]){
     return NULL;
@@ -1181,7 +1141,7 @@ FdEntity* FdManager::Open(const char* path, ssize_t size, time_t time, bool forc
 {
   FdEntity* ent;
 
-  FGPRINT2("  FdManager::Open[path=%s][size=%zd][time=%zd]\n", SAFESTRPTR(path), size, time);
+  FPRNINFO("[path=%s][size=%zd][time=%zd]", SAFESTRPTR(path), size, time);
 
   if(!path || '\0' == path[0]){
     return NULL;
@@ -1198,8 +1158,7 @@ FdEntity* FdManager::Open(const char* path, ssize_t size, time_t time, bool forc
     // not found
     string cache_path = "";
     if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
-      FGPRINT("FdManager::GetFd: failed to make cache path for object(%s).\n", path);
-      SYSLOGERR("failed to make cache path for object(%s).", path);
+      DPRN("failed to make cache path for object(%s).", path);
       return NULL;
     }
     // make new obj
@@ -1219,7 +1178,7 @@ FdEntity* FdManager::Open(const char* path, ssize_t size, time_t time, bool forc
 
 bool FdManager::Close(FdEntity* ent)
 {
-  FGPRINT2("  FdManager::Close[ent->file=%s][ent->fd=%d]\n", ent ? ent->GetPath() : "", ent ? ent->GetFd() : -1);
+  FPRNINFO("[ent->file=%s][ent->fd=%d]", ent ? ent->GetPath() : "", ent ? ent->GetFd() : -1);
 
   AutoLock auto_lock(&FdManager::fd_manager_lock);
 

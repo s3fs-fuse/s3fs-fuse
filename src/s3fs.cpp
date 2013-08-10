@@ -305,7 +305,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   bool         forcedir = false;
   string::size_type Pos;
 
-//FGPRINT("   get_object_attribute[path=%s]\n", path);
+  FPRNINFO("[path=%s]", path);
 
   if(!path || '\0' == path[0]){
     return -ENOENT;
@@ -412,20 +412,20 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   if(0 != StatCache::getStatCacheData()->GetCacheSize()){
     // add into stat cache
     if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
-      FGPRINT("   get_object_attribute: failed adding stat cache [path=%s]\n", strpath.c_str());
+      DPRN("failed adding stat cache [path=%s]", strpath.c_str());
       return -ENOENT;
     }
     if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
       // There is not in cache.(why?) -> retry to convert.
       if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-        FGPRINT("   get_object_attribute: failed convert headers to stat[path=%s]\n", strpath.c_str());
+        DPRN("failed convert headers to stat[path=%s]", strpath.c_str());
         return -ENOENT;
       }
     }
   }else{
     // cache size is Zero -> only convert.
     if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-      FGPRINT("   get_object_attribute: failed convert headers to stat[path=%s]\n", strpath.c_str());
+      DPRN("failed convert headers to stat[path=%s]", strpath.c_str());
       return -ENOENT;
     }
   }
@@ -449,7 +449,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
   struct stat* pst = (pstbuf ? pstbuf : &st);
   struct fuse_context* pcxt;
 
-//FGPRINT("  check_object_access[path=%s]\n", path);
+  FPRNINFO("[path=%s]", path);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -521,7 +521,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
   struct stat* pst = (pstbuf ? pstbuf : &st);
   struct fuse_context* pcxt;
 
-//FGPRINT("  check_object_owner[path=%s]\n", path);
+  FPRNINFO("[path=%s]", path);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -553,7 +553,7 @@ static int check_parent_object_access(const char* path, int mask)
   string parent;
   int result;
 
-//FGPRINT("  check_parent_object_access[path=%s]\n", path);
+  FPRNINFO("[path=%s]", path);
 
   if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
     // path is mount point.
@@ -590,7 +590,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
   struct stat stobj;
   FdEntity*   ent;
 
-  FGPRINT("   get_local_fent[path=%s]\n", path);
+  FPRNNN("[path=%s]", path);
 
   if(0 != get_object_attribute(path, &stobj)){
     return NULL;
@@ -601,14 +601,12 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
   bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
   if(NULL == (ent = FdManager::get()->Open(path, stobj.st_size, mtime, force_tmpfile, true))){
-    FGPRINT("  get_local_fent: Coult not open file. errno(%d)\n", errno);
-    SYSLOGERR("Coult not open file. errno(%d)", errno);
+    DPRN("Coult not open file. errno(%d)", errno);
     return NULL;
   }
   // load
   if(is_load && !ent->LoadFull()){
-    FGPRINT("  get_local_fent: Coult not load file. errno(%d)\n", errno);
-    SYSLOGERR("Coult not load file. errno(%d)", errno);
+    DPRN("Coult not load file. errno(%d)", errno);
     FdManager::get()->Close(ent);
     return NULL;
   }
@@ -627,7 +625,7 @@ static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
   S3fsCurl    s3fscurl;
   struct stat buf;
 
-  FGPRINT("   put_headers[path=%s]\n", path);
+  FPRNNN("[path=%s]", path);
 
   // files larger than 5GB must be modified via the multipart interface
   // *** If there is not target object(a case of move command),
@@ -666,7 +664,7 @@ static int s3fs_getattr(const char* path, struct stat* stbuf)
 {
   int result;
 
-  FGPRINT("s3fs_getattr[path=%s]\n", path);
+  FPRN("[path=%s]", path);
 
   // check parent directory attribute.
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -698,15 +696,13 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   // Open
   FdEntity*   ent;
   if(NULL == (ent = get_local_fent(path))){
-    FGPRINT("s3fs_readlink: could not get fent(file=%s)\n", path);
-    SYSLOGERR("could not get fent(file=%s)", path);
+    DPRN("could not get fent(file=%s)", path);
     return -EIO;
   }
   // Get size
   size_t readsize;
   if(!ent->GetSize(readsize)){
-    FGPRINT("s3fs_readlink: could not get file size(file=%s)\n", path);
-    SYSLOGERR("could not get file size(file=%s)", path);
+    DPRN("could not get file size(file=%s)", path);
     FdManager::get()->Close(ent);
     return -EIO;
   }
@@ -716,8 +712,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   // Read
   ssize_t ressize;
   if(0 > (ressize = ent->Read(buf, 0, readsize))){
-    FGPRINT("s3fs_readlink: could not read file(file=%s, errno=%zd)\n", path, ressize);
-    SYSLOGERR("could not read file(file=%s, errno=%zd)", path, ressize);
+    DPRN("could not read file(file=%s, errno=%zd)", path, ressize);
     FdManager::get()->Close(ent);
     return static_cast<int>(ressize);
   }
@@ -731,7 +726,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
 // common function for creation of a plain object
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid)
 {
-  FGPRINT("   create_file_object[path=%s][mode=%d]\n", path, mode);
+  FPRNNN("[path=%s][mode=%d]", path, mode);
 
   headers_t meta;
   meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
@@ -750,15 +745,14 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers_t meta;
   struct fuse_context* pcxt;
 
-  FGPRINT("s3fs_mknod[path=%s][mode=0%o][dev=%lu]\n", path, mode, rdev);
+  FPRN("[path=%s][mode=0%o][dev=%lu]", path, mode, rdev);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
   }
 
   if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid))){
-    FGPRINT("s3fs_mknod: could not create object for special file(result=%d)\n", result);
-    SYSLOGERR("could not create object for special file(result=%d)", result);
+    DPRN("could not create object for special file(result=%d)", result);
     return result;
   }
   StatCache::getStatCacheData()->DelStat(path);
@@ -772,7 +766,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
   headers_t meta;
   struct fuse_context* pcxt;
 
-  FGPRINT("s3fs_create[path=%s][mode=%d][flags=%d]\n", path, mode, fi->flags);
+  FPRN("[path=%s][mode=%d][flags=%d]", path, mode, fi->flags);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -807,7 +801,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
 
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
 {
-  FGPRINT(" create_directory_object[path=%s][mode=%d][time=%lu][uid=%d][gid=%d]\n", path, mode, time, uid, gid);
+  FPRNN("[path=%s][mode=%d][time=%lu][uid=%d][gid=%d]", path, mode, time, uid, gid);
 
   if(!path || '\0' == path[0]){
     return -1;
@@ -833,7 +827,7 @@ static int s3fs_mkdir(const char* path, mode_t mode)
   int result;
   struct fuse_context* pcxt;
 
-  FGPRINT("s3fs_mkdir[path=%s][mode=%d]\n", path, mode);
+  FPRN("[path=%s][mode=%d]", path, mode);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -859,7 +853,7 @@ static int s3fs_unlink(const char* path)
 {
   int result;
 
-  FGPRINT("s3fs_unlink[path=%s]\n", path);
+  FPRN("[path=%s]", path);
 
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
@@ -878,7 +872,7 @@ static int directory_empty(const char* path)
   S3ObjList head;
 
   if((result = list_bucket(path, head, "/")) != 0){
-    FGPRINT(" directory_empty - list_bucket returns error.\n");
+    DPRNNN("list_bucket returns error.");
     return result;
   }
   if(!head.IsEmpty()){
@@ -893,7 +887,7 @@ static int s3fs_rmdir(const char* path)
   string strpath;
   struct stat stbuf;
 
-  FGPRINT("s3fs_rmdir [path=%s]\n", path);
+  FPRN("[path=%s]", path);
 
   if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
     return result;
@@ -946,7 +940,7 @@ static int s3fs_symlink(const char* from, const char* to)
   int result;
   struct fuse_context* pcxt;
 
-  FGPRINT("s3fs_symlink[from=%s][to=%s]\n", from, to);
+  FPRN("[from=%s][to=%s]", from, to);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -971,22 +965,19 @@ static int s3fs_symlink(const char* from, const char* to)
   // open tmpfile
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->Open(to, 0, -1, true, true))){
-    FGPRINT("s3fs_symlink: could not open tmpfile(errno=%d)\n", errno);
-    SYSLOGERR("could not open tmpfile(errno=%d)", errno);
+    DPRN("could not open tmpfile(errno=%d)", errno);
     return -errno;
   }
   // write
   ssize_t from_size = strlen(from);
   if(from_size != ent->Write(from, 0, from_size)){
-    FGPRINT("s3fs_symlink: could not write tmpfile(errno=%d)\n", errno);
-    SYSLOGERR("could not write tmpfile(errno=%d)", errno);
+    DPRN("could not write tmpfile(errno=%d)", errno);
     FdManager::get()->Close(ent);
     return -errno;
   }
   // upload
   if(0 != (result = ent->Flush(headers, true, true))){
-    FGPRINT("s3fs_symlink: could not upload tmpfile(result=%d)\n", result);
-    SYSLOGERR("could not upload tmpfile(result=%d)", result);
+    DPRN("could not upload tmpfile(result=%d)", result);
   }
   FdManager::get()->Close(ent);
 
@@ -1001,8 +992,7 @@ static int rename_object(const char* from, const char* to)
   string s3_realpath;
   headers_t meta;
 
-  FGPRINT("rename_object [from=%s] [to=%s]\n", from , to);
-  SYSLOGDBG("rename_object [from=%s] [to=%s]", from, to);
+  FPRNN("[from=%s][to=%s]", from , to);
 
   if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
     // not permmit writing "to" object parent dir.
@@ -1035,8 +1025,7 @@ static int rename_object_nocopy(const char* from, const char* to)
   int       result;
   headers_t meta;
 
-  FGPRINT("rename_object_nocopy [from=%s] [to=%s]\n", from , to);
-  SYSLOGDBG("rename_object_nocopy [from=%s] [to=%s]", from, to);
+  FPRNN("[from=%s][to=%s]", from , to);
 
   if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
     // not permmit writing "to" object parent dir.
@@ -1058,15 +1047,13 @@ static int rename_object_nocopy(const char* from, const char* to)
   // open & load
   FdEntity* ent;
   if(NULL == (ent = get_local_fent(from, true))){
-    FGPRINT("  rename_object_nocopy: could not open and read file(%s)\n", from);
-    SYSLOGERR("could not open and read file(%s)", from);
+    DPRN("could not open and read file(%s)", from);
     return -EIO;
   }
 
   // upload
   if(0 != (result = ent->RowFlush(to, meta, false, true))){
-    FGPRINT("  rename_object_nocopy: could not upload file(%s): result=%d\n", to, result);
-    SYSLOGERR("could not upload file(%s): result=%d", to, result);
+    DPRN("could not upload file(%s): result=%d", to, result);
     FdManager::get()->Close(ent);
     return result;
   }
@@ -1088,8 +1075,7 @@ static int rename_large_object(const char* from, const char* to)
   struct stat buf;
   headers_t   meta;
 
-  FGPRINT("rename_large_object [from=%s] [to=%s]\n", from , to);
-  SYSLOGDBG("rename_large_object [from=%s] [to=%s]", from, to);
+  FPRNN("[from=%s][to=%s]", from , to);
 
   if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
     // not permmit writing "to" object parent dir.
@@ -1118,8 +1104,7 @@ static int clone_directory_object(const char* from, const char* to)
   int result = -1;
   struct stat stbuf;
 
-  FGPRINT("clone_directory_object [from=%s] [to=%s]\n", from, to);
-  SYSLOGDBG("clone_directory_object [from=%s] [to=%s]", from, to);
+  FPRNN("[from=%s][to=%s]", from, to);
 
   // get target's attributes
   if(0 != (result = get_object_attribute(from, &stbuf))){
@@ -1149,8 +1134,7 @@ static int rename_directory(const char* from, const char* to)
   int result;
   bool is_dir;
 
-  FGPRINT("rename_directory[from=%s][to=%s]\n", from, to);
-  SYSLOGDBG("rename_directory [from=%s] [to=%s]", from, to);
+  FPRNN("[from=%s][to=%s]", from, to);
 
   //
   // Initiate and Add base directory into MVNODE struct.
@@ -1176,7 +1160,7 @@ static int rename_directory(const char* from, const char* to)
   // No delimiter is specified, the result(head) is all object keys.
   // (CommonPrefixes is empty, but all object is listed in Key.)
   if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
-    FGPRINT(" rename_directory list_bucket returns error.\n");
+    DPRNNN("list_bucket returns error.");
     return result; 
   }
   head.GetNameList(headlist);                       // get name without "/".
@@ -1192,13 +1176,13 @@ static int rename_directory(const char* from, const char* to)
     // Check subdirectory.
     StatCache::getStatCacheData()->HasStat(from_name, etag.c_str()); // Check ETag
     if(0 != get_object_attribute(from_name.c_str(), &stbuf, NULL)){
-      FGPRINT(" rename_directory - failed to get %s object attribute.\n", from_name.c_str());
+      DPRNNN("failed to get %s object attribute.", from_name.c_str());
       continue;
     }
     if(S_ISDIR(stbuf.st_mode)){
       is_dir = true;
       if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, NULL, &DirType) || DIRTYPE_UNKNOWN == DirType){
-        FGPRINT(" rename_directory - failed to get %s%s object directory type.\n", basepath.c_str(), (*liter).c_str());
+        DPRNNN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
         continue;
       }
       if(DIRTYPE_NOOBJ != DirType){
@@ -1225,8 +1209,7 @@ static int rename_directory(const char* from, const char* to)
   for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
     if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
       if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
-        FGPRINT(" rename_directory - failed(%d) to rename %s directory object to %s.\n", result, mn_cur->old_path, mn_cur->new_path);
-        SYSLOGERR("clone_directory_object returned an error(%d)", result);
+        DPRN("clone_directory_object returned an error(%d)", result);
         free_mvnodes(mn_head);
         return -EIO;
       }
@@ -1243,8 +1226,7 @@ static int rename_directory(const char* from, const char* to)
         result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
       }
       if(0 != result){
-        FGPRINT(" rename_directory - failed(%d) to rename %s object to %s.\n", result, mn_cur->old_path, mn_cur->new_path);
-        SYSLOGERR("rename_object returned an error(%d)", result);
+        DPRN("rename_object returned an error(%d)", result);
         free_mvnodes(mn_head);
         return -EIO;
       }
@@ -1256,8 +1238,7 @@ static int rename_directory(const char* from, const char* to)
     if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
       if(!(mn_cur->is_normdir)){
         if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
-          FGPRINT(" rename_directory - failed(%d) to remove %s directory object.\n", result, mn_cur->old_path);
-          SYSLOGERR("s3fs_rmdir returned an error(%d)", result);
+          DPRN("s3fs_rmdir returned an error(%d)", result);
           free_mvnodes(mn_head);
           return -EIO;
         }
@@ -1277,8 +1258,7 @@ static int s3fs_rename(const char* from, const char* to)
   struct stat buf;
   int result;
 
-  FGPRINT("s3fs_rename [from=%s] [to=%s]\n", from, to);
-  SYSLOGDBG("s3fs_rename [from=%s] [to=%s]", from, to);
+  FPRN("[from=%s][to=%s]", from, to);
 
   if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
     // not permmit writing "to" object parent dir.
@@ -1309,7 +1289,7 @@ static int s3fs_rename(const char* from, const char* to)
 
 static int s3fs_link(const char* from, const char* to)
 {
-  FGPRINT("s3fs_link[from=%s][to=%s]\n", from, to);
+  FPRN("[from=%s][to=%s]", from, to);
   return -EPERM;
 }
 
@@ -1323,7 +1303,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_chmod [path=%s] [mode=%d]\n", path, mode);
+  FPRN("[path=%s][mode=%d]", path, mode);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1385,7 +1365,7 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_chmod_nocopy [path=%s] [mode=%d]\n", path, mode);
+  FPRNN("[path=%s][mode=%d]", path, mode);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1432,15 +1412,13 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
     // open & load
     FdEntity* ent;
     if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      FGPRINT("  s3fs_chmod_nocopy: could not open and read file(%s)\n", strpath.c_str());
-      SYSLOGERR("could not open and read file(%s)", strpath.c_str());
+      DPRN("could not open and read file(%s)", strpath.c_str());
       return -EIO;
     }
 
     // upload
     if(0 != (result = ent->Flush(meta, false, true))){
-      FGPRINT("  s3fs_chmod_nocopy: could not upload file(%s): result=%d\n", strpath.c_str(), result);
-      SYSLOGERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+      DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
     }
@@ -1461,7 +1439,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_chown [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
+  FPRN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1538,7 +1516,7 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_chown_nocopy [path=%s] [uid=%d] [gid=%d]\n", path, uid, gid);
+  FPRNN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1595,15 +1573,13 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
     // open & load
     FdEntity* ent;
     if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      FGPRINT("  s3fs_chown_nocopy: could not open and read file(%s)\n", strpath.c_str());
-      SYSLOGERR("could not open and read file(%s)", strpath.c_str());
+      DPRN("could not open and read file(%s)", strpath.c_str());
       return -EIO;
     }
 
     // upload
     if(0 != (result = ent->Flush(meta, false, true))){
-      FGPRINT("  s3fs_chown_nocopy: could not upload file(%s): result=%d\n", strpath.c_str(), result);
-      SYSLOGERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+      DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
     }
@@ -1624,7 +1600,7 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_utimens[path=%s][mtime=%zd]\n", path, ts[1].tv_sec);
+  FPRN("[path=%s][mtime=%zd]", path, ts[1].tv_sec);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1685,7 +1661,7 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FGPRINT("s3fs_utimens_nocopy [path=%s][mtime=%s]\n", path, str(ts[1].tv_sec).c_str());
+  FPRNN("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1732,23 +1708,20 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
     // open & load
     FdEntity* ent;
     if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      FGPRINT("  s3fs_utimens_nocopy: could not open and read file(%s)\n", strpath.c_str());
-      SYSLOGERR("could not open and read file(%s)", strpath.c_str());
+      DPRN("could not open and read file(%s)", strpath.c_str());
       return -EIO;
     }
 
     // set mtime
     if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
-      FGPRINT("  s3fs_utimens_nocopy: could not set mtime to file(%s): result=%d\n", strpath.c_str(), result);
-      SYSLOGERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
+      DPRN("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
     }
 
     // upload
     if(0 != (result = ent->Flush(meta, false, true))){
-      FGPRINT("  s3fs_utimens_nocopy: could not upload file(%s): result=%d\n", strpath.c_str(), result);
-      SYSLOGERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+      DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
     }
@@ -1765,7 +1738,7 @@ static int s3fs_truncate(const char* path, off_t size)
   headers_t meta;
   FdEntity* ent = NULL;
 
-  FGPRINT("s3fs_truncate[path=%s][size=%zd]\n", path, size);
+  FPRN("[path=%s][size=%zd]", path, size);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1778,13 +1751,11 @@ static int s3fs_truncate(const char* path, off_t size)
   if(0 == (result = get_object_attribute(path, NULL, &meta))){
     // Exists -> Get file(with size)
     if(NULL == (ent = FdManager::get()->Open(path, size, -1, false, true))){
-      FGPRINT("  s3fs_truncate: could not open file(%s): errno=%d\n", path, errno);
-      SYSLOGERR("could not open file(%s): errno=%d", path, errno);
+      DPRN("could not open file(%s): errno=%d", path, errno);
       return -EIO;
     }
     if(!ent->Load(0, size)){
-      FGPRINT("  s3fs_truncate: could not download file(%s): errno=%d\n", path, errno);
-      SYSLOGERR("could not download file(%s): errno=%d", path, errno);
+      DPRN("could not download file(%s): errno=%d", path, errno);
       FdManager::get()->Close(ent);
       return -EIO;
     }
@@ -1792,16 +1763,14 @@ static int s3fs_truncate(const char* path, off_t size)
   }else{
     // Not found -> Make tmpfile(with size)
     if(NULL == (ent = FdManager::get()->Open(path, size, -1, true, true))){
-      FGPRINT("  s3fs_truncate: could not open file(%s): errno=%d\n", path, errno);
-      SYSLOGERR("could not open file(%s): errno=%d", path, errno);
+      DPRN("could not open file(%s): errno=%d", path, errno);
       return -EIO;
     }
   }
 
   // upload
   if(0 != (result = ent->Flush(meta, false, true))){
-    FGPRINT("  s3fs_chmod_nocopy: could not upload file(%s): result=%d\n", path, result);
-    SYSLOGERR("could not upload file(%s): result=%d", path, result);
+    DPRN("could not upload file(%s): result=%d", path, result);
     FdManager::get()->Close(ent);
     return result;
   }
@@ -1818,7 +1787,7 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
   headers_t meta;
   struct stat st;
 
-  FGPRINT("s3fs_open[path=%s][flags=%d]\n", path, fi->flags);
+  FPRN("[path=%s][flags=%d]", path, fi->flags);
 
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -1854,31 +1823,27 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 {
   ssize_t res;
 
-  // Commented - This message is output too much
-  FGPRINT2("s3fs_read[path=%s][size=%zd][offset=%zd][fd=%zd]\n", path, size, offset, fi->fh);
+  FPRNINFO("[path=%s][size=%zd][offset=%zd][fd=%zd]", path, size, offset, fi->fh);
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path))){
-    FGPRINT("  s3fs_read: could not find opened fd(%s)\n", path);
-    SYSLOGERR("could not find opened fd(%s)", path);
+    DPRN("could not find opened fd(%s)", path);
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    FGPRINT("  s3fs_read: Warning - different fd(%d - %zd)\n", ent->GetFd(), fi->fh);
-    SYSLOGERR("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
   }
 
   // check real file size
   size_t realsize = 0;
   if(!ent->GetSize(realsize) || 0 >= realsize){
-    //FGPRINT("  s3fs_read: file size is 0, so break to read.\n");
+    DPRNINFO("file size is 0, so break to read.");
     FdManager::get()->Close(ent);
     return 0;
   }
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
-    FGPRINT("  s3fs_read: failed to read file(%s). result=%zd\n", path, res);
-    SYSLOGERR("failed to read file(%s). result=%zd", path, res);
+    DPRN("failed to read file(%s). result=%zd", path, res);
   }
   FdManager::get()->Close(ent);
 
@@ -1889,22 +1854,18 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
 {
   ssize_t res;
 
-  // Commented - This message is output too much
-  FGPRINT2("s3fs_write[path=%s][size=%zd][offset=%zd][fd=%zd]\n", path, size, offset, fi->fh);
+  FPRNINFO("[path=%s][size=%zd][offset=%zd][fd=%zd]", path, size, offset, fi->fh);
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path))){
-    FGPRINT("  s3fs_write: could not find opened fd(%s)\n", path);
-    SYSLOGERR("could not find opened fd(%s)", path);
+    DPRN("could not find opened fd(%s)", path);
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    FGPRINT("  s3fs_write: Warning - different fd(%d - %zd)\n", ent->GetFd(), fi->fh);
-    SYSLOGERR("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
   }
   if(0 > (res = ent->Write(buf, offset, size))){
-    FGPRINT("  s3fs_write: failed to write file(%s). result=%zd\n", path, res);
-    SYSLOGERR("failed to write file(%s). result=%zd", path, res);
+    DPRN("failed to write file(%s). result=%zd", path, res);
   }
   FdManager::get()->Close(ent);
 
@@ -1926,7 +1887,7 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
 {
   int result;
 
-  FGPRINT("s3fs_flush[path=%s][fd=%zd]\n", path, fi->fh);
+  FPRN("[path=%s][fd=%zd]", path, fi->fh);
 
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -1964,25 +1925,22 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
 
 static int s3fs_release(const char* path, struct fuse_file_info* fi)
 {
-  FGPRINT("s3fs_release[path=%s][fd=%ld]\n", path, fi->fh);
+  FPRN("[path=%s][fd=%ld]", path, fi->fh);
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->GetFdEntity(path))){
-    FGPRINT("  s3fs_release: could not find fd(file=%s)\n", path);
-    SYSLOGERR("could not find fd(file=%s)", path);
+    DPRN("could not find fd(file=%s)", path);
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    FGPRINT("  s3fs_release: Warning - different fd(%d - %zd)\n", ent->GetFd(), fi->fh);
-    SYSLOGERR("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
   }
   FdManager::get()->Close(ent);
 
   // check - for debug
   if(debug){
     if(NULL != (ent = FdManager::get()->GetFdEntity(path))){
-      FGPRINT("  s3fs_release: Warning - file(%s),fd(%d) is still opened.\n", path, ent->GetFd());
-      SYSLOGERR("Warning - file(%s),fd(%d) is still opened.", path, ent->GetFd());
+      DPRNNN("Warning - file(%s),fd(%d) is still opened.", path, ent->GetFd());
     }
   }
 
@@ -1997,7 +1955,7 @@ static int s3fs_opendir(const char* path, struct fuse_file_info* fi)
   int result;
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
 
-  FGPRINT("s3fs_opendir [path=%s][flags=%d]\n", path, fi->flags);
+  FPRN("[path=%s][flags=%d]", path, fi->flags);
 
   if(0 == (result = check_object_access(path, mask, NULL))){
     result = check_parent_object_access(path, mask);
@@ -2012,7 +1970,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl)
   }
   string saved_path = s3fscurl->GetSpacialSavedPath();
   if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
-    FGPRINT("  multi_head_callback: failed adding stat cache [path=%s]\n", saved_path.c_str());
+    DPRN("failed adding stat cache [path=%s]", saved_path.c_str());
     return false;
   }
   return true;
@@ -2029,8 +1987,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   string saved_path = s3fscurl->GetSpacialSavedPath();
 
   if(!newcurl->PreHeadRequest(path, base_path, saved_path)){
-    FGPRINT("  multi_head_retry_callback: Could not duplicate curl object(%s).\n", saved_path.c_str());
-    SYSLOGERR("Could not duplicate curl object(%s).", saved_path.c_str());
+    DPRN("Could not duplicate curl object(%s).", saved_path.c_str());
     delete newcurl;
     return NULL;
   }
@@ -2043,7 +2000,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
   s3obj_list_t  headlist;
   int           result;
 
-  FGPRINT(" readdir_multi_head[path=%s][list=%ld]\n", path, headlist.size());
+  FPRNN("[path=%s][list=%ld]", path, headlist.size());
 
   // Make base path list.
   head.GetNameList(headlist, true, false);  // get name with "/".
@@ -2068,15 +2025,13 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
 
       S3fsCurl* s3fscurl = new S3fsCurl();
       if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
-        FGPRINT("  readdir_multi_head: Could not make curl object for head request(%s).\n", disppath.c_str());
-        SYSLOGERR("Could not make curl object for head request(%s).", disppath.c_str());
+        DPRNNN("Could not make curl object for head request(%s).", disppath.c_str());
         delete s3fscurl;
         continue;
       }
 
       if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
-        FGPRINT("  readdir_multi_head: Could not set curl object into multi curl(%s).\n", disppath.c_str());
-        SYSLOGERR("Could not make curl object into multi curl(%s).", disppath.c_str());
+        DPRNNN("Could not make curl object into multi curl(%s).", disppath.c_str());
         delete s3fscurl;
         continue;
       }
@@ -2085,8 +2040,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
 
     // Multi request
     if(0 != (result = curlmulti.Request())){
-      FGPRINT("  readdir_multi_head: error occuered in multi request(errno=%d).\n", result);
-      SYSLOGERR("error occuered in multi request(errno=%d).", result); 
+      DPRN("error occuered in multi request(errno=%d).", result); 
       break;
     }
 
@@ -2102,7 +2056,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
   s3obj_list_t headlist;
   int result;
 
-  FGPRINT("s3fs_readdir[path=%s]\n", path);
+  FPRN("[path=%s]", path);
 
   if(0 != (result = check_object_access(path, X_OK, NULL))){
     return result;
@@ -2110,7 +2064,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 
   // get a list of all the objects
   if((result = list_bucket(path, head, "/")) != 0){
-    FGPRINT(" s3fs_readdir list_bucket returns error(%d).\n", result);
+    DPRN("list_bucket returns error(%d).", result);
     return result;
   }
 
@@ -2134,7 +2088,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
     strpath += "/";
   }
   if(0 != (result = readdir_multi_head(strpath.c_str(), head))){
-    FGPRINT(" s3fs_readdir readdir_multi_head returns error(%d).\n", result);
+    DPRN("readdir_multi_head returns error(%d).", result);
   }
   return result;
 }
@@ -2149,7 +2103,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
   S3fsCurl  s3fscurl;
   BodyData* body;
 
-  FGPRINT("list_bucket [path=%s]\n", path);
+  FPRNN("[path=%s]", path);
 
   if(delimiter && 0 < strlen(delimiter)){
     query += "delimiter=";
@@ -2175,13 +2129,13 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
     }
     // request
     if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
-      FGPRINT("  list_bucket S3fsCurl::ListBucketRequest returns with error.\n");
+      DPRN("ListBucketRequest returns with error.");
       return result;
     }
     body = s3fscurl.GetBodyData();
 
     if(0 != append_objects_from_xml(path, body->str(), head)){
-      FGPRINT("  list_bucket append_objects_from_xml returns with error.\n");
+      DPRN("append_objects_from_xml returns with error.");
       return -1;
     }
     truncated = is_truncated(body->str());
@@ -2219,7 +2173,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
     char* name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
     if(!name){
-      FGPRINT("  append_objects_from_xml_ex name is something wrong. but continue.\n");
+      DPRNNN("append_objects_from_xml_ex name is something wrong. but continue.");
 
     }else if((const char*)name != c_strErrorObjectName){
       bool is_dir = isCPrefix ? true : false;
@@ -2241,7 +2195,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
         }
       }
       if(!head.insert(name, (0 < stretag.length() ? stretag.c_str() : NULL), is_dir)){
-        FGPRINT("  append_objects_from_xml_ex insert_object returns with error.\n");
+        DPRN("insert_object returns with error.");
         xmlXPathFreeObject(key);
         xmlXPathFreeObject(contents_xp);
         free(name);
@@ -2249,7 +2203,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
       }
       free(name);
     }else{
-      //FGPRINT("append_objects_from_xml_ex name is file or subdir in dir. but continue.\n");
+      DPRNINFO("append_objects_from_xml_ex name is file or subdir in dir. but continue.");
     }
     xmlXPathFreeObject(key);
   }
@@ -2297,7 +2251,7 @@ static int append_objects_from_xml(const char* path, const char* xml, S3ObjList&
 
   doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
   if(doc == NULL){
-    FGPRINT("  append_objects_from_xml xmlReadMemory returns with error.\n");
+    DPRN("xmlReadMemory returns with error.");
     return -1;
   }
   ctx = xmlXPathNewContext(doc);
@@ -2319,7 +2273,7 @@ static int append_objects_from_xml(const char* path, const char* xml, S3ObjList&
   if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), 0, head) ||
      -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), NULL, 1, head) )
   {
-    FGPRINT("  append_objects_from_xml append_objects_from_xml_ex returns with error.\n");
+    DPRN("append_objects_from_xml_ex returns with error.");
     xmlXPathFreeContext(ctx);
     xmlFreeDoc(doc);
     return -1;
@@ -2390,7 +2344,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
   // Get full path
   xmlChar* fullpath = xmlNodeListGetString(doc, node, 1);
   if(!fullpath){
-    FGPRINT("  get_object_name could not get object full path name..\n");
+    DPRN("could not get object full path name..");
     return NULL;
   }
   // basepath(path) is as same as fullpath.
@@ -2455,7 +2409,7 @@ static int remote_mountpath_exists(const char* path)
 {
   struct stat stbuf;
 
-  FGPRINT("remote_mountpath_exists [path=%s]\n", path);
+  FPRNN("[path=%s]", path);
 
   // getattr will prefix the path with the remote mountpoint
   if(0 != get_object_attribute("/", &stbuf, NULL)){
@@ -2493,8 +2447,8 @@ static unsigned long id_function(void)
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-  SYSLOGINFO("init $Rev$");
-  FGPRINT("s3fs_init\n");
+  FPRN("init");
+  LOWSYSLOGPRINT(LOG_ERR, "init $Rev$");
 
   // openssl
   mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
@@ -2510,8 +2464,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   }
   // cache
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
-    //FGPRINT("s3fs_init: Could not inilialize cache directory.\n");
-    //SYSLOGDBG("Could not inilialize cache directory.");
+    DPRNINFO("Could not inilialize cache directory.");
   }
 
   return 0;
@@ -2519,8 +2472,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 
 static void s3fs_destroy(void*)
 {
-  SYSLOGDBG("destroy");
-  FGPRINT("s3fs_destroy\n");
+  DPRN("destroy");
 
   // openssl
   CRYPTO_set_id_callback(NULL);
@@ -2533,14 +2485,13 @@ static void s3fs_destroy(void*)
 
   // cache
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
-    //FGPRINT("s3fs_destroy: Could not remove cache directory.\n");
-    //SYSLOGDBG("Could not remove cache directory.");
+    DPRNINFO("Could not remove cache directory.");
   }
 }
 
 static int s3fs_access(const char* path, int mask)
 {
-  FGPRINT("s3fs_access[path=%s][mask=%s%s%s%s]\n", path,
+  FPRN("[path=%s][mask=%s%s%s%s]", path,
           ((mask & R_OK) == R_OK) ? "R_OK " : "",
           ((mask & W_OK) == W_OK) ? "W_OK " : "",
           ((mask & X_OK) == X_OK) ? "X_OK " : "",
@@ -2551,7 +2502,7 @@ static int s3fs_access(const char* path, int mask)
 
 static int s3fs_check_service(void)
 {
-  FGPRINT("s3fs_check_service\n");
+  FPRN("check services.");
 
   S3fsCurl s3fscurl;
   if(0 != s3fscurl.CheckBucket()){
@@ -2573,7 +2524,6 @@ static int s3fs_check_service(void)
     return EXIT_SUCCESS;
   }
   if(responseCode != 200 && responseCode != 301){
-    SYSLOGDBG("responseCode: %ld\n", responseCode);
     fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
     return EXIT_FAILURE;
   }

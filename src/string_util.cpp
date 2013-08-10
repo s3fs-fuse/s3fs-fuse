@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include <stdio.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -125,7 +126,7 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
 
 string prepare_url(const char* url)
 {
-  SYSLOGDBG("URL is %s", url);
+  DPRNNN("URL is %s", url);
 
   string uri;
   string host;
@@ -145,7 +146,7 @@ string prepare_url(const char* url)
 
   url_str = uri + host + path;
 
-  SYSLOGDBG("URL changed is %s", url_str.c_str());
+  DPRNNN("URL changed is %s", url_str.c_str());
 
   return str(url_str);
 }

@@ -458,8 +458,7 @@ string get_username(uid_t uid)
 {
   struct passwd* ppw;
   if(NULL == (ppw = getpwuid(uid)) || NULL == ppw->pw_name){
-    FGPRINT("    could not get username(errno=%d).\n", (int)errno);
-    SYSLOGDBG("could not get username(errno=%d).\n", (int)errno);
+    DPRNNN("could not get username(errno=%d).", (int)errno);
     return string("");
   }
   return string(ppw->pw_name);
@@ -477,21 +476,18 @@ int is_uid_inculde_group(uid_t uid, gid_t gid)
   // make buffer
   if(0 == maxlen){
     if(0 > (maxlen = (size_t)sysconf(_SC_GETGR_R_SIZE_MAX))){
-      FGPRINT("    could not get max name length.\n");
-      SYSLOGDBG("could not get max name length.\n");
+      DPRNNN("could not get max name length.");
       maxlen = 0;
       return -ERANGE;
     }
   }
   if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-    FGPRINT("    failed to allocate memory.\n");
-    SYSLOGERR("failed to allocate memory.\n");
+    DPRNCRIT("failed to allocate memory.");
     return -ENOMEM;
   }
   // get group infomation
   if(0 != (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-    FGPRINT("    could not get group infomation.\n");
-    SYSLOGDBG("could not get group infomation.\n");
+    DPRNNN("could not get group infomation.");
     free(pbuf);
     return -result;
   }
@@ -553,7 +549,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
   struct dirent* dent;
 
   if(NULL == (dp = opendir(dir))){
-    //FGPRINT("delete_files_in_dir: could not open dir(%s) - errno(%d)\n", dir, errno);
+    DPRNINFO("could not open dir(%s) - errno(%d)", dir, errno);
     return false;
   }
 
@@ -566,20 +562,20 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
     fullpath         += dent->d_name;
     struct stat st;
     if(0 != lstat(fullpath.c_str(), &st)){
-      FGPRINT("delete_files_in_dir: could not get stats of file(%s) - errno(%d)\n", fullpath.c_str(), errno);
+      DPRN("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
       closedir(dp);
       return false;
     }
     if(S_ISDIR(st.st_mode)){
       // dir -> Reentrant
       if(!delete_files_in_dir(fullpath.c_str(), true)){
-        //FGPRINT("delete_files_in_dir: could not remove sub dir(%s) - errno(%d)\n", fullpath.c_str(), errno);
+        DPRNINFO("could not remove sub dir(%s) - errno(%d)", fullpath.c_str(), errno);
         closedir(dp);
         return false;
       }
     }else{
       if(0 != unlink(fullpath.c_str())){
-        FGPRINT("delete_files_in_dir: could not remove file(%s) - errno(%d)\n", fullpath.c_str(), errno);
+        DPRN("could not remove file(%s) - errno(%d)", fullpath.c_str(), errno);
         closedir(dp);
         return false;
       }
@@ -588,7 +584,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
   closedir(dp);
 
   if(is_remove_own && 0 != rmdir(dir)){
-    FGPRINT("delete_files_in_dir: could not remove dir(%s) - errno(%d)\n", dir, errno);
+    DPRN("could not remove dir(%s) - errno(%d)", dir, errno);
     return false;
   }
   return true;
