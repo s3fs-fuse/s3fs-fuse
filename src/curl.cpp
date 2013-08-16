@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <syslog.h>
 #include <pthread.h>
+#include <assert.h>
 #include <curl/curl.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
@@ -700,7 +701,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   part_num = atoi(part_num_str.c_str());
 
   // duplicate request
-  S3fsCurl* newcurl          = new S3fsCurl();
+  S3fsCurl* newcurl          = new S3fsCurl(s3fscurl->IsUseAhbe());
   newcurl->partdata.etaglist = s3fscurl->partdata.etaglist;
   newcurl->partdata.etagpos  = s3fscurl->partdata.etagpos;
   newcurl->partdata.fd       = s3fscurl->partdata.fd;
@@ -726,7 +727,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   etaglist_t     list;
   off_t          remaining_bytes;
   unsigned char* buf;
-  S3fsCurl       s3fscurl;
+  S3fsCurl       s3fscurl(true);
 
   FPRNNN("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
@@ -775,7 +776,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
       chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
       // s3fscurl sub object
-      S3fsCurl* s3fscurl_para          = new S3fsCurl();
+      S3fsCurl* s3fscurl_para          = new S3fsCurl(true);
       s3fscurl_para->partdata.fd       = fd2;
       s3fscurl_para->partdata.startpos = st.st_size - remaining_bytes;
       s3fscurl_para->partdata.size     = chunk;
@@ -826,7 +827,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
     return NULL;
   }
   // duplicate request(setup new curl object)
-  S3fsCurl* newcurl = new S3fsCurl();
+  S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
   if(0 != (result = newcurl->PreGetObjectRequest(
            s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size))){
     DPRN("failed downloading part setup(%d)", result);
@@ -889,9 +890,9 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
-S3fsCurl::S3fsCurl() : 
-    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL), 
-    bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0)
+S3fsCurl::S3fsCurl(bool ahbe) : 
+    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL), bodydata(NULL),
+    headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe)
 {
 }
 
@@ -991,6 +992,13 @@ bool S3fsCurl::ClearInternalData(void)
   partdata.clear();
 
   return true;
+}
+
+bool S3fsCurl::SetUseAhbe(bool ahbe)
+{
+  bool old = is_use_ahbe;
+  is_use_ahbe = ahbe;
+  return old;
 }
 
 bool S3fsCurl::GetResponseCode(long& responseCode)
@@ -1505,6 +1513,10 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg
   if(ow_sse_flg && S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
   }
+  if(is_use_ahbe){
+    // set additional header by ahbe conf
+    requestHeaders = AdditionalHeader::get()->AddHeader(requestHeaders, tpath);
+  }
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
           requestHeaders,
@@ -1600,6 +1612,10 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   }
   if(ow_sse_flg && S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(is_use_ahbe){
+    // set additional header by ahbe conf
+    requestHeaders = AdditionalHeader::get()->AddHeader(requestHeaders, tpath);
   }
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
@@ -1851,6 +1867,10 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   }
   if(ow_sse_flg && S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(is_use_ahbe){
+    // set additional header by ahbe conf
+    requestHeaders = AdditionalHeader::get()->AddHeader(requestHeaders, tpath);
   }
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
@@ -2166,6 +2186,10 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   }
   if(ow_sse_flg && S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
+  }
+  if(is_use_ahbe){
+    // set additional header by ahbe conf
+    requestHeaders = AdditionalHeader::get()->AddHeader(requestHeaders, to);
   }
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
@@ -2597,6 +2621,189 @@ int S3fsMultiCurl::Request(void)
     curl_multi_cleanup(hMulti);
   }
   return 0;
+}
+
+//-------------------------------------------------------------------
+// Class AdditionalHeader
+//-------------------------------------------------------------------
+AdditionalHeader AdditionalHeader::singleton;
+
+//-------------------------------------------------------------------
+// Class AdditionalHeader method
+//-------------------------------------------------------------------
+AdditionalHeader::AdditionalHeader()
+{
+  if(this == AdditionalHeader::get()){
+    is_enable = false;
+  }else{
+    assert(false);
+  }
+}
+
+AdditionalHeader::~AdditionalHeader()
+{
+  if(this == AdditionalHeader::get()){
+    Unload();
+  }else{
+    assert(false);
+  }
+}
+
+bool AdditionalHeader::Load(const char* file)
+{
+  if(!file){
+    DPRNNN("file is NULL.");
+    return false;
+  }
+  Unload();
+
+  ifstream AH(file);
+  if(!AH.good()){
+    DPRNNN("Could not open file(%s).", file);
+    return false;
+  }
+
+  // read file
+  string line;
+  while(getline(AH, line)){
+    if('#' == line[0]){
+      continue;
+    }
+    if(0 == line.size()){
+      continue;
+    }
+    // load a line
+    stringstream ss(line);
+    string       key("");       // suffix(key)
+    string       head;          // additional HTTP header
+    string       value;         // header value
+    if(0 == isblank(line[0])){
+      ss >> key;
+    }
+    if(ss){
+      ss >> head;
+      if(ss && static_cast<size_t>(ss.tellg()) < line.size()){
+        value = line.substr(static_cast<int>(ss.tellg()) + 1);
+      }
+    }
+
+    // check it
+    if(0 == head.size()){
+      if(0 == key.size()){
+        continue;
+      }
+      DPRNNN("file format error: %s key(suffix) is no HTTP header value.", key.c_str());
+      Unload();
+      return false;
+    }
+
+    // set charcntlist
+    int keylen = key.size();
+    charcnt_list_t::iterator iter;
+    for(iter = charcntlist.begin(); iter != charcntlist.end(); ++iter){
+      if(keylen == (*iter)){
+        break;
+      }
+    }
+    if(iter == charcntlist.end()){
+      charcntlist.push_back(keylen);
+    }
+    // set addheader
+    if(addheader.end() == addheader.find(key)){
+      headerpair_t hpair;
+      hpair[head]    = value;
+      addheader[key] = hpair;
+    }else{
+      (addheader[key])[head] = value;
+    }
+    // set flag
+    if(!is_enable){
+      is_enable = true;
+    }
+  }
+  return true;
+}
+
+void AdditionalHeader::Unload(void)
+{
+  is_enable = false;
+  charcntlist.clear();
+  addheader.clear();
+}
+
+bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
+{
+  if(!is_enable){
+    return true;
+  }
+  if(!path){
+    DPRNNN("path is NULL.");
+    return false;
+  }
+  int nPathLen = strlen(path);
+  for(charcnt_list_t::const_iterator iter = charcntlist.begin(); iter != charcntlist.end(); ++iter){
+    // get target charactor count
+    if(nPathLen < (*iter)){
+      continue;
+    }
+    // make target suffix(same charactor count) & find
+    string suffix(&path[nPathLen - (*iter)]);
+    if(addheader.end() == addheader.find(suffix)){
+      continue;
+    }
+    for(headerpair_t::const_iterator piter = addheader.at(suffix).begin(); piter != addheader.at(suffix).end(); ++piter){
+      // Adding header
+      meta[(*piter).first] = (*piter).second;
+    }
+  }
+  return true;
+}
+
+struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const char* path) const
+{
+  headers_t meta;
+
+  if(!AddHeader(meta, path)){
+    return list;
+  }
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string slistval = (*iter).first + ": " + (*iter).second;
+    // Adding header
+    list = curl_slist_sort_insert(list, slistval.c_str());
+  }
+  return list;
+}
+
+bool AdditionalHeader::Dump(void) const
+{
+  if(!foreground2){
+    return true;
+  }
+  // charactor count list
+  stringstream ssdbg;
+  ssdbg << "Charactor count list[" << charcntlist.size() << "] = {";
+  for(charcnt_list_t::const_iterator citer = charcntlist.begin(); citer != charcntlist.end(); ++citer){
+    ssdbg << " " << (*citer);
+  }
+  ssdbg << " }\n";
+
+  // additional header
+  ssdbg << "Additional Header list[" << addheader.size() << "] = {\n";
+  for(addheader_t::const_iterator aiter = addheader.begin(); aiter != addheader.end(); ++aiter){
+    string key = (*aiter).first;
+    if(0 == key.size()){
+      key = "*";
+    }
+    for(headerpair_t::const_iterator piter = (*aiter).second.begin(); piter != (*aiter).second.end(); ++piter){
+      ssdbg << "    " << key << "\t--->\t" << (*piter).first << ": " << (*piter).second << "\n";
+    }
+  }
+  ssdbg << "}";
+
+  // print all
+  FPRNINFO("%s", ssdbg.str().c_str());
+
+  return true;
 }
 
 //-------------------------------------------------------------------

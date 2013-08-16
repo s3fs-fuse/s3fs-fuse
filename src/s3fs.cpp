@@ -25,6 +25,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 #include <libxml/tree.h>
@@ -78,7 +79,9 @@ std::string bucket                = "";
 //-------------------------------------------------------------------
 // Static valiables
 //-------------------------------------------------------------------
-static mode_t root_mode           = 0;
+static uid_t mp_uid               = 0;    // owner of mount point(only not specified uid opt)
+static gid_t mp_gid               = 0;    // group of mount point(only not specified gid opt)
+static mode_t mp_mode             = 0;    // mode of mount point
 static std::string mountpoint;
 static std::string passwd_file    = "";
 static bool utility_mode          = false;
@@ -87,10 +90,12 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
-static uid_t s3fs_uid             = 0;    // default = root.
-static gid_t s3fs_gid             = 0;    // default = root.
-static bool is_s3fs_umask         = false;// default does not set.
+static uid_t s3fs_uid             = 0;
+static gid_t s3fs_gid             = 0;
 static mode_t s3fs_umask          = 0;
+static bool is_s3fs_uid           = false;// default does not set.
+static bool is_s3fs_gid           = false;// default does not set.
+static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 
 // mutex
@@ -136,6 +141,7 @@ static int check_for_aws_format(void);
 static int check_passwd_file_perms(void);
 static int read_passwd_file(void);
 static int get_access_keys(void);
+static int set_moutpoint_attribute(struct stat& mpst);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 
 // fuse interface functions
@@ -314,7 +320,9 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   memset(pstat, 0, sizeof(struct stat));
   if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
     pstat->st_nlink = 1; // see fuse faq
-    pstat->st_mode  = root_mode;
+    pstat->st_mode  = mp_mode;
+    pstat->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
+    pstat->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
     return 0;
   }
 
@@ -462,7 +470,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
     // root is allowed all accessing.
     return 0;
   }
-  if(0 != s3fs_uid && s3fs_uid == pcxt->uid){
+  if(is_s3fs_uid && s3fs_uid == pcxt->uid){
     // "uid" user is allowed all accessing.
     return 0;
   }
@@ -472,8 +480,8 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
   }
 
   // for "uid", "gid" option
-  uid_t  obj_uid = (0 != s3fs_uid ? s3fs_uid : pst->st_uid);
-  gid_t  obj_gid = (0 != s3fs_gid ? s3fs_gid : pst->st_gid);
+  uid_t  obj_uid = (is_s3fs_uid ? s3fs_uid : pst->st_uid);
+  gid_t  obj_gid = (is_s3fs_gid ? s3fs_gid : pst->st_gid);
 
   // compare file mode and uid/gid + mask.
   mode_t mode      = pst->st_mode;
@@ -535,11 +543,11 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
     // root is allowed all accessing.
     return 0;
   }
-  if(0 != s3fs_uid && s3fs_uid == pcxt->uid){
+  if(is_s3fs_uid && s3fs_uid == pcxt->uid){
     // "uid" user is allowed all accessing.
     return 0;
   }
-  if(pcxt->uid == (0 != s3fs_uid ? s3fs_uid : pst->st_uid)){
+  if(pcxt->uid == pst->st_uid){
     return 0;
   }
   return -EPERM;
@@ -622,7 +630,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
 static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
 {
   int         result;
-  S3fsCurl    s3fscurl;
+  S3fsCurl    s3fscurl(true);
   struct stat buf;
 
   FPRNNN("[path=%s]", path);
@@ -726,7 +734,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
 // common function for creation of a plain object
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid)
 {
-  FPRNNN("[path=%s][mode=%d]", path, mode);
+  FPRNNN("[path=%s][mode=%04o]", path, mode);
 
   headers_t meta;
   meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
@@ -735,7 +743,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
   meta["x-amz-meta-mode"]  = str(mode);
   meta["x-amz-meta-mtime"] = str(time(NULL));
 
-  S3fsCurl s3fscurl;
+  S3fsCurl s3fscurl(true);
   return s3fscurl.PutRequest(path, meta, -1, false);    // fd=-1 means for creating zero byte object.
 }
 
@@ -745,7 +753,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers_t meta;
   struct fuse_context* pcxt;
 
-  FPRN("[path=%s][mode=0%o][dev=%lu]", path, mode, rdev);
+  FPRN("[path=%s][mode=%04o][dev=%lu]", path, mode, rdev);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -766,7 +774,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
   headers_t meta;
   struct fuse_context* pcxt;
 
-  FPRN("[path=%s][mode=%d][flags=%d]", path, mode, fi->flags);
+  FPRN("[path=%s][mode=%04o][flags=%d]", path, mode, fi->flags);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -801,7 +809,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
 
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
 {
-  FPRNN("[path=%s][mode=%d][time=%lu][uid=%d][gid=%d]", path, mode, time, uid, gid);
+  FPRNN("[path=%s][mode=%04o][time=%lu][uid=%d][gid=%d]", path, mode, time, uid, gid);
 
   if(!path || '\0' == path[0]){
     return -1;
@@ -827,7 +835,7 @@ static int s3fs_mkdir(const char* path, mode_t mode)
   int result;
   struct fuse_context* pcxt;
 
-  FPRN("[path=%s][mode=%d]", path, mode);
+  FPRN("[path=%s][mode=%04o]", path, mode);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -1089,7 +1097,7 @@ static int rename_large_object(const char* from, const char* to)
     return result;
   }
 
-  S3fsCurl s3fscurl;
+  S3fsCurl s3fscurl(true);
   if(0 != (result = s3fscurl.MultipartRenameRequest(from, to, meta, buf.st_size))){
     return result;
   }
@@ -1303,8 +1311,12 @@ static int s3fs_chmod(const char* path, mode_t mode)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FPRN("[path=%s][mode=%d]", path, mode);
+  FPRN("[path=%s][mode=%04o]", path, mode);
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change mode for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1365,8 +1377,12 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FPRNN("[path=%s][mode=%d]", path, mode);
+  FPRNN("[path=%s][mode=%04o]", path, mode);
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change mode for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1441,6 +1457,10 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
 
   FPRN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change owner for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1518,6 +1538,10 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
 
   FPRNN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change owner for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1602,6 +1626,10 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
 
   FPRN("[path=%s][mtime=%zd]", path, ts[1].tv_sec);
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change mtime for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1663,6 +1691,10 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
 
   FPRNN("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
 
+  if(0 == strcmp(path, "/")){
+    DPRNNN("Could not change mtime for maount point.");
+    return -EIO;
+  }
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
@@ -1981,7 +2013,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return NULL;
   }
-  S3fsCurl* newcurl = new S3fsCurl();
+  S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
   string path       = s3fscurl->GetPath();
   string base_path  = s3fscurl->GetBasePath();
   string saved_path = s3fscurl->GetSpacialSavedPath();
@@ -2881,6 +2913,34 @@ static int get_access_keys(void)
   return EXIT_FAILURE;
 }
 
+//
+// Check & Set attributes for mount point.
+//
+static int set_moutpoint_attribute(struct stat& mpst)
+{
+  mp_uid  = geteuid();
+  mp_gid  = getegid();
+  mp_mode = S_IFDIR | (allow_other ? (S_IRWXU | S_IRWXG | S_IRWXO) : S_IRWXU);
+
+  FPRNNN("PROC(uid=%d, gid=%d) - MountPoint(uid=%d, gid=%d, mode=%04o)", mp_uid, mp_gid, mpst.st_uid, mpst.st_gid, mpst.st_mode);
+
+  // check owner
+  if(0 == mp_uid || mpst.st_uid == mp_uid){
+    return true;
+  }
+  // check group permission
+  if(mpst.st_gid == mp_gid || 1 == is_uid_inculde_group(mp_uid, mpst.st_gid)){
+    if(S_IRWXG == (mpst.st_mode & S_IRWXG)){
+      return true;
+    }
+  }
+  // check other permission
+  if(S_IRWXO == (mpst.st_mode & S_IRWXO)){
+    return true;
+  }
+  return false;
+}
+
 // This is repeatedly called by the fuse option parser
 // if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
@@ -2928,11 +2988,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
               program_name.c_str(), mountpoint.c_str());
       return -1;
     }
-    root_mode = stbuf.st_mode; // save mode for later usage
-    if(allow_other){
-      root_mode |= (S_IXUSR | S_IXGRP | S_IXOTH | S_IFDIR);
-    }else{
-      root_mode |= S_IFDIR;
+    if(!set_moutpoint_attribute(stbuf)){
+      fprintf(stderr, "%s: MOUNTPOINT: %s permission denied.\n", 
+              program_name.c_str(), mountpoint.c_str());
+      return -1;
     }
 
     if(!nonempty){
@@ -2957,10 +3016,20 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
   }else if(key == FUSE_OPT_KEY_OPT){
     if(strstr(arg, "uid=") != 0){
       s3fs_uid = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      if(0 != geteuid() && 0 == s3fs_uid){
+        fprintf(stderr, "%s: root user can only specify uid=0.\n", program_name.c_str());
+        return -1;
+      }
+      is_s3fs_uid = true;
       return 1; // continue for fuse option
     }
     if(strstr(arg, "gid=") != 0){
       s3fs_gid = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      if(0 != getegid() && 0 == s3fs_gid){
+        fprintf(stderr, "%s: root user can only specify gid=0.\n", program_name.c_str());
+        return -1;
+      }
+      is_s3fs_gid = true;
       return 1; // continue for fuse option
     }
     if(strstr(arg, "umask=") != 0){
@@ -3123,6 +3192,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         return -1;
       }
       FdManager::SetPageSize(pagesize);
+      return 0;
+    }
+    if(strstr(arg, "ahbe_conf=") != 0){
+      string ahbe_conf = strchr(arg, '=') + sizeof(char);
+      if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
+        fprintf(stderr, "%s: failed to load ahbe_conf file(%s).\n", 
+           program_name.c_str(), ahbe_conf.c_str());
+        return -1;
+      }
+      AdditionalHeader::get()->Dump();
       return 0;
     }
     if(strstr(arg, "noxmlns") != 0){

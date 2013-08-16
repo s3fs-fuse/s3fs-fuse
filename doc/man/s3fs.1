@@ -75,6 +75,24 @@ this option can not be specified with use_rrs.
 \fB\-o\fR passwd_file (default="")
 specify the path to the password file, which which takes precedence over the password in $HOME/.passwd-s3fs and /etc/passwd-s3fs
 .TP
+\fB\-o\fR ahbe_conf (default="" which means disabled)
+This option specifies the configuration file path which file is the additional HTTP header by file(object) extension.
+ The configuration file format is below:
+ -----------
+ line         = [file suffix] HTTP-header [HTTP-values]
+ file suffix  = file(object) suffix, if this field is empty, it means "*"(all object).
+ HTTP-header  = additional HTTP header name
+ HTTP-values  = additional HTTP header value
+ -----------
+ Sample:
+ -----------
+ .gz      Content-Encoding     gzip
+ .Z       Content-Encoding     compress
+          X-S3FS-MYHTTPHEAD    myvalue
+ -----------
+ A sample configuration file is uploaded in "test" directory.
+If you specify this option for set "Content-Encoding" HTTP header, please take care for RFC 2616.
+.TP
 \fB\-o\fR public_bucket (default="" which means disabled)
 anonymously mount a public bucket when set to 1, ignores the $HOME/.passwd-s3fs and /etc/passwd-s3fs files.
 .TP

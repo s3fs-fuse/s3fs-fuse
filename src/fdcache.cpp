@@ -906,7 +906,7 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
       S3fsCurl::SetReadwriteTimeout(backup);
     }
   }else{
-    S3fsCurl s3fscurl;
+    S3fsCurl s3fscurl(true);
     result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), meta, fd, ow_sse_flg);
   }
 

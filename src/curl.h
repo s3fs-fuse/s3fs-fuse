@@ -144,10 +144,11 @@ class S3fsCurl
     const unsigned char* postdata;           // use by post method and read callback function.
     int                  postdata_remaining; // use by post method and read callback function.
     filepart             partdata;           // use by multipart upload/get object callback
+    bool                 is_use_ahbe;        // additional header by extension
 
   public:
     // constructor/destructor
-    S3fsCurl();
+    S3fsCurl(bool ahbe = false);
     ~S3fsCurl();
 
   private:
@@ -244,6 +245,10 @@ class S3fsCurl
     BodyData* GetBodyData(void) const { return bodydata; }
     BodyData* GetHeadData(void) const { return headdata; }
     long GetLastResponseCode(void) const { return LastResponseCode; }
+    bool SetUseAhbe(bool ahbe);
+    bool EnableUseAhbe(void) { return SetUseAhbe(true); }
+    bool DisableUseAhbe(void) { return SetUseAhbe(false); }
+    bool IsUseAhbe(void) const { return is_use_ahbe; }
 };
 
 //----------------------------------------------
@@ -283,6 +288,36 @@ class S3fsMultiCurl
     bool Clear(void);
     bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
     int Request(void);
+};
+
+//----------------------------------------------
+// class AdditionalHeader
+//----------------------------------------------
+typedef std::list<int> charcnt_list_t;
+typedef std::map<std::string, std::string> headerpair_t;
+typedef std::map<std::string, headerpair_t> addheader_t;
+
+class AdditionalHeader
+{
+  private:
+    static AdditionalHeader singleton;
+    bool                    is_enable;
+    charcnt_list_t          charcntlist;
+    addheader_t             addheader;
+
+  public:
+    // Reference singleton
+    static AdditionalHeader* get(void) { return &singleton; }
+
+    AdditionalHeader();
+    ~AdditionalHeader();
+
+    bool Load(const char* file);
+    void Unload(void);
+
+    bool AddHeader(headers_t& meta, const char* path) const;
+    struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
+    bool Dump(void) const;
 };
 
 //----------------------------------------------
