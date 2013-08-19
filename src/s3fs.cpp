@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -809,7 +810,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
 
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
 {
-  FPRNN("[path=%s][mode=%04o][time=%lu][uid=%d][gid=%d]", path, mode, time, uid, gid);
+  FPRNN("[path=%s][mode=%04o][time=%jd][uid=%u][gid=%u]", path, mode, (intmax_t)time, (unsigned int)uid, (unsigned int)gid);
 
   if(!path || '\0' == path[0]){
     return -1;
@@ -1455,7 +1456,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FPRN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
+  FPRN("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
   if(0 == strcmp(path, "/")){
     DPRNNN("Could not change owner for maount point.");
@@ -1536,7 +1537,7 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FPRNN("[path=%s][uid=%d][gid=%d]", path, uid, gid);
+  FPRNN("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
   if(0 == strcmp(path, "/")){
     DPRNNN("Could not change owner for maount point.");
@@ -1624,7 +1625,7 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
   struct stat stbuf;
   int nDirType = DIRTYPE_UNKNOWN;
 
-  FPRN("[path=%s][mtime=%zd]", path, ts[1].tv_sec);
+  FPRN("[path=%s][mtime=%jd]", path, (intmax_t)(ts[1].tv_sec));
 
   if(0 == strcmp(path, "/")){
     DPRNNN("Could not change mtime for maount point.");
@@ -1770,7 +1771,7 @@ static int s3fs_truncate(const char* path, off_t size)
   headers_t meta;
   FdEntity* ent = NULL;
 
-  FPRN("[path=%s][size=%zd]", path, size);
+  FPRN("[path=%s][size=%jd]", path, (intmax_t)size);
 
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
@@ -1855,7 +1856,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 {
   ssize_t res;
 
-  FPRNINFO("[path=%s][size=%zd][offset=%zd][fd=%zd]", path, size, offset, fi->fh);
+  FPRNINFO("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path))){
@@ -1863,7 +1864,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
 
   // check real file size
@@ -1886,7 +1887,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
 {
   ssize_t res;
 
-  FPRNINFO("[path=%s][size=%zd][offset=%zd][fd=%zd]", path, size, offset, fi->fh);
+  FPRNINFO("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path))){
@@ -1894,7 +1895,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
   if(0 > (res = ent->Write(buf, offset, size))){
     DPRN("failed to write file(%s). result=%zd", path, res);
@@ -1919,7 +1920,7 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
 {
   int result;
 
-  FPRN("[path=%s][fd=%zd]", path, fi->fh);
+  FPRN("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -1957,7 +1958,7 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
 
 static int s3fs_release(const char* path, struct fuse_file_info* fi)
 {
-  FPRN("[path=%s][fd=%ld]", path, fi->fh);
+  FPRN("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->GetFdEntity(path))){
@@ -1965,7 +1966,7 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
     return -EIO;
   }
   if(ent->GetFd() != static_cast<int>(fi->fh)){
-    DPRNNN("Warning - different fd(%d - %zd)", ent->GetFd(), fi->fh);
+    DPRNNN("Warning - different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
   FdManager::get()->Close(ent);
 
@@ -2032,7 +2033,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
   s3obj_list_t  headlist;
   int           result;
 
-  FPRNN("[path=%s][list=%ld]", path, headlist.size());
+  FPRNN("[path=%s][list=%zu]", path, headlist.size());
 
   // Make base path list.
   head.GetNameList(headlist, true, false);  // get name with "/".
@@ -2922,7 +2923,8 @@ static int set_moutpoint_attribute(struct stat& mpst)
   mp_gid  = getegid();
   mp_mode = S_IFDIR | (allow_other ? (S_IRWXU | S_IRWXG | S_IRWXO) : S_IRWXU);
 
-  FPRNNN("PROC(uid=%d, gid=%d) - MountPoint(uid=%d, gid=%d, mode=%04o)", mp_uid, mp_gid, mpst.st_uid, mpst.st_gid, mpst.st_mode);
+  FPRNNN("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
+         (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
 
   // check owner
   if(0 == mp_uid || mpst.st_uid == mp_uid){

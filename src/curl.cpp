@@ -23,6 +23,7 @@
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
@@ -312,8 +313,8 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
     // timeout?
     if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
       pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
-      DPRN("timeout now: %li, curl_times[curl]: %lil, readwrite_timeout: %li",
-                      (long int)now, S3fsCurl::curl_times[curl], (long int)readwrite_timeout);
+      DPRN("timeout now: %jd, curl_times[curl]: %jd, readwrite_timeout: %jd",
+                      (intmax_t)now, (intmax_t)(S3fsCurl::curl_times[curl]), (intmax_t)readwrite_timeout);
       return CURLE_ABORTED_BY_CALLBACK;
     }
   }
@@ -1144,7 +1145,7 @@ int S3fsCurl::RequestPerform(FILE* file)
             break;
           }
         }
-        DPRNCRIT("curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
+        DPRNCRIT("curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
 
@@ -1158,7 +1159,7 @@ int S3fsCurl::RequestPerform(FILE* file)
           FPRNNN("The certificate will still be checked but the hostname will not be verified.");
           FPRNNN("A more secure method would be to use a bucket name without periods.");
         }else
-          DPRNNN("my_curl_easy_perform: curlCode: %i -- %s", curlCode, curl_easy_strerror(curlCode));
+          DPRNNN("my_curl_easy_perform: curlCode: %d -- %s", curlCode, curl_easy_strerror(curlCode));
         }
         exit(EXIT_FAILURE);
         break;
@@ -1184,7 +1185,7 @@ int S3fsCurl::RequestPerform(FILE* file)
 
       // Unknown CURL return code
       default:
-        DPRNCRIT("###curlCode: %i  msg: %s", curlCode, curl_easy_strerror(curlCode));
+        DPRNCRIT("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
         exit(EXIT_FAILURE);
         break;
     }
@@ -1637,7 +1638,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
     curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);             // Content-Length: 0
   }
 
-  DPRNNN("uploading... [path=%s][fd=%d][size=%zd]", tpath, fd, (-1 != fd ? st.st_size : 0));
+  DPRNNN("uploading... [path=%s][fd=%d][size=%jd]", tpath, fd, (intmax_t)(-1 != fd ? st.st_size : 0));
 
   int result = RequestPerform();
   delete bodydata;
@@ -1651,7 +1652,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
 
 int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
 {
-  FPRNNN("[tpath=%s][start=%zd][size=%zd]", SAFESTRPTR(tpath), start, size);
+  FPRNNN("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
 
   if(!tpath || -1 == fd || 0 > start || 0 >= size){
     return -1;
@@ -1707,7 +1708,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 {
   int result;
 
-  FPRNNN("[tpath=%s][start=%zd][size=%zd]", SAFESTRPTR(tpath), start, size);
+  FPRNNN("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
 
   if(!tpath){
     return -1;
@@ -1909,7 +1910,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
 
 int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, etaglist_t& parts)
 {
-  FPRNNN("[tpath=%s][parts=%zd]", SAFESTRPTR(tpath), parts.size());
+  FPRNNN("[tpath=%s][parts=%zu]", SAFESTRPTR(tpath), parts.size());
 
   if(!tpath){
     return -1;
@@ -2045,7 +2046,7 @@ int S3fsCurl::MultipartListRequest(string& body)
 
 int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& upload_id)
 {
-  FPRNNN("[tpath=%s][start=%zd][size=%zd][part=%d]", SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
+  FPRNNN("[tpath=%s][start=%jd][size=%zd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), partdata.size, part_num);
 
   if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
     return -1;
@@ -2108,7 +2109,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string
 {
   int result;
 
-  FPRNNN("[tpath=%s][start=%zd][size=%zd][part=%d]", SAFESTRPTR(tpath), partdata.startpos, partdata.size, part_num);
+  FPRNNN("[tpath=%s][start=%jd][size=%zd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), partdata.size, part_num);
 
   // setup
   if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
@@ -2545,7 +2546,7 @@ int S3fsMultiCurl::MultiRead(void)
       }
 
     }else{
-      DPRNNN("failed to read(remaining: %i code: %d  msg: %s), so retry this.",
+      DPRNNN("failed to read(remaining: %d code: %d  msg: %s), so retry this.",
               remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
 
       // For retry
@@ -2572,7 +2573,7 @@ int S3fsMultiCurl::Request(void)
   int       result;
   CURLMcode curlm_code;
 
-  FPRNNN("[count=%ld]", cMap_all.size());
+  FPRNNN("[count=%zu]", cMap_all.size());
 
   if(hMulti){
     Clear();
@@ -2817,7 +2818,7 @@ string GetContentMD5(int fd)
   string   Signature;
   unsigned char* md5hex;
 
-  if(NULL == (md5hex = md5hexsum(fd))){
+  if(NULL == (md5hex = md5hexsum(fd, 0, -1))){
     return string("");
   }
 

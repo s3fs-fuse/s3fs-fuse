@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
@@ -462,7 +463,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
 
     // check size
     if(total != Size()){
-      DPRN("different size(%zd - %zd).", total, Size());
+      DPRN("different size(%zu - %zu).", total, Size());
       Clear();
       return false;
     }
@@ -476,7 +477,7 @@ void PageList::Dump(void)
 
   DPRNINFO("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++, cnt++){
-    DPRNINFO("  [%08d] -> {%014zd - %014zd : %s}", cnt, (*iter)->offset, (*iter)->bytes, (*iter)->init ? "true" : "false");
+    DPRNINFO("  [%08d] -> {%014jd - %014zu : %s}", cnt, (intmax_t)((*iter)->offset), (*iter)->bytes, (*iter)->init ? "true" : "false");
   }
   DPRNINFO("}");
 }
@@ -573,7 +574,7 @@ int FdEntity::Open(ssize_t size, time_t time)
   bool is_truncate    = false;  // need to truncate
   bool init_value     = false;  // value for pagelist
 
-  FPRNINFO("[path=%s][fd=%d][size=%zd][time=%zd]", path.c_str(), fd, size, time);
+  FPRNINFO("[path=%s][fd=%d][size=%zd][time=%jd]", path.c_str(), fd, size, (intmax_t)time);
 
   if(-1 != fd){
     // already opened, needs to increment refcnt.
@@ -687,7 +688,7 @@ int FdEntity::Open(ssize_t size, time_t time)
 
 int FdEntity::SetMtime(time_t time)
 {
-  FPRNINFO("[path=%s][fd=%d][time=%zd]", path.c_str(), fd, time);
+  FPRNINFO("[path=%s][fd=%d][time=%jd]", path.c_str(), fd, (intmax_t)time);
 
   if(-1 == time){
     return 0;
@@ -780,7 +781,7 @@ int FdEntity::Load(off_t start, ssize_t size)
 {
   int result = 0;
 
-  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zd]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -927,7 +928,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   int     result;
   ssize_t rsize;
 
-  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -938,7 +939,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   }
   // Loading
   if(0 != (result = Load(start, size))){
-    DPRN("could not download. start(%zd), size(%zd), errno(%d)", start, size, result);
+    DPRN("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
     return -EIO;
   }
   // Reading
@@ -958,7 +959,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   int     result;
   ssize_t wsize;
 
-  FPRNINFO("[path=%s][fd=%d][offset=%zd][size=%zd]", path.c_str(), fd, start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
     return -EBADF;
@@ -1141,7 +1142,7 @@ FdEntity* FdManager::Open(const char* path, ssize_t size, time_t time, bool forc
 {
   FdEntity* ent;
 
-  FPRNINFO("[path=%s][size=%zd][time=%zd]", SAFESTRPTR(path), size, time);
+  FPRNINFO("[path=%s][size=%zd][time=%jd]", SAFESTRPTR(path), size, (intmax_t)time);
 
   if(!path || '\0' == path[0]){
     return NULL;

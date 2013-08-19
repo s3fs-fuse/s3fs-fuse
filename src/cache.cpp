@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <pthread.h>
 #include <string.h>
 #include <assert.h>
@@ -148,13 +149,13 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       }
       if(is_delete_cache){
         // not hit by different ETag
-        DPRNNN("stat cache not hit by ETag[path=%s][time=%ld][hit count=%lu][ETag(%s)!=(%s)]",
-          strpath.c_str(), (*iter).second.cache_date, (*iter).second.hit_count,
+        DPRNNN("stat cache not hit by ETag[path=%s][time=%jd][hit count=%lu][ETag(%s)!=(%s)]",
+          strpath.c_str(), (intmax_t)((*iter).second.cache_date), (*iter).second.hit_count,
           petag ? petag : "null", (*iter).second.meta["ETag"].c_str());
       }else{
         // hit 
-        DPRNNN("stat cache hit [path=%s] [time=%ld] [hit count=%lu]",
-          strpath.c_str(), (*iter).second.cache_date, (*iter).second.hit_count);
+        DPRNNN("stat cache hit [path=%s][time=%jd][hit count=%lu]",
+          strpath.c_str(), (intmax_t)((*iter).second.cache_date), (*iter).second.hit_count);
 
         if(pst!= NULL){
           *pst= (*iter).second.stbuf;
