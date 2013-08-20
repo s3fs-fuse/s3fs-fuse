@@ -126,7 +126,7 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
 
 string prepare_url(const char* url)
 {
-  DPRNNN("URL is %s", url);
+  FPRNINFO("URL is %s", url);
 
   string uri;
   string host;
@@ -146,7 +146,7 @@ string prepare_url(const char* url)
 
   url_str = uri + host + path;
 
-  DPRNNN("URL changed is %s", url_str.c_str());
+  FPRNINFO("URL changed is %s", url_str.c_str());
 
   return str(url_str);
 }
