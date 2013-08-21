@@ -106,6 +106,22 @@ class S3fsCurl
     friend class S3fsMultiCurl;  
 
   private:
+    enum REQTYPE {
+      REQTYPE_UNSET  = -1,
+      REQTYPE_DELETE = 0,
+      REQTYPE_HEAD,
+      REQTYPE_PUTHEAD,
+      REQTYPE_PUT,
+      REQTYPE_GET,
+      REQTYPE_CHKBUCKET,
+      REQTYPE_LISTBUCKET,
+      REQTYPE_PREMULTIPOST,
+      REQTYPE_COMPLETEMULTIPOST,
+      REQTYPE_UPLOADMULTIPOST,
+      REQTYPE_COPYMULTIPOST,
+      REQTYPE_MULTILIST
+    };
+
     // class variables
     static pthread_mutex_t curl_handles_lock;
     static pthread_mutex_t curl_share_lock;
@@ -132,19 +148,25 @@ class S3fsCurl
 
     // variables
     CURL*                hCurl;
-    std::string          path;               // target object path
-    std::string          base_path;          // base path (for multi curl head request)
-    std::string          saved_path;         // saved path = cache key (for multi curl head request)
-    std::string          url;                // target object path(url)
+    REQTYPE              type;                 // type of request
+    std::string          path;                 // target object path
+    std::string          base_path;            // base path (for multi curl head request)
+    std::string          saved_path;           // saved path = cache key (for multi curl head request)
+    std::string          url;                  // target object path(url)
     struct curl_slist*   requestHeaders;
-    headers_t            responseHeaders;    // header data by HeaderCallback
-    BodyData*            bodydata;           // body data by WriteMemoryCallback
-    BodyData*            headdata;           // header data by WriteMemoryCallback
+    headers_t            responseHeaders;      // header data by HeaderCallback
+    BodyData*            bodydata;             // body data by WriteMemoryCallback
+    BodyData*            headdata;             // header data by WriteMemoryCallback
     long                 LastResponseCode;
-    const unsigned char* postdata;           // use by post method and read callback function.
-    int                  postdata_remaining; // use by post method and read callback function.
-    filepart             partdata;           // use by multipart upload/get object callback
-    bool                 is_use_ahbe;        // additional header by extension
+    const unsigned char* postdata;             // use by post method and read callback function.
+    int                  postdata_remaining;   // use by post method and read callback function.
+    filepart             partdata;             // use by multipart upload/get object callback
+    bool                 is_use_ahbe;          // additional header by extension
+    FILE*                b_infile;             // backup for retrying
+    const unsigned char* b_postdata;           // backup for retrying
+    int                  b_postdata_remaining; // backup for retrying
+    off_t                b_partdata_startpos;  // backup for retrying
+    ssize_t              b_partdata_size;      // backup for retrying
 
   public:
     // constructor/destructor
@@ -170,6 +192,8 @@ class S3fsCurl
     static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
     // methods
+    bool ResetHandle(void);
+    bool RemakeHandle(void);
     bool ClearInternalData(void);
     std::string CalcSignature(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
     bool GetUploadId(std::string& upload_id);
@@ -217,7 +241,7 @@ class S3fsCurl
     bool DestroyCurlHandle(void);
 
     bool GetResponseCode(long& responseCode);
-    int RequestPerform(FILE* file = NULL);
+    int RequestPerform(void);
     int DeleteRequest(const char* tpath);
     bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL);
     bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath) {

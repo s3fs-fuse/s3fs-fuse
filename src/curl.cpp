@@ -892,14 +892,42 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL), bodydata(NULL),
-    headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe)
+    type(REQTYPE_UNSET), hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
+    bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
+    b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0)
 {
 }
 
 S3fsCurl::~S3fsCurl()
 {
   DestroyCurlHandle();
+}
+
+bool S3fsCurl::ResetHandle(void)
+{
+  curl_easy_reset(hCurl);
+  curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
+  curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true);
+  curl_easy_setopt(hCurl, CURLOPT_CONNECTTIMEOUT, S3fsCurl::connect_timeout);
+  curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0);
+  curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress);
+  curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
+  // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
+  
+  if(0 == S3fsCurl::ssl_verify_hostname){
+    curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
+  }
+  if(S3fsCurl::curl_ca_bundle.size() != 0){
+    curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
+  }
+  if(S3fsCurl::is_dns_cache && S3fsCurl::hCurlShare){
+    curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
+  }
+
+  S3fsCurl::curl_times[hCurl]    = time(0);
+  S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
+
+  return true;
 }
 
 bool S3fsCurl::CreateCurlHandle(bool force)
@@ -923,27 +951,8 @@ bool S3fsCurl::CreateCurlHandle(bool force)
     DPRN("Failed to create handle.");
     return false;
   }
-  curl_easy_reset(hCurl);
-  curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
-  curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true);
-  curl_easy_setopt(hCurl, CURLOPT_CONNECTTIMEOUT, S3fsCurl::connect_timeout);
-  curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0);
-  curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress);
-  curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
-  // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
-  
-  if(0 == S3fsCurl::ssl_verify_hostname){
-    curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
-  }
-  if(S3fsCurl::curl_ca_bundle.size() != 0){
-    curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
-  }
-  if(S3fsCurl::is_dns_cache && S3fsCurl::hCurlShare){
-    curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
-  }
-
-  S3fsCurl::curl_times[hCurl]    = time(0);
-  S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
+  type = REQTYPE_UNSET;
+  ResetHandle();
 
   pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
 
@@ -972,6 +981,7 @@ bool S3fsCurl::ClearInternalData(void)
   if(hCurl){
     return false;
   }
+  type      = REQTYPE_UNSET;
   path      = "";
   base_path = "";
   saved_path= "";
@@ -989,7 +999,14 @@ bool S3fsCurl::ClearInternalData(void)
     delete headdata;
     headdata = NULL;
   }
-  LastResponseCode = -1;
+  LastResponseCode     = -1;
+  postdata             = NULL;
+  postdata_remaining   = 0;
+  b_infile             = NULL;
+  b_postdata           = NULL;
+  b_postdata_remaining = 0;
+  b_partdata_startpos  = 0;
+  b_partdata_size      = 0;
   partdata.clear();
 
   return true;
@@ -1016,9 +1033,170 @@ bool S3fsCurl::GetResponseCode(long& responseCode)
 }
 
 //
+// Reset all options for retrying
+//
+bool S3fsCurl::RemakeHandle(void)
+{
+  DPRNNN("Retry request. [type=%d][url=%s][path=%s]", type, url.c_str(), path.c_str());
+
+  if(REQTYPE_UNSET == type){
+    return false;
+  }
+
+  // rewind file
+  struct stat st;
+  if(b_infile){
+    rewind(b_infile);
+    if(-1 == fstat(fileno(b_infile), &st)){
+      DPRNNN("Could not get file stat(fd=%d)", fileno(b_infile));
+      return false;
+    }
+  }
+
+  // reinitialize internal data
+  responseHeaders.clear();
+  if(bodydata){
+    bodydata->Clear();
+  }
+  if(headdata){
+    headdata->Clear();
+  }
+  LastResponseCode   = -1;
+
+  // set from backup
+  postdata           = b_postdata;
+  postdata_remaining = b_postdata_remaining;
+  partdata.startpos  = b_partdata_startpos;
+  partdata.size      = b_partdata_size;
+
+  // reset handle
+  ResetHandle();
+
+  // set options
+  switch(type){
+    case REQTYPE_DELETE:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_HEAD:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_NOBODY, true);
+      curl_easy_setopt(hCurl, CURLOPT_FILETIME, true);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      // responseHeaders
+      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
+      break;
+
+    case REQTYPE_PUTHEAD:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_PUT:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      if(b_infile){
+        curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size));
+        curl_easy_setopt(hCurl, CURLOPT_INFILE, b_infile);
+      }else{
+        curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);
+      }
+      break;
+
+    case REQTYPE_GET:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, S3fsCurl::DownloadWriteCallback);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)this);
+      break;
+
+    case REQTYPE_CHKBUCKET:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_FAILONERROR, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_LISTBUCKET:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_PREMULTIPOST:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_POST, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_COMPLETEMULTIPOST:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      curl_easy_setopt(hCurl, CURLOPT_POST, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, (curl_off_t)postdata_remaining);
+      curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
+      curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+      break;
+
+    case REQTYPE_UPLOADMULTIPOST:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, partdata.size);
+      curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
+      curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_COPYMULTIPOST:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_MULTILIST:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    default:
+      DPRNNN("request type is unknown(%d)", type);
+      return false;
+  }
+  return true;
+}
+
+//
 // returns curl return code
 //
-int S3fsCurl::RequestPerform(FILE* file)
+int S3fsCurl::RequestPerform(void)
 {
   if(debug){
     char* ptr_url = NULL;
@@ -1029,16 +1207,6 @@ int S3fsCurl::RequestPerform(FILE* file)
 
   // 1 attempt + retries...
   for(int retrycnt = S3fsCurl::retries; 0 < retrycnt; retrycnt--){
-    if(file){
-      rewind(file);
-    }
-    if(bodydata){
-      bodydata->Clear();
-    }
-    if(headdata){
-      headdata->Clear();
-    }
-
     // Requests
     CURLcode curlCode = curl_easy_perform(hCurl);
 
@@ -1190,6 +1358,11 @@ int S3fsCurl::RequestPerform(FILE* file)
         break;
     }
     DPRNNN("### retrying...");
+
+    if(!RemakeHandle()){
+      DPRNNN("Failed to reset handle and internal data for retrying.");
+      return -EIO;
+    }
   }
   DPRN("### giving up");
   return -EIO;
@@ -1371,6 +1544,8 @@ int S3fsCurl::DeleteRequest(const char* tpath)
   curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  type = REQTYPE_DELETE;
+
   return RequestPerform();
 }
 
@@ -1420,6 +1595,8 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
   // responseHeaders
   curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
   curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
+
+  type = REQTYPE_HEAD;
 
   return true;
 }
@@ -1533,6 +1710,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  type = REQTYPE_PUTHEAD;
+
   DPRNNN("copying... [path=%s]", tpath);
 
   int result = RequestPerform();
@@ -1559,6 +1738,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
       DPRN("Could not duplicate file discriptor(errno=%d)", errno);
       return -errno;
     }
+    b_infile = file;
   }else{
     // This case is creating zero byte obejct.(calling by create_file_object())
     DPRNNN("create zero byte file object.");
@@ -1638,6 +1818,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
     curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);             // Content-Length: 0
   }
 
+  type = REQTYPE_PUT;
+
   DPRNNN("uploading... [path=%s][fd=%d][size=%jd]", tpath, fd, (intmax_t)(-1 != fd ? st.st_size : 0));
 
   int result = RequestPerform();
@@ -1697,9 +1879,13 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
   // set info for callback func.
   // (use only fd, startpos and size, other member is not used.)
   partdata.clear();
-  partdata.fd       = fd;
-  partdata.startpos = start;
-  partdata.size     = size;
+  partdata.fd         = fd;
+  partdata.startpos   = start;
+  partdata.size       = size;
+  b_partdata_startpos = start;
+  b_partdata_size     = size;
+
+  type = REQTYPE_GET;
 
   return 0;
 }
@@ -1759,6 +1945,8 @@ int S3fsCurl::CheckBucket(void)
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  type = REQTYPE_CHKBUCKET;
+
   int result = RequestPerform();
   delete bodydata;
   bodydata = NULL;
@@ -1806,6 +1994,8 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  type = REQTYPE_LISTBUCKET;
 
   return RequestPerform();
 }
@@ -1888,6 +2078,8 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  type = REQTYPE_PREMULTIPOST;
+
   // request
   int result;
   if(0 != (result = RequestPerform())){
@@ -1932,8 +2124,10 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   postContent += "</CompleteMultipartUpload>\n";
 
   // set postdata
-  postdata           = reinterpret_cast<const unsigned char*>(postContent.c_str());
-  postdata_remaining = postContent.size(); // without null
+  postdata             = reinterpret_cast<const unsigned char*>(postContent.c_str());
+  b_postdata           = postdata;
+  postdata_remaining   = postContent.size(); // without null
+  b_postdata_remaining = postdata_remaining;
 
   if(!CreateCurlHandle(true)){
     return -1;
@@ -1971,6 +2165,8 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, (curl_off_t)postdata_remaining);
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+
+  type = REQTYPE_COMPLETEMULTIPOST;
 
   // request
   int result = RequestPerform();
@@ -2016,6 +2212,8 @@ int S3fsCurl::MultipartListRequest(string& body)
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  type = REQTYPE_MULTILIST;
 
   int result;
   if(0 == (result = RequestPerform()) && 0 < bodydata->size()){
@@ -2101,6 +2299,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+
+  type = REQTYPE_UPLOADMULTIPOST;
 
   return 0;
 }
@@ -2209,6 +2409,8 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
+  type = REQTYPE_COPYMULTIPOST;
+
   // request
   DPRNNN("copying... [from=%s][to=%s][part=%d]", from, to, part_num);
 
@@ -2313,9 +2515,11 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
     chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
     // set
-    partdata.fd       = fd2;
-    partdata.startpos = st.st_size - remaining_bytes;
-    partdata.size     = chunk;
+    partdata.fd         = fd2;
+    partdata.startpos   = st.st_size - remaining_bytes;
+    partdata.size       = chunk;
+    b_partdata_startpos = partdata.startpos;
+    b_partdata_size     = partdata.size;
 
     // upload part
     if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
