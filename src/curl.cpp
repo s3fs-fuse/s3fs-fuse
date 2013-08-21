@@ -892,10 +892,11 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    type(REQTYPE_UNSET), hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
+    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0)
 {
+  type = REQTYPE_UNSET;
 }
 
 S3fsCurl::~S3fsCurl()
@@ -3046,7 +3047,7 @@ string GetContentMD5(int fd)
   return Signature;
 }
 
-unsigned char* md5hexsum(int fd, off_t start, off_t size)
+unsigned char* md5hexsum(int fd, off_t start, ssize_t size)
 {
   MD5_CTX c;
   char    buf[512];
@@ -3085,7 +3086,7 @@ unsigned char* md5hexsum(int fd, off_t start, off_t size)
   return result;
 }
 
-string md5sum(int fd, off_t start, off_t size)
+string md5sum(int fd, off_t start, ssize_t size)
 {
   char md5[2 * MD5_DIGEST_LENGTH + 1];
   char hexbuf[3];
