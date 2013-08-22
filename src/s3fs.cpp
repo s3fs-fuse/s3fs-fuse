@@ -1960,6 +1960,16 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
 {
   FPRN("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
+  // [NOTICE]
+  // At first, we remove stats cache.
+  // Because fuse does not wait for responce from "release" function. :-(
+  // And fuse runs next command before this function returns.
+  // Thus we call deleting stats function ASSAP.
+  //
+  if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
+    StatCache::getStatCacheData()->DelStat(path);
+  }
+
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->GetFdEntity(path))){
     DPRN("could not find fd(file=%s)", path);
@@ -1975,10 +1985,6 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
     if(NULL != (ent = FdManager::get()->GetFdEntity(path))){
       DPRNNN("Warning - file(%s),fd(%d) is still opened.", path, ent->GetFd());
     }
-  }
-
-  if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
-    StatCache::getStatCacheData()->DelStat(path);
   }
   return 0;
 }

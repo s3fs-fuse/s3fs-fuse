@@ -515,7 +515,7 @@ void FdEntity::Clear(void)
   AutoLock auto_lock(&fdent_lock);
 
   if(file){
-    {
+    if(0 != cachepath.size()){
       CacheFileStat cfstat(path.c_str());
       if(!pagelist.Serialize(cfstat, true)){
         DPRN("failed to save cache stat file(%s).", path.c_str());
@@ -543,7 +543,7 @@ void FdEntity::Close(void)
       refcnt--;
     }
     if(0 == refcnt){
-      {
+      if(0 != cachepath.size()){
         CacheFileStat cfstat(path.c_str());
         if(!pagelist.Serialize(cfstat, true)){
           DPRN("failed to save cache stat file(%s).", path.c_str());
