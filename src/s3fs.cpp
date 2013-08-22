@@ -498,7 +498,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
   }
   if(is_s3fs_umask){
     // If umask is set, all object attributes set ~umask.
-    mode |= ((S_IRWXU | S_IRWXG | S_IRWXO) & ~s3fs_umask);
+    mode &= ((S_IRWXU | S_IRWXG | S_IRWXO) & ~s3fs_umask);
   }
   mode &= base_mask;
 
@@ -2895,7 +2895,7 @@ static int get_access_keys(void)
        // It is possible that the user's file was there but
        // contained no key pairs i.e. commented out
        // in that case, go look in the final location
-       if(!S3fsCurl::IsSetAccessKeyId()){
+       if(S3fsCurl::IsSetAccessKeyId()){
           return EXIT_SUCCESS;
        }
      }
