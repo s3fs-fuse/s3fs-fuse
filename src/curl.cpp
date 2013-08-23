@@ -143,6 +143,7 @@ string          S3fsCurl::default_acl         = "private";
 bool            S3fsCurl::is_use_rrs          = false;
 bool            S3fsCurl::is_use_sse          = false;
 bool            S3fsCurl::is_content_md5      = false;
+bool            S3fsCurl::is_verbose          = false;
 string          S3fsCurl::AWSAccessKeyId;
 string          S3fsCurl::AWSSecretAccessKey;
 long            S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
@@ -641,6 +642,13 @@ bool S3fsCurl::SetContentMd5(bool flag)
   return old;
 }
 
+bool S3fsCurl::SetVerbose(bool flag)
+{
+  bool old = S3fsCurl::is_verbose;
+  S3fsCurl::is_verbose = flag;
+  return old;
+}
+
 bool S3fsCurl::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
 {
   if(!AccessKeyId || '\0' == AccessKeyId[0] || !SecretAccessKey || '\0' == SecretAccessKey[0]){
@@ -924,6 +932,9 @@ bool S3fsCurl::ResetHandle(void)
   if(S3fsCurl::is_dns_cache && S3fsCurl::hCurlShare){
     curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
   }
+  if(S3fsCurl::is_verbose){
+    curl_easy_setopt(hCurl, CURLOPT_VERBOSE, true);
+  }
 
   S3fsCurl::curl_times[hCurl]    = time(0);
   S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
@@ -1204,7 +1215,6 @@ int S3fsCurl::RequestPerform(void)
     curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
     DPRNNN("connecting to URL %s", SAFESTRPTR(ptr_url));
   }
-  // curl_easy_setopt(curl, CURLOPT_VERBOSE, true);
 
   // 1 attempt + retries...
   for(int retrycnt = S3fsCurl::retries; 0 < retrycnt; retrycnt--){

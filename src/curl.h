@@ -136,6 +136,7 @@ class S3fsCurl
     static bool            is_use_rrs;
     static bool            is_use_sse;
     static bool            is_content_md5;
+    static bool            is_verbose;
     static std::string     AWSAccessKeyId;
     static std::string     AWSSecretAccessKey;
     static long            ssl_verify_hostname;
@@ -230,6 +231,8 @@ class S3fsCurl
     static bool SetUseSse(bool flag);
     static bool GetUseSse(void) { return S3fsCurl::is_use_sse; }
     static bool SetContentMd5(bool flag);
+    static bool SetVerbose(bool flag);
+    static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
     static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
     static bool IsSetAccessKeyId(void) { return (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()); }
     static long SetSslVerifyHostname(long value);

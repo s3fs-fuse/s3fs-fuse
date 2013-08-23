@@ -694,6 +694,8 @@ static int s3fs_getattr(const char* path, struct stat* stbuf)
       FdManager::get()->Close(ent);
     }
   }
+  FPRNINFO("[path=%s] uid=%u, gid=%u, mode=%04o", path, (unsigned int)(stbuf->st_uid), (unsigned int)(stbuf->st_gid), stbuf->st_mode);
+
   return result;
 }
 
@@ -3266,6 +3268,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     // for deep debugging message
     if(strstr(arg, "f2") != 0){
       foreground2 = true;
+      return 0;
+    }
+    if(strstr(arg, "curldbg") != 0){
+      S3fsCurl::SetVerbose(true);
       return 0;
     }
 
