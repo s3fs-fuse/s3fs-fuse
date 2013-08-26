@@ -756,7 +756,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers_t meta;
   struct fuse_context* pcxt;
 
-  FPRN("[path=%s][mode=%04o][dev=%lu]", path, mode, rdev);
+  FPRN("[path=%s][mode=%04o][dev=%ju]", path, mode, (uintmax_t)rdev);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
