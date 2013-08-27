@@ -99,6 +99,12 @@ class S3fsMultiCurl;
 //----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
+// internal use struct for openssl
+struct CRYPTO_dynlock_value
+{
+  pthread_mutex_t dyn_mutex;
+};
+
 // Class for lapping curl
 //
 class S3fsCurl
@@ -123,29 +129,30 @@ class S3fsCurl
     };
 
     // class variables
-    static pthread_mutex_t curl_handles_lock;
-    static pthread_mutex_t curl_share_lock;
-    static bool            is_initglobal_done;
-    static CURLSH*         hCurlShare;
-    static bool            is_dns_cache;
-    static long            connect_timeout;
-    static time_t          readwrite_timeout;
-    static int             retries;
-    static bool            is_public_bucket;
-    static std::string     default_acl;             // TODO: to enum
-    static bool            is_use_rrs;
-    static bool            is_use_sse;
-    static bool            is_content_md5;
-    static bool            is_verbose;
-    static std::string     AWSAccessKeyId;
-    static std::string     AWSSecretAccessKey;
-    static long            ssl_verify_hostname;
-    static const EVP_MD*   evp_md;
-    static curltime_t      curl_times;
-    static curlprogress_t  curl_progress;
-    static std::string     curl_ca_bundle;
-    static mimes_t         mimeTypes;
-    static int             max_parallel_cnt;
+    static pthread_mutex_t  curl_handles_lock;
+    static pthread_mutex_t  curl_share_lock;
+    static pthread_mutex_t* crypt_mutex;
+    static bool             is_initglobal_done;
+    static CURLSH*          hCurlShare;
+    static bool             is_dns_cache;
+    static long             connect_timeout;
+    static time_t           readwrite_timeout;
+    static int              retries;
+    static bool             is_public_bucket;
+    static std::string      default_acl;             // TODO: to enum
+    static bool             is_use_rrs;
+    static bool             is_use_sse;
+    static bool             is_content_md5;
+    static bool             is_verbose;
+    static std::string      AWSAccessKeyId;
+    static std::string      AWSSecretAccessKey;
+    static long             ssl_verify_hostname;
+    static const EVP_MD*    evp_md;
+    static curltime_t       curl_times;
+    static curlprogress_t   curl_progress;
+    static std::string      curl_ca_bundle;
+    static mimes_t          mimeTypes;
+    static int              max_parallel_cnt;
 
     // variables
     CURL*                hCurl;
@@ -176,8 +183,19 @@ class S3fsCurl
 
   private:
     // class methods
+    static bool InitGlobalCurl(void);
+    static bool DestroyGlobalCurl(void);
+    static bool InitShareCurl(void);
+    static bool DestroyShareCurl(void);
     static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr);
     static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr);
+    static bool InitCryptMutex(void);
+    static bool DestroyCryptMutex(void);
+    static void CryptMutexLock(int mode, int pos, const char* file, int line);
+    static unsigned long CryptGetThreadid(void);
+    static struct CRYPTO_dynlock_value* CreateDynCryptMutex(const char* file, int line);
+    static void DynCryptMutexLock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line);
+    static void DestoryDynCryptMutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line);
     static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
 
     static bool InitMimeType(const char* MimeFile = NULL);
@@ -207,12 +225,8 @@ class S3fsCurl
 
   public:
     // class methods
-    static bool InitS3fsCurl(const char* MimeFile = NULL, bool reinit = false);
-    static bool DestroyS3fsCurl(bool reinit = false);
-    static bool InitGlobalCurl(void);
-    static bool DestroyGlobalCurl(void);
-    static bool InitShareCurl(void);
-    static bool DestroyShareCurl(void);
+    static bool InitS3fsCurl(const char* MimeFile = NULL);
+    static bool DestroyS3fsCurl(void);
     static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
     static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
 

@@ -99,9 +99,6 @@ static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 
-// mutex
-static pthread_mutex_t *mutex_buf = NULL;
-
 //-------------------------------------------------------------------
 // Static functions : prototype
 //-------------------------------------------------------------------
@@ -134,9 +131,8 @@ static int rename_object(const char* from, const char* to);
 static int rename_object_nocopy(const char* from, const char* to);
 static int clone_directory_object(const char* from, const char* to);
 static int rename_directory(const char* from, const char* to);
-static void locking_function(int mode, int n, const char* file, int line);
-static unsigned long id_function(void);
 static int remote_mountpath_exists(const char* path);
+static int s3fs_utility_mode(void);
 static int s3fs_check_service(void);
 static int check_for_aws_format(void);
 static int check_passwd_file_perms(void);
@@ -2462,42 +2458,27 @@ static int remote_mountpath_exists(const char* path)
   return 0;
 }
 
-/**
- * OpenSSL locking function.
- *
- * @param    mode    lock mode
- * @param    n        lock number
- * @param    file    source file name
- * @param    line    source file line number
- * @return    none
- */
-static void locking_function(int mode, int n, const char* file, int line)
-{
-  if(mode & CRYPTO_LOCK){
-    pthread_mutex_lock(&mutex_buf[n]);
-  }else{
-    pthread_mutex_unlock(&mutex_buf[n]);
-  }
-}
-
-// OpenSSL uniq thread id function.
-static unsigned long id_function(void)
-{
-  return (unsigned long)pthread_self();
-}
-
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
   FPRN("init");
   LOWSYSLOGPRINT(LOG_ERR, "init $Rev$");
 
-  // openssl
-  mutex_buf = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
-  for (int i = 0; i < CRYPTO_num_locks(); i++){
-    pthread_mutex_init(&mutex_buf[i], NULL);
+  // init curl
+  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
+    fprintf(stderr, "%s: Could not initiate curl library.\n", program_name.c_str());
+    LOWSYSLOGPRINT(LOG_ERR, "Could not initiate curl library.");
+    exit(EXIT_FAILURE);
   }
-  CRYPTO_set_locking_callback(locking_function);
-  CRYPTO_set_id_callback(id_function);
+
+  // Check Bucket
+  // If the network is up, check for valid credentials and if the bucket
+  // exists. skip check if mounting a public bucket
+  if(!S3fsCurl::IsPublicBucket()){
+    int result;
+    if(EXIT_SUCCESS != (result = s3fs_check_service())){
+      exit(result);
+    }
+  }
 
   // Investigate system capabilities
   if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
@@ -2507,26 +2488,20 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
     DPRNINFO("Could not inilialize cache directory.");
   }
-
-  return 0;
+  return NULL;
 }
 
 static void s3fs_destroy(void*)
 {
   DPRN("destroy");
 
-  // openssl
-  CRYPTO_set_id_callback(NULL);
-  CRYPTO_set_locking_callback(NULL);
-  for(int i = 0; i < CRYPTO_num_locks(); i++){
-    pthread_mutex_destroy(&mutex_buf[i]);
+  // Destory curl
+  if(!S3fsCurl::DestroyS3fsCurl()){
+    DPRN("Could not release curl library.");
   }
-  free(mutex_buf);
-  mutex_buf = NULL;
-
   // cache
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
-    DPRNINFO("Could not remove cache directory.");
+    DPRN("Could not remove cache directory.");
   }
 }
 
@@ -2539,6 +2514,38 @@ static int s3fs_access(const char* path, int mask)
           (mask == F_OK) ? "F_OK" : "");
 
     return check_object_access(path, mask, NULL);
+}
+
+static int s3fs_utility_mode(void)
+{
+  if(!utility_mode){
+    return EXIT_FAILURE;
+  }
+
+  // init curl
+  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
+    fprintf(stderr, "%s: Could not initiate curl library.\n", program_name.c_str());
+    LOWSYSLOGPRINT(LOG_ERR, "Could not initiate curl library.");
+    return EXIT_FAILURE;
+  }
+
+  printf("Utility Mode\n");
+
+  S3fsCurl s3fscurl;
+  string   body;
+  int      result = EXIT_SUCCESS;
+  if(0 != s3fscurl.MultipartListRequest(body)){
+    fprintf(stderr, "%s: Could not get list multipart upload.\n", program_name.c_str());
+    result = EXIT_FAILURE;
+  }else{
+    printf("body.text:\n%s\n", body.c_str());
+  }
+
+  // Destory curl
+  if(!S3fsCurl::DestroyS3fsCurl()){
+    DPRN("Could not release curl library.");
+  }
+  return result;
 }
 
 static int s3fs_check_service(void)
@@ -3435,33 +3442,8 @@ int main(int argc, char* argv[])
   }
   */
 
-  // Init curl
-  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
-    fprintf(stderr, "%s: Could not initiate curl library.\n", program_name.c_str());
-    exit(EXIT_FAILURE);
-  }
-
-  // Does the bucket exist?
-  // if the network is up, check for valid credentials and if the bucket
-  // exists. skip check if mounting a public bucket
-  if(!S3fsCurl::IsPublicBucket()){
-     int result;
-     if(EXIT_SUCCESS != (result = s3fs_check_service())){
-       exit(result);
-     }
-  }
-
   if(utility_mode){
-     printf("Utility Mode\n");
-
-     S3fsCurl s3fscurl;
-     string   body;
-     if(0 != s3fscurl.MultipartListRequest(body)){
-       fprintf(stderr, "%s: Could not get list multipart upload.\n", program_name.c_str());
-       exit(EXIT_FAILURE);
-     }
-     printf("body.text:\n%s\n", body.c_str());
-     exit(EXIT_SUCCESS);
+    exit(s3fs_utility_mode());
   }
 
   s3fs_oper.getattr   = s3fs_getattr;
@@ -3495,12 +3477,6 @@ int main(int argc, char* argv[])
   s3fs_oper.destroy   = s3fs_destroy;
   s3fs_oper.access    = s3fs_access;
   s3fs_oper.create    = s3fs_create;
-
-  // Reinit curl
-  if(!S3fsCurl::DestroyS3fsCurl(true) || !S3fsCurl::InitS3fsCurl(NULL, true)){
-    fprintf(stderr, "%s: Could not reinitiate curl library.\n", program_name.c_str());
-    exit(EXIT_FAILURE);
-  }
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);

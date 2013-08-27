@@ -130,45 +130,44 @@ const char* BodyData::str(void) const
 #define MULTIPART_SIZE              10485760          // 10MB
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
-pthread_mutex_t S3fsCurl::curl_handles_lock;
-pthread_mutex_t S3fsCurl::curl_share_lock;
-bool            S3fsCurl::is_initglobal_done  = false;
-CURLSH*         S3fsCurl::hCurlShare          = NULL;
-bool            S3fsCurl::is_dns_cache        = true; // default
-long            S3fsCurl::connect_timeout     = 10;   // default
-time_t          S3fsCurl::readwrite_timeout   = 30;   // default
-int             S3fsCurl::retries             = 3;    // default
-bool            S3fsCurl::is_public_bucket    = false;
-string          S3fsCurl::default_acl         = "private";
-bool            S3fsCurl::is_use_rrs          = false;
-bool            S3fsCurl::is_use_sse          = false;
-bool            S3fsCurl::is_content_md5      = false;
-bool            S3fsCurl::is_verbose          = false;
-string          S3fsCurl::AWSAccessKeyId;
-string          S3fsCurl::AWSSecretAccessKey;
-long            S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
-const EVP_MD*   S3fsCurl::evp_md              = EVP_sha1();
-curltime_t      S3fsCurl::curl_times;
-curlprogress_t  S3fsCurl::curl_progress;
-string          S3fsCurl::curl_ca_bundle;
-mimes_t         S3fsCurl::mimeTypes;
-int             S3fsCurl::max_parallel_cnt    = 5;    // default
+pthread_mutex_t  S3fsCurl::curl_handles_lock;
+pthread_mutex_t  S3fsCurl::curl_share_lock;
+pthread_mutex_t* S3fsCurl::crypt_mutex         = NULL;
+bool             S3fsCurl::is_initglobal_done  = false;
+CURLSH*          S3fsCurl::hCurlShare          = NULL;
+bool             S3fsCurl::is_dns_cache        = true; // default
+long             S3fsCurl::connect_timeout     = 10;   // default
+time_t           S3fsCurl::readwrite_timeout   = 30;   // default
+int              S3fsCurl::retries             = 3;    // default
+bool             S3fsCurl::is_public_bucket    = false;
+string           S3fsCurl::default_acl         = "private";
+bool             S3fsCurl::is_use_rrs          = false;
+bool             S3fsCurl::is_use_sse          = false;
+bool             S3fsCurl::is_content_md5      = false;
+bool             S3fsCurl::is_verbose          = false;
+string           S3fsCurl::AWSAccessKeyId;
+string           S3fsCurl::AWSSecretAccessKey;
+long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
+const EVP_MD*    S3fsCurl::evp_md              = EVP_sha1();
+curltime_t       S3fsCurl::curl_times;
+curlprogress_t   S3fsCurl::curl_progress;
+string           S3fsCurl::curl_ca_bundle;
+mimes_t          S3fsCurl::mimeTypes;
+int              S3fsCurl::max_parallel_cnt    = 5;    // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
 //-------------------------------------------------------------------
-bool S3fsCurl::InitS3fsCurl(const char* MimeFile, bool reinit)
+bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
 {
-  if(!reinit){
-    if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, NULL)){
-      return false;
-    }
-    if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock, NULL)){
-      return false;
-    }
-    if(!S3fsCurl::InitMimeType(MimeFile)){
-      return false;
-    }
+  if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, NULL)){
+    return false;
+  }
+  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock, NULL)){
+    return false;
+  }
+  if(!S3fsCurl::InitMimeType(MimeFile)){
+    return false;
   }
   if(!S3fsCurl::InitGlobalCurl()){
     return false;
@@ -176,26 +175,30 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile, bool reinit)
   if(!S3fsCurl::InitShareCurl()){
     return false;
   }
+  if(!S3fsCurl::InitCryptMutex()){
+    return false;
+  }
   return true;
 }
 
-bool S3fsCurl::DestroyS3fsCurl(bool reinit)
+bool S3fsCurl::DestroyS3fsCurl(void)
 {
-  bool result = true;
+  int result = true;
 
+  if(!S3fsCurl::DestroyCryptMutex()){
+    return false;
+  }
   if(!S3fsCurl::DestroyShareCurl()){
     return false;
   }
   if(!S3fsCurl::DestroyGlobalCurl()){
     return false;
   }
-  if(!reinit){
-    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_share_lock)){
-      result = false;
-    }
-    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
-      result = false;
-    }
+  if(0 != pthread_mutex_destroy(&S3fsCurl::curl_share_lock)){
+    result = false;
+  }
+  if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
+    result = false;
   }
   return result;
 }
@@ -293,6 +296,100 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
   if(hCurlShare && useptr && CURL_LOCK_DATA_DNS == nLockData){
     pthread_mutex_t* lockmutex = static_cast<pthread_mutex_t*>(useptr);
     pthread_mutex_unlock(lockmutex);
+  }
+}
+
+bool S3fsCurl::InitCryptMutex(void)
+{
+  if(S3fsCurl::crypt_mutex){
+    FPRNNN("crypt_mutex is not NULL, destory it.");
+    if(!S3fsCurl::DestroyCryptMutex()){
+      DPRN("Failed to destroy crypt mutex");
+      return false;
+    }
+  }
+  if(NULL == (S3fsCurl::crypt_mutex = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t))))){
+    DPRNCRIT("Could not allocate memory for crypt mutex");
+    return false;
+  }
+  for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
+    pthread_mutex_init(&S3fsCurl::crypt_mutex[cnt], NULL);
+  }
+  // static lock
+  CRYPTO_set_locking_callback(S3fsCurl::CryptMutexLock);
+  CRYPTO_set_id_callback(S3fsCurl::CryptGetThreadid);
+  // dynamic lock
+  CRYPTO_set_dynlock_create_callback(S3fsCurl::CreateDynCryptMutex);
+  CRYPTO_set_dynlock_lock_callback(S3fsCurl::DynCryptMutexLock);
+  CRYPTO_set_dynlock_destroy_callback(S3fsCurl::DestoryDynCryptMutex);
+
+  return true;
+}
+
+bool S3fsCurl::DestroyCryptMutex(void)
+{
+  if(!S3fsCurl::crypt_mutex){
+    return true;
+  }
+
+  CRYPTO_set_dynlock_destroy_callback(NULL);
+  CRYPTO_set_dynlock_lock_callback(NULL);
+  CRYPTO_set_dynlock_create_callback(NULL);
+  CRYPTO_set_id_callback(NULL);
+  CRYPTO_set_locking_callback(NULL);
+
+  for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
+    pthread_mutex_destroy(&S3fsCurl::crypt_mutex[cnt]);
+  }
+  free(S3fsCurl::crypt_mutex);
+  S3fsCurl::crypt_mutex = NULL;
+
+  return true;
+}
+
+void S3fsCurl::CryptMutexLock(int mode, int pos, const char* file, int line)
+{
+  if(S3fsCurl::crypt_mutex){
+    if(mode & CRYPTO_LOCK){
+      pthread_mutex_lock(&S3fsCurl::crypt_mutex[pos]);
+    }else{
+      pthread_mutex_unlock(&S3fsCurl::crypt_mutex[pos]);
+    }
+  }
+}
+
+unsigned long S3fsCurl::CryptGetThreadid(void)
+{
+  return (unsigned long)pthread_self();
+}
+
+struct CRYPTO_dynlock_value* S3fsCurl::CreateDynCryptMutex(const char* file, int line)
+{
+  struct CRYPTO_dynlock_value* dyndata;
+
+  if(NULL == (dyndata = (struct CRYPTO_dynlock_value*)malloc(sizeof(struct CRYPTO_dynlock_value)))){
+    return NULL;
+  }
+  pthread_mutex_init(&(dyndata->dyn_mutex), NULL);
+  return dyndata;
+}
+
+void S3fsCurl::DynCryptMutexLock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
+{
+  if(dyndata){
+    if(mode & CRYPTO_LOCK){
+      pthread_mutex_lock(&(dyndata->dyn_mutex));
+    }else{
+      pthread_mutex_unlock(&(dyndata->dyn_mutex));
+    }
+  }
+}
+
+void S3fsCurl::DestoryDynCryptMutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
+{
+  if(dyndata){
+    pthread_mutex_destroy(&(dyndata->dyn_mutex));
+    free(dyndata);
   }
 }
 
