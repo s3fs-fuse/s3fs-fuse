@@ -10,7 +10,8 @@
 #include <string>
 #include <sstream>
 
-#define SPACES " \t\r\n"
+#define SPACES                " \t\r\n"
+#define STR2NCMP(str1, str2)  strncmp(str1, str2, strlen(str2))
 
 template<typename T> std::string str(T value) {
   std::stringstream s;
