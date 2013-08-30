@@ -601,7 +601,7 @@ int FdEntity::Open(ssize_t size, time_t time)
           fd   = -1;
           return (0 == errno ? -EIO : -errno);
         }
-        if(static_cast<size_t>(st.st_size) != pagelist.Size()){
+        if((-1 != size && static_cast<size_t>(size) != pagelist.Size()) || static_cast<size_t>(st.st_size) != pagelist.Size()){
           is_csf_loaded = false;   // reinitializing
           if(-1 == size){
             size = st.st_size;
