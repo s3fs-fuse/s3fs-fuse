@@ -869,7 +869,6 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   int            fd2;
   etaglist_t     list;
   off_t          remaining_bytes;
-  unsigned char* buf;
   S3fsCurl       s3fscurl(true);
 
   FPRNNN("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
