@@ -456,15 +456,40 @@ bool AutoLock::Unlock(void)
 // get user name from uid
 string get_username(uid_t uid)
 {
-  struct passwd* ppw;
-  if(NULL == (ppw = getpwuid(uid)) || NULL == ppw->pw_name){
-    DPRNNN("could not get username(errno=%d).", (int)errno);
+  static size_t maxlen = 0;	// set onece
+  int result;
+  char* pbuf;
+  struct passwd pwinfo;
+  struct passwd* ppwinfo = NULL;
+
+  // make buffer
+  if(0 == maxlen){
+    if(0 > (maxlen = (size_t)sysconf(_SC_GETPW_R_SIZE_MAX))){
+      DPRNNN("could not get max pw length.");
+      maxlen = 0;
+      return string("");
+    }
+  }
+  if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
+    DPRNCRIT("failed to allocate memory.");
     return string("");
   }
-  return string(ppw->pw_name);
+  // get group infomation
+  if(0 != (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
+    DPRNNN("could not get pw infomation.");
+    free(pbuf);
+    return string("");
+  }
+  // check pw
+  if(NULL == ppwinfo){
+    free(pbuf);
+    return string("");
+  }
+  string name = SAFESTRPTR(ppwinfo->pw_name);
+  free(pbuf);
+  return name;
 }
 
-// check uid in group(gid)
 int is_uid_inculde_group(uid_t uid, gid_t gid)
 {
   static size_t maxlen = 0;	// set onece
@@ -520,14 +545,14 @@ int is_uid_inculde_group(uid_t uid, gid_t gid)
 // dirname clobbers path so let it operate on a tmp copy
 string mydirname(string path)
 {
-  return string(dirname(&path[0]));
+  return string(dirname((char*)path.c_str()));
 }
 
 // safe variant of basename
 // basename clobbers path so let it operate on a tmp copy
 string mybasename(string path)
 {
-  return string(basename(&path[0]));
+  return string(basename((char*)path.c_str()));
 }
 
 // mkdir --parents
@@ -871,7 +896,11 @@ void show_help (void)
     "   nodnscache (disable dns cache)\n"
     "      - s3fs is always using dns cache, this option make dns cache disable.\n"
     "\n"
-    "   multireq_max (default=\"500\")\n"
+    "   nosscache (disable ssl session cache)\n"
+    "      - s3fs is always using ssl session cache, this option make ssl \n"
+    "      session cache disable.\n"
+    "\n"
+    "   multireq_max (default=\"20\")\n"
     "      - maximum number of parallel request for listing objects.\n"
     "\n"
     "   parallel_count (default=\"5\")\n"

@@ -20,7 +20,7 @@ struct stat_cache_entry {
   }
 };
 
-typedef std::map<std::string, struct stat_cache_entry> stat_cache_t; // key=path
+typedef std::map<std::string, stat_cache_entry*> stat_cache_t; // key=path
 
 //
 // Class
@@ -28,15 +28,16 @@ typedef std::map<std::string, struct stat_cache_entry> stat_cache_t; // key=path
 class StatCache
 {
   private:
-    static StatCache singleton;
+    static StatCache       singleton;
     static pthread_mutex_t stat_cache_lock;
-    stat_cache_t stat_cache;
-    bool IsExpireTime;
-    time_t ExpireTime;
+    stat_cache_t  stat_cache;
+    bool          IsExpireTime;
+    time_t        ExpireTime;
     unsigned long CacheSize;
-    bool IsCacheNoObject;
+    bool          IsCacheNoObject;
 
   private:
+    void Clear(void);
     bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
     // Truncate stat cache
     bool TruncateCache(void);

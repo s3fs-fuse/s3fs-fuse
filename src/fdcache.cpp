@@ -202,7 +202,7 @@ void PageList::FreeList(fdpage_list_t& list)
 
 PageList::PageList(size_t size, bool is_init)
 {
-  Init(0, false);
+  Init(size, is_init);
 }
 
 PageList::~PageList()
@@ -417,7 +417,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     }
     string       oneline;
     stringstream ssall(ptmp);
-    free(ptmp);
 
     // init
     Clear();
@@ -425,6 +424,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     // load(size)
     if(!getline(ssall, oneline, '\n')){
       DPRN("failed to parse stats.");
+      free(ptmp);
       return false;
     }
     size_t total = static_cast<size_t>(atoi(oneline.c_str()));
@@ -455,6 +455,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       // add new area
       SetInit(offset, size, is_init);
     }
+    free(ptmp);
     if(is_err){
       DPRN("failed to parse stats.");
       Clear();

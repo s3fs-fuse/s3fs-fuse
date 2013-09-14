@@ -33,6 +33,7 @@
 #include <list>
 
 #include "cache.h"
+#include "s3fs.h"
 #include "s3fs_util.h"
 
 using namespace std;
@@ -40,28 +41,26 @@ using namespace std;
 //-------------------------------------------------------------------
 // Static
 //-------------------------------------------------------------------
-StatCache StatCache::singleton;
+StatCache       StatCache::singleton;
 pthread_mutex_t StatCache::stat_cache_lock;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache()
+StatCache::StatCache() : IsExpireTime(false), ExpireTime(0), CacheSize(1000), IsCacheNoObject(false)
 {
   if(this == StatCache::getStatCacheData()){
+    stat_cache.clear();
     pthread_mutex_init(&(StatCache::stat_cache_lock), NULL);
   }else{
     assert(false);
   }
-  CacheSize       = 1000;
-  ExpireTime      = 0;
-  IsExpireTime    = false;
-  IsCacheNoObject = false;
 }
 
 StatCache::~StatCache()
 {
   if(this == StatCache::getStatCacheData()){
+    Clear();
     pthread_mutex_destroy(&(StatCache::stat_cache_lock));
   }else{
     assert(false);
@@ -111,6 +110,20 @@ bool StatCache::SetCacheNoObject(bool flag)
   return old;
 }
 
+void StatCache::Clear(void)
+{
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); stat_cache.erase(iter++)){
+    if((*iter).second){
+      delete (*iter).second;
+    }
+  }
+  S3FS_MALLOCTRIM(0);
+
+  pthread_mutex_unlock(&StatCache::stat_cache_lock);
+}
+
 bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
 {
   bool is_delete_cache = false;
@@ -128,9 +141,10 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
     iter = stat_cache.find(strpath.c_str());
   }
 
-  if(iter != stat_cache.end()) {
-    if(!IsExpireTime|| ((*iter).second.cache_date + ExpireTime) >= time(NULL)){
-      if((*iter).second.noobjcache){
+  if(iter != stat_cache.end() && (*iter).second){
+    stat_cache_entry* ent = (*iter).second;
+    if(!IsExpireTime|| (ent->cache_date + ExpireTime) >= time(NULL)){
+      if(ent->noobjcache){
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         if(!IsCacheNoObject){
           // need to delete this cache.
@@ -142,7 +156,7 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       }
       // hit without checking etag
       if(petag){
-        string stretag = (*iter).second.meta["ETag"];
+        string stretag = ent->meta["ETag"];
         if('\0' != petag[0] && 0 != strcmp(petag, stretag.c_str())){
           is_delete_cache = true;
         }
@@ -150,24 +164,22 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       if(is_delete_cache){
         // not hit by different ETag
         DPRNNN("stat cache not hit by ETag[path=%s][time=%jd][hit count=%lu][ETag(%s)!=(%s)]",
-          strpath.c_str(), (intmax_t)((*iter).second.cache_date), (*iter).second.hit_count,
-          petag ? petag : "null", (*iter).second.meta["ETag"].c_str());
+          strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count, petag ? petag : "null", ent->meta["ETag"].c_str());
       }else{
         // hit 
-        DPRNNN("stat cache hit [path=%s][time=%jd][hit count=%lu]",
-          strpath.c_str(), (intmax_t)((*iter).second.cache_date), (*iter).second.hit_count);
+        DPRNNN("stat cache hit [path=%s][time=%jd][hit count=%lu]", strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count);
 
         if(pst!= NULL){
-          *pst= (*iter).second.stbuf;
+          *pst= ent->stbuf;
         }
         if(meta != NULL){
-          meta->clear();
-          (*meta) = (*iter).second.meta;
+          *meta = ent->meta;
         }
         if(pisforce != NULL){
-          (*pisforce) = (*iter).second.isforce;
+          (*pisforce) = ent->isforce;
         }
-        (*iter).second.hit_count++;
+        ent->hit_count++;
+        ent->cache_date = time(NULL);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
@@ -206,10 +218,11 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
     iter = stat_cache.find(strpath.c_str());
   }
 
-  if(iter != stat_cache.end()) {
-    if(!IsExpireTime|| ((*iter).second.cache_date + ExpireTime) >= time(NULL)){
-      if((*iter).second.noobjcache){
+  if(iter != stat_cache.end() && (*iter).second) {
+    if(!IsExpireTime|| ((*iter).second->cache_date + ExpireTime) >= time(NULL)){
+      if((*iter).second->noobjcache){
         // noobjcache = true means no object.
+        (*iter).second->cache_date = time(NULL);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
@@ -233,46 +246,52 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   }
   DPRNNN("add stat cache entry[path=%s]", key.c_str());
 
-  if(stat_cache.size() > CacheSize){
-    if(!TruncateCache()){
-      return false;
+  if(stat_cache.end() != stat_cache.find(key)){
+    DelStat(key.c_str());
+  }else{
+    if(stat_cache.size() > CacheSize){
+      if(!TruncateCache()){
+        return false;
+      }
     }
   }
 
-  struct stat st;
-  if(!convert_header_to_stat(key.c_str(), meta, &st, forcedir)){
+  // make new
+  stat_cache_entry* ent = new stat_cache_entry();
+  if(!convert_header_to_stat(key.c_str(), meta, &(ent->stbuf), forcedir)){
+    delete ent;
     return false;
   }
-
-  pthread_mutex_lock(&StatCache::stat_cache_lock);
-  stat_cache[key].stbuf      = st;
-  stat_cache[key].hit_count  = 0;
-  stat_cache[key].cache_date = time(NULL); // Set time.
-  stat_cache[key].isforce    = forcedir;
-  stat_cache[key].noobjcache = false;
-
+  ent->hit_count  = 0;
+  ent->cache_date = time(NULL); // Set time.
+  ent->isforce    = forcedir;
+  ent->noobjcache = false;
+  ent->meta.clear();
   //copy only some keys
-  for (headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter) {
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string tag   = (*iter).first;
     string value = (*iter).second;
     if(tag == "Content-Type"){
-      stat_cache[key].meta[tag] = value;
+      ent->meta[tag] = value;
     }else if(tag == "Content-Length"){
-      stat_cache[key].meta[tag] = value;
+      ent->meta[tag] = value;
     }else if(tag == "ETag"){
-      stat_cache[key].meta[tag] = value;
+      ent->meta[tag] = value;
     }else if(tag == "Last-Modified"){
-      stat_cache[key].meta[tag] = value;
+      ent->meta[tag] = value;
     }else if(tag.substr(0, 5) == "x-amz"){
-      stat_cache[key].meta[tag] = value;
+      ent->meta[tag] = value;
     }else{
       // Check for upper case
       transform(tag.begin(), tag.end(), tag.begin(), static_cast<int (*)(int)>(std::tolower));
       if(tag.substr(0, 5) == "x-amz"){
-        stat_cache[key].meta[tag] = value;
+        ent->meta[tag] = value;
       }
     }
   }
+  // add
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+  stat_cache[key] = ent;
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
@@ -288,21 +307,27 @@ bool StatCache::AddNoObjectCache(string& key)
   }
   DPRNNN("add no object cache entry[path=%s]", key.c_str());
 
-  if(stat_cache.size() > CacheSize){
-    if(!TruncateCache()){
-      return false;
+  if(stat_cache.end() != stat_cache.find(key)){
+    DelStat(key.c_str());
+  }else{
+    if(stat_cache.size() > CacheSize){
+      if(!TruncateCache()){
+        return false;
+      }
     }
   }
 
-  struct stat st;
-  memset(&st, 0, sizeof(struct stat));
-
+  // make new
+  stat_cache_entry* ent = new stat_cache_entry();
+  memset(&(ent->stbuf), 0, sizeof(struct stat));
+  ent->hit_count  = 0;
+  ent->cache_date = time(NULL); // Set time.
+  ent->isforce    = false;
+  ent->noobjcache = true;
+  ent->meta.clear();
+  // add
   pthread_mutex_lock(&StatCache::stat_cache_lock);
-  stat_cache[key].stbuf      = st;
-  stat_cache[key].hit_count  = 0;
-  stat_cache[key].cache_date = time(NULL); // Set time.
-  stat_cache[key].isforce    = false;
-  stat_cache[key].noobjcache = true;
+  stat_cache[key] = ent;
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
@@ -310,25 +335,34 @@ bool StatCache::AddNoObjectCache(string& key)
 
 bool StatCache::TruncateCache(void)
 {
-  string path_to_delete;
-  unsigned int lowest_hit_count = 0;
+  if(0 == stat_cache.size()){
+    return true;
+  }
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  time_t lowest_time = time(NULL) + 1;
+  stat_cache_t::iterator iter_to_delete = stat_cache.end();
   stat_cache_t::iterator iter;
+
   for(iter = stat_cache.begin(); iter != stat_cache.end(); iter++) {
-    if(!lowest_hit_count) {
-      lowest_hit_count = (*iter).second.hit_count;
-      path_to_delete   = (*iter).first;
-    }
-    if(lowest_hit_count > (*iter).second.hit_count){
-      lowest_hit_count = (*iter).second.hit_count;
-      path_to_delete   = (*iter).first;
+    if((*iter).second){
+      if(lowest_time > (*iter).second->cache_date){
+        lowest_time    = (*iter).second->cache_date;
+        iter_to_delete = iter;
+      }
     }
   }
-  stat_cache.erase(path_to_delete);
-  pthread_mutex_unlock(&StatCache::stat_cache_lock);
+  if(stat_cache.end() != iter_to_delete){
+    DPRNNN("truncate stat cache[path=%s]", (*iter_to_delete).first.c_str());
+    if((*iter_to_delete).second){
+      delete (*iter_to_delete).second;
+    }
+    stat_cache.erase(iter_to_delete);
+    S3FS_MALLOCTRIM(0);
+  }
 
-  DPRNNN("truncate stat cache[path=%s]", path_to_delete.c_str());
+  pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
 }
@@ -341,8 +375,12 @@ bool StatCache::DelStat(const char* key)
   DPRNNN("delete stat cache entry[path=%s]", key);
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
-  stat_cache_t::iterator iter = stat_cache.find(key);
-  if(iter != stat_cache.end()){
+
+  stat_cache_t::iterator iter;
+  if(stat_cache.end() != (iter = stat_cache.find(string(key)))){
+    if((*iter).second){
+      delete (*iter).second;
+    }
     stat_cache.erase(iter);
   }
   if(0 < strlen(key) && 0 != strcmp(key, "/")){
@@ -354,11 +392,15 @@ bool StatCache::DelStat(const char* key)
       // If there is "path/" cache, delete it.
       strpath += "/";
     }
-    iter = stat_cache.find(strpath.c_str());
-    if(iter != stat_cache.end()){
+    if(stat_cache.end() != (iter = stat_cache.find(strpath.c_str()))){
+      if((*iter).second){
+        delete (*iter).second;
+      }
       stat_cache.erase(iter);
     }
   }
+  S3FS_MALLOCTRIM(0);
+
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;

@@ -99,6 +99,11 @@ class S3fsMultiCurl;
 //----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
+// share
+#define	SHARE_MUTEX_DNS         0
+#define	SHARE_MUTEX_SSL_SESSION 1
+#define	SHARE_MUTEX_MAX         2
+
 // internal use struct for openssl
 struct CRYPTO_dynlock_value
 {
@@ -130,11 +135,12 @@ class S3fsCurl
 
     // class variables
     static pthread_mutex_t  curl_handles_lock;
-    static pthread_mutex_t  curl_share_lock;
+    static pthread_mutex_t  curl_share_lock[SHARE_MUTEX_MAX];
     static pthread_mutex_t* crypt_mutex;
     static bool             is_initglobal_done;
     static CURLSH*          hCurlShare;
     static bool             is_dns_cache;
+    static bool             is_ssl_session_cache;
     static long             connect_timeout;
     static time_t           readwrite_timeout;
     static int              retries;
@@ -233,6 +239,7 @@ class S3fsCurl
     // class methods(valiables)
     static std::string LookupMimeType(std::string name);
     static bool SetDnsCache(bool isCache);
+    static bool SetSslSessionCache(bool isCache);
     static long SetConnectTimeout(long timeout);
     static time_t SetReadwriteTimeout(time_t timeout);
     static time_t GetReadwriteTimeout(void) { return S3fsCurl::readwrite_timeout; }
@@ -314,6 +321,7 @@ class S3fsMultiCurl
     S3fsMultiRetryCallback   RetryCallback;
 
   private:
+    bool ClearEx(bool is_all);
     int MultiPerform(void);
     int MultiRead(void);
 
@@ -326,7 +334,7 @@ class S3fsMultiCurl
 
     S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
     S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
-    bool Clear(void);
+    bool Clear(void) { return ClearEx(true); }
     bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
     int Request(void);
 };

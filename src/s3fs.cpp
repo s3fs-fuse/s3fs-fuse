@@ -111,17 +111,17 @@ static int check_parent_object_access(const char* path, int mask);
 static FdEntity* get_local_fent(const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
-static int readdir_multi_head(const char* path, S3ObjList& head);
+static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter);
 static int directory_empty(const char* path);
-static bool is_truncated(const char* xml);
+static bool is_truncated(xmlDocPtr doc);;
 static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
               const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head);
-static int append_objects_from_xml(const char* path, const char* xml, S3ObjList& head);
+static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
 static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl);
-static xmlChar* get_base_exp(const char* xml, const char* exp);
-static xmlChar* get_prefix(const char* xml);
-static xmlChar* get_next_marker(const char* xml);
+static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp);
+static xmlChar* get_prefix(xmlDocPtr doc);
+static xmlChar* get_next_marker(xmlDocPtr doc);
 static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
 static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg);
 static int rename_large_object(const char* from, const char* to);
@@ -194,6 +194,8 @@ static bool is_special_name_folder_object(const char* path)
   if(0 != s3fscurl.HeadRequest(strpath.c_str(), header)){
     return false;
   }
+  header.clear();
+  S3FS_MALLOCTRIM(0);
   return true;
 }
 
@@ -693,6 +695,7 @@ static int s3fs_getattr(const char* path, struct stat* stbuf)
     }
   }
   FPRNINFO("[path=%s] uid=%u, gid=%u, mode=%04o", path, (unsigned int)(stbuf->st_uid), (unsigned int)(stbuf->st_gid), stbuf->st_mode);
+  S3FS_MALLOCTRIM(0);
 
   return result;
 }
@@ -728,6 +731,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   buf[ressize] = '\0';
 
   FdManager::get()->Close(ent);
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -765,6 +769,7 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
     return result;
   }
   StatCache::getStatCacheData()->DelStat(path);
+  S3FS_MALLOCTRIM(0);
 
   return result;
 }
@@ -804,6 +809,7 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
     return -EIO;
   }
   fi->fh = ent->GetFd();
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -855,6 +861,8 @@ static int s3fs_mkdir(const char* path, mode_t mode)
 
   result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
   StatCache::getStatCacheData()->DelStat(path);
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -871,6 +879,7 @@ static int s3fs_unlink(const char* path)
   result = s3fscurl.DeleteRequest(path);
   FdManager::DeleteCacheFile(path);
   StatCache::getStatCacheData()->DelStat(path);
+  S3FS_MALLOCTRIM(0);
 
   return result;
 }
@@ -941,6 +950,8 @@ static int s3fs_rmdir(const char* path)
     strpath += "_$folder$";
     result   = s3fscurl.DeleteRequest(strpath.c_str());
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -991,6 +1002,7 @@ static int s3fs_symlink(const char* from, const char* to)
   FdManager::get()->Close(ent);
 
   StatCache::getStatCacheData()->DelStat(to);
+  S3FS_MALLOCTRIM(0);
 
   return result;
 }
@@ -1293,6 +1305,8 @@ static int s3fs_rename(const char* from, const char* to)
       result = rename_object_nocopy(from, to);
     }
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -1364,6 +1378,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -1443,6 +1458,8 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
 
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -1523,6 +1540,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -1612,6 +1630,8 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
 
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -1678,6 +1698,7 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -1766,6 +1787,8 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
 
     StatCache::getStatCacheData()->DelStat(nowcache);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -1814,6 +1837,7 @@ static int s3fs_truncate(const char* path, off_t size)
   FdManager::get()->Close(ent);
 
   StatCache::getStatCacheData()->DelStat(path);
+  S3FS_MALLOCTRIM(0);
 
   return result;
 }
@@ -1852,6 +1876,7 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
     return -EIO;
   }
   fi->fh = ent->GetFd();
+  S3FS_MALLOCTRIM(0);
 
   return 0;
 }
@@ -1957,6 +1982,8 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
     result = ent->Flush(meta, true, false);
     FdManager::get()->Close(ent);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -1990,6 +2017,8 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
       DPRNNN("Warning - file(%s),fd(%d) is still opened.", path, ent->GetFd());
     }
   }
+  S3FS_MALLOCTRIM(0);
+
   return 0;
 }
 
@@ -2003,6 +2032,8 @@ static int s3fs_opendir(const char* path, struct fuse_file_info* fi)
   if(0 == (result = check_object_access(path, mask, NULL))){
     result = check_parent_object_access(path, mask);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -2037,11 +2068,12 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   return newcurl;
 }
 
-static int readdir_multi_head(const char* path, S3ObjList& head)
+static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
   S3fsMultiCurl curlmulti;
   s3obj_list_t  headlist;
-  int           result;
+  s3obj_list_t  fillerlist;
+  int           result = 0;
 
   FPRNN("[path=%s][list=%zu]", path, headlist.size());
 
@@ -2057,10 +2089,17 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
     s3obj_list_t::iterator iter;
     long                   cnt;
 
+    fillerlist.clear();
     // Make single head request(with max).
     for(iter = headlist.begin(), cnt = 0; headlist.end() != iter && cnt < S3fsMultiCurl::GetMaxMultiRequest(); iter = headlist.erase(iter)){
       string disppath = path + (*iter);
       string etag     = head.GetETag((*iter).c_str());
+
+      string fillpath = disppath;
+      if('/' == disppath[disppath.length() - 1]){
+        fillpath = fillpath.substr(0, fillpath.length() -1);
+      }
+      fillerlist.push_back(fillpath);
 
       if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
         continue;
@@ -2085,6 +2124,20 @@ static int readdir_multi_head(const char* path, S3ObjList& head)
     if(0 != (result = curlmulti.Request())){
       DPRN("error occuered in multi request(errno=%d).", result); 
       break;
+    }
+
+    // populate fuse buffer
+    // here is best posision, because a case is cache size < files in directory
+    //
+    for(iter = fillerlist.begin(); fillerlist.end() != iter; iter++){
+      struct stat st;
+      string bpath = mybasename((*iter));
+      if(StatCache::getStatCacheData()->GetStat((*iter), &st)){
+        filler(buf, bpath.c_str(), &st, 0);
+      }else{
+        FPRNNN("Could not find %s file in stat cache.", (*iter).c_str());
+        filler(buf, bpath.c_str(), 0, 0);
+      }
     }
 
     // reinit for loop.
@@ -2118,21 +2171,16 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
     return 0;
   }
 
-  // populate fuse buffer
-  head.GetNameList(headlist);
-  s3obj_list_t::const_iterator liter;
-  for(liter = headlist.begin(); headlist.end() != liter; liter++){
-    filler(buf, (*liter).c_str(), 0, 0);
-  }
-
   // Send multi head request for stats caching.
   string strpath = path;
   if(strcmp(path, "/") != 0){
     strpath += "/";
   }
-  if(0 != (result = readdir_multi_head(strpath.c_str(), head))){
+  if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
     DPRN("readdir_multi_head returns error(%d).", result);
   }
+  S3FS_MALLOCTRIM(0);
+
   return result;
 }
 
@@ -2144,6 +2192,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
   string    next_marker = "";
   bool      truncated = true;
   S3fsCurl  s3fscurl;
+  xmlDocPtr doc;
   BodyData* body;
 
   FPRNN("[path=%s]", path);
@@ -2177,21 +2226,34 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
     }
     body = s3fscurl.GetBodyData();
 
-    if(0 != append_objects_from_xml(path, body->str(), head)){
-      DPRN("append_objects_from_xml returns with error.");
+    // xmlDocPtr
+    if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
+      DPRN("xmlReadMemory returns with error.");
       return -1;
     }
-    truncated = is_truncated(body->str());
-    if(truncated){
-      xmlChar*	tmpch = get_next_marker(body->str());
+    if(0 != append_objects_from_xml(path, doc, head)){
+      DPRN("append_objects_from_xml returns with error.");
+      xmlFreeDoc(doc);
+      return -1;
+    }
+    if(true == (truncated = is_truncated(doc))){
+      xmlChar*	tmpch = get_next_marker(doc);
       if(tmpch){
         next_marker = (char*)tmpch;
         xmlFree(tmpch);
+      }else{
+        DPRN("Could not find next marker, thus break loop.");
+        truncated = false;
       }
     }
+    xmlFreeDoc(doc);
+    S3FS_XMLFREEDOC(doc);
+
     // reset(initialize) curl object
     s3fscurl.DestroyCurlHandle();
   }
+  S3FS_MALLOCTRIM(0);
+
   return 0;
 }
 
@@ -2203,31 +2265,52 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
   xmlXPathObjectPtr contents_xp;
   xmlNodeSetPtr content_nodes;
 
-  contents_xp = xmlXPathEvalExpression((xmlChar*)ex_contents, ctx);
+  if(NULL == (contents_xp = xmlXPathEvalExpression((xmlChar*)ex_contents, ctx))){
+    DPRNNN("xmlXPathEvalExpression returns null.");
+    return -1;
+  }
+  if(xmlXPathNodeSetIsEmpty(contents_xp->nodesetval)){
+    DPRNNN("contents_xp->nodesetval is empty.");
+    S3FS_XMLXPATHFREEOBJECT(contents_xp);
+    return 0;
+  }
   content_nodes = contents_xp->nodesetval;
 
-  int i;
+  bool   is_dir;
+  string stretag;
+  int    i;
   for(i = 0; i < content_nodes->nodeNr; i++){
     ctx->node = content_nodes->nodeTab[i];
 
     // object name
-    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar*)ex_key, ctx);
+    xmlXPathObjectPtr key;
+    if(NULL == (key = xmlXPathEvalExpression((xmlChar*)ex_key, ctx))){
+      DPRNNN("key is null. but continue.");
+      continue;
+    }
+    if(xmlXPathNodeSetIsEmpty(key->nodesetval)){
+      DPRNNN("node is empty. but continue.");
+      xmlXPathFreeObject(key);
+      continue;
+    }
     xmlNodeSetPtr key_nodes = key->nodesetval;
     char* name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
     if(!name){
-      DPRNNN("append_objects_from_xml_ex name is something wrong. but continue.");
+      DPRNNN("name is something wrong. but continue.");
 
     }else if((const char*)name != c_strErrorObjectName){
-      bool is_dir = isCPrefix ? true : false;
-      string stretag = "";
+      is_dir  = isCPrefix ? true : false;
+      stretag = "";
 
       if(!isCPrefix && ex_etag){
         // Get ETag
-        xmlXPathObjectPtr ETag = xmlXPathEvalExpression((xmlChar*)ex_etag, ctx);
-        if(ETag){
-          xmlNodeSetPtr etag_nodes = ETag->nodesetval;
-          if(etag_nodes){
+        xmlXPathObjectPtr ETag;
+        if(NULL != (ETag = xmlXPathEvalExpression((xmlChar*)ex_etag, ctx))){
+          if(xmlXPathNodeSetIsEmpty(ETag->nodesetval)){
+            DPRNNN("ETag->nodesetval is empty.");
+          }else{
+            xmlNodeSetPtr etag_nodes = ETag->nodesetval;
             xmlChar* petag = xmlNodeListGetString(doc, etag_nodes->nodeTab[0]->xmlChildrenNode, 1);
             if(petag){
               stretag = (char*)petag;
@@ -2242,44 +2325,53 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
         xmlXPathFreeObject(key);
         xmlXPathFreeObject(contents_xp);
         free(name);
+        S3FS_MALLOCTRIM(0);
         return -1;
       }
       free(name);
     }else{
-      DPRNINFO("append_objects_from_xml_ex name is file or subdir in dir. but continue.");
+      DPRNINFO("name is file or subdir in dir. but continue.");
     }
     xmlXPathFreeObject(key);
   }
-  xmlXPathFreeObject(contents_xp);
+  S3FS_XMLXPATHFREEOBJECT(contents_xp);
 
   return 0;
 }
 
 static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
 {
+  static time_t tmLast = 0;  // cache for 60 sec.
+  static string strNs("");
   bool result = false;
 
   if(!doc){
     return result;
   }
-  xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
-  if(pRootNode){
-    xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
-    if(nslist && nslist[0]){
-      if(nslist[0]->href){
-        nsurl  = (const char*)(nslist[0]->href);
-        result = true;
+  if((tmLast + 60) < time(NULL)){
+    // refresh
+    tmLast = time(NULL);
+    strNs  = "";
+    xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
+    if(pRootNode){
+      xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
+      if(nslist){
+        if(nslist[0] && nslist[0]->href){
+          strNs  = (const char*)(nslist[0]->href);
+        }
+        S3FS_XMLFREE(nslist);
       }
-      xmlFree(nslist);
     }
+  }
+  if(0 < strNs.size()){
+    nsurl  = strNs;
+    result = true;
   }
   return result;
 }
 
-static int append_objects_from_xml(const char* path, const char* xml, S3ObjList& head)
+static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
 {
-  xmlDocPtr doc;
-  xmlXPathContextPtr ctx;
   string xmlnsurl;
   string ex_contents = "//";
   string ex_key      = "";
@@ -2287,17 +2379,18 @@ static int append_objects_from_xml(const char* path, const char* xml, S3ObjList&
   string ex_prefix   = "";
   string ex_etag     = "";
 
-  // If there is not <Prefix>, use path instead of it.
-  xmlChar* pprefix = get_prefix(xml);
-  string prefix = (pprefix ? (char*)pprefix : path ? path : "");
-  xmlFree(pprefix);
-
-  doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
-  if(doc == NULL){
-    DPRN("xmlReadMemory returns with error.");
+  if(!doc){
     return -1;
   }
-  ctx = xmlXPathNewContext(doc);
+
+  // If there is not <Prefix>, use path instead of it.
+  xmlChar* pprefix = get_prefix(doc);
+  string   prefix  = (pprefix ? (char*)pprefix : path ? path : "");
+  if(pprefix){
+    xmlFree(pprefix);
+  }
+
+  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
 
   if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
     xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
@@ -2317,28 +2410,24 @@ static int append_objects_from_xml(const char* path, const char* xml, S3ObjList&
      -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), NULL, 1, head) )
   {
     DPRN("append_objects_from_xml_ex returns with error.");
-    xmlXPathFreeContext(ctx);
-    xmlFreeDoc(doc);
+    S3FS_XMLXPATHFREECONTEXT(ctx);
     return -1;
   }
-  xmlXPathFreeContext(ctx);
-  xmlFreeDoc(doc);
+  S3FS_XMLXPATHFREECONTEXT(ctx);
 
   return 0;
 }
 
-static xmlChar* get_base_exp(const char* xml, const char* exp)
+static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
 {
-  xmlDocPtr doc;
-  xmlXPathContextPtr ctx;
-  xmlXPathObjectPtr marker_xp;
-  xmlNodeSetPtr nodes;
-  xmlChar* result;
+  xmlXPathObjectPtr  marker_xp;
   string xmlnsurl;
   string exp_string = "//";
 
-  doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0);
-  ctx = xmlXPathNewContext(doc);
+  if(!doc){
+    return NULL;
+  }
+  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
 
   if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
     xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
@@ -2346,37 +2435,48 @@ static xmlChar* get_base_exp(const char* xml, const char* exp)
   }
   exp_string += exp;
 
-  marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx);
-  nodes = marker_xp->nodesetval;
-
-  if(nodes->nodeNr < 1)
+  if(NULL == (marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx))){
+    xmlXPathFreeContext(ctx);
     return NULL;
-
-  result = xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
+  }
+  if(xmlXPathNodeSetIsEmpty(marker_xp->nodesetval)){
+    DPRNNN("marker_xp->nodesetval is empty.");
+    xmlXPathFreeObject(marker_xp);
+    xmlXPathFreeContext(ctx);
+    return NULL;
+  }
+  xmlNodeSetPtr nodes  = marker_xp->nodesetval;
+  xmlChar*      result = xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
 
   xmlXPathFreeObject(marker_xp);
   xmlXPathFreeContext(ctx);
-  xmlFreeDoc(doc);
 
   return result;
 }
 
-static xmlChar* get_prefix(const char* xml)
+static xmlChar* get_prefix(xmlDocPtr doc)
 {
-  return get_base_exp(xml, "Prefix");
+  return get_base_exp(doc, "Prefix");
 }
 
-static xmlChar* get_next_marker(const char* xml)
+static xmlChar* get_next_marker(xmlDocPtr doc)
 {
-  return get_base_exp(xml, "NextMarker");
+  return get_base_exp(doc, "NextMarker");
 }
 
-static bool is_truncated(const char* xml)
+static bool is_truncated(xmlDocPtr doc)
 {
-  if(strstr(xml, "<IsTruncated>true</IsTruncated>")){
-    return true;
+  bool result = false;
+
+  xmlChar* strTruncate = get_base_exp(doc, "IsTruncated");
+  if(!strTruncate){
+    return result;
   }
-  return false;
+  if(0 == strcasecmp((const char*)strTruncate, "true")){
+    result = true;
+  }
+  xmlFree(strTruncate);
+  return result;
 }
 
 // return: the pointer to object name on allocated memory.
@@ -2398,8 +2498,8 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
 
   // Make dir path and filename
   string   strfullpath= (char*)fullpath;
-  string   strdirpath = mydirname((char*)fullpath);
-  string   strmybpath = mybasename((char*)fullpath);
+  string   strdirpath = mydirname(string((char*)fullpath));
+  string   strmybpath = mybasename(string((char*)fullpath));
   const char* dirpath = strdirpath.c_str();
   const char* mybname = strmybpath.c_str();
   const char* basepath= (!path || '\0' == path[0] || '/' != path[0] ? path : &path[1]);
@@ -2519,7 +2619,9 @@ static int s3fs_access(const char* path, int mask)
           ((mask & X_OK) == X_OK) ? "X_OK " : "",
           (mask == F_OK) ? "F_OK" : "");
 
-    return check_object_access(path, mask, NULL);
+  int result = check_object_access(path, mask, NULL);
+  S3FS_MALLOCTRIM(0);
+  return result;
 }
 
 static int s3fs_utility_mode(void)
@@ -2590,6 +2692,8 @@ static int s3fs_check_service(void)
       return EXIT_FAILURE;
     }
   }
+  S3FS_MALLOCTRIM(0);
+
   return EXIT_SUCCESS;
 }
 
@@ -3196,6 +3300,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       S3fsCurl::SetDnsCache(false);
       return 0;
     }
+    if(0 == strcmp(arg, "nosscache")){
+      S3fsCurl::SetSslSessionCache(false);
+      return 0;
+    }
     if(0 == STR2NCMP(arg, "parallel_count=") || 0 == STR2NCMP(arg, "parallel_upload=")){
       int maxpara = (int)strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
       if(0 >= maxpara){
@@ -3315,41 +3423,45 @@ int main(int argc, char* argv[])
     {0, 0, 0, 0}
   };
 
-   // get progam name - emulate basename 
-   size_t found = string::npos;
-   program_name.assign(argv[0]);
-   found = program_name.find_last_of("/");
-   if(found != string::npos){
-      program_name.replace(0, found+1, "");
-   }
+  // init xml2
+  xmlInitParser();
+  LIBXML_TEST_VERSION
 
-   while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
-     switch(ch){
-     case 0:
-       if(strcmp(long_opts[option_index].name, "version") == 0){
-         show_version();
-         exit(EXIT_SUCCESS);
-       }
-       break;
-     case 'h':
-       show_help();
-       exit(EXIT_SUCCESS);
-     case 'o':
-       break;
-     case 'd':
-       break;
-     case 'f':
-       foreground = true;
-       break;
-     case 's':
-       break;
-     case 'u':
-       utility_mode = 1;
-       break;
-     default:
-       exit(EXIT_FAILURE);
-     }
-   }
+  // get progam name - emulate basename 
+  size_t found = string::npos;
+  program_name.assign(argv[0]);
+  found = program_name.find_last_of("/");
+  if(found != string::npos){
+    program_name.replace(0, found+1, "");
+  }
+
+  while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
+    switch(ch){
+    case 0:
+      if(strcmp(long_opts[option_index].name, "version") == 0){
+        show_version();
+        exit(EXIT_SUCCESS);
+      }
+      break;
+    case 'h':
+      show_help();
+      exit(EXIT_SUCCESS);
+    case 'o':
+      break;
+    case 'd':
+      break;
+    case 'f':
+      foreground = true;
+      break;
+    case 's':
+      break;
+    case 'u':
+      utility_mode = 1;
+      break;
+    default:
+      exit(EXIT_FAILURE);
+    }
+  }
 
   // clear this structure
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
@@ -3483,9 +3595,18 @@ int main(int argc, char* argv[])
   s3fs_oper.access    = s3fs_access;
   s3fs_oper.create    = s3fs_create;
 
+  // init NSS
+  S3FS_INIT_NSS();
+
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
+
+  // cleanup NSS
+  S3FS_CLEANUP_NSS();
+  // cleanup xml2
+  xmlCleanupParser();
+  S3FS_MALLOCTRIM(0);
 
   exit(fuse_res);
 }

@@ -117,7 +117,10 @@ You can specify this option for performance, s3fs memorizes in stat cache that t
 \fB\-o\fR nodnscache - disable dns cache.
 s3fs is always using dns cache, this option make dns cache disable.
 .TP
-\fB\-o\fR multireq_max (default="500")
+\fB\-o\fR nosscache - disable ssl session cache.
+s3fs is always using ssl session cache, this option make ssl session cache disable.
+.TP
+\fB\-o\fR multireq_max (default="20")
 maximum number of parallel request for listing objects.
 .TP
 \fB\-o\fR parallel_count (default="5")
