@@ -2246,7 +2246,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
         truncated = false;
       }
     }
-    xmlFreeDoc(doc);
     S3FS_XMLFREEDOC(doc);
 
     // reset(initialize) curl object
