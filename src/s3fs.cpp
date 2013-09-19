@@ -1814,10 +1814,10 @@ static int s3fs_truncate(const char* path, off_t size)
       DPRN("could not open file(%s): errno=%d", path, errno);
       return -EIO;
     }
-    if(!ent->Load(0, size)){
-      DPRN("could not download file(%s): errno=%d", path, errno);
+    if(0 != (result = ent->Load(0, size))){
+      DPRN("could not download file(%s): result=%d", path, result);
       FdManager::get()->Close(ent);
-      return -EIO;
+      return result;
     }
 
   }else{
