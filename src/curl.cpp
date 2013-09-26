@@ -2875,7 +2875,7 @@ int S3fsMultiCurl::MultiRead(void)
 
     if(s3fscurl){
       if(CURLE_OK == msg->data.result){
-        long responseCode;
+        long responseCode = -1;
         if(s3fscurl->GetResponseCode(responseCode) && 400 > responseCode){
           // add into stat cache
           if(SuccessCallback && !SuccessCallback(s3fscurl)){
@@ -2883,7 +2883,7 @@ int S3fsMultiCurl::MultiRead(void)
           }
         }else{
           // This case is directory object("dir", "non dir object", "_$folder$", etc)
-          DPRNINFO("failed a request(%s)", s3fscurl->base_path.c_str());
+          DPRNNN("failed a request(%ld: %s)", responseCode, s3fscurl->base_path.c_str());
         }
         cMap_req.erase(hCurl);
         curl_multi_remove_handle(hMulti, hCurl);
