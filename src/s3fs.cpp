@@ -3267,6 +3267,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
            program_name.c_str());
         return -1;
       }
+      return 0;
     }
     if(0 == STR2NCMP(arg, "host=")){
       host = strchr(arg, '=') + sizeof(char);
