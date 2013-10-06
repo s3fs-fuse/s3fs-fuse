@@ -145,6 +145,9 @@ Enable to send "Content-MD5" header when uploading a object without multipart po
 If this option is enabled, it has some influences on a performance of s3fs when uploading small object.
 Because s3fs always checks MD5 when uploading large object, this option does not affect on large object.
 .TP
+\fB\-o\fR iam_role ( default is no role )
+set the IAM Role that will supply the credentials from the instance meta-data.
+.TP
 \fB\-o\fR noxmlns - disable registing xml name space.
 disable registing xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
 This option should not be specified now, because s3fs looks up xmlns automatically after v1.66.

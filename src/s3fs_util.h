@@ -106,6 +106,7 @@ uid_t get_uid(headers_t& meta);
 gid_t get_gid(const char *s);
 gid_t get_gid(headers_t& meta);
 blkcnt_t get_blocks(off_t size);
+time_t cvtIAMExpireStringToTime(const char* s);
 time_t get_lastmodified(const char* s);
 time_t get_lastmodified(headers_t& meta);
 bool is_need_check_obj_detail(headers_t& meta);

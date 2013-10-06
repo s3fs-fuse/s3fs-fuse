@@ -138,6 +138,14 @@ const char* BodyData::str(void) const
 #define MULTIPART_SIZE              10485760          // 10MB
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
+#define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timming
+#define	IAM_CRED_URL                "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+#define IAMCRED_ACCESSKEYID         "AccessKeyId"
+#define IAMCRED_SECRETACCESSKEY     "SecretAccessKey"
+#define IAMCRED_ACCESSTOKEN         "Token"
+#define IAMCRED_EXPIRATION          "Expiration"
+#define IAMCRED_KEYCOUNT            4
+
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 pthread_mutex_t  S3fsCurl::curl_share_lock[SHARE_MUTEX_MAX];
 pthread_mutex_t* S3fsCurl::crypt_mutex         = NULL;
@@ -156,6 +164,9 @@ bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
 string           S3fsCurl::AWSAccessKeyId;
 string           S3fsCurl::AWSSecretAccessKey;
+string           S3fsCurl::AWSAccessToken;
+time_t           S3fsCurl::AWSAccessTokenExpire= 0;
+string           S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 const EVP_MD*    S3fsCurl::evp_md              = EVP_sha1();
 curltime_t       S3fsCurl::curl_times;
@@ -804,6 +815,13 @@ long S3fsCurl::SetSslVerifyHostname(long value)
   return old;
 }
 
+string S3fsCurl::SetIAMRole(const char* role)
+{
+  string old = S3fsCurl::IAM_role;
+  S3fsCurl::IAM_role = role ? role : "";
+  return old;
+}
+
 int S3fsCurl::SetMaxParallelCount(int value)
 {
   int old = S3fsCurl::max_parallel_cnt;
@@ -1017,6 +1035,82 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
   return result;
 }
 
+bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval)
+{
+  if(!response){
+    return false;
+  }
+  istringstream sscred(response);
+  string        oneline;
+  keyval.clear();
+  while(getline(sscred, oneline, '\n')){
+    string::size_type pos;
+    string            key;
+    string            val;
+    if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
+      key = IAMCRED_ACCESSKEYID;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
+      key = IAMCRED_SECRETACCESSKEY;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSTOKEN))){
+      key = IAMCRED_ACCESSTOKEN;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
+      key = IAMCRED_EXPIRATION;
+    }else{
+      continue;
+    }
+    if(string::npos == (pos = oneline.find(':', pos + key.length()))){
+      continue;
+    }
+    if(string::npos == (pos = oneline.find('\"', pos))){
+      continue;
+    }
+    oneline = oneline.substr(pos + sizeof(char));
+    if(string::npos == (pos = oneline.find('\"'))){
+      continue;
+    }
+    val = oneline.substr(0, pos);
+    keyval[key] = val;
+  }
+  return true;
+}
+
+bool S3fsCurl::SetIAMCredentials(const char* response)
+{
+  FPRNINFO("IAM credential response = \"%s\"", response);
+
+  iamcredmap_t keyval;
+
+  if(!ParseIAMCredentialResponse(response, keyval)){
+    return false;
+  }
+  if(IAMCRED_KEYCOUNT != keyval.size()){
+    return false;
+  }
+
+  S3fsCurl::AWSAccessKeyId       = keyval[string(IAMCRED_ACCESSKEYID)];
+  S3fsCurl::AWSSecretAccessKey   = keyval[string(IAMCRED_SECRETACCESSKEY)];
+  S3fsCurl::AWSAccessToken       = keyval[string(IAMCRED_ACCESSTOKEN)];
+  S3fsCurl::AWSAccessTokenExpire = cvtIAMExpireStringToTime(keyval[string(IAMCRED_EXPIRATION)].c_str());
+
+  return true;
+}
+
+bool S3fsCurl::CheckIAMCredentialUpdate(void)
+{
+  if(0 == S3fsCurl::IAM_role.size()){
+    return true;
+  }
+  if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
+    return true;
+  }
+  // update
+  S3fsCurl s3fscurl;
+  if(0 != s3fscurl.GetIAMCredentials()){
+    return false;
+  }
+  return true;
+}
+
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
@@ -1044,11 +1138,14 @@ bool S3fsCurl::ResetHandle(void)
   curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
   // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
 
-  if(0 == S3fsCurl::ssl_verify_hostname){
-    curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
-  }
-  if(S3fsCurl::curl_ca_bundle.size() != 0){
-    curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
+  if(type != REQTYPE_IAMCRED){
+    // REQTYPE_IAMCRED is always HTTP
+    if(0 == S3fsCurl::ssl_verify_hostname){
+      curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
+    }
+    if(S3fsCurl::curl_ca_bundle.size() != 0){
+      curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
+    }
   }
   if((S3fsCurl::is_dns_cache || S3fsCurl::is_ssl_session_cache) && S3fsCurl::hCurlShare){
     curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
@@ -1320,6 +1417,12 @@ bool S3fsCurl::RemakeHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
       break;
 
+    case REQTYPE_IAMCRED:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+      break;
+
     default:
       DPRNNN("request type is unknown(%d)", type);
       return false;
@@ -1513,6 +1616,14 @@ string S3fsCurl::CalcSignature(string method, string strMD5, string content_type
   string Signature;
   string StringToSign;
 
+  if(0 < S3fsCurl::IAM_role.size()){
+    if(!S3fsCurl::CheckIAMCredentialUpdate()){
+      DPRN("Something error occurred in checking IAM credential.");  
+      return Signature;  // returns empty string, then it occures error.
+    }
+    requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-security-token:" + S3fsCurl::AWSAccessToken).c_str());
+  }
+
   StringToSign += method + "\n";
   StringToSign += strMD5 + "\n";        // md5
   StringToSign += content_type + "\n";
@@ -1681,6 +1792,47 @@ int S3fsCurl::DeleteRequest(const char* tpath)
   type = REQTYPE_DELETE;
 
   return RequestPerform();
+}
+
+//
+// Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
+// and Set these value to class valiable.
+//
+int S3fsCurl::GetIAMCredentials(void)
+{
+  FPRNINFO("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
+
+  if(0 == S3fsCurl::IAM_role.size()){
+    DPRN("IAM role name is empty.");
+    return -EIO;
+  }
+  // at first set type for handle
+  type = REQTYPE_IAMCRED;
+
+  if(!CreateCurlHandle(true)){
+    return -EIO;
+  }
+
+  // url
+  url             = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+  int result = RequestPerform();
+
+  // analizing response
+  if(0 == result && !S3fsCurl::SetIAMCredentials(bodydata->str())){
+    DPRN("Something error occured, could not get IAM credential.");
+  }
+  delete bodydata;
+  bodydata = NULL;
+
+  return result;
 }
 
 //

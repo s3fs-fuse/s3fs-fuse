@@ -743,6 +743,17 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
+time_t cvtIAMExpireStringToTime(const char* s)
+{
+  struct tm tm;
+  if(!s){
+    return 0L;
+  }
+  memset(&tm, 0, sizeof(struct tm));
+  strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
+  return mktime(&tm);      // GMT
+}
+
 time_t get_lastmodified(const char* s)
 {
   struct tm tm;
@@ -926,6 +937,10 @@ void show_help (void)
     "\n"
     "   enable_content_md5 (default is disable)\n"
     "      - verifying uploaded object without multipart by content-md5 header.\n"
+    "\n"
+    "   iam_role (default is no role)\n"
+    "      - set the IAM Role that will supply the credentials from the \n"
+    "      instance meta-data.\n"
     "\n"
     "   noxmlns (disable registing xml name space)\n"
     "        disable registing xml name space for response of \n"

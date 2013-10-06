@@ -99,6 +99,8 @@ class S3fsMultiCurl;
 //----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
+typedef std::map<std::string, std::string> iamcredmap_t;
+
 // share
 #define	SHARE_MUTEX_DNS         0
 #define	SHARE_MUTEX_SSL_SESSION 1
@@ -130,7 +132,8 @@ class S3fsCurl
       REQTYPE_COMPLETEMULTIPOST,
       REQTYPE_UPLOADMULTIPOST,
       REQTYPE_COPYMULTIPOST,
-      REQTYPE_MULTILIST
+      REQTYPE_MULTILIST,
+      REQTYPE_IAMCRED
     };
 
     // class variables
@@ -152,6 +155,9 @@ class S3fsCurl
     static bool             is_verbose;
     static std::string      AWSAccessKeyId;
     static std::string      AWSSecretAccessKey;
+    static std::string      AWSAccessToken;
+    static time_t           AWSAccessTokenExpire;
+    static std::string      IAM_role;
     static long             ssl_verify_hostname;
     static const EVP_MD*    evp_md;
     static curltime_t       curl_times;
@@ -216,12 +222,16 @@ class S3fsCurl
     static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
+    static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
+    static bool SetIAMCredentials(const char* response);
+
     // methods
     bool ResetHandle(void);
     bool RemakeHandle(void);
     bool ClearInternalData(void);
     std::string CalcSignature(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
     bool GetUploadId(std::string& upload_id);
+    int GetIAMCredentials(void);
 
     int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool ow_sse_flg);
     int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
@@ -235,6 +245,7 @@ class S3fsCurl
     static bool DestroyS3fsCurl(void);
     static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
     static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
+    static bool CheckIAMCredentialUpdate(void);
 
     // class methods(valiables)
     static std::string LookupMimeType(std::string name);
@@ -255,10 +266,14 @@ class S3fsCurl
     static bool SetVerbose(bool flag);
     static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
     static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
-    static bool IsSetAccessKeyId(void) { return (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()); }
+    static bool IsSetAccessKeyId(void){
+                  return (0 < S3fsCurl::IAM_role.size() || (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()));
+                }
     static long SetSslVerifyHostname(long value);
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
     static int SetMaxParallelCount(int value);
+    static std::string SetIAMRole(const char* role);
+    static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
 
     // methods
     bool CreateCurlHandle(bool force = false);
