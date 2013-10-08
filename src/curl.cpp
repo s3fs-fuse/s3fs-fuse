@@ -871,7 +871,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   newcurl->partdata.size     = s3fscurl->partdata.size;
 
   // setup new curl object
-  if(!newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
+  if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
     DPRN("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
     delete newcurl;
     return NULL;
