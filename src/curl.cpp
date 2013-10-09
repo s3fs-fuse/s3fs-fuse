@@ -863,12 +863,14 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   part_num = atoi(part_num_str.c_str());
 
   // duplicate request
-  S3fsCurl* newcurl          = new S3fsCurl(s3fscurl->IsUseAhbe());
-  newcurl->partdata.etaglist = s3fscurl->partdata.etaglist;
-  newcurl->partdata.etagpos  = s3fscurl->partdata.etagpos;
-  newcurl->partdata.fd       = s3fscurl->partdata.fd;
-  newcurl->partdata.startpos = s3fscurl->partdata.startpos;
-  newcurl->partdata.size     = s3fscurl->partdata.size;
+  S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
+  newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
+  newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+  newcurl->partdata.fd         = s3fscurl->partdata.fd;
+  newcurl->partdata.startpos   = s3fscurl->b_partdata_startpos;
+  newcurl->partdata.size       = s3fscurl->b_partdata_size;
+  newcurl->b_partdata_startpos = s3fscurl->b_partdata_startpos;
+  newcurl->b_partdata_size     = s3fscurl->b_partdata_size;
 
   // setup new curl object
   if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
@@ -927,10 +929,12 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
       chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
 
       // s3fscurl sub object
-      S3fsCurl* s3fscurl_para          = new S3fsCurl(true);
-      s3fscurl_para->partdata.fd       = fd2;
-      s3fscurl_para->partdata.startpos = st.st_size - remaining_bytes;
-      s3fscurl_para->partdata.size     = chunk;
+      S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
+      s3fscurl_para->partdata.fd         = fd2;
+      s3fscurl_para->partdata.startpos   = st.st_size - remaining_bytes;
+      s3fscurl_para->partdata.size       = chunk;
+      s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
+      s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
       s3fscurl_para->partdata.add_etag_list(&list);
 
       // initiate upload part for parallel
