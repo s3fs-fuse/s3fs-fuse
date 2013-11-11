@@ -133,7 +133,8 @@ class S3fsCurl
       REQTYPE_UPLOADMULTIPOST,
       REQTYPE_COPYMULTIPOST,
       REQTYPE_MULTILIST,
-      REQTYPE_IAMCRED
+      REQTYPE_IAMCRED,
+      REQTYPE_ABORTMULTIUPLOAD
     };
 
     // class variables
@@ -182,6 +183,7 @@ class S3fsCurl
     int                  postdata_remaining;   // use by post method and read callback function.
     filepart             partdata;             // use by multipart upload/get object callback
     bool                 is_use_ahbe;          // additional header by extension
+    int                  retry_count;          // retry count for multipart
     FILE*                b_infile;             // backup for retrying
     const unsigned char* b_postdata;           // backup for retrying
     int                  b_postdata_remaining; // backup for retrying
@@ -237,7 +239,7 @@ class S3fsCurl
     int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
     int UploadMultipartPostSetup(const char* tpath, int part_num, std::string& upload_id);
     int UploadMultipartPostRequest(const char* tpath, int part_num, std::string& upload_id);
-    int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta, bool ow_sse_flg);
+    int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
 
   public:
     // class methods
@@ -294,7 +296,8 @@ class S3fsCurl
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
     int MultipartListRequest(std::string& body);
-    int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool ow_sse_flg);
+    int AbortMultipartUpload(const char* tpath, std::string& upload_id);
+    int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta);
     int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
@@ -312,6 +315,9 @@ class S3fsCurl
     bool EnableUseAhbe(void) { return SetUseAhbe(true); }
     bool DisableUseAhbe(void) { return SetUseAhbe(false); }
     bool IsUseAhbe(void) const { return is_use_ahbe; }
+    int GetMultipartRetryCount(void) const { return retry_count; }
+    void SetMultipartRetryCount(int retrycnt) { retry_count = retrycnt; }
+    bool IsOverMultipartRetryCount(void) const { return (retry_count >= S3fsCurl::retries); }
 };
 
 //----------------------------------------------

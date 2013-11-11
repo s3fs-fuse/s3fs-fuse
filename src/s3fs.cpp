@@ -66,6 +66,17 @@ using namespace std;
 #define	IS_RMTYPEDIR(type)  (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type)
 
 //-------------------------------------------------------------------
+// Structs
+//-------------------------------------------------------------------
+typedef struct uncomplete_multipart_info{
+  string key;
+  string id;
+  string date;
+}UNCOMP_MP_INFO;
+
+typedef std::list<UNCOMP_MP_INFO> uncomp_mp_list_t;
+
+//-------------------------------------------------------------------
 // Global valiables
 //-------------------------------------------------------------------
 bool debug                        = false;
@@ -132,6 +143,10 @@ static int rename_object_nocopy(const char* from, const char* to);
 static int clone_directory_object(const char* from, const char* to);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
+static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key);
+static void print_uncomp_mp_list(uncomp_mp_list_t& list);
+static bool abort_uncomp_mp_list(uncomp_mp_list_t& list);
+static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list);
 static int s3fs_utility_mode(void);
 static int s3fs_check_service(void);
 static int check_for_aws_format(void);
@@ -643,7 +658,7 @@ static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
 
   if(buf.st_size >= FIVE_GB){
     // multipart
-    if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, ow_sse_flg))){
+    if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta))){
       return result;
     }
   }else{
@@ -2060,6 +2075,11 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return NULL;
   }
+  if(s3fscurl->IsOverMultipartRetryCount()){
+    DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+    return NULL;
+  }
+
   S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
   string path       = s3fscurl->GetPath();
   string base_path  = s3fscurl->GetBasePath();
@@ -2070,6 +2090,8 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     delete newcurl;
     return NULL;
   }
+  newcurl->SetMultipartRetryCount(s3fscurl->GetMultipartRetryCount());
+
   return newcurl;
 }
 
@@ -2628,6 +2650,188 @@ static int s3fs_access(const char* path, int mask)
   return result;
 }
 
+static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key)
+{
+  if(!doc || !ctx || !exp_key){
+    return NULL;
+  }
+
+  xmlXPathObjectPtr exp;
+  xmlNodeSetPtr     exp_nodes;
+  xmlChar*          exp_value;
+
+  // search exp_key tag
+  if(NULL == (exp = xmlXPathEvalExpression((xmlChar*)exp_key, ctx))){
+    DPRNNN("Could not find key(%s).", exp_key);
+    return NULL;
+  }
+  if(xmlXPathNodeSetIsEmpty(exp->nodesetval)){
+    DPRNNN("Key(%s) node is empty.", exp_key);
+    S3FS_XMLXPATHFREEOBJECT(exp);
+    return NULL;
+  }
+  // get exp_key value & set in struct
+  exp_nodes = exp->nodesetval;
+  if(NULL == (exp_value = xmlNodeListGetString(doc, exp_nodes->nodeTab[0]->xmlChildrenNode, 1))){
+    DPRNNN("Key(%s) value is empty.", exp_key);
+    S3FS_XMLXPATHFREEOBJECT(exp);
+    return NULL;
+  }
+
+  S3FS_XMLXPATHFREEOBJECT(exp);
+  return exp_value;
+}
+
+static void print_uncomp_mp_list(uncomp_mp_list_t& list)
+{
+  printf("\n");
+  printf("Lists the parts that have been uploaded for a specific multipart upload.\n");
+  printf("\n");
+
+  if(0 < list.size()){
+    printf("---------------------------------------------------------------\n");
+
+    int cnt = 0;
+    for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); iter++, cnt++){
+      printf(" Path     : %s\n", (*iter).key.c_str());
+      printf(" UploadId : %s\n", (*iter).id.c_str());
+      printf(" Date     : %s\n", (*iter).date.c_str());
+      printf("\n");
+    }
+    printf("---------------------------------------------------------------\n");
+
+  }else{
+    printf("There is no list.\n");
+  }
+}
+
+static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
+{
+  char buff[1024];
+
+  if(0 >= list.size()){
+    return false;
+  }
+  memset(buff, 0, sizeof(buff));
+
+  // confirm
+  while(true){
+    printf("Would you remove all objects? [Y/N]\n");
+    if(NULL != fgets(buff, sizeof(buff), stdin)){
+      if(0 == strcasecmp(buff, "Y\n") || 0 == strcasecmp(buff, "YES\n")){
+        break;
+      }else if(0 == strcasecmp(buff, "N\n") || 0 == strcasecmp(buff, "NO\n")){
+        return true;
+      }
+      printf("*** please put Y(yes) or N(no).\n");
+    }
+  }
+
+  // do removing their.
+  S3fsCurl s3fscurl;
+  bool     result = true;
+  for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); iter++){
+    const char* tpath     = (*iter).key.c_str();
+    string      upload_id = (*iter).id;
+
+    if(0 != s3fscurl.AbortMultipartUpload(tpath, upload_id)){
+      fprintf(stderr, "Failed to remove %s multipart uploading object.\n", tpath);
+      result = false;
+    }else{
+      printf("Succeed to remove %s multipart uploading object.\n", tpath);
+    }
+
+    // reset(initialize) curl object
+    s3fscurl.DestroyCurlHandle();
+  }
+
+  return result;
+}
+
+static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
+{
+  if(!doc){
+    return false;
+  }
+
+  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);;
+
+  string xmlnsurl;
+  string ex_upload = "//";
+  string ex_key    = "";
+  string ex_id     = "";
+  string ex_date   = "";
+
+  if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
+    xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
+    ex_upload += "s3:";
+    ex_key    += "s3:";
+    ex_id     += "s3:";
+    ex_date   += "s3:";
+  }
+  ex_upload += "Upload";
+  ex_key    += "Key";
+  ex_id     += "UploadId";
+  ex_date   += "Initiated";
+
+  // get "Upload" Tags
+  xmlXPathObjectPtr  upload_xp;
+  if(NULL == (upload_xp = xmlXPathEvalExpression((xmlChar*)ex_upload.c_str(), ctx))){
+    DPRNNN("xmlXPathEvalExpression returns null.");
+    return false;
+  }
+  if(xmlXPathNodeSetIsEmpty(upload_xp->nodesetval)){
+    DPRNNN("upload_xp->nodesetval is empty.");
+    S3FS_XMLXPATHFREEOBJECT(upload_xp);
+    S3FS_XMLXPATHFREECONTEXT(ctx);
+    return true;
+  }
+
+  // Make list
+  int           cnt;
+  xmlNodeSetPtr upload_nodes;
+  list.clear();
+  for(cnt = 0, upload_nodes = upload_xp->nodesetval; cnt < upload_nodes->nodeNr; cnt++){
+    ctx->node = upload_nodes->nodeTab[cnt];
+
+    UNCOMP_MP_INFO  part;
+    xmlChar*        ex_value;
+
+    // search "Key" tag
+    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_key.c_str()))){
+      continue;
+    }
+    if('/' != *((char*)ex_value)){
+      part.key = "/";
+    }else{
+      part.key = "";
+    }
+    part.key += (char*)ex_value;
+    S3FS_XMLFREE(ex_value);
+
+    // search "UploadId" tag
+    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_id.c_str()))){
+      continue;
+    }
+    part.id = (char*)ex_value;
+    S3FS_XMLFREE(ex_value);
+
+    // search "Initiated" tag
+    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_date.c_str()))){
+      continue;
+    }
+    part.date = (char*)ex_value;
+    S3FS_XMLFREE(ex_value);
+
+    list.push_back(part);
+  }
+
+  S3FS_XMLXPATHFREEOBJECT(upload_xp);
+  S3FS_XMLXPATHFREECONTEXT(ctx);
+
+  return true;
+}
+
 static int s3fs_utility_mode(void)
 {
   if(!utility_mode){
@@ -2650,7 +2854,32 @@ static int s3fs_utility_mode(void)
     fprintf(stderr, "%s: Could not get list multipart upload.\n", program_name.c_str());
     result = EXIT_FAILURE;
   }else{
-    printf("body.text:\n%s\n", body.c_str());
+    // perse result(uncomplete multipart upload information)
+    FPRNINFO("response body = {\n%s\n}", body.c_str());
+
+    xmlDocPtr doc;
+    if(NULL == (doc = xmlReadMemory(body.c_str(), static_cast<int>(body.size()), "", NULL, 0))){
+      DPRN("xmlReadMemory returns with error.");
+      result = EXIT_FAILURE;
+
+    }else{
+      // make working uploads list
+      uncomp_mp_list_t list;
+      if(!get_uncomp_mp_list(doc, list)){
+        DPRN("get_uncomp_mp_list returns with error.");
+        result = EXIT_FAILURE;
+
+      }else{
+        // print list
+        print_uncomp_mp_list(list);
+        // remove
+        if(!abort_uncomp_mp_list(list)){
+          DPRN("something error occured in removing process.");
+          result = EXIT_FAILURE;
+        }
+      }
+      S3FS_XMLFREEDOC(doc);
+    }
   }
 
   // Destory curl
@@ -3111,45 +3340,60 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
 
-    // save the mountpoint and do some basic error checking
-    mountpoint = arg;
-    struct stat stbuf;
+    // the second NONPOT option is the mountpoint(not utility mode)
+    if(0 == mountpoint.size() && 0 == utility_mode){
+      // save the mountpoint and do some basic error checking
+      mountpoint = arg;
+      struct stat stbuf;
 
-    if(stat(arg, &stbuf) == -1){
-      fprintf(stderr, "%s: unable to access MOUNTPOINT %s: %s\n", 
-          program_name.c_str(), mountpoint.c_str(), strerror(errno));
-      return -1;
-    }
-    if(!(S_ISDIR(stbuf.st_mode))){
-      fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
-              program_name.c_str(), mountpoint.c_str());
-      return -1;
-    }
-    if(!set_moutpoint_attribute(stbuf)){
-      fprintf(stderr, "%s: MOUNTPOINT: %s permission denied.\n", 
-              program_name.c_str(), mountpoint.c_str());
-      return -1;
-    }
-
-    if(!nonempty){
-      struct dirent *ent;
-      DIR *dp = opendir(mountpoint.c_str());
-      if(dp == NULL){
-        fprintf(stderr, "%s: failed to open MOUNTPOINT: %s: %s\n", 
-                program_name.c_str(), mountpoint.c_str(), strerror(errno));
+      if(stat(arg, &stbuf) == -1){
+        fprintf(stderr, "%s: unable to access MOUNTPOINT %s: %s\n", 
+            program_name.c_str(), mountpoint.c_str(), strerror(errno));
         return -1;
       }
-      while((ent = readdir(dp)) != NULL){
-        if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
-          closedir(dp);
-          fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty.\n"
-                          "%s: if you are sure this is safe, can use the 'nonempty' mount option.\n", 
-                          program_name.c_str(), mountpoint.c_str(), program_name.c_str());
+      if(!(S_ISDIR(stbuf.st_mode))){
+        fprintf(stderr, "%s: MOUNTPOINT: %s is not a directory\n", 
+                program_name.c_str(), mountpoint.c_str());
+        return -1;
+      }
+      if(!set_moutpoint_attribute(stbuf)){
+        fprintf(stderr, "%s: MOUNTPOINT: %s permission denied.\n", 
+                program_name.c_str(), mountpoint.c_str());
+        return -1;
+      }
+
+      if(!nonempty){
+        struct dirent *ent;
+        DIR *dp = opendir(mountpoint.c_str());
+        if(dp == NULL){
+          fprintf(stderr, "%s: failed to open MOUNTPOINT: %s: %s\n", 
+                program_name.c_str(), mountpoint.c_str(), strerror(errno));
           return -1;
         }
+        while((ent = readdir(dp)) != NULL){
+          if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
+            closedir(dp);
+            fprintf(stderr, "%s: MOUNTPOINT directory %s is not empty.\n"
+                            "%s: if you are sure this is safe, can use the 'nonempty' mount option.\n", 
+                            program_name.c_str(), mountpoint.c_str(), program_name.c_str());
+            return -1;
+          }
+        }
+        closedir(dp);
       }
-      closedir(dp);
+      return 1;
     }
+
+    // Unknow option
+    if(0 == utility_mode){
+      fprintf(stderr, "%s: specified unknown third optioni(%s).\n", program_name.c_str(), arg);
+    }else{
+      fprintf(stderr, "%s: specified unknown second optioni(%s).\n"
+                      "%s: you don't need to specify second option(mountpoint) for utility mode(-u).\n",
+                      program_name.c_str(), arg, program_name.c_str());
+    }
+    return -1;
+
   }else if(key == FUSE_OPT_KEY_OPT){
     if(0 == STR2NCMP(arg, "uid=")){
       s3fs_uid = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
