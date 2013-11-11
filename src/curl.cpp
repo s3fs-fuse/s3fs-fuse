@@ -1247,9 +1247,7 @@ bool S3fsCurl::ClearInternalData(void)
   LastResponseCode     = -1;
   postdata             = NULL;
   postdata_remaining   = 0;
-#ifndef	OR_CORE_RETRY
   retry_count          = 0;
-#endif
   b_infile             = NULL;
   b_postdata           = NULL;
   b_postdata_remaining = 0;
