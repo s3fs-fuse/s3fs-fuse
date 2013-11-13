@@ -3396,7 +3396,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
 
   }else if(key == FUSE_OPT_KEY_OPT){
     if(0 == STR2NCMP(arg, "uid=")){
-      s3fs_uid = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      s3fs_uid = get_uid(strchr(arg, '=') + sizeof(char));
       if(0 != geteuid() && 0 == s3fs_uid){
         fprintf(stderr, "%s: root user can only specify uid=0.\n", program_name.c_str());
         return -1;
@@ -3405,7 +3405,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 1; // continue for fuse option
     }
     if(0 == STR2NCMP(arg, "gid=")){
-      s3fs_gid = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      s3fs_gid = get_gid(strchr(arg, '=') + sizeof(char));
       if(0 != getegid() && 0 == s3fs_gid){
         fprintf(stderr, "%s: root user can only specify gid=0.\n", program_name.c_str());
         return -1;
@@ -3414,7 +3414,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 1; // continue for fuse option
     }
     if(0 == STR2NCMP(arg, "umask=")){
-      s3fs_umask = (mode_t)strtoul(strchr(arg, '=') + sizeof(char), 0, 8);
+      s3fs_umask = get_mode(strchr(arg, '=') + sizeof(char));
       s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
       is_s3fs_umask = true;
       return 1; // continue for fuse option
@@ -3429,7 +3429,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "retries=")){
-      S3fsCurl::SetRetries(atoi(strchr(arg, '=') + sizeof(char)));
+      S3fsCurl::SetRetries(static_cast<int>(s3fs_strtoul(strchr(arg, '=') + sizeof(char))));
       return 0;
     }
     if(0 == STR2NCMP(arg, "use_cache=")){
@@ -3441,7 +3441,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "multireq_max=")){
-      long maxreq = (long)atoi(strchr(arg, '=') + sizeof(char));
+      long maxreq = static_cast<long>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       S3fsMultiCurl::SetMaxMultiRequest(maxreq);
       return 0;
     }
@@ -3454,10 +3454,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == strcmp(arg, "use_rrs") || 0 == STR2NCMP(arg, "use_rrs=")){
-      int rrs = 1;
+      size_t rrs = 1;
       // for an old format.
       if(0 == STR2NCMP(arg, "use_rrs=")){
-        rrs = atoi(strchr(arg, '=') + sizeof(char));
+        rrs = s3fs_strtoul(strchr(arg, '=') + sizeof(char));
       }
       if(0 == rrs){
         S3fsCurl::SetUseRrs(false);
@@ -3474,10 +3474,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == strcmp(arg, "use_sse") || 0 == STR2NCMP(arg, "use_sse=")){
-      int sse = 1;
+      size_t sse = 1;
       // for an old format.
       if(0 == STR2NCMP(arg, "use_sse=")){
-        sse = atoi(strchr(arg, '=') + sizeof(char));
+        sse = s3fs_strtoul(strchr(arg, '=') + sizeof(char));
       }
       if(0 == sse){
         S3fsCurl::SetUseSse(false);
@@ -3494,7 +3494,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
-      long sslvh = strtol(strchr(arg, '=') + sizeof(char), 0, 10);
+      long sslvh = static_cast<long>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
         fprintf(stderr, "%s: poorly formed argument to option: ssl_verify_hostname\n", 
                 program_name.c_str());
@@ -3512,7 +3512,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "public_bucket=")){
-      long pubbucket = strtol(strchr(arg, '=') + sizeof(char), 0, 10);
+      size_t pubbucket = s3fs_strtoul(strchr(arg, '=') + sizeof(char));
       if(1 == pubbucket){
         S3fsCurl::SetPublicBucket(true);
       }else if(0 == pubbucket){
@@ -3533,22 +3533,22 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "connect_timeout=")){
-      long contimeout = strtol(strchr(arg, '=') + sizeof(char), 0, 10);
+      long contimeout = static_cast<long>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       S3fsCurl::SetConnectTimeout(contimeout);
       return 0;
     }
     if(0 == STR2NCMP(arg, "readwrite_timeout=")){
-      time_t rwtimeout = (time_t)strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      time_t rwtimeout = static_cast<time_t>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       S3fsCurl::SetReadwriteTimeout(rwtimeout);
       return 0;
     }
     if(0 == STR2NCMP(arg, "max_stat_cache_size=")){
-      unsigned long cache_size = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      unsigned long cache_size = static_cast<unsigned long>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       StatCache::getStatCacheData()->SetCacheSize(cache_size);
       return 0;
     }
     if(0 == STR2NCMP(arg, "stat_cache_expire=")){
-      time_t expr_time = strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      time_t expr_time = static_cast<time_t>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       StatCache::getStatCacheData()->SetExpireTime(expr_time);
       return 0;
     }
@@ -3565,7 +3565,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "parallel_count=") || 0 == STR2NCMP(arg, "parallel_upload=")){
-      int maxpara = (int)strtoul(strchr(arg, '=') + sizeof(char), 0, 10);
+      int maxpara = static_cast<int>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       if(0 >= maxpara){
         fprintf(stderr, "%s: argument should be over 1: parallel_count\n", 
            program_name.c_str());
@@ -3575,7 +3575,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "fd_page_size=")){
-      ssize_t pagesize = static_cast<ssize_t>(strtoul(strchr(arg, '=') + sizeof(char), 0, 10));
+      ssize_t pagesize = static_cast<ssize_t>(s3fs_strtoul(strchr(arg, '=') + sizeof(char)));
       if((1024 * 1024) >= pagesize){
         fprintf(stderr, "%s: argument should be over 1MB: fd_page_size\n", 
            program_name.c_str());

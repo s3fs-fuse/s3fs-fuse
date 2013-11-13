@@ -427,7 +427,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       free(ptmp);
       return false;
     }
-    size_t total = static_cast<size_t>(atoi(oneline.c_str()));
+    size_t total = s3fs_strtoul(oneline.c_str());
 
     // load each part
     bool is_err = false;
@@ -439,19 +439,19 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
         is_err = true;
         break;
       }
-      off_t offset = static_cast<off_t>(atoi(part.c_str()));
+      off_t offset = static_cast<off_t>(s3fs_strtoul(part.c_str()));
       // size
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      ssize_t size = static_cast<ssize_t>(atoi(part.c_str()));
+      ssize_t size = static_cast<ssize_t>(s3fs_strtoul(part.c_str()));
       // init
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      bool is_init = (1 == atoi(part.c_str()) ? true : false);
+      bool is_init = (1 == s3fs_strtoul(part.c_str()) ? true : false);
       // add new area
       SetInit(offset, size, is_init);
     }

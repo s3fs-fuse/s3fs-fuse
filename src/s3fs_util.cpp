@@ -618,9 +618,52 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
+size_t s3fs_strtoul(const char* str, bool is_base_16)
+{
+  if(!str || '\0' == *str){
+    return 0;
+  }
+  size_t result;
+  bool   chk_space;
+  bool   chk_base16_prefix;
+  for(result = 0, chk_space = false, chk_base16_prefix = false; '\0' != *str; str++){
+    // check head space
+    if(!chk_space && isspace(*str)){
+      continue;
+    }else if(!chk_space){
+      chk_space = true;
+    }
+    // check prefix for base 16
+    if(!chk_base16_prefix){
+      chk_base16_prefix = true;
+      if('0' == *str && ('x' == str[1] || 'X' == str[1])){
+        is_base_16 = true;
+        str++;
+        continue;
+      }
+    }
+    // check like isalnum and set data
+    result *= (is_base_16 ? 16 : 10);
+    if('0' <= *str || '9' < *str){
+      result += static_cast<size_t>(*str - '0');
+    }else if(is_base_16){
+      if('A' <= *str && *str <= 'F'){
+        result += static_cast<size_t>(*str - 'A' + 0x0a);
+      }else if('a' <= *str && *str <= 'f'){
+        result += static_cast<size_t>(*str - 'a' + 0x0a);
+      }else{
+        return 0;
+      }
+    }else{
+      return 0;
+    }
+  }
+  return result;
+}
+
 time_t get_mtime(const char *s)
 {
-  return (time_t) strtoul(s, (char **) NULL, 10);
+  return static_cast<time_t>(s3fs_strtoul(s));
 }
 
 time_t get_mtime(headers_t& meta, bool overcheck)
@@ -637,7 +680,7 @@ time_t get_mtime(headers_t& meta, bool overcheck)
 
 off_t get_size(const char *s)
 {
-  return (off_t) strtoul(s, (char **) NULL, 10);
+  return static_cast<off_t>(s3fs_strtoul(s));
 }
 
 off_t get_size(headers_t& meta)
@@ -651,7 +694,7 @@ off_t get_size(headers_t& meta)
 
 mode_t get_mode(const char *s)
 {
-  return (mode_t) strtoul(s, (char **) NULL, 10);
+  return static_cast<mode_t>(s3fs_strtoul(s));
 }
 
 mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
@@ -708,7 +751,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
 
 uid_t get_uid(const char *s)
 {
-  return (uid_t) strtoul(s, (char **) NULL, 10);
+  return static_cast<uid_t>(s3fs_strtoul(s));
 }
 
 uid_t get_uid(headers_t& meta)
@@ -724,7 +767,7 @@ uid_t get_uid(headers_t& meta)
 
 gid_t get_gid(const char *s)
 {
-  return (gid_t) strtoul(s, (char **) NULL, 10);
+  return static_cast<gid_t>(s3fs_strtoul(s));
 }
 
 gid_t get_gid(headers_t& meta)

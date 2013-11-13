@@ -95,6 +95,7 @@ std::string mybasename(std::string path);
 int mkdirp(const std::string& path, mode_t mode);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
+size_t s3fs_strtoul(const char* str, bool is_base_16 = false);
 time_t get_mtime(const char *s);
 time_t get_mtime(headers_t& meta, bool overcheck = true);
 off_t get_size(const char *s);

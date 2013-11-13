@@ -3085,20 +3085,24 @@ int S3fsMultiCurl::MultiRead(void)
           if(400 > responseCode){
             // add into stat cache
             if(SuccessCallback && !SuccessCallback(s3fscurl)){
-              DPRNNN("error from callback function(%s).", s3fscurl->base_path.c_str());
+              DPRN("error from callback function(%s).", s3fscurl->url.c_str());
             }
           }else if(400 == responseCode){
             // as possibly in multipart
-            DPRNNN("failed a request(%ld: %s)", responseCode, s3fscurl->base_path.c_str());
+            DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
             isRetry = true;
           }else{
-            DPRNNN("failed a request(%ld: %s)", responseCode, s3fscurl->base_path.c_str());
+            // case of all other result, do retry.(11/13/2013)
+            // because it was found that s3fs got 500 error from S3, but could success
+            // to retry it.
+            DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+            isRetry = true;
           }
         }else{
-          DPRNNN("failed a request(Unknown respons code: %s)", s3fscurl->base_path.c_str());
+          DPRN("failed a request(Unknown respons code: %s)", s3fscurl->url.c_str());
         }
       }else{
-        DPRNNN("failed to read(remaining: %d code: %d  msg: %s), so retry this.",
+        DPRN("failed to read(remaining: %d code: %d  msg: %s), so retry this.",
               remaining_messages, msg->data.result, curl_easy_strerror(msg->data.result));
         isRetry = true;
       }
