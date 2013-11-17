@@ -1,4 +1,4 @@
-#ifndef FD_CACHE_H_
+﻿#ifndef FD_CACHE_H_
 #define FD_CACHE_H_
 
 //------------------------------------------------
@@ -57,14 +57,14 @@ class PageList
   public:
     static void FreeList(fdpage_list_t& list);
 
-    PageList(size_t size = 0, bool is_init = false);
+    PageList(off_t size = 0, bool is_init = false);
     ~PageList();
 
-    size_t Size(void) const;
-    int Resize(size_t size, bool is_init);
-    int Init(size_t size, bool is_init);
-    bool IsInit(off_t start, size_t size);
-    bool SetInit(off_t start, size_t size, bool is_init = true);
+    off_t Size(void) const;
+    int Resize(off_t size, bool is_init);
+    int Init(off_t size, bool is_init);
+    bool IsInit(off_t start, off_t size);
+    bool SetInit(off_t start, off_t size, bool is_init = true);
     bool FindUninitPage(off_t start, off_t& resstart, size_t& ressize);
     int GetUninitPages(fdpage_list_t& uninit_list, off_t start = 0);
     bool Serialize(CacheFileStat& file, bool is_output);
@@ -98,18 +98,18 @@ class FdEntity
 
     void Close(void);
     bool IsOpen(void) const { return (-1 != fd); }
-    int Open(ssize_t size = -1, time_t time = -1);
+    int Open(off_t size = -1, time_t time = -1);
     const char* GetPath(void) const { return path.c_str(); }
     int GetFd(void) const { return fd; }
     int SetMtime(time_t time);
-    bool GetSize(size_t& size);
+    bool GetSize(off_t& size);
     bool GetMtime(time_t& time);
     bool GetStats(struct stat& st);
 
     bool SetAllEnable(void) { return SetAllStatus(true); }
     bool SetAllDisable(void) { return SetAllStatus(false); }
-    bool LoadFull(size_t* size = NULL, bool force_load = false);
-    int Load(off_t start, ssize_t size);
+    bool LoadFull(off_t* size = NULL, bool force_load = false);
+    int Load(off_t start, off_t size);
     int RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool force_sync = false);
     int Flush(headers_t& meta, bool ow_sse_flg, bool force_sync = false) { return RowFlush(NULL, meta, ow_sse_flg, force_sync); }
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
@@ -148,7 +148,7 @@ class FdManager
     static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true);
 
     FdEntity* GetFdEntity(const char* path);
-    FdEntity* Open(const char* path, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
+    FdEntity* Open(const char* path, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
     FdEntity* ExistOpen(const char* path) { return Open(path, -1, -1, false, false); }
     bool Close(FdEntity* ent);
 };

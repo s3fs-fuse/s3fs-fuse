@@ -19,6 +19,8 @@ template<typename T> std::string str(T value) {
   return s.str();
 }
 
+off_t s3fs_strtoofft(const char* str, bool is_base_16 = false);
+
 std::string trim_left(const std::string &s, const std::string &t = SPACES);
 std::string trim_right(const std::string &s, const std::string &t = SPACES);
 std::string trim(const std::string &s, const std::string &t = SPACES);

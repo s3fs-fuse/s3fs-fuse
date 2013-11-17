@@ -43,6 +43,7 @@
 #include "fdcache.h"
 #include "s3fs.h"
 #include "s3fs_util.h"
+#include "string_util.h"
 #include "curl.h"
 
 using namespace std;
@@ -200,7 +201,7 @@ void PageList::FreeList(fdpage_list_t& list)
   list.clear();
 }
 
-PageList::PageList(size_t size, bool is_init)
+PageList::PageList(off_t size, bool is_init)
 {
   Init(size, is_init);
 }
@@ -210,7 +211,7 @@ PageList::~PageList()
   Clear();
 }
 
-size_t PageList::Size(void) const
+off_t PageList::Size(void) const
 {
   if(0 == pages.size()){
     return 0;
@@ -219,36 +220,36 @@ size_t PageList::Size(void) const
   return ((*riter)->offset + (*riter)->bytes);
 }
 
-int PageList::Resize(size_t size, bool is_init)
+int PageList::Resize(off_t size, bool is_init)
 {
-  size_t total = Size();
+  off_t total = Size();
 
   if(0 == total){
     Init(size, is_init);
 
   }else if(total < size){
-    size_t remain = size - total;           // remaining bytes
+    off_t remain = size - total;           // remaining bytes
     fdpage_list_t::reverse_iterator riter = pages.rbegin();
 
     if((*riter)->bytes < FdManager::GetPageSize()){
       // resize last area
       remain         += (*riter)->bytes;    // remaining bytes(without last page)
-      (*riter)->bytes = remain > FdManager::GetPageSize() ? FdManager::GetPageSize() : remain; // reset page size
+      (*riter)->bytes = remain > static_cast<off_t>(FdManager::GetPageSize()) ? FdManager::GetPageSize() : static_cast<size_t>(remain); // reset page size
       remain         -= (*riter)->bytes;    // remaining bytes(after last page)
       (*riter)->init  = is_init;
     }
 
     // add new area
     for(off_t next = (*riter)->next(); 0 < remain; remain -= size, next += size){
-      size         = remain > FdManager::GetPageSize() ? FdManager::GetPageSize() : remain;
+      size         = remain > static_cast<off_t>(FdManager::GetPageSize()) ? static_cast<off_t>(FdManager::GetPageSize()) : remain;
       fdpage* page = new fdpage(next, size, is_init);
       pages.push_back(page);
     }
 
   }else if(total > size){
     for(fdpage_list_t::reverse_iterator riter = pages.rbegin(); riter != pages.rend(); riter++){
-      if(static_cast<size_t>((*riter)->offset) < size){
-        (*riter)->bytes = size - (*riter)->offset;
+      if((*riter)->offset < size){
+        (*riter)->bytes = static_cast<size_t>(size - (*riter)->offset);
         break;
       }
     }
@@ -261,18 +262,18 @@ void PageList::Clear(void)
   PageList::FreeList(pages);
 }
 
-int PageList::Init(size_t size, bool is_init)
+int PageList::Init(off_t size, bool is_init)
 {
   Clear();
-  for(size_t total = 0; total < size; total += FdManager::GetPageSize()){
-    size_t areasize = (total + FdManager::GetPageSize()) < size ? FdManager::GetPageSize() : (size - total);
+  for(off_t total = 0; total < size; total += FdManager::GetPageSize()){
+    size_t areasize = (total + FdManager::GetPageSize()) < size ? FdManager::GetPageSize() : static_cast<size_t>(size - total);
     fdpage* page    = new fdpage(total, areasize, is_init);
     pages.push_back(page);
   }
   return pages.size();
 }
 
-bool PageList::IsInit(off_t start, size_t size)
+bool PageList::IsInit(off_t start, off_t size)
 {
   off_t next = start + size;
 
@@ -301,7 +302,7 @@ bool PageList::IsInit(off_t start, size_t size)
   return true;
 }
 
-bool PageList::SetInit(off_t start, size_t size, bool is_init)
+bool PageList::SetInit(off_t start, off_t size, bool is_init)
 {
   // check size & resize
   if(Size() < (start + size)){
@@ -427,7 +428,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       free(ptmp);
       return false;
     }
-    size_t total = s3fs_strtoul(oneline.c_str());
+    off_t total = s3fs_strtoofft(oneline.c_str());
 
     // load each part
     bool is_err = false;
@@ -439,19 +440,19 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
         is_err = true;
         break;
       }
-      off_t offset = static_cast<off_t>(s3fs_strtoul(part.c_str()));
+      off_t offset = s3fs_strtoofft(part.c_str());
       // size
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      ssize_t size = static_cast<ssize_t>(s3fs_strtoul(part.c_str()));
+      off_t size = s3fs_strtoofft(part.c_str());
       // init
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      bool is_init = (1 == s3fs_strtoul(part.c_str()) ? true : false);
+      bool is_init = (1 == s3fs_strtoofft(part.c_str()) ? true : false);
       // add new area
       SetInit(offset, size, is_init);
     }
@@ -464,7 +465,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
 
     // check size
     if(total != Size()){
-      DPRN("different size(%zu - %zu).", total, Size());
+      DPRN("different size(%jd - %jd).", (intmax_t)total, (intmax_t)Size());
       Clear();
       return false;
     }
@@ -568,14 +569,14 @@ int FdEntity::Dup(void)
   return fd;
 }
 
-int FdEntity::Open(ssize_t size, time_t time)
+int FdEntity::Open(off_t size, time_t time)
 {
   bool already_opened = false;  // already opened fd
   bool is_csf_loaded  = false;  // loaded by cache stat file
   bool is_truncate    = false;  // need to truncate
   bool init_value     = false;  // value for pagelist
 
-  FPRNINFO("[path=%s][fd=%d][size=%zd][time=%jd]", path.c_str(), fd, size, (intmax_t)time);
+  FPRNINFO("[path=%s][fd=%d][size=%jd][time=%jd]", path.c_str(), fd, (intmax_t)size, (intmax_t)time);
 
   if(-1 != fd){
     // already opened, needs to increment refcnt.
@@ -602,7 +603,7 @@ int FdEntity::Open(ssize_t size, time_t time)
           fd   = -1;
           return (0 == errno ? -EIO : -errno);
         }
-        if((-1 != size && static_cast<size_t>(size) != pagelist.Size()) || static_cast<size_t>(st.st_size) != pagelist.Size()){
+        if((-1 != size && size != pagelist.Size()) || st.st_size != pagelist.Size()){
           is_csf_loaded = false;   // reinitializing
           if(-1 == size){
             size = st.st_size;
@@ -719,7 +720,7 @@ int FdEntity::SetMtime(time_t time)
   return 0;
 }
 
-bool FdEntity::GetSize(size_t& size)
+bool FdEntity::GetSize(off_t& size)
 {
   if(-1 == fd){
     return false;
@@ -778,11 +779,11 @@ bool FdEntity::SetAllStatus(bool is_enable)
   return true;
 }
 
-int FdEntity::Load(off_t start, ssize_t size)
+int FdEntity::Load(off_t start, off_t size)
 {
   int result = 0;
 
-  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zd]", path.c_str(), fd, (intmax_t)start, size);
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
 
   if(-1 == fd){
     return -EBADF;
@@ -818,14 +819,14 @@ int FdEntity::Load(off_t start, ssize_t size)
       }
 
       // Set init flag
-      pagelist.SetInit((*iter)->offset, (*iter)->bytes, true);
+      pagelist.SetInit((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
     }
     PageList::FreeList(uninit_list);
   }
   return result;
 }
 
-bool FdEntity::LoadFull(size_t* size, bool force_load)
+bool FdEntity::LoadFull(off_t* size, bool force_load)
 {
   int result;
 
@@ -936,7 +937,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   }
   if(force_load){
     AutoLock auto_lock(&fdent_lock);
-    pagelist.SetInit(start, size, false);
+    pagelist.SetInit(start, static_cast<off_t>(size), false);
   }
   // Loading
   if(0 != (result = Load(start, size))){
@@ -984,7 +985,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       is_modify = true;
     }
     if(0 < wsize){
-      pagelist.SetInit(start, wsize, true);
+      pagelist.SetInit(start, static_cast<off_t>(wsize), true);
     }
   }
   return wsize;
@@ -1139,11 +1140,11 @@ FdEntity* FdManager::GetFdEntity(const char* path)
   return (*iter).second;
 }
 
-FdEntity* FdManager::Open(const char* path, ssize_t size, time_t time, bool force_tmpfile, bool is_create)
+FdEntity* FdManager::Open(const char* path, off_t size, time_t time, bool force_tmpfile, bool is_create)
 {
   FdEntity* ent;
 
-  FPRNINFO("[path=%s][size=%zd][time=%jd]", SAFESTRPTR(path), size, (intmax_t)time);
+  FPRNINFO("[path=%s][size=%jd][time=%jd]", SAFESTRPTR(path), (intmax_t)size, (intmax_t)time);
 
   if(!path || '\0' == path[0]){
     return NULL;
