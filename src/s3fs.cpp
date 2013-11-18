@@ -2090,7 +2090,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     delete newcurl;
     return NULL;
   }
-  newcurl->SetMultipartRetryCount(s3fscurl->GetMultipartRetryCount());
+  newcurl->SetMultipartRetryCount(s3fscurl->GetMultipartRetryCount() + 1);
 
   return newcurl;
 }
