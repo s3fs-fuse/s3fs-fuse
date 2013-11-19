@@ -3091,6 +3091,9 @@ int S3fsMultiCurl::MultiRead(void)
             // as possibly in multipart
             DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
             isRetry = true;
+          }else if(404 == responseCode){
+            // not found
+            DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
           }else if(500 == responseCode){
             // case of all other result, do retry.(11/13/2013)
             // because it was found that s3fs got 500 error from S3, but could success
@@ -3098,7 +3101,9 @@ int S3fsMultiCurl::MultiRead(void)
             DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
             isRetry = true;
           }else{
+            // Retry in other case.
             DPRN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+            isRetry = true;
           }
         }else{
           DPRN("failed a request(Unknown respons code: %s)", s3fscurl->url.c_str());

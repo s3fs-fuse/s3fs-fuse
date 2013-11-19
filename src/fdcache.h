@@ -1,4 +1,4 @@
-﻿#ifndef FD_CACHE_H_
+#ifndef FD_CACHE_H_
 #define FD_CACHE_H_
 
 //------------------------------------------------
