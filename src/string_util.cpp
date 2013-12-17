@@ -130,7 +130,9 @@ string urlEncode(const string &s)
     } else if (s[i] == '.' || s[i] == '-' || s[i] == '*' || s[i] == '_') {
       result += s[i];
     } else if (s[i] == ' ') {
-      result += '+';
+      result += '%';
+      result += '2';
+      result += '0';
     } else {
       result += "%";
       result += hexAlphabet[static_cast<unsigned char>(s[i]) / 16];
