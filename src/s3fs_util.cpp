@@ -752,7 +752,7 @@ time_t cvtIAMExpireStringToTime(const char* s)
   }
   memset(&tm, 0, sizeof(struct tm));
   strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
-  return mktime(&tm);      // GMT
+  return timegm(&tm); // GMT
 }
 
 time_t get_lastmodified(const char* s)
@@ -763,7 +763,7 @@ time_t get_lastmodified(const char* s)
   }
   memset(&tm, 0, sizeof(struct tm));
   strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
-  return mktime(&tm);      // GMT
+  return timegm(&tm); // GMT
 }
 
 time_t get_lastmodified(headers_t& meta)
