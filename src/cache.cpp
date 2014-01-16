@@ -425,6 +425,7 @@ bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst,
   if(S_ISREG(pst->st_mode)){
     pst->st_blocks = get_blocks(pst->st_size);
   }
+  pst->st_blksize = 4096;
 
   // mtime
   pst->st_mtime = get_mtime(meta);
