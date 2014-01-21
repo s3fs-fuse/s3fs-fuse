@@ -1,6 +1,10 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.76 -- Jan 21, 2014
+issue #5 - du shows incorrect usage stats
+issue #8 - version in configure.ac is 1.74 for release 1.75
+
 Version 1.75 -- Jan 6, 2014
 issue #1 - Using %20 instead of the plus (+) sign for encoding spaces
 issue #3 - Fixed local timezone was incorrectly being applied to IAM and Last-Modified dates.
