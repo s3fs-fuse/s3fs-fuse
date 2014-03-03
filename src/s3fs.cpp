@@ -2712,7 +2712,7 @@ static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
   char buff[1024];
 
   if(0 >= list.size()){
-    return false;
+    return true;
   }
   memset(buff, 0, sizeof(buff));
 
