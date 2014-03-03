@@ -3426,6 +3426,14 @@ unsigned char* md5hexsum(int fd, off_t start, ssize_t size)
   ssize_t bytes;
   unsigned char* result;
 
+  if(-1 == size){
+    struct stat st;
+    if(-1 == fstat(fd, &st)){
+      return NULL;
+    }
+    size = static_cast<ssize_t>(st.st_size);
+  }
+
   // seek to top of file.
   if(-1 == lseek(fd, start, SEEK_SET)){
     return NULL;
@@ -3457,7 +3465,6 @@ unsigned char* md5hexsum(int fd, off_t start, ssize_t size)
     free(result);
     return NULL;
   }
-
   return result;
 }
 
