@@ -889,7 +889,7 @@ void show_help (void)
     "   readwrite_timeout (default=\"30\" seconds)\n"
     "      - time to wait between read/write activity before giving up\n"
     "\n"
-    "   max_stat_cache_size (default=\"10000\" entries (about 4MB))\n"
+    "   max_stat_cache_size (default=\"1000\" entries (about 4MB))\n"
     "      - maximum number of entries in the stat cache\n"
     "\n"
     "   stat_cache_expire (default is no expire)\n"
