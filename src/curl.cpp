@@ -3127,8 +3127,12 @@ int S3fsMultiCurl::MultiRead(void)
 
         // For retry
         if(RetryCallback){
-          retrycurl = RetryCallback(s3fscurl);
-          cMap_all[retrycurl->hCurl] = retrycurl;
+          if(NULL != (retrycurl = RetryCallback(s3fscurl))){
+            cMap_all[retrycurl->hCurl] = retrycurl;
+          }else{
+            // do not care, but set...
+            isRetry = false;
+          }
         }
         if(s3fscurl != retrycurl){
           s3fscurl->DestroyCurlHandle();
