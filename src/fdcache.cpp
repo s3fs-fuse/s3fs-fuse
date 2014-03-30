@@ -51,8 +51,7 @@ using namespace std;
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-#define MAX_OBJECT_SIZE     68719476735LL           // 64GB - 1L
-#define MULTIPART_LOWLIMIT  (20 * 1024 * 1024)      // 20MB
+#define MAX_MULTIPART_CNT   10000                   // S3 multipart max count
 #define	FDPAGE_SIZE	    (50 * 1024 * 1024)      // 50MB(parallel uploading is 5 parallel(default) * 10 MB)
 
 //------------------------------------------------
@@ -798,7 +797,7 @@ int FdEntity::Load(off_t start, off_t size)
         break;
       }
       // download
-      if((*iter)->bytes >= MULTIPART_LOWLIMIT && !nomultipart){ // 20MB
+      if((*iter)->bytes >= (2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
         // parallel request
         // Additional time is needed for large files
         time_t backup = 0;
@@ -880,14 +879,14 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
    *  - 1 to 10,000 parts are allowed
    *  - minimum size of parts is 5MB (expect for the last part)
    * 
-   * For our application, we will define part size to be 10MB (10 * 2^20 Bytes)
-   * maximum file size will be ~64 GB - 2 ** 36 
+   * For our application, we will define minimum part size to be 10MB (10 * 2^20 Bytes)
+   * minimum file size will be 64 GB - 2 ** 36 
    * 
    * Initially uploads will be done serially
    * 
    * If file is > 20MB, then multipart will kick in
    */
-  if(pagelist.Size() > MAX_OBJECT_SIZE){ // 64GB - 1
+  if(pagelist.Size() > (MAX_MULTIPART_CNT * S3fsCurl::GetMultipartSize())){
     // close f ?
     return -ENOTSUP;
   }
@@ -898,7 +897,7 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
     return -errno;
   }
 
-  if(pagelist.Size() >= MULTIPART_LOWLIMIT && !nomultipart){ // 20MB
+  if(pagelist.Size() >= (2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
     // Additional time is needed for large files
     time_t backup = 0;
     if(120 > S3fsCurl::GetReadwriteTimeout()){
