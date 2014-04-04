@@ -173,7 +173,8 @@ curltime_t       S3fsCurl::curl_times;
 curlprogress_t   S3fsCurl::curl_progress;
 string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
-int              S3fsCurl::max_parallel_cnt    = 5;    // default
+int              S3fsCurl::max_parallel_cnt    = 5;              // default
+off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -822,6 +823,16 @@ string S3fsCurl::SetIAMRole(const char* role)
   return old;
 }
 
+bool S3fsCurl::SetMultipartSize(off_t size)
+{
+  size = size * 1024 * 1024;
+  if(size < MULTIPART_SIZE){
+    return false;
+  }
+  S3fsCurl::multipart_size = size;
+  return true;
+}
+
 int S3fsCurl::SetMaxParallelCount(int value)
 {
   int old = S3fsCurl::max_parallel_cnt;
@@ -931,7 +942,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
     // Loop for setup parallel upload(multipart) request.
     for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_cnt && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
       // chunk size
-      chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+      chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
 
       // s3fscurl sub object
       S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
@@ -1021,7 +1032,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
     // Loop for setup parallel upload(multipart) request.
     for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_cnt && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
       // chunk size
-      chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+      chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
 
       // s3fscurl sub object
       S3fsCurl* s3fscurl_para = new S3fsCurl();
@@ -2837,7 +2848,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   // cycle through open fd, pulling off 10MB chunks at a time
   for(remaining_bytes = st.st_size; 0 < remaining_bytes; remaining_bytes -= chunk){
     // chunk size
-    chunk = remaining_bytes > MULTIPART_SIZE ?  MULTIPART_SIZE : remaining_bytes;
+    chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
 
     // set
     partdata.fd         = fd2;

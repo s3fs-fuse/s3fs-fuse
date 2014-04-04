@@ -3574,16 +3574,31 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         return -1;
       }
       S3fsCurl::SetMaxParallelCount(maxpara);
+
+      if(FdManager::GetPageSize() < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+        FdManager::SetPageSize(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
+      }
       return 0;
     }
     if(0 == STR2NCMP(arg, "fd_page_size=")){
       size_t pagesize = static_cast<size_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if((1024 * 1024) >= pagesize){
+      if(pagesize < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
         fprintf(stderr, "%s: argument should be over 1MB: fd_page_size\n", 
            program_name.c_str());
         return -1;
       }
       FdManager::SetPageSize(pagesize);
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "multipart_size=")){
+      off_t size = static_cast<off_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
+      if(!S3fsCurl::SetMultipartSize(size)){
+        fprintf(stderr, "%s: multipart_size option could not be specified over 10(MB)\n", program_name.c_str());
+        return -1;
+      }
+      if(FdManager::GetPageSize() < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+        FdManager::SetPageSize(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
+      }
       return 0;
     }
     if(0 == STR2NCMP(arg, "ahbe_conf=")){

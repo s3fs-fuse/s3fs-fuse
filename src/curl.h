@@ -166,6 +166,7 @@ class S3fsCurl
     static std::string      curl_ca_bundle;
     static mimes_t          mimeTypes;
     static int              max_parallel_cnt;
+    static off_t            multipart_size;
 
     // variables
     CURL*                hCurl;
@@ -274,8 +275,11 @@ class S3fsCurl
     static long SetSslVerifyHostname(long value);
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
     static int SetMaxParallelCount(int value);
+    static int GetMaxParallelCount(void) { return S3fsCurl::max_parallel_cnt; }
     static std::string SetIAMRole(const char* role);
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
+    static bool SetMultipartSize(off_t size);
+    static off_t GetMultipartSize(void) { return S3fsCurl::multipart_size; }
 
     // methods
     bool CreateCurlHandle(bool force = false);
