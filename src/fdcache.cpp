@@ -265,7 +265,7 @@ int PageList::Init(off_t size, bool is_init)
 {
   Clear();
   for(off_t total = 0; total < size; total += FdManager::GetPageSize()){
-    size_t areasize = (total + FdManager::GetPageSize()) < size ? FdManager::GetPageSize() : static_cast<size_t>(size - total);
+    size_t areasize = (total + static_cast<off_t>(FdManager::GetPageSize())) < size ? FdManager::GetPageSize() : static_cast<size_t>(size - total);
     fdpage* page    = new fdpage(total, areasize, is_init);
     pages.push_back(page);
   }
