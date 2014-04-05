@@ -89,7 +89,7 @@ If there are some keys after first line, those are used downloading object which
 So that, you can keep all SSE-C keys in file, that is SSE-C key history.
 If you specify "custom"("c") without file path, you need to set custom key by load_sse_c option or AWSSSECKEYS environment.(AWSSSECKEYS environment has some SSE-C keys with ":" separator.)
 This option is used to decide the SSE type.
-So that if you do not want to encrypt a object at uploading, but you need to decrypt encrypted object at downloaing, you can use load_sse_c option instead of this option.
+So that if you do not want to encrypt a object at uploading, but you need to decrypt encrypted object at downloading, you can use load_sse_c option instead of this option.
 For setting SSE-KMS, specify "use_sse=kmsid" or "use_sse=kmsid:<kms id>".
 You can use "k" for short "kmsid".
 If you san specify SSE-KMS type with your <kms id> in AWS KMS, you can set it after "kmsid:"(or "k:").
@@ -211,8 +211,8 @@ If you set this option, you can use the extended attribute.
 For example, encfs and ecryptfs need to support the extended attribute.
 Notice: if s3fs handles the extended attribute, s3fs can not work to copy command with preserve=mode.
 .TP
-\fB\-o\fR noxmlns - disable registing xml name space.
-disable registing xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
+\fB\-o\fR noxmlns - disable registering xml name space.
+disable registering xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
 This option should not be specified now, because s3fs looks up xmlns automatically after v1.66.
 .TP
 \fB\-o\fR nocopyapi - for other incomplete compatibility object storage.
@@ -222,10 +222,10 @@ If you set this option, s3fs do not use PUT with "x-amz-copy-source"(copy api). 
 \fB\-o\fR norenameapi - for other incomplete compatibility object storage.
 For a distributed object storage which is compatibility S3 API without PUT(copy api).
 This option is a subset of nocopyapi option. The nocopyapi option does not use copy-api for all command(ex. chmod, chown, touch, mv, etc), but this option does not use copy-api for only rename command(ex. mv).
-If this option is specified with nocopapi, the s3fs ignores it.
+If this option is specified with nocopyapi, then s3fs ignores it.
 .TP
 \fB\-o\fR use_path_request_style (use legacy API calling style)
-Enble compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
+Enable compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .TP
 \fB\-o\fR noua (suppress User-Agent header)
 Usually s3fs outputs of the User-Agent in "s3fs/<version> (commit hash <hash>; <using ssl library name>)" format.

@@ -745,7 +745,7 @@ int FdEntity::OpenMirrorFile(void)
     return -EIO;
   }
 
-  // make tmporary directory
+  // make temporary directory
   string bupdir;
   if(!FdManager::MakeCachePath(NULL, bupdir, true, true)){
     S3FS_PRN_ERR("could not make bup cache directory path or create it.");
@@ -952,7 +952,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
 }
 
 // [NOTE]
-// This method is called from olny nocopapi functions.
+// This method is called from only nocopyapi functions.
 // So we do not check disk space for this option mode, if there is no enough
 // disk space this method will be failed.
 //
@@ -1232,7 +1232,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
     if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
       break;
     }
-    // download earch multipart size(default 10MB) in unit
+    // download each multipart size(default 10MB) in unit
     for(size_t oneread = 0, totalread = ((*iter)->offset < start ? start : 0); totalread < (*iter)->bytes; totalread += oneread){
       int   upload_fd = fd;
       off_t offset    = (*iter)->offset + totalread;
@@ -1434,7 +1434,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       // check disk space
       if(FdManager::IsSafeDiskSpace(NULL, restsize)){
         // enough disk space
-        // Load all unitialized area
+        // Load all uninitialized area
         if(0 != (result = Load())){
           S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
           return static_cast<ssize_t>(result);
@@ -1448,7 +1448,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
         }
       }
     }else{
-      // alreay start miltipart uploading
+      // already start multipart uploading
     }
   }
 
@@ -1627,7 +1627,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     if(FdManager::IsSafeDiskSpace(NULL, restsize)){
       // enough disk space
 
-      // Load unitialized area which starts from 0 to (start + size) before writing.
+      // Load uninitialized area which starts from 0 to (start + size) before writing.
       if(0 < start && 0 != (result = Load(0, static_cast<size_t>(start)))){
         S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
         return static_cast<ssize_t>(result);
@@ -1647,7 +1647,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       mp_size  = 0;
     }
   }else{
-    // alreay start miltipart uploading
+    // already start multipart uploading
   }
 
   // Writing
@@ -1705,7 +1705,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 #define NOCACHE_PATH_PREFIX_FORM    " __S3FS_UNEXISTED_PATH_%lx__ / "      // important space words for simply
 
 //------------------------------------------------
-// FdManager class valiable
+// FdManager class variable
 //------------------------------------------------
 FdManager       FdManager::singleton;
 pthread_mutex_t FdManager::fd_manager_lock;
@@ -1832,7 +1832,7 @@ bool FdManager::MakeRandomTempPath(const char* path, string& tmppath)
 {
   char szBuff[64];
 
-  sprintf(szBuff, NOCACHE_PATH_PREFIX_FORM, random());     // warry for performance, but maybe don't warry.
+  sprintf(szBuff, NOCACHE_PATH_PREFIX_FORM, random());     // worry for performance, but maybe don't worry.
   tmppath  = szBuff;
   tmppath += path ? path : "";
   return true;
@@ -1941,7 +1941,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
   if(-1 != existfd){
     for(iter = fent.begin(); iter != fent.end(); ++iter){
       if((*iter).second && (*iter).second->GetFd() == existfd){
-        // found opend fd in map
+        // found opened fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
           return (*iter).second;
         }
@@ -1983,7 +1983,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
       // using cache
       fent[string(path)] = ent;
     }else{
-      // not using cache, so the key of fdentity is set not really existsing path.
+      // not using cache, so the key of fdentity is set not really existing path.
       // (but not strictly unexisting path.)
       //
       // [NOTE]
@@ -2018,7 +2018,7 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd, bool ignore_existf
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
       if((*iter).second && (*iter).second->IsOpen() && (ignore_existfd || ((*iter).second->GetFd() == existfd))){
-        // found opend fd in map
+        // found opened fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
           ent = (*iter).second;
           ent->Dup();

@@ -128,8 +128,8 @@ typedef std::map<std::string, std::string, header_nocase_cmp> headers_t;
 
 //
 // Header "x-amz-meta-xattr" is for extended attributes.
-// This header is url encoded string which is json formated.
-//   x-amz-meta-xattr:urlencod({"xattr-1":"base64(value-1)","xattr-2":"base64(value-2)","xattr-3":"base64(value-3)"})
+// This header is url encoded string which is json formatted.
+//   x-amz-meta-xattr:urlencode({"xattr-1":"base64(value-1)","xattr-2":"base64(value-2)","xattr-3":"base64(value-3)"})
 //
 typedef struct xattr_value{
   unsigned char* pvalue;
@@ -147,7 +147,7 @@ typedef struct xattr_value{
 typedef std::map<std::string, PXATTRVAL> xattrs_t;
 
 //
-// Global valiables
+// Global variables
 //
 extern bool           foreground;
 extern bool           nomultipart;
