@@ -1,6 +1,15 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.77 -- Apr 19, 2014
+issue 405(googlecode) - enable_content_md5 Input/output error
+issue #14 - s3fs -u should return 0 if there are no lost multiparts
+issue #16 - empty file is written to s3
+issue #18 - s3fs crashes with segfault
+issue #22 - Fix typos in docs for max_stat_cache_size
+issue #23 - curl ssl problems
+issue #28 - Address signedness warning in FdCache::Init
+
 Version 1.76 -- Jan 21, 2014
 issue #5 - du shows incorrect usage stats
 issue #8 - version in configure.ac is 1.74 for release 1.75
