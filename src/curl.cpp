@@ -1572,6 +1572,11 @@ int S3fsCurl::RequestPerform(void)
         sleep(2);
         break;
 
+      case CURLE_SSL_CONNECT_ERROR:
+        DPRN("### CURLE_SSL_CONNECT_ERROR");
+        sleep(2);
+        break;
+
       case CURLE_SSL_CACERT:
         // try to locate cert, if successful, then set the
         // option and continue
