@@ -8,6 +8,9 @@ S3FS \- FUSE-based file system backed by Amazon S3
 .SS unmounting
 .TP
 \fBumount mountpoint
+.SS utility mode ( remove interrupted multipart uploading objects )
+.TP
+\fBs3fs -u bucket
 .SH DESCRIPTION
 s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
 .SH AUTHENTICATION
