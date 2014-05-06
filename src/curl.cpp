@@ -31,11 +31,6 @@
 #include <pthread.h>
 #include <assert.h>
 #include <curl/curl.h>
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/md5.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 #include <libxml/tree.h>
@@ -52,6 +47,7 @@
 #include "string_util.h"
 #include "s3fs.h"
 #include "s3fs_util.h"
+#include "s3fs_auth.h"
 
 using namespace std;
 
@@ -148,7 +144,6 @@ const char* BodyData::str(void) const
 
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 pthread_mutex_t  S3fsCurl::curl_share_lock[SHARE_MUTEX_MAX];
-pthread_mutex_t* S3fsCurl::crypt_mutex         = NULL;
 bool             S3fsCurl::is_initglobal_done  = false;
 CURLSH*          S3fsCurl::hCurlShare          = NULL;
 bool             S3fsCurl::is_dns_cache        = true; // default
@@ -168,7 +163,6 @@ string           S3fsCurl::AWSAccessToken;
 time_t           S3fsCurl::AWSAccessTokenExpire= 0;
 string           S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
-const EVP_MD*    S3fsCurl::evp_md              = EVP_sha1();
 curltime_t       S3fsCurl::curl_times;
 curlprogress_t   S3fsCurl::curl_progress;
 string           S3fsCurl::curl_ca_bundle;
@@ -340,97 +334,12 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
 
 bool S3fsCurl::InitCryptMutex(void)
 {
-  if(S3fsCurl::crypt_mutex){
-    FPRNNN("crypt_mutex is not NULL, destory it.");
-    if(!S3fsCurl::DestroyCryptMutex()){
-      DPRN("Failed to destroy crypt mutex");
-      return false;
-    }
-  }
-  if(NULL == (S3fsCurl::crypt_mutex = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t))))){
-    DPRNCRIT("Could not allocate memory for crypt mutex");
-    return false;
-  }
-  for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-    pthread_mutex_init(&S3fsCurl::crypt_mutex[cnt], NULL);
-  }
-  // static lock
-  CRYPTO_set_locking_callback(S3fsCurl::CryptMutexLock);
-  CRYPTO_set_id_callback(S3fsCurl::CryptGetThreadid);
-  // dynamic lock
-  CRYPTO_set_dynlock_create_callback(S3fsCurl::CreateDynCryptMutex);
-  CRYPTO_set_dynlock_lock_callback(S3fsCurl::DynCryptMutexLock);
-  CRYPTO_set_dynlock_destroy_callback(S3fsCurl::DestoryDynCryptMutex);
-
-  return true;
+  return s3fs_init_crypt_mutex();
 }
 
 bool S3fsCurl::DestroyCryptMutex(void)
 {
-  if(!S3fsCurl::crypt_mutex){
-    return true;
-  }
-
-  CRYPTO_set_dynlock_destroy_callback(NULL);
-  CRYPTO_set_dynlock_lock_callback(NULL);
-  CRYPTO_set_dynlock_create_callback(NULL);
-  CRYPTO_set_id_callback(NULL);
-  CRYPTO_set_locking_callback(NULL);
-
-  for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-    pthread_mutex_destroy(&S3fsCurl::crypt_mutex[cnt]);
-  }
-  CRYPTO_cleanup_all_ex_data();
-  free(S3fsCurl::crypt_mutex);
-  S3fsCurl::crypt_mutex = NULL;
-
-  return true;
-}
-
-void S3fsCurl::CryptMutexLock(int mode, int pos, const char* file, int line)
-{
-  if(S3fsCurl::crypt_mutex){
-    if(mode & CRYPTO_LOCK){
-      pthread_mutex_lock(&S3fsCurl::crypt_mutex[pos]);
-    }else{
-      pthread_mutex_unlock(&S3fsCurl::crypt_mutex[pos]);
-    }
-  }
-}
-
-unsigned long S3fsCurl::CryptGetThreadid(void)
-{
-  return (unsigned long)pthread_self();
-}
-
-struct CRYPTO_dynlock_value* S3fsCurl::CreateDynCryptMutex(const char* file, int line)
-{
-  struct CRYPTO_dynlock_value* dyndata;
-
-  if(NULL == (dyndata = (struct CRYPTO_dynlock_value*)malloc(sizeof(struct CRYPTO_dynlock_value)))){
-    return NULL;
-  }
-  pthread_mutex_init(&(dyndata->dyn_mutex), NULL);
-  return dyndata;
-}
-
-void S3fsCurl::DynCryptMutexLock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
-{
-  if(dyndata){
-    if(mode & CRYPTO_LOCK){
-      pthread_mutex_lock(&(dyndata->dyn_mutex));
-    }else{
-      pthread_mutex_unlock(&(dyndata->dyn_mutex));
-    }
-  }
-}
-
-void S3fsCurl::DestoryDynCryptMutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
-{
-  if(dyndata){
-    pthread_mutex_destroy(&(dyndata->dyn_mutex));
-    free(dyndata);
-  }
+  return s3fs_destroy_crypt_mutex();
 }
 
 // homegrown timeout mechanism
@@ -1651,10 +1560,6 @@ int S3fsCurl::RequestPerform(void)
 //
 string S3fsCurl::CalcSignature(string method, string strMD5, string content_type, string date, string resource)
 {
-  int ret;
-  int bytes_written;
-  int offset;
-  int write_attempts = 0;
   string Signature;
   string StringToSign;
 
@@ -1682,74 +1587,20 @@ string S3fsCurl::CalcSignature(string method, string strMD5, string content_type
   int key_len                = S3fsCurl::AWSSecretAccessKey.size();
   const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
   int sdata_len              = StringToSign.size();
-  unsigned char md[EVP_MAX_MD_SIZE];
-  unsigned int md_len;
+  unsigned char* md          = NULL;
+  unsigned int md_len        = 0;;
 
-  HMAC(S3fsCurl::evp_md, key, key_len, sdata, sdata_len, md, &md_len);
+  s3fs_HMAC(key, key_len, sdata, sdata_len, &md, &md_len);
 
-  BIO* b64  = BIO_new(BIO_f_base64());
-  BIO* bmem = BIO_new(BIO_s_mem());
-  b64       = BIO_push(b64, bmem);
-
-  offset = 0;
-  for(;;){
-    bytes_written = BIO_write(b64, &(md[offset]), md_len);
-    write_attempts++;
-    // -1 indicates that an error occurred, or a temporary error, such as
-    // the server is busy, occurred and we need to retry later.
-    // BIO_write can do a short write, this code addresses this condition
-    if(bytes_written <= 0){
-      // Indicates whether a temporary error occurred or a failure to
-      // complete the operation occurred
-      if((ret = BIO_should_retry(b64))){
-        // Wait until the write can be accomplished
-        if(write_attempts <= 10){
-          continue;
-        }
-        // Too many write attempts
-        DPRNNN("Failure during BIO_write, returning null String");  
-        CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-        BIO_free_all(b64);
-        Signature.clear();
-        return Signature;
-
-      }else{
-        // If not a retry then it is an error
-        DPRNNN("Failure during BIO_write, returning null String");  
-        CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-        BIO_free_all(b64);
-        Signature.clear();
-        return Signature;
-      }
-    }
-  
-    // The write request succeeded in writing some Bytes
-    offset += bytes_written;
-    md_len -= bytes_written;
-  
-    // If there is no more data to write, the request sending has been
-    // completed
-    if(md_len <= 0){
-      break;
-    }
+  char* base64;
+  if(NULL == (base64 = s3fs_base64(md, md_len))){
+    free(md);
+    return string("");  // ENOMEM
   }
+  free(md);
 
-  // Flush the data
-  ret = BIO_flush(b64);
-  if(ret <= 0){ 
-    DPRNNN("Failure during BIO_flush, returning null String");  
-    CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-    BIO_free_all(b64);
-    Signature.clear();
-    return Signature;
-  } 
-
-  BUF_MEM *bptr;
-  BIO_get_mem_ptr(b64, &bptr);
-  Signature.assign(bptr->data, bptr->length - 1);
-
-  CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-  BIO_free_all(b64);
+  Signature = base64;
+  free(base64);
 
   return Signature;
 }
@@ -2094,7 +1945,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
 
   string strMD5;
   if(-1 != fd && S3fsCurl::is_content_md5){
-    strMD5         = GetContentMD5(fd);
+    strMD5         = s3fs_get_content_md5(fd);
     requestHeaders = curl_slist_sort_insert(requestHeaders, string("Content-MD5: " + strMD5).c_str());
   }
 
@@ -2617,7 +2468,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   }
 
   // make md5 and file pointer
-  partdata.etag = md5sum(partdata.fd, partdata.startpos, partdata.size);
+  partdata.etag = s3fs_md5sum(partdata.fd, partdata.startpos, partdata.size);
   if(partdata.etag.empty()){
     DPRN("Could not make md5 for file(part %d)", part_num);
     return -1;
@@ -3407,107 +3258,6 @@ bool AdditionalHeader::Dump(void) const
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
-string GetContentMD5(int fd)
-{
-  BIO*     b64;
-  BIO*     bmem;
-  BUF_MEM* bptr;
-  string   Signature;
-  unsigned char* md5hex;
-
-  if(NULL == (md5hex = md5hexsum(fd, 0, -1))){
-    return string("");
-  }
-
-  b64  = BIO_new(BIO_f_base64());
-  bmem = BIO_new(BIO_s_mem());
-  b64  = BIO_push(b64, bmem);
-
-  BIO_write(b64, md5hex, MD5_DIGEST_LENGTH);
-  free(md5hex);
-  if(1 != BIO_flush(b64)){
-    CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-    BIO_free_all(b64);
-    return string("");
-  }
-  BIO_get_mem_ptr(b64, &bptr);
-  Signature.assign(bptr->data, bptr->length - 1);
-
-  CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, b64, &b64->ex_data);
-  BIO_free_all(b64);
-
-  return Signature;
-}
-
-unsigned char* md5hexsum(int fd, off_t start, ssize_t size)
-{
-  MD5_CTX c;
-  char    buf[512];
-  ssize_t bytes;
-  unsigned char* result;
-
-  if(-1 == size){
-    struct stat st;
-    if(-1 == fstat(fd, &st)){
-      return NULL;
-    }
-    size = static_cast<ssize_t>(st.st_size);
-  }
-
-  // seek to top of file.
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    return NULL;
-  }
-  if(NULL == (result = (unsigned char*)malloc(MD5_DIGEST_LENGTH))){
-    return NULL;
-  }
-
-  memset(buf, 0, 512);
-  MD5_Init(&c);
-  for(ssize_t total = 0; total < size; total += bytes){
-    bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = read(fd, buf, bytes);
-    if(0 == bytes){
-      // end of file
-      break;
-    }else if(-1 == bytes){
-      // error
-      DPRNNN("file read error(%d)", errno);
-      free(result);
-      return NULL;
-    }
-    MD5_Update(&c, buf, bytes);
-    memset(buf, 0, 512);
-  }
-  MD5_Final(result, &c);
-
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
-    return NULL;
-  }
-  return result;
-}
-
-string md5sum(int fd, off_t start, ssize_t size)
-{
-  char md5[2 * MD5_DIGEST_LENGTH + 1];
-  char hexbuf[3];
-  unsigned char* md5hex;
-
-  if(NULL == (md5hex = md5hexsum(fd, start, size))){
-    return string("");
-  }
-
-  memset(md5, 0, 2 * MD5_DIGEST_LENGTH + 1);
-  for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-    snprintf(hexbuf, 3, "%02x", md5hex[i]);
-    strncat(md5, hexbuf, 2);
-  }
-  free(md5hex);
-
-  return string(md5);
-}
-
 //
 // curl_slist_sort_insert
 // This function is like curl_slist_append function, but this adds data by a-sorting.

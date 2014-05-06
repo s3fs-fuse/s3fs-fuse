@@ -26,81 +26,181 @@ AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE()
 
 AC_PROG_CXX
+AC_PROG_CC
 
 CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64"
 
-PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9])
+dnl ----------------------------------------------
+dnl Choice SSL library
+dnl ----------------------------------------------
+auth_lib=na
+nettle_lib=no
 
-dnl malloc_trim function
-AC_CHECK_FUNCS(malloc_trim, , )
-
-dnl Initializing NSS(temporally)
-AC_MSG_CHECKING([Initializing libcurl build with NSS])
+dnl
+dnl nettle library
+dnl
+AC_MSG_CHECKING([s3fs build with nettle(GnuTLS)])
 AC_ARG_ENABLE(
-  nss-init,
-  [
-    AS_HELP_STRING(
-      [--enable-nss-init],
-      [Inilializing libcurl with NSS (default is no)]
-    )
-  ],
+  nettle-lib,
+  [AS_HELP_STRING([--enable-nettle-lib], [s3fs build with nettle in GnuTLS(default no)])],
   [
     case "${enableval}" in
     yes)
       AC_MSG_RESULT(yes)
-      nss_init_enabled=yes
+      nettle_lib=yes
       ;;
     *)
       AC_MSG_RESULT(no)
-      nss_init_enabled=no
       ;;
     esac
   ],
   [
     AC_MSG_RESULT(no)
-    nss_init_enabled=no
+  ])
+
+dnl
+dnl use openssl library for ssl
+dnl
+AC_MSG_CHECKING([s3fs build with OpenSSL])
+AC_ARG_ENABLE(
+  openssl-lib,
+  [AS_HELP_STRING([--enable-openssl-lib], [s3fs build with OpenSSL(default is no)])],
+  [
+    case "${enableval}" in
+    yes)
+      AC_MSG_RESULT(yes)
+      AS_IF(
+        [test $nettle_lib = no],
+        [auth_lib=openssl],
+        [AC_MSG_ERROR([could not set openssl with nettle, nettle is only for gnutls library])])
+      ;;
+    *)
+      AC_MSG_RESULT(no)
+      ;;
+    esac
+  ],
+  [
+    AC_MSG_RESULT(no)
+  ])
+
+dnl
+dnl use GnuTLS library for ssl
+dnl
+AC_MSG_CHECKING([s3fs build with GnuTLS])
+AC_ARG_ENABLE(
+  gnutls-lib,
+  [AS_HELP_STRING([--enable-gnutls-lib], [s3fs build with GnuTLS(default is no)])],
+  [
+    case "${enableval}" in
+    yes)
+      AC_MSG_RESULT(yes)
+      AS_IF(
+        [test $auth_lib = na],
+        [
+          AS_IF(
+            [test $nettle_lib = no],
+            [auth_lib=gnutls],
+            [auth_lib=nettle])
+        ],
+        [AC_MSG_ERROR([could not set gnutls because already set another ssl library])])
+      ;;
+    *)
+      AC_MSG_RESULT(no)
+      ;;
+    esac
+  ],
+  [
+    AC_MSG_RESULT(no)
+  ])
+
+dnl
+dnl use nss library for ssl
+dnl
+AC_MSG_CHECKING([s3fs build with NSS])
+AC_ARG_ENABLE(
+  nss-lib,
+  [AS_HELP_STRING([--enable-nss-lib], [s3fs build with NSS(default is no)])],
+  [
+    case "${enableval}" in
+    yes)
+      AC_MSG_RESULT(yes)
+      AS_IF(
+        [test $auth_lib = na],
+        [
+          AS_IF(
+            [test $nettle_lib = no],
+            [auth_lib=nss],
+            [AC_MSG_ERROR([could not set openssl with nettle, nettle is only for gnutls library])])
+        ],
+        [AC_MSG_ERROR([could not set nss because already set another ssl library])])
+      ;;
+    *)
+      AC_MSG_RESULT(no)
+      ;;
+    esac
+  ],
+  [
+    AC_MSG_RESULT(no)
   ])
 
 AS_IF(
-  [test $nss_init_enabled = yes],
-  [
-    AC_DEFINE(NSS_INIT_ENABLED, 1)
-    AC_CHECK_LIB(nss3, NSS_NoDB_Init, , [AC_MSG_ERROR(not found NSS libraries)])
-    AC_CHECK_LIB(plds4, PL_ArenaFinish, , [AC_MSG_ERROR(not found PL_ArenaFinish)])
-    AC_CHECK_LIB(nspr4, PR_Cleanup, , [AC_MSG_ERROR(not found PR_Cleanup)])
-    AC_CHECK_HEADER(nss.h, , [AC_MSG_ERROR(not found nss.h)])
-    AC_CHECK_HEADER(nspr4/prinit.h, , [AC_MSG_ERROR(not found prinit.h)])
-    AC_PATH_PROG(NSSCONFIG, [nss-config], no)
-    AS_IF(
-      [test $NSSCONFIG = no],
-      [
-        DEPS_CFLAGS="$DEPS_CFLAGS -I/usr/include/nss3"
-        DEPS_LIBS="$DEPS_LIBS -lnss3"
-      ],
-      [
-        addcflags=`nss-config --cflags`
-        DEPS_CFLAGS="$DEPS_CFLAGS $addcflags"
-        dnl addlib=`nss-config --libs`
-        dnl DEPS_LIBS="$DEPS_LIBS $addlib"
-        DEPS_LIBS="$DEPS_LIBS -lnss3"
-      ])
-    AC_PATH_PROG(NSPRCONFIG, [nspr-config], no)
-    AS_IF(
-      [test $NSPRCONFIG = no],
-      [
-        DEPS_CFLAGS="$DEPS_CFLAGS -I/usr/include/nspr4"
-        DEPS_LIBS="$DEPS_LIBS -lnspr4 -lplds4"
-      ],
-      [
-        addcflags=`nspr-config --cflags`
-        DEPS_CFLAGS="$DEPS_CFLAGS $addcflags"
-        dnl addlib=`nspr-config --libs`
-        dnl DEPS_LIBS="$DEPS_LIBS $addlib"
-        DEPS_LIBS="$DEPS_LIBS -lnspr4 -lplds4"
-      ])
-  ])
+  [test $auth_lib = na],
+  [auth_lib=openssl])
 
-AS_UNSET(nss_enabled)
+AC_MSG_CHECKING([compile s3fs with])
+case "${auth_lib}" in
+openssl)
+  AC_MSG_RESULT(OpenSSL)
+  PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9])
+  ;;
+gnutls)
+  AC_MSG_RESULT(GnuTLS-gcrypt)
+  gnutls_nettle=""
+  AC_CHECK_LIB(gnutls, gcry_control, [gnutls_nettle=0])
+  AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
+  AS_IF([test $gnutls_nettle = 0],
+    [
+      PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])
+      LIBS="-lgnutls -lgcrypt $LIBS"
+      AC_MSG_CHECKING([gnutls is build with])
+      AC_MSG_RESULT(gcrypt)
+    ],
+    [AC_MSG_ERROR([GnuTLS found, but gcrypt not found])])
+  ;;
+nettle)
+  AC_MSG_RESULT(GnuTLS-nettle)
+  gnutls_nettle=""
+  AC_CHECK_LIB(gnutls, nettle_MD5Init, [gnutls_nettle=1])
+  AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
+  AS_IF([test $gnutls_nettle = 1],
+    [
+      PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])
+      LIBS="-lgnutls -lnettle $LIBS"
+      AC_MSG_CHECKING([gnutls is build with])
+      AC_MSG_RESULT(nettle)
+    ],
+    [AC_MSG_ERROR([GnuTLS found, but nettle not found])])
+  ;;
+nss)
+  AC_MSG_RESULT(NSS)
+  PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])
+  ;;
+*)
+  AC_MSG_ERROR([unknown ssl library type.])
+  ;;
+esac
+
+AM_CONDITIONAL([USE_SSL_OPENSSL], [test "$auth_lib" = openssl])
+AM_CONDITIONAL([USE_SSL_GNUTLS], [test "$auth_lib" = gnutls -o "$auth_lib" = nettle])
+AM_CONDITIONAL([USE_GNUTLS_NETTLE], [test "$auth_lib" = nettle])
+AM_CONDITIONAL([USE_SSL_NSS], [test "$auth_lib" = nss])
+
+dnl ----------------------------------------------
+dnl end of ssl library
+dnl ----------------------------------------------
+
+dnl malloc_trim function
+AC_CHECK_FUNCS(malloc_trim, , )
 
 AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)
 AC_OUTPUT

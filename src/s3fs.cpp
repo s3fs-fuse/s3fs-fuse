@@ -31,7 +31,6 @@
 #include <libxml/xpathInternals.h>
 #include <libxml/tree.h>
 #include <curl/curl.h>
-#include <openssl/crypto.h>
 #include <pwd.h>
 #include <grp.h>
 #include <getopt.h>
@@ -50,6 +49,7 @@
 #include "string_util.h"
 #include "s3fs_util.h"
 #include "fdcache.h"
+#include "s3fs_auth.h"
 
 using namespace std;
 
@@ -2595,7 +2595,7 @@ static int remote_mountpath_exists(const char* path)
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
   FPRN("init");
-  LOWSYSLOGPRINT(LOG_ERR, "init $Rev$");
+  LOWSYSLOGPRINT(LOG_ERR, "init v%s (%s)", VERSION, s3fs_crypt_lib_name());
 
   // init curl
   if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
@@ -3872,15 +3872,17 @@ int main(int argc, char* argv[])
   s3fs_oper.access    = s3fs_access;
   s3fs_oper.create    = s3fs_create;
 
-  // init NSS
-  S3FS_INIT_NSS();
+  if(!s3fs_init_global_ssl()){
+    fprintf(stderr, "%s: could not initialize for ssl libraries.\n", program_name.c_str());
+    exit(EXIT_FAILURE);
+  }
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
 
-  // cleanup NSS
-  S3FS_CLEANUP_NSS();
+  s3fs_destroy_global_ssl();
+
   // cleanup xml2
   xmlCleanupParser();
   S3FS_MALLOCTRIM(0);
@@ -3888,3 +3890,4 @@ int main(int argc, char* argv[])
   exit(fuse_res);
 }
 
+/// END

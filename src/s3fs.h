@@ -65,36 +65,4 @@
 
 #endif // HAVE_MALLOC_TRIM
 
-//
-// For initializing libcurl with NSS
-// Normally libcurl initializes the NSS library, but usually allows
-// you to initialize s3fs forcibly. Because Memory leak is reported
-// in valgrind(about curl_global_init() function), and this is for
-// the cancellation. When "--enable-nss-init" option is specified
-// at configurarion, it makes NSS_INIT_ENABLED flag into Makefile.
-// NOTICE
-// This defines and macros is temporary, and this should be deleted.
-//
-#ifdef NSS_INIT_ENABLED
-#include <nss.h>
-#include <prinit.h>
-
-#define S3FS_INIT_NSS() \
-        { \
-          NSS_NoDB_Init(NULL); \
-        }
-#define S3FS_CLEANUP_NSS() \
-        { \
-          NSS_Shutdown(); \
-          PL_ArenaFinish(); \
-          PR_Cleanup(); \
-        }
-
-#else // NSS_INIT_ENABLED
-
-#define S3FS_INIT_NSS()
-#define S3FS_CLEANUP_NSS()
-
-#endif // NSS_INIT_ENABLED
-
 #endif // S3FS_S3_H_

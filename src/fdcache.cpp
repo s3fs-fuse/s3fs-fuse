@@ -31,7 +31,6 @@
 #include <string.h>
 #include <assert.h>
 #include <curl/curl.h>
-#include <openssl/crypto.h>
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -797,7 +796,7 @@ int FdEntity::Load(off_t start, off_t size)
         break;
       }
       // download
-      if((*iter)->bytes >= (2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
+      if((*iter)->bytes >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
         // parallel request
         // Additional time is needed for large files
         time_t backup = 0;
@@ -1197,3 +1196,4 @@ bool FdManager::Close(FdEntity* ent)
   return false;
 }
 
+/// END
