@@ -40,11 +40,11 @@ dnl
 dnl nettle library
 dnl
 AC_MSG_CHECKING([s3fs build with nettle(GnuTLS)])
-AC_ARG_ENABLE(
-  nettle-lib,
-  [AS_HELP_STRING([--enable-nettle-lib], [s3fs build with nettle in GnuTLS(default no)])],
+AC_ARG_WITH(
+  nettle,
+  [AS_HELP_STRING([--with-nettle], [s3fs build with nettle in GnuTLS(default no)])],
   [
-    case "${enableval}" in
+    case "${withval}" in
     yes)
       AC_MSG_RESULT(yes)
       nettle_lib=yes
@@ -62,11 +62,11 @@ dnl
 dnl use openssl library for ssl
 dnl
 AC_MSG_CHECKING([s3fs build with OpenSSL])
-AC_ARG_ENABLE(
-  openssl-lib,
-  [AS_HELP_STRING([--enable-openssl-lib], [s3fs build with OpenSSL(default is no)])],
+AC_ARG_WITH(
+  openssl,
+  [AS_HELP_STRING([--with-openssl], [s3fs build with OpenSSL(default is no)])],
   [
-    case "${enableval}" in
+    case "${withval}" in
     yes)
       AC_MSG_RESULT(yes)
       AS_IF(
@@ -87,11 +87,11 @@ dnl
 dnl use GnuTLS library for ssl
 dnl
 AC_MSG_CHECKING([s3fs build with GnuTLS])
-AC_ARG_ENABLE(
-  gnutls-lib,
-  [AS_HELP_STRING([--enable-gnutls-lib], [s3fs build with GnuTLS(default is no)])],
+AC_ARG_WITH(
+  gnutls,
+  [AS_HELP_STRING([--with-gnutls], [s3fs build with GnuTLS(default is no)])],
   [
-    case "${enableval}" in
+    case "${withval}" in
     yes)
       AC_MSG_RESULT(yes)
       AS_IF(
@@ -117,11 +117,11 @@ dnl
 dnl use nss library for ssl
 dnl
 AC_MSG_CHECKING([s3fs build with NSS])
-AC_ARG_ENABLE(
-  nss-lib,
-  [AS_HELP_STRING([--enable-nss-lib], [s3fs build with NSS(default is no)])],
+AC_ARG_WITH(
+  nss,
+  [AS_HELP_STRING([--with-nss], [s3fs build with NSS(default is no)])],
   [
-    case "${enableval}" in
+    case "${withval}" in
     yes)
       AC_MSG_RESULT(yes)
       AS_IF(
@@ -145,7 +145,12 @@ AC_ARG_ENABLE(
 
 AS_IF(
   [test $auth_lib = na],
-  [auth_lib=openssl])
+  AS_IF(
+    [test $nettle_lib = no],
+    [auth_lib=openssl],
+    [AC_MSG_ERROR([could not set nettle without GnuTLS library])]
+  )
+)
 
 AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
