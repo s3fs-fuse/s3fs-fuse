@@ -41,6 +41,7 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs.h"
+#include "s3fs_auth.h"
 
 using namespace std;
 
@@ -997,11 +998,13 @@ void show_help (void)
 void show_version(void)
 {
   printf(
-  "Amazon Simple Storage Service File System %s\n"
+  "Amazon Simple Storage Service File System V%s with %s\n"
   "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>\n"
   "License GPL2: GNU GPL version 2 <http://gnu.org/licenses/gpl.html>\n"
   "This is free software: you are free to change and redistribute it.\n"
-  "There is NO WARRANTY, to the extent permitted by law.\n", VERSION );
+  "There is NO WARRANTY, to the extent permitted by law.\n",
+  VERSION, s3fs_crypt_lib_name());
   return;
 }
 
+/// END

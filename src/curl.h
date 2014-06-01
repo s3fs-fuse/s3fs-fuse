@@ -106,12 +106,6 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 #define	SHARE_MUTEX_SSL_SESSION 1
 #define	SHARE_MUTEX_MAX         2
 
-// internal use struct for openssl
-struct CRYPTO_dynlock_value
-{
-  pthread_mutex_t dyn_mutex;
-};
-
 // Class for lapping curl
 //
 class S3fsCurl
@@ -140,7 +134,6 @@ class S3fsCurl
     // class variables
     static pthread_mutex_t  curl_handles_lock;
     static pthread_mutex_t  curl_share_lock[SHARE_MUTEX_MAX];
-    static pthread_mutex_t* crypt_mutex;
     static bool             is_initglobal_done;
     static CURLSH*          hCurlShare;
     static bool             is_dns_cache;
@@ -160,7 +153,6 @@ class S3fsCurl
     static time_t           AWSAccessTokenExpire;
     static std::string      IAM_role;
     static long             ssl_verify_hostname;
-    static const EVP_MD*    evp_md;
     static curltime_t       curl_times;
     static curlprogress_t   curl_progress;
     static std::string      curl_ca_bundle;
@@ -206,11 +198,6 @@ class S3fsCurl
     static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr);
     static bool InitCryptMutex(void);
     static bool DestroyCryptMutex(void);
-    static void CryptMutexLock(int mode, int pos, const char* file, int line);
-    static unsigned long CryptGetThreadid(void);
-    static struct CRYPTO_dynlock_value* CreateDynCryptMutex(const char* file, int line);
-    static void DynCryptMutexLock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line);
-    static void DestoryDynCryptMutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line);
     static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
 
     static bool InitMimeType(const char* MimeFile = NULL);
