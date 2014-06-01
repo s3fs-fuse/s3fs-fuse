@@ -33,6 +33,7 @@
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
 #include <openssl/crypto.h>
+#include <openssl/err.h>
 #include <string>
 #include <map>
 
@@ -56,11 +57,16 @@ const char* s3fs_crypt_lib_name(void)
 //-------------------------------------------------------------------
 bool s3fs_init_global_ssl(void)
 {
+  ERR_load_crypto_strings();
+  ERR_load_BIO_strings();
+  OpenSSL_add_all_algorithms();
   return true;
 }
 
 bool s3fs_destroy_global_ssl(void)
 {
+  EVP_cleanup();
+  ERR_free_strings();
   return true;
 }
 

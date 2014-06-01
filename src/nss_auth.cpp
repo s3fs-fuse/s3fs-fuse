@@ -54,6 +54,7 @@ const char* s3fs_crypt_lib_name(void)
 //-------------------------------------------------------------------
 bool s3fs_init_global_ssl(void)
 {
+  NSS_Init(NULL);
   NSS_NoDB_Init(NULL);
   return true;
 }

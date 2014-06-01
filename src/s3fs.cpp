@@ -2597,6 +2597,12 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   FPRN("init");
   LOWSYSLOGPRINT(LOG_ERR, "init v%s (%s)", VERSION, s3fs_crypt_lib_name());
 
+  // ssl init
+  if(!s3fs_init_global_ssl()){
+    fprintf(stderr, "%s: could not initialize for ssl libraries.\n", program_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+
   // init curl
   if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
     fprintf(stderr, "%s: Could not initiate curl library.\n", program_name.c_str());
@@ -2637,6 +2643,8 @@ static void s3fs_destroy(void*)
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
     DPRN("Could not remove cache directory.");
   }
+  // ssl
+  s3fs_destroy_global_ssl();
 }
 
 static int s3fs_access(const char* path, int mask)
@@ -2840,10 +2848,17 @@ static int s3fs_utility_mode(void)
     return EXIT_FAILURE;
   }
 
+  // ssl init
+  if(!s3fs_init_global_ssl()){
+    fprintf(stderr, "%s: could not initialize for ssl libraries.\n", program_name.c_str());
+    return EXIT_FAILURE;
+  }
+
   // init curl
   if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
     fprintf(stderr, "%s: Could not initiate curl library.\n", program_name.c_str());
     LOWSYSLOGPRINT(LOG_ERR, "Could not initiate curl library.");
+    s3fs_destroy_global_ssl();
     return EXIT_FAILURE;
   }
 
@@ -2888,6 +2903,10 @@ static int s3fs_utility_mode(void)
   if(!S3fsCurl::DestroyS3fsCurl()){
     DPRN("Could not release curl library.");
   }
+
+  // ssl
+  s3fs_destroy_global_ssl();
+
   return result;
 }
 
