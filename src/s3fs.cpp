@@ -2976,10 +2976,18 @@ static int check_for_aws_format(void)
   ifstream PF(passwd_file.c_str());
   if(PF.good()){
     while (getline(PF, line)){
-      if(line[0]=='#')
+      if(line[0]=='#'){
         continue;
-      if(line.size() == 0)
+      }
+      if(line.size() == 0){
         continue;
+      }
+      if('\r' == line[line.size() - 1]){
+        line = line.substr(0, line.size() - 1);
+        if(line.size() == 0){
+          continue;
+        }
+      }
 
       first_pos = line.find_first_of(" \t");
       if(first_pos != string::npos){
@@ -3128,6 +3136,12 @@ static int read_passwd_file(void)
       }
       if(line.size() == 0){
         continue;
+      }
+      if('\r' == line[line.size() - 1]){
+        line = line.substr(0, line.size() - 1);
+        if(line.size() == 0){
+          continue;
+        }
       }
 
       first_pos = line.find_first_of(" \t");
