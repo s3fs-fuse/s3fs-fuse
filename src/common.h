@@ -69,6 +69,7 @@ extern bool debug;
 extern bool foreground;
 extern bool foreground2;
 extern bool nomultipart;
+extern bool pathrequeststyle;
 extern std::string program_name;
 extern std::string service_path;
 extern std::string host;

@@ -83,6 +83,7 @@ bool debug                        = false;
 bool foreground                   = false;
 bool foreground2                  = false;
 bool nomultipart                  = false;
+bool pathrequeststyle             = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
@@ -3672,6 +3673,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
          found  = host.find_last_of('/');
          length = host.length();
       }
+      return 0;
+    }
+    if(0 == strcmp(arg, "use_path_request_style")){
+      pathrequeststyle = true;
       return 0;
     }
 
