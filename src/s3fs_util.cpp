@@ -312,7 +312,7 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
     return NULL;
   }
 
-  if(NULL == (p_new_path = strdup(new_path))){ 
+  if(NULL == (p_new_path = strdup(new_path))){
     free(p);
     free(p_old_path);
     printf("create_mvnode: could not allocation memory for p_new_path\n");
@@ -330,7 +330,7 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
 }
 
 //
-// Add sorted MVNODE data(Ascending order) 
+// Add sorted MVNODE data(Ascending order)
 //
 MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir, bool normdir)
 {
@@ -671,9 +671,9 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
     }
   }
   // Checking the bitmask, if the last 3 bits are all zero then process as a regular
-  // file type (S_IFDIR or S_IFREG), otherwise return mode unmodified so that S_IFIFO, 
+  // file type (S_IFDIR or S_IFREG), otherwise return mode unmodified so that S_IFIFO,
   // S_IFSOCK, S_IFCHR, S_IFLNK and S_IFBLK devices can be processed properly by fuse.
-  if(!(mode & S_IFMT)){ 
+  if(!(mode & S_IFMT)){
     if(!isS3sync){
       if(checkdir){
         if(forcedir){
@@ -823,7 +823,7 @@ void show_usage (void)
 void show_help (void)
 {
   show_usage();
-  printf( 
+  printf(
     "\n"
     "Mount an Amazon S3 bucket as a file system.\n"
     "\n"
@@ -966,6 +966,11 @@ void show_help (void)
     "        touch, mv, etc), but this option does not use copy-api for\n"
     "        only rename command(ex. mv). If this option is specified with\n"
     "        nocopapi, the s3fs ignores it.\n"
+    "\n"
+    "   use_path_request_style (use legacy API calling style)\n"
+    "        Enble compatibility with S3-like APIs which do not support\n"
+    "        the virtual-host request style, by using the older path request\n"
+    "        style.\n"
     "\n"
     "FUSE/mount Options:\n"
     "\n"

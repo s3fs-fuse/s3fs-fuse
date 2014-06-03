@@ -186,8 +186,18 @@ string prepare_url(const char* url)
     uri_length = 8;
   }
   uri  = url_str.substr(0, uri_length);
-  host = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
-  path = url_str.substr((bucket_pos + bucket_length));
+
+  if(!pathrequeststyle){
+    host = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    path = url_str.substr((bucket_pos + bucket_length));
+  }else{
+    host = url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    string part = url_str.substr((bucket_pos + bucket_length));
+    if('/' != part[0]){
+      part = "/" + part;
+    }
+    path = "/" + bucket + part;
+  }
 
   url_str = uri + host + path;
 
@@ -207,4 +217,3 @@ string get_date()
   strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&t));
   return buf;
 }
-
