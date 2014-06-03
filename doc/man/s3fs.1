@@ -171,6 +171,9 @@ If you set this option, s3fs do not use PUT with "x-amz-copy-source"(copy api). 
 For a distributed object storage which is compatibility S3 API without PUT(copy api).
 This option is a subset of nocopyapi option. The nocopyapi option does not use copy-api for all command(ex. chmod, chown, touch, mv, etc), but this option does not use copy-api for only rename command(ex. mv).
 If this option is specified with nocopapi, the s3fs ignores it.
+.TP
+\fB\-o\fR use_path_request_style (use legacy API calling style)
+Enble compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .SH FUSE/MOUNT OPTIONS
 .TP
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '-onodev,nosuid' by default, which can only be overridden by a privileged user.
