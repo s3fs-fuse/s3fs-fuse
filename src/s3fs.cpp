@@ -2272,8 +2272,20 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
         next_marker = (char*)tmpch;
         xmlFree(tmpch);
       }else{
-        DPRN("Could not find next marker, thus break loop.");
-        truncated = false;
+        // If did not specify "delimiter", s3 did not return "NextMarker".
+        // On this case, can use lastest name for next marker.
+        //
+        string lastname;
+        if(!head.GetLastName(lastname)){
+          DPRN("Could not find next marker, thus break loop.");
+          truncated = false;
+        }else{
+          next_marker = s3_realpath.substr(1);
+          if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+            next_marker += "/";
+          }
+          next_marker += lastname;
+        }
       }
     }
     S3FS_XMLFREEDOC(doc);

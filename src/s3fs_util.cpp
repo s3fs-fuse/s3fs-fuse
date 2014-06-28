@@ -229,6 +229,26 @@ bool S3ObjList::IsDir(const char* name) const
   return ps3obj->is_dir;
 }
 
+bool S3ObjList::GetLastName(std::string& lastname) const
+{
+  bool result = false;
+  lastname = "";
+  for(s3obj_t::const_iterator iter = objects.begin(); iter != objects.end(); iter++){
+    if((*iter).second.orgname.length()){
+      if(0 > strcmp(lastname.c_str(), (*iter).second.orgname.c_str())){
+        lastname = (*iter).second.orgname;
+        result = true;
+      }
+    }else{
+      if(0 > strcmp(lastname.c_str(), (*iter).second.normalname.c_str())){
+        lastname = (*iter).second.normalname;
+        result = true;
+      }
+    }
+  }
+  return result;
+}
+
 bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSlash) const
 {
   s3obj_t::const_iterator iter;

@@ -51,6 +51,7 @@ class S3ObjList
     std::string GetETag(const char* name) const;
     bool IsDir(const char* name) const;
     bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
+    bool GetLastName(std::string& lastname) const;
 
     static bool MakeHierarchizedList(s3obj_list_t& list, bool haveSlash);
 };
