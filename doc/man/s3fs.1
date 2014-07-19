@@ -71,9 +71,12 @@ this option can not be specified with use_sse.
 (can specify use_rrs=1 for old version)
 .TP
 \fB\-o\fR use_sse (default is disable)
-use Amazon's Server Site Encryption.
-this option can not be specified with use_rrs.
-(can specify use_sse=1 for old version)
+use AmazonÅfs Server-Site Encryption or Server-Side Encryption with Customer-Provided Encryption Keys.
+this option can not be specified with use_rrs. specifying only "use_sse" or "use_sse=1" enables Server-Side Encryption.(use_sse=1 for old version)
+specifying this option with file path which has some SSE-C secret key enables Server-Side Encryption with Customer-Provided Encryption Keys.(use_sse=file)
+the file must be 600 permission. the file can have some lines, each line is one SSE-C key. the first line in file is used as Customer-Provided Encryption Keys for uploading and chnaging headers etc.
+if there are some keys after first line, those are used downloading object which are encripted by not first key.
+so that, you can keep all SSE-C keys in file, that is SSE-C key history.
 .TP
 \fB\-o\fR passwd_file (default="")
 specify the path to the password file, which which takes precedence over the password in $HOME/.passwd-s3fs and /etc/passwd-s3fs

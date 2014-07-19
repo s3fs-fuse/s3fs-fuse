@@ -100,6 +100,8 @@ class S3fsMultiCurl;
 // class S3fsCurl
 //----------------------------------------------
 typedef std::map<std::string, std::string> iamcredmap_t;
+typedef std::map<std::string, std::string> sseckeymap_t;
+typedef std::list<sseckeymap_t>            sseckeylist_t;
 
 // share
 #define	SHARE_MUTEX_DNS         0
@@ -144,6 +146,7 @@ class S3fsCurl
     static bool             is_public_bucket;
     static std::string      default_acl;             // TODO: to enum
     static bool             is_use_rrs;
+    static sseckeylist_t    sseckeys;
     static bool             is_use_sse;
     static bool             is_content_md5;
     static bool             is_verbose;
@@ -182,6 +185,8 @@ class S3fsCurl
     int                  b_postdata_remaining; // backup for retrying
     off_t                b_partdata_startpos;  // backup for retrying
     ssize_t              b_partdata_size;      // backup for retrying
+    bool                 b_ssekey_pos;         // backup for retrying
+    std::string          b_ssekey_md5;         // backup for retrying
 
   public:
     // constructor/destructor
@@ -250,6 +255,11 @@ class S3fsCurl
     static std::string SetDefaultAcl(const char* acl);
     static bool SetUseRrs(bool flag);
     static bool GetUseRrs(void) { return S3fsCurl::is_use_rrs; }
+    static bool SetSseKeys(const char* filepath);
+    static bool GetSseKey(std::string& md5, std::string& ssekey);
+    static bool GetSseKeyMd5(int pos, std::string& md5);
+    static int GetSseKeyCount(void);
+    static bool IsSseCustomMode(void);
     static bool SetUseSse(bool flag);
     static bool GetUseSse(void) { return S3fsCurl::is_use_sse; }
     static bool SetContentMd5(bool flag);
@@ -272,17 +282,18 @@ class S3fsCurl
     bool CreateCurlHandle(bool force = false);
     bool DestroyCurlHandle(void);
 
+    bool AddSseKeyRequestHead(std::string& md5, bool is_copy_source);
     bool GetResponseCode(long& responseCode);
     int RequestPerform(void);
     int DeleteRequest(const char* tpath);
-    bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL);
-    bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath) {
-      return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str());
+    bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, int ssekey_pos = -1);
+    bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath, int ssekey_pos = -1) {
+      return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
     }
     int HeadRequest(const char* tpath, headers_t& meta);
     int PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg);
     int PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
-    int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
+    int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, std::string& ssekeymd5);
     int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
@@ -309,6 +320,7 @@ class S3fsCurl
     int GetMultipartRetryCount(void) const { return retry_count; }
     void SetMultipartRetryCount(int retrycnt) { retry_count = retrycnt; }
     bool IsOverMultipartRetryCount(void) const { return (retry_count >= S3fsCurl::retries); }
+    int GetLastPreHeadSeecKeyPos(void) const { return b_ssekey_pos; }
 };
 
 //----------------------------------------------

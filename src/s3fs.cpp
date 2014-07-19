@@ -610,6 +610,30 @@ static int check_parent_object_access(const char* path, int mask)
   return 0;
 }
 
+//
+// This function is global, is called fom curl class(GetObject).
+//
+char* get_object_sseckey_md5(const char* path)
+{
+  if(!path){
+    return NULL;
+  }
+  headers_t meta;
+
+  if(0 != get_object_attribute(path, NULL, &meta)){
+    DPRNNN("Failed to get object(%s) headers", path);
+    return NULL;
+  }
+
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key   = (*iter).first;
+    if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
+      return strdup((*iter).second.c_str());
+    }
+  }
+  return NULL;
+}
+
 static FdEntity* get_local_fent(const char* path, bool is_load)
 {
   struct stat stobj;
@@ -2078,9 +2102,23 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return NULL;
   }
+  int ssec_key_pos     = s3fscurl->GetLastPreHeadSeecKeyPos();
+  int next_retry_count = s3fscurl->GetMultipartRetryCount() + 1;
+
   if(s3fscurl->IsOverMultipartRetryCount()){
-    DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
-    return NULL;
+    if(S3fsCurl::IsSseCustomMode()){
+      // If sse-c mode, start check not sse-c(ssec_key_pos = -1).
+      // do increment ssec_key_pos for checking all sse-c key.
+      next_retry_count = 0;
+      ssec_key_pos++;
+      if(S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
+        DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+        return NULL;
+      }
+    }else{
+      DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+      return NULL;
+    }
   }
 
   S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
@@ -2088,12 +2126,12 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   string base_path  = s3fscurl->GetBasePath();
   string saved_path = s3fscurl->GetSpacialSavedPath();
 
-  if(!newcurl->PreHeadRequest(path, base_path, saved_path)){
+  if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
     DPRN("Could not duplicate curl object(%s).", saved_path.c_str());
     delete newcurl;
     return NULL;
   }
-  newcurl->SetMultipartRetryCount(s3fscurl->GetMultipartRetryCount() + 1);
+  newcurl->SetMultipartRetryCount(next_retry_count);
 
   return newcurl;
 }
@@ -2135,6 +2173,8 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
         continue;
       }
 
+      // First check for directory, start checking "not sse-c".
+      // If checking failed, retry to check with "sse-c" by retry callback func when sse-c mode.
       S3fsCurl* s3fscurl = new S3fsCurl();
       if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
         DPRNNN("Could not make curl object for head request(%s).", disppath.c_str());
@@ -3522,22 +3562,36 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == strcmp(arg, "use_sse") || 0 == STR2NCMP(arg, "use_sse=")){
-      off_t sse = 1;
-      // for an old format.
       if(0 == STR2NCMP(arg, "use_sse=")){
-        sse = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));
-      }
-      if(0 == sse){
-        S3fsCurl::SetUseSse(false);
-      }else if(1 == sse){
+        if(S3fsCurl::GetUseRrs()){
+          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
+          return -1;
+        }
+        const char* ssecfile = &arg[strlen("use_sse=")];
+        if(0 == strcmp(ssecfile, "1")){
+          S3fsCurl::SetUseSse(true);
+        }else{
+          // testing sse-c, try to load AES256 keys
+          struct stat st;
+          if(0 != stat(ssecfile, &st)){
+            fprintf (stderr, "%s: could not open use_sse keys file(%s)\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+          if(st.st_mode & (S_IXUSR | S_IRWXG | S_IRWXO)){
+            fprintf (stderr, "%s: use_sse keys file %s should be 0600 permissions\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+          if(!S3fsCurl::SetSseKeys(ssecfile)){
+            fprintf (stderr, "%s: failed to load use_sse keys file %s\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+        }
+      }else{
         if(S3fsCurl::GetUseRrs()){
           fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
           return -1;
         }
         S3fsCurl::SetUseSse(true);
-      }else{
-        fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", program_name.c_str());
-        return -1;
       }
       return 0;
     }
