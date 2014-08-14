@@ -791,7 +791,8 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
   meta["x-amz-meta-mtime"] = str(time(NULL));
 
   S3fsCurl s3fscurl(true);
-  return s3fscurl.PutRequest(path, meta, -1, false);    // fd=-1 means for creating zero byte object.
+  return s3fscurl.PutRequest(path, meta, -1, true);    // fd=-1 means for creating zero byte object.
+                                                       // overwrite sse headers, so create new file.
 }
 
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
@@ -876,7 +877,8 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
   meta["x-amz-meta-mtime"] = str(time);
 
   S3fsCurl s3fscurl;
-  return s3fscurl.PutRequest(tpath.c_str(), meta, -1, false);    // fd=-1 means for creating zero byte object.
+  return s3fscurl.PutRequest(tpath.c_str(), meta, -1, true);    // fd=-1 means for creating zero byte object.
+                                                                // overwrite sse headers, so create new file.
 }
 
 static int s3fs_mkdir(const char* path, mode_t mode)
