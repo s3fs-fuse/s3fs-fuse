@@ -110,8 +110,8 @@ class FdEntity
     bool SetAllDisable(void) { return SetAllStatus(false); }
     bool LoadFull(off_t* size = NULL, bool force_load = false);
     int Load(off_t start, off_t size);
-    int RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool force_sync = false);
-    int Flush(headers_t& meta, bool ow_sse_flg, bool force_sync = false) { return RowFlush(NULL, meta, ow_sse_flg, force_sync); }
+    int RowFlush(const char* tpath, headers_t& meta, bool force_sync = false);
+    int Flush(headers_t& meta, bool force_sync = false) { return RowFlush(NULL, meta, force_sync); }
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
 };

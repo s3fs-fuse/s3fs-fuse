@@ -219,6 +219,7 @@ class S3fsCurl
 
     static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
     static bool SetIAMCredentials(const char* response);
+    static bool PushbackSseKeys(std::string& onekey);
 
     // methods
     bool ResetHandle(void);
@@ -228,7 +229,7 @@ class S3fsCurl
     bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
-    int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool ow_sse_flg);
+    int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
     int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
     int UploadMultipartPostSetup(const char* tpath, int part_num, std::string& upload_id);
     int UploadMultipartPostRequest(const char* tpath, int part_num, std::string& upload_id);
@@ -238,7 +239,7 @@ class S3fsCurl
     // class methods
     static bool InitS3fsCurl(const char* MimeFile = NULL);
     static bool DestroyS3fsCurl(void);
-    static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
     static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
     static bool CheckIAMCredentialUpdate(void);
 
@@ -256,6 +257,7 @@ class S3fsCurl
     static bool SetUseRrs(bool flag);
     static bool GetUseRrs(void) { return S3fsCurl::is_use_rrs; }
     static bool SetSseKeys(const char* filepath);
+    static bool LoadEnvSseKeys(void);
     static bool GetSseKey(std::string& md5, std::string& ssekey);
     static bool GetSseKeyMd5(int pos, std::string& md5);
     static int GetSseKeyCount(void);
@@ -282,7 +284,7 @@ class S3fsCurl
     bool CreateCurlHandle(bool force = false);
     bool DestroyCurlHandle(void);
 
-    bool AddSseKeyRequestHead(std::string& md5, bool is_copy_source);
+    bool AddSseKeyRequestHead(std::string& md5, bool is_copy);
     bool GetResponseCode(long& responseCode);
     int RequestPerform(void);
     int DeleteRequest(const char* tpath);
@@ -291,16 +293,16 @@ class S3fsCurl
       return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
     }
     int HeadRequest(const char* tpath, headers_t& meta);
-    int PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg);
-    int PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
+    int PutRequest(const char* tpath, headers_t& meta, int fd);
     int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, std::string& ssekeymd5);
     int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
     int MultipartListRequest(std::string& body);
     int AbortMultipartUpload(const char* tpath, std::string& upload_id);
-    int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta);
-    int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg);
+    int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
+    int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
     // methods(valiables)
