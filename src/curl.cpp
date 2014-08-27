@@ -2061,10 +2061,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
   return 0;
 }
 
-//TEST
-//int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool ow_sse_flg)
 int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
-//TEST
 {
   FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -2155,10 +2152,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   return result;
 }
 
-//TEST
-//int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg)
 int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
-//TEST
 {
   struct stat st;
   FILE*       file = NULL;
@@ -2465,10 +2459,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 //   Date: Mon, 1 Nov 2010 20:34:56 GMT
 //   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
 //
-//TEST
-//int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string& upload_id, bool ow_sse_flg)
 int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string& upload_id, bool is_copy)
-//TEST
 {
   FPRNNN("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -2924,10 +2915,7 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   return result;
 }
 
-//TEST
-//int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta)
 int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy)
-//TEST
 {
   int            result;
   string         upload_id;
@@ -2964,10 +2952,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   return 0;
 }
 
-//TEST
-//int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse_flg)
 int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy)
-//TEST
 {
   int            result;
   string         upload_id;

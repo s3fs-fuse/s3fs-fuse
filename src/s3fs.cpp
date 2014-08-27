@@ -135,10 +135,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp);
 static xmlChar* get_prefix(xmlDocPtr doc);
 static xmlChar* get_next_marker(xmlDocPtr doc);
 static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
-//TEST
-//static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg);
 static int put_headers(const char* path, headers_t& meta, bool is_copy);
-//TEST
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
@@ -671,10 +668,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
  * ow_sse_flg is for over writing sse header by use_sse option.
  * @return fuse return code
  */
-//TEST
-//static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
 static int put_headers(const char* path, headers_t& meta, bool is_copy)
-//TEST
 {
   int         result;
   S3fsCurl    s3fscurl(true);
