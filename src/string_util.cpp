@@ -217,3 +217,12 @@ string get_date()
   strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&t));
   return buf;
 }
+
+/*
+* Local variables:
+* tab-width: 4
+* c-basic-offset: 4
+* End:
+* vim600: noet sw=4 ts=4 fdm=marker
+* vim<600: noet sw=4 ts=4
+*/
