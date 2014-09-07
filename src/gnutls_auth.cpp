@@ -256,4 +256,11 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 
 #endif	// USE_GNUTLS_NETTLE
 
-/// END
+/*
+* Local variables:
+* tab-width: 4
+* c-basic-offset: 4
+* End:
+* vim600: noet sw=4 ts=4 fdm=marker
+* vim<600: noet sw=4 ts=4
+*/

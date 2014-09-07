@@ -14,6 +14,8 @@ In order to compile s3fs, You'll need the following requirements:
 * FUSE (>= 2.8.4)
 * FUSE Kernel module installed and running (RHEL 4.x/CentOS 4.x users - read below)
 * OpenSSL-devel (0.9.8)
+  GnuTLS(gcrypt and nettle)
+  NSS
 * Git
 
 If you're using YUM or APT to install those packages, then it might require additional packaging, allow it to be installed.
