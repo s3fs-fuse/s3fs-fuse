@@ -855,7 +855,7 @@ bool FdEntity::LoadFull(off_t* size, bool force_load)
   return true;
 }
 
-int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool force_sync)
+int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool force_sync)
 {
   int result;
 
@@ -902,13 +902,13 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool ow_sse_flg, bool
     if(120 > S3fsCurl::GetReadwriteTimeout()){
       backup = S3fsCurl::SetReadwriteTimeout(120);
     }
-    result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), meta, fd, ow_sse_flg);
+    result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), meta, fd);
     if(0 != backup){
       S3fsCurl::SetReadwriteTimeout(backup);
     }
   }else{
     S3fsCurl s3fscurl(true);
-    result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), meta, fd, ow_sse_flg);
+    result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), meta, fd);
   }
 
   // seek to head of file.

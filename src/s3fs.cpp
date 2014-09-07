@@ -135,7 +135,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp);
 static xmlChar* get_prefix(xmlDocPtr doc);
 static xmlChar* get_next_marker(xmlDocPtr doc);
 static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
-static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg);
+static int put_headers(const char* path, headers_t& meta, bool is_copy);
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
@@ -610,6 +610,30 @@ static int check_parent_object_access(const char* path, int mask)
   return 0;
 }
 
+//
+// This function is global, is called fom curl class(GetObject).
+//
+char* get_object_sseckey_md5(const char* path)
+{
+  if(!path){
+    return NULL;
+  }
+  headers_t meta;
+
+  if(0 != get_object_attribute(path, NULL, &meta)){
+    DPRNNN("Failed to get object(%s) headers", path);
+    return NULL;
+  }
+
+  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    string key   = (*iter).first;
+    if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
+      return strdup((*iter).second.c_str());
+    }
+  }
+  return NULL;
+}
+
 static FdEntity* get_local_fent(const char* path, bool is_load)
 {
   struct stat stobj;
@@ -644,7 +668,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
  * ow_sse_flg is for over writing sse header by use_sse option.
  * @return fuse return code
  */
-static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
+static int put_headers(const char* path, headers_t& meta, bool is_copy)
 {
   int         result;
   S3fsCurl    s3fscurl(true);
@@ -659,11 +683,11 @@ static int put_headers(const char* path, headers_t& meta, bool ow_sse_flg)
 
   if(buf.st_size >= FIVE_GB){
     // multipart
-    if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta))){
+    if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
       return result;
     }
   }else{
-    if(0 != (result = s3fscurl.PutHeadRequest(path, meta, ow_sse_flg))){
+    if(0 != (result = s3fscurl.PutHeadRequest(path, meta, is_copy))){
       return result;
     }
   }
@@ -767,7 +791,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
   meta["x-amz-meta-mtime"] = str(time(NULL));
 
   S3fsCurl s3fscurl(true);
-  return s3fscurl.PutRequest(path, meta, -1, false);    // fd=-1 means for creating zero byte object.
+  return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
@@ -852,7 +876,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
   meta["x-amz-meta-mtime"] = str(time);
 
   S3fsCurl s3fscurl;
-  return s3fscurl.PutRequest(tpath.c_str(), meta, -1, false);    // fd=-1 means for creating zero byte object.
+  return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
 static int s3fs_mkdir(const char* path, mode_t mode)
@@ -1014,7 +1038,7 @@ static int s3fs_symlink(const char* from, const char* to)
     return -errno;
   }
   // upload
-  if(0 != (result = ent->Flush(headers, true, true))){
+  if(0 != (result = ent->Flush(headers, true))){
     DPRN("could not upload tmpfile(result=%d)", result);
   }
   FdManager::get()->Close(ent);
@@ -1050,7 +1074,7 @@ static int rename_object(const char* from, const char* to)
   meta["Content-Type"]             = S3fsCurl::LookupMimeType(string(to));
   meta["x-amz-metadata-directive"] = "REPLACE";
 
-  if(0 != (result = put_headers(to, meta, false))){
+  if(0 != (result = put_headers(to, meta, true))){
     return result;
   }
   result = s3fs_unlink(from);
@@ -1091,7 +1115,7 @@ static int rename_object_nocopy(const char* from, const char* to)
   }
 
   // upload
-  if(0 != (result = ent->RowFlush(to, meta, false, true))){
+  if(0 != (result = ent->RowFlush(to, meta, true))){
     DPRN("could not upload file(%s): result=%d", to, result);
     FdManager::get()->Close(ent);
     return result;
@@ -1391,7 +1415,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta, false) != 0){
+    if(put_headers(strpath.c_str(), meta, true) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -1467,7 +1491,7 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
     }
 
     // upload
-    if(0 != (result = ent->Flush(meta, false, true))){
+    if(0 != (result = ent->Flush(meta, true))){
       DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
@@ -1553,7 +1577,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta, false) != 0){
+    if(put_headers(strpath.c_str(), meta, true) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -1639,7 +1663,7 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
     }
 
     // upload
-    if(0 != (result = ent->Flush(meta, false, true))){
+    if(0 != (result = ent->Flush(meta, true))){
       DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
@@ -1711,7 +1735,7 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta, false) != 0){
+    if(put_headers(strpath.c_str(), meta, true) != 0){
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
@@ -1796,7 +1820,7 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
     }
 
     // upload
-    if(0 != (result = ent->Flush(meta, false, true))){
+    if(0 != (result = ent->Flush(meta, true))){
       DPRN("could not upload file(%s): result=%d", strpath.c_str(), result);
       FdManager::get()->Close(ent);
       return result;
@@ -1847,7 +1871,7 @@ static int s3fs_truncate(const char* path, off_t size)
   }
 
   // upload
-  if(0 != (result = ent->Flush(meta, false, true))){
+  if(0 != (result = ent->Flush(meta, true))){
     DPRN("could not upload file(%s): result=%d", path, result);
     FdManager::get()->Close(ent);
     return result;
@@ -2002,7 +2026,7 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
         meta["x-amz-meta-mtime"] = str(ent_mtime);
       }
     }
-    result = ent->Flush(meta, true, false);
+    result = ent->Flush(meta, false);
     FdManager::get()->Close(ent);
   }
   S3FS_MALLOCTRIM(0);
@@ -2078,9 +2102,23 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return NULL;
   }
+  int ssec_key_pos     = s3fscurl->GetLastPreHeadSeecKeyPos();
+  int next_retry_count = s3fscurl->GetMultipartRetryCount() + 1;
+
   if(s3fscurl->IsOverMultipartRetryCount()){
-    DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
-    return NULL;
+    if(S3fsCurl::IsSseCustomMode()){
+      // If sse-c mode, start check not sse-c(ssec_key_pos = -1).
+      // do increment ssec_key_pos for checking all sse-c key.
+      next_retry_count = 0;
+      ssec_key_pos++;
+      if(S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
+        DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+        return NULL;
+      }
+    }else{
+      DPRN("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+      return NULL;
+    }
   }
 
   S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
@@ -2088,12 +2126,12 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   string base_path  = s3fscurl->GetBasePath();
   string saved_path = s3fscurl->GetSpacialSavedPath();
 
-  if(!newcurl->PreHeadRequest(path, base_path, saved_path)){
+  if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
     DPRN("Could not duplicate curl object(%s).", saved_path.c_str());
     delete newcurl;
     return NULL;
   }
-  newcurl->SetMultipartRetryCount(s3fscurl->GetMultipartRetryCount() + 1);
+  newcurl->SetMultipartRetryCount(next_retry_count);
 
   return newcurl;
 }
@@ -2135,6 +2173,8 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
         continue;
       }
 
+      // First check for directory, start checking "not sse-c".
+      // If checking failed, retry to check with "sse-c" by retry callback func when sse-c mode.
       S3fsCurl* s3fscurl = new S3fsCurl();
       if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
         DPRNNN("Could not make curl object for head request(%s).", disppath.c_str());
@@ -3522,22 +3562,44 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == strcmp(arg, "use_sse") || 0 == STR2NCMP(arg, "use_sse=")){
-      off_t sse = 1;
-      // for an old format.
       if(0 == STR2NCMP(arg, "use_sse=")){
-        sse = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));
-      }
-      if(0 == sse){
-        S3fsCurl::SetUseSse(false);
-      }else if(1 == sse){
         if(S3fsCurl::GetUseRrs()){
           fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
           return -1;
         }
-        S3fsCurl::SetUseSse(true);
+        const char* ssecfile = &arg[strlen("use_sse=")];
+        if(0 == strcmp(ssecfile, "1")){
+          if(S3fsCurl::IsSseCustomMode()){
+            fprintf (stderr, "%s: already set SSE-C key by environment, and confrict use_sse option.\n", program_name.c_str());
+            return -1;
+          }
+          S3fsCurl::SetUseSse(true);
+        }else{
+          // testing sse-c, try to load AES256 keys
+          struct stat st;
+          if(0 != stat(ssecfile, &st)){
+            fprintf (stderr, "%s: could not open use_sse keys file(%s)\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+          if(st.st_mode & (S_IXUSR | S_IRWXG | S_IRWXO)){
+            fprintf (stderr, "%s: use_sse keys file %s should be 0600 permissions\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+          if(!S3fsCurl::SetSseKeys(ssecfile)){
+            fprintf (stderr, "%s: failed to load use_sse keys file %s\n", program_name.c_str(), ssecfile);
+            return -1;
+          }
+        }
       }else{
-        fprintf(stderr, "%s: poorly formed argument to option: use_sse\n", program_name.c_str());
-        return -1;
+        if(S3fsCurl::GetUseRrs()){
+          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
+          return -1;
+        }
+        if(S3fsCurl::IsSseCustomMode()){
+          fprintf (stderr, "%s: already set SSE-C key by environment, and confrict use_sse option.\n", program_name.c_str());
+          return -1;
+        }
+        S3fsCurl::SetUseSse(true);
       }
       return 0;
     }
@@ -3789,6 +3851,9 @@ int main(int argc, char* argv[])
       exit(EXIT_FAILURE);
     }
   }
+
+  // Load SSE-C Key from env
+  S3fsCurl::LoadEnvSseKeys();
 
   // clear this structure
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
