@@ -1,6 +1,17 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.78 -- Sep 15, 2014
+issue #29 - Possible to create Debian/Ubuntu packages?(googlecode issue 109)
+issue 417(googlecode) - Password file with DOS format is not handled properly
+issue #41 - Failed making signature
+issue #40 - Moving a directory containing more than 1000 files truncates the
+directory
+issue #49 - use_sse is ignored when creating new files
+issue #39 - Support for SSE-C
+issue #50 - Cannot find pkg-config when configured with any SSL backend except
+openssl
+
 Version 1.77 -- Apr 19, 2014
 issue 405(googlecode) - enable_content_md5 Input/output error
 issue #14 - s3fs -u should return 0 if there are no lost multiparts
