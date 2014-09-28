@@ -1478,7 +1478,6 @@ bool S3fsCurl::RemakeHandle(void)
 
     case REQTYPE_CHKBUCKET:
       curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
-      curl_easy_setopt(hCurl, CURLOPT_FAILONERROR, true);
       curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
       curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
       curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
@@ -2390,7 +2389,6 @@ int S3fsCurl::CheckBucket(void)
   }
   // setopt
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(hCurl, CURLOPT_FAILONERROR, true);
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
