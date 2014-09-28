@@ -2396,6 +2396,9 @@ int S3fsCurl::CheckBucket(void)
   type = REQTYPE_CHKBUCKET;
 
   int result = RequestPerform();
+  if (result != 0) {
+    DPRN("Check bucket failed, S3 response: %s", (bodydata ? bodydata->str() : ""));
+  }
   delete bodydata;
   bodydata = NULL;
 
