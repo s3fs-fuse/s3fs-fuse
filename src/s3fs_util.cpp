@@ -875,7 +875,7 @@ void show_help (void)
     "      - this option makes Amazon's Reduced Redundancy Storage enable.\n"
     "\n"
     "   use_sse (default is disable)\n"
-    "      - use AmazonÅfs Server-Site Encryption or Server-Side Encryption\n"
+    "      - use Amazon's Server-Site Encryption or Server-Side Encryption\n"
     "        with Customer-Provided Encryption Keys.\n"
     "        this option can not be specified with use_rrs. specifying only \n"
     "        \"use_sse\" or \"use_sse=1\" enables Server-Side Encryption.\n"

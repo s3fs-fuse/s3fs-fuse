@@ -10,7 +10,7 @@ S3FS \- FUSE-based file system backed by Amazon S3
 \fBumount mountpoint
 .SS utility mode ( remove interrupted multipart uploading objects )
 .TP
-\fBs3fs -u bucket
+\fBs3fs \-u bucket
 .SH DESCRIPTION
 s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
 .SH AUTHENTICATION
@@ -71,7 +71,7 @@ this option can not be specified with use_sse.
 (can specify use_rrs=1 for old version)
 .TP
 \fB\-o\fR use_sse (default is disable)
-use AmazonÅfs Server-Site Encryption or Server-Side Encryption with Customer-Provided Encryption Keys.
+use Amazon's Server-Site Encryption or Server-Side Encryption with Customer-Provided Encryption Keys.
 this option can not be specified with use_rrs. specifying only "use_sse" or "use_sse=1" enables Server-Side Encryption.(use_sse=1 for old version)
 specifying this option with file path which has some SSE-C secret key enables Server-Side Encryption with Customer-Provided Encryption Keys.(use_sse=file)
 the file must be 600 permission. the file can have some lines, each line is one SSE-C key. the first line in file is used as Customer-Provided Encryption Keys for uploading and change headers etc.
@@ -180,7 +180,7 @@ If this option is specified with nocopapi, the s3fs ignores it.
 Enble compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .SH FUSE/MOUNT OPTIONS
 .TP
-Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '-onodev,nosuid' by default, which can only be overridden by a privileged user.
+Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
 .SH NOTES
