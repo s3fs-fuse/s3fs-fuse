@@ -496,9 +496,9 @@ string get_username(uid_t uid)
     DPRNCRIT("failed to allocate memory.");
     return string("");
   }
-  // get group infomation
+  // get group information
   if(0 != (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
-    DPRNNN("could not get pw infomation.");
+    DPRNNN("could not get pw information.");
     free(pbuf);
     return string("");
   }
@@ -532,9 +532,9 @@ int is_uid_inculde_group(uid_t uid, gid_t gid)
     DPRNCRIT("failed to allocate memory.");
     return -ENOMEM;
   }
-  // get group infomation
+  // get group information
   if(0 != (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-    DPRNNN("could not get group infomation.");
+    DPRNNN("could not get group information.");
     free(pbuf);
     return -result;
   }

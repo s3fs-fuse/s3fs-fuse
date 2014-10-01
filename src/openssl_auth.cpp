@@ -131,7 +131,7 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
 bool s3fs_init_crypt_mutex(void)
 {
   if(s3fs_crypt_mutex){
-    FPRNNN("s3fs_crypt_mutex is not NULL, destory it.");
+    FPRNNN("s3fs_crypt_mutex is not NULL, destroy it.");
     if(!s3fs_destroy_crypt_mutex()){
       DPRN("Failed to s3fs_crypt_mutex");
       return false;
