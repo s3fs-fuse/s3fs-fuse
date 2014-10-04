@@ -3280,8 +3280,8 @@ int S3fsMultiCurl::MultiRead(void)
           if(NULL != (retrycurl = RetryCallback(s3fscurl))){
             cMap_all[retrycurl->hCurl] = retrycurl;
           }else{
-            // do not care, but set...
-            isRetry = false;
+            // Could not set up callback.
+            return -EIO;
           }
         }
         if(s3fscurl != retrycurl){
