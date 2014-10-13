@@ -529,7 +529,7 @@ bool S3fsCurl::LocateBundle(void)
   if(0 == S3fsCurl::curl_ca_bundle.size()){
     CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
     if(CURL_CA_BUNDLE != NULL)  {
-      // check for existance and readability of the file
+      // check for existence and readability of the file
       ifstream BF(CURL_CA_BUNDLE);
       if(!BF.good()){
         DPRN("%s: file specified by CURL_CA_BUNDLE environment variable is not readable", program_name.c_str());
@@ -1904,7 +1904,7 @@ int S3fsCurl::GetIAMCredentials(void)
 
   // analizing response
   if(0 == result && !S3fsCurl::SetIAMCredentials(bodydata->str())){
-    DPRN("Something error occured, could not get IAM credential.");
+    DPRN("Something error occurred, could not get IAM credential.");
   }
   delete bodydata;
   bodydata = NULL;
@@ -3473,11 +3473,11 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
   }
   int nPathLen = strlen(path);
   for(charcnt_list_t::const_iterator iter = charcntlist.begin(); iter != charcntlist.end(); ++iter){
-    // get target charactor count
+    // get target character count
     if(nPathLen < (*iter)){
       continue;
     }
-    // make target suffix(same charactor count) & find
+    // make target suffix(same character count) & find
     string suffix(&path[nPathLen - (*iter)]);
     if(addheader.end() == addheader.find(suffix)){
       continue;
@@ -3512,9 +3512,9 @@ bool AdditionalHeader::Dump(void) const
   if(!foreground2){
     return true;
   }
-  // charactor count list
+  // character count list
   stringstream ssdbg;
-  ssdbg << "Charactor count list[" << charcntlist.size() << "] = {";
+  ssdbg << "Character count list[" << charcntlist.size() << "] = {";
   for(charcnt_list_t::const_iterator citer = charcntlist.begin(); citer != charcntlist.end(); ++citer){
     ssdbg << " " << (*citer);
   }

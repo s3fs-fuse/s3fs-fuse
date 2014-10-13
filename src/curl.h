@@ -351,7 +351,7 @@ class S3fsCurl
 //
 typedef std::map<CURL*, S3fsCurl*> s3fscurlmap_t;
 typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl);    // callback for succeed multi request
-typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl); // callback for failuer and retrying
+typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl); // callback for failure and retrying
 
 class S3fsMultiCurl
 {

@@ -2040,7 +2040,7 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
 
   // [NOTICE]
   // At first, we remove stats cache.
-  // Because fuse does not wait for responce from "release" function. :-(
+  // Because fuse does not wait for response from "release" function. :-(
   // And fuse runs next command before this function returns.
   // Thus we call deleting stats function ASSAP.
   //
@@ -2562,7 +2562,7 @@ static bool is_truncated(xmlDocPtr doc)
 
 // return: the pointer to object name on allocated memory.
 //         the pointer to "c_strErrorObjectName".(not allocated)
-//         NULL(a case of something error occured)
+//         NULL(a case of something error occurred)
 static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
 {
   // Get full path
@@ -2688,7 +2688,7 @@ static void s3fs_destroy(void*)
 {
   DPRN("destroy");
 
-  // Destory curl
+  // Destroy curl
   if(!S3fsCurl::DestroyS3fsCurl()){
     DPRN("Could not release curl library.");
   }
@@ -2929,14 +2929,14 @@ static int s3fs_utility_mode(void)
 
     xmlDocPtr doc;
     if(NULL == (doc = xmlReadMemory(body.c_str(), static_cast<int>(body.size()), "", NULL, 0))){
-      DPRN("xmlReadMemory returns with error.");
+      DPRN("xmlReadMemory exited with error.");
       result = EXIT_FAILURE;
 
     }else{
       // make working uploads list
       uncomp_mp_list_t list;
       if(!get_uncomp_mp_list(doc, list)){
-        DPRN("get_uncomp_mp_list returns with error.");
+        DPRN("get_uncomp_mp_list exited with error.");
         result = EXIT_FAILURE;
 
       }else{
@@ -2944,7 +2944,7 @@ static int s3fs_utility_mode(void)
         print_uncomp_mp_list(list);
         // remove
         if(!abort_uncomp_mp_list(list)){
-          DPRN("something error occured in removing process.");
+          DPRN("an error occurred during removal process.");
           result = EXIT_FAILURE;
         }
       }
@@ -2952,7 +2952,7 @@ static int s3fs_utility_mode(void)
     }
   }
 
-  // Destory curl
+  // Destroy curl
   if(!S3fsCurl::DestroyS3fsCurl()){
     DPRN("Could not release curl library.");
   }
@@ -3900,7 +3900,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  // error checking of command line arguments for compatability
+  // error checking of command line arguments for compatibility
   if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeyId()){
     fprintf(stderr, "%s: specifying both public_bucket and the access keys options is invalid\n",
       program_name.c_str());
