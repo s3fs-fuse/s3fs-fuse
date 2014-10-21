@@ -3165,7 +3165,7 @@ static int read_passwd_file(void)
   size_t first_pos = string::npos;
   size_t last_pos = string::npos;
   bool default_found = 0;
-  bool aws_format;
+  int aws_format;
 
   // if you got here, the password file
   // exists and is readable by the
