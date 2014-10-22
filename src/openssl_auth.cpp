@@ -94,7 +94,9 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 
 static unsigned long s3fs_crypt_get_threadid(void)
 {
-  return static_cast<unsigned long>(pthread_self());
+  // For FreeBSD etc, some system's pthread_t is structure pointer.
+  // Then we use cast like C style(not C++) instead of ifdef.
+  return (unsigned long)(pthread_self());
 }
 
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
