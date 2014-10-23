@@ -9,6 +9,8 @@
 /config.sub
 /configure
 /depcomp
+/test-driver
+/compile
 /doc/Makefile
 /doc/Makefile.in
 /install-sh
