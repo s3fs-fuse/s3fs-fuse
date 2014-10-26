@@ -180,10 +180,12 @@ string prepare_url(const char* url)
   string token =  str("/" + bucket);
   int bucket_pos = url_str.find(token);
   int bucket_length = token.size();
-  int uri_length = 7;
+  int uri_length = 0;
 
   if(!strncasecmp(url_str.c_str(), "https://", 8)){
     uri_length = 8;
+  } else if(!strncasecmp(url_str.c_str(), "http://", 7)) {
+    uri_length = 7;
   }
   uri  = url_str.substr(0, uri_length);
 
