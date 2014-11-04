@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <limits>
+#include <stdint.h>
 #include <string>
 
 #include "string_util.h"
@@ -39,6 +41,14 @@ int main(int argc, char *argv[])
   ASSERT_EQUALS(std::string("1234"), trim_right("1234  "));
   ASSERT_EQUALS(std::string("  1234"), trim_right("  1234"));
   ASSERT_EQUALS(std::string("1234"), trim_right("1234"));
+
+  ASSERT_EQUALS(std::string("0"), str(0));
+  ASSERT_EQUALS(std::string("1"), str(1));
+  ASSERT_EQUALS(std::string("-1"), str(-1));
+  ASSERT_EQUALS(std::string("9223372036854775807"), str(std::numeric_limits<int64_t>::max()));
+  ASSERT_EQUALS(std::string("-9223372036854775808"), str(std::numeric_limits<int64_t>::min()));
+  ASSERT_EQUALS(std::string("0"), str(std::numeric_limits<uint64_t>::min()));
+  ASSERT_EQUALS(std::string("18446744073709551615"), str(std::numeric_limits<uint64_t>::max()));
 
   return 0;
 }

@@ -85,13 +85,6 @@ string lower(string s)
   return s;
 }
 
-string IntToStr(int n)
-{
-  stringstream result;
-  result << n;
-  return result.str();
-}
-
 string trim_left(const string &s, const string &t /* = SPACES */)
 {
   string d(s);
