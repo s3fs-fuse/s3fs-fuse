@@ -3498,7 +3498,7 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
     return list;
   }
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-    string slistval = (*iter).first + ": " + (*iter).second;
+    string slistval = (*iter).first + ":" + (*iter).second;
     // Adding header
     list = curl_slist_sort_insert(list, slistval.c_str());
   }
