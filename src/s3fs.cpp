@@ -3502,7 +3502,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 1; // continue for fuse option
     }
     if(0 == STR2NCMP(arg, "umask=")){
-      s3fs_umask = get_mode(strchr(arg, '=') + sizeof(char));
+      s3fs_umask = strtol(strchr(arg, '=') + sizeof(char), NULL, 0);
       s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
       is_s3fs_umask = true;
       return 1; // continue for fuse option
