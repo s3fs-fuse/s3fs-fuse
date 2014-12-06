@@ -422,6 +422,7 @@ unsigned char* md5hexsum(int fd, off_t start, ssize_t size);
 std::string md5sum(int fd, off_t start, ssize_t size);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
+std::string prepare_url(const char* url);
 
 #endif // S3FS_CURL_H_
 

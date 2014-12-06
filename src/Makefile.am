@@ -37,3 +37,8 @@ endif
 
 s3fs_LDADD = $(DEPS_LIBS)
 
+noinst_PROGRAMS = test_string_util
+
+test_string_util_SOURCES = string_util.cpp test_string_util.cpp
+
+TESTS = test_string_util

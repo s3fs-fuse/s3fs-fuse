@@ -169,45 +169,6 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
   return true;
 }
 
-string prepare_url(const char* url)
-{
-  FPRNINFO("URL is %s", url);
-
-  string uri;
-  string host;
-  string path;
-  string url_str = str(url);
-  string token =  str("/" + bucket);
-  int bucket_pos = url_str.find(token);
-  int bucket_length = token.size();
-  int uri_length = 0;
-
-  if(!strncasecmp(url_str.c_str(), "https://", 8)){
-    uri_length = 8;
-  } else if(!strncasecmp(url_str.c_str(), "http://", 7)) {
-    uri_length = 7;
-  }
-  uri  = url_str.substr(0, uri_length);
-
-  if(!pathrequeststyle){
-    host = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
-    path = url_str.substr((bucket_pos + bucket_length));
-  }else{
-    host = url_str.substr(uri_length, bucket_pos - uri_length).c_str();
-    string part = url_str.substr((bucket_pos + bucket_length));
-    if('/' != part[0]){
-      part = "/" + part;
-    }
-    path = "/" + bucket + part;
-  }
-
-  url_str = uri + host + path;
-
-  FPRNINFO("URL changed is %s", url_str.c_str());
-
-  return str(url_str);
-}
-
 /**
  * Returns the current date
  * in a format suitable for a HTTP request header.
