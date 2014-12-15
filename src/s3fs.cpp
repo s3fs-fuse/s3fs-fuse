@@ -3701,8 +3701,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "fd_page_size=")){
       size_t pagesize = static_cast<size_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       if(pagesize < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
-        fprintf(stderr, "%s: argument should be over 1MB: fd_page_size\n", 
-           program_name.c_str());
+        fprintf(stderr, "%s: argument should be over %d: fd_page_size\n", 
+           program_name.c_str(), static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
         return -1;
       }
       FdManager::SetPageSize(pagesize);

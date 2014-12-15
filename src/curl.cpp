@@ -188,7 +188,7 @@ const char* BodyData::str(void) const
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
-#define MULTIPART_SIZE              10485760          // 10MB
+#define MULTIPART_SIZE              1048576           // 1MB
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
 #define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timming
