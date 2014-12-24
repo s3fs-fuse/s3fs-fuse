@@ -329,13 +329,13 @@ bool S3fsCurl::InitShareCurl(void)
     DPRN("curl_share_setopt(UNLOCKFUNC) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
-  if(!S3fsCurl::is_dns_cache){
+  if(S3fsCurl::is_dns_cache){
     if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS))){
       DPRN("curl_share_setopt(DNS) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
       return false;
     }
   }
-  if(!S3fsCurl::is_ssl_session_cache){
+  if(S3fsCurl::is_ssl_session_cache){
     if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION))){
       DPRN("curl_share_setopt(SSL SESSION) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
       return false;
