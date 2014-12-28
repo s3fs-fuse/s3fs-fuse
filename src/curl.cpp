@@ -457,7 +457,7 @@ string S3fsCurl::LookupMimeType(string name)
   }
 
   // neither the last extension nor the second-to-last extension
-  // matched a mimeType, return the default mime type 
+  // matched a mimeType, return the default mime type
   return result;
 }
 
@@ -466,7 +466,7 @@ bool S3fsCurl::LocateBundle(void)
   // See if environment variable CURL_CA_BUNDLE is set
   // if so, check it, if it is a good path, then set the
   // curl_ca_bundle variable to it
-  char *CURL_CA_BUNDLE; 
+  char *CURL_CA_BUNDLE;
 
   if(0 == S3fsCurl::curl_ca_bundle.size()){
     CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
@@ -478,7 +478,7 @@ bool S3fsCurl::LocateBundle(void)
         return false;
       }
       BF.close();
-      S3fsCurl::curl_ca_bundle.assign(CURL_CA_BUNDLE); 
+      S3fsCurl::curl_ca_bundle.assign(CURL_CA_BUNDLE);
       return true;
     }
   }
@@ -499,10 +499,10 @@ bool S3fsCurl::LocateBundle(void)
   // dnl /usr/local/share/certs/ca-root.crt FreeBSD
   // dnl /etc/ssl/cert.pem OpenBSD
   // dnl /etc/ssl/certs/ (ca path) SUSE
-  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
+  ifstream BF("/etc/pki/tls/certs/ca-bundle.crt");
   if(BF.good()){
      BF.close();
-     S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
+     S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt");
   }else{
     DPRN("%s: /etc/pki/tls/certs/ca-bundle.crt is not readable", program_name.c_str());
     return false;
@@ -1050,7 +1050,7 @@ bool S3fsCurl::CheckIAMCredentialUpdate(void)
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
-S3fsCurl::S3fsCurl(bool ahbe) : 
+S3fsCurl::S3fsCurl(bool ahbe) :
     hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0)
@@ -1408,7 +1408,7 @@ int S3fsCurl::RequestPerform(void)
         if(500 <= LastResponseCode){
           DPRNNN("###HTTP response=%ld", LastResponseCode);
           sleep(4);
-          break; 
+          break;
         }
 
         // Service response codes which are >= 400 && < 500
@@ -1438,38 +1438,38 @@ int S3fsCurl::RequestPerform(void)
       case CURLE_WRITE_ERROR:
         DPRN("### CURLE_WRITE_ERROR");
         sleep(2);
-        break; 
+        break;
 
       case CURLE_OPERATION_TIMEDOUT:
         DPRN("### CURLE_OPERATION_TIMEDOUT");
         sleep(2);
-        break; 
+        break;
 
       case CURLE_COULDNT_RESOLVE_HOST:
         DPRN("### CURLE_COULDNT_RESOLVE_HOST");
         sleep(2);
-        break; 
+        break;
 
       case CURLE_COULDNT_CONNECT:
         DPRN("### CURLE_COULDNT_CONNECT");
         sleep(4);
-        break; 
+        break;
 
       case CURLE_GOT_NOTHING:
         DPRN("### CURLE_GOT_NOTHING");
         sleep(4);
-        break; 
+        break;
 
       case CURLE_ABORTED_BY_CALLBACK:
         DPRN("### CURLE_ABORTED_BY_CALLBACK");
         sleep(4);
         S3fsCurl::curl_times[hCurl] = time(0);
-        break; 
+        break;
 
       case CURLE_PARTIAL_FILE:
         DPRN("### CURLE_PARTIAL_FILE");
         sleep(4);
-        break; 
+        break;
 
       case CURLE_SEND_ERROR:
         DPRN("### CURLE_SEND_ERROR");
@@ -1524,7 +1524,7 @@ int S3fsCurl::RequestPerform(void)
         }
         DPRN("HTTP response code =%ld", LastResponseCode);
 
-        // Let's try to retrieve the 
+        // Let's try to retrieve the
         if(404 == LastResponseCode){
           return -ENOENT;
         }
@@ -1565,7 +1565,7 @@ string S3fsCurl::CalcSignaturev2(string method, string strMD5, string content_ty
 
   if(0 < S3fsCurl::IAM_role.size()){
     if(!S3fsCurl::CheckIAMCredentialUpdate()){
-      DPRN("Something error occurred in checking IAM credential.");  
+      DPRN("Something error occurred in checking IAM credential.");
       return Signature;  // returns empty string, then it occures error.
     }
     requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-security-token:" + S3fsCurl::AWSAccessToken).c_str());
@@ -1605,7 +1605,7 @@ string S3fsCurl::CalcSignaturev2(string method, string strMD5, string content_ty
   return Signature;
 }
 
-string S3fsCurl::CalcSignature(string method, string canonical_uri, string date2,
+string S3fsCurl::CalcSignatureReal(string method, string canonical_uri, string query_string , string date2,
        string canonical_headers, string payload_hash, string signed_headers, string date3)
 {
   string Signature, StringCQ, StringToSign;
@@ -1622,13 +1622,15 @@ string S3fsCurl::CalcSignature(string method, string canonical_uri, string date2
   uriencode = urlEncode(canonical_uri);
   StringCQ = method + "\n";
   if(0 == strcmp(method.c_str(),"HEAD") || 0 == strcmp(method.c_str(),"PUT") || 0 == strcmp(method.c_str(),"DELETE")){
-    StringCQ += uriencode + "\n\n";
+    StringCQ += uriencode + "\n" + query_string + "\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 == strcmp(uriencode.c_str(), "")) {
     StringCQ +="/\n\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 == strncmp(uriencode.c_str(), "/",1)) {
     StringCQ += uriencode +"\n\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 != strncmp(uriencode.c_str(), "/",1)) {
     StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
+  }else if (0 == strcmp(method.c_str(), "POST")) {
+      StringCQ += uriencode +"\n" + query_string +"\n";
   }
   StringCQ += canonical_headers + "\n";
   StringCQ += signed_headers + "\n";
@@ -1657,6 +1659,8 @@ string S3fsCurl::CalcSignature(string method, string canonical_uri, string date2
   StringToSign += date3+"\n";
   StringToSign += date2+"/" + endpoint + "/s3/aws4_request\n";
   StringToSign += hexsRequest;
+
+
   unsigned char* cscope = (unsigned char*)StringToSign.c_str();
   unsigned int cscope_len = StringToSign.size();
   unsigned char* md          = NULL;
@@ -1669,6 +1673,14 @@ string S3fsCurl::CalcSignature(string method, string canonical_uri, string date2
 
   return Signature;
 }
+
+string S3fsCurl::CalcSignature(string method, string canonical_uri, string date2,
+string canonical_headers, string payload_hash, string signed_headers, string date3)
+{
+  return CalcSignatureReal(method, canonical_uri, "", date2, canonical_headers, payload_hash, signed_headers, date3);
+}
+
+
 
 // XML in BodyData has UploadId, Parse XML body for UploadId
 bool S3fsCurl::GetUploadId(string& upload_id)
@@ -2069,11 +2081,6 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
   // Make request headers
   string date    = get_date();
 
-  string strMD5;
-  if(-1 != fd && S3fsCurl::is_content_md5){
-    strMD5         = s3fs_get_content_md5(fd);
-    requestHeaders = curl_slist_sort_insert(requestHeaders, string("Content-MD5: " + strMD5).c_str());
-  }
   string date2   = get_date2();
   string date3   = get_date3();
   string canonical_uri = "";
@@ -2088,6 +2095,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
       requestHeaders = curl_slist_sort_insert(requestHeaders, string("host:" + bucket + "." + "s3.amazonaws.com").c_str());
       string canonical_headers = "host:" + bucket + "." + "s3.amazonaws.com" + "\n";
       string signed_headers = "host";
+      string strMD5;
+
       // "x-amz-acl", rrs, sse
       requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
       canonical_headers += "x-amz-acl:" + S3fsCurl::default_acl + "\n";
@@ -2100,6 +2109,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
         string("x-amz-date:" + date3).c_str());
       canonical_headers += "x-amz-date:" + date3 + "\n";
       signed_headers += ";x-amz-date";
+
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string key = (*iter).first;
     string value = (*iter).second;
@@ -2122,6 +2132,16 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd, bool ow_sse
       signed_headers += ";" + key;
     }
   }
+
+  if(-1 != fd && S3fsCurl::is_content_md5){
+    // content-md5 must be before content-type
+    strMD5         = s3fs_get_content_md5(fd);
+    // content-md5 must be before content-type
+    requestHeaders = curl_slist_sort_insert(requestHeaders, string("content-md5: " + strMD5).c_str());
+    canonical_headers.insert(0, "content-md5:" + strMD5 +"\n");
+    signed_headers.insert(0, "content-md5;");
+  }
+
   if(ow_sse_flg && S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption:AES256");
       canonical_headers += "x-amz-server-side-encryption:AES256\n";
@@ -2411,8 +2431,9 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   string turl;
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
-  turl           += "?uploads";
-  resource       += "?uploads";
+  string query_string = "uploads=";
+  turl           += "?"+query_string;
+  resource       += "?"+query_string;
   url             = prepare_url(turl.c_str());
   path            = tpath;
   requestHeaders  = NULL;
@@ -2421,7 +2442,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
 
   DPRN("SHUNDEBUG9POST %s", tpath); //string("Date:"+date3).c_str());
   // to be done: what's the payload_hash value?
-  string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  string payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
   string date    = get_date();
   string date2   = get_date2();
   string date3   = get_date3();
@@ -2436,6 +2457,12 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
   canonical_headers += "x-amz-acl:" + S3fsCurl::default_acl + "\n";
   signed_headers += ";x-amz-acl";
+
+  requestHeaders = curl_slist_sort_insert(requestHeaders,
+  string("x-amz-content-sha256:" + payload_hash).c_str());
+  canonical_headers += "x-amz-content-sha256:" + payload_hash + "\n";
+  signed_headers += ";x-amz-content-sha256";
+
 
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept: ");
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length: ");
@@ -2487,7 +2514,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
           requestHeaders,
           string("Authorization: AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + date2
             + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + signed_headers + ", Signature=" +
-          CalcSignature("POST", canonical_uri, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
+          CalcSignatureReal("POST", canonical_uri, query_string, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
   }
 
   // setopt
@@ -2540,7 +2567,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     postContent += "  <PartNumber>" + IntToStr(cnt + 1) + "</PartNumber>\n";
     postContent += "  <ETag>\""     + parts[cnt]        + "\"</ETag>\n";
     postContent += "</Part>\n";
-  }  
+  }
   postContent += "</CompleteMultipartUpload>\n";
 
   // set postdata
@@ -2554,10 +2581,12 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   }
   string resource;
   string turl;
+  string query_string;
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
-  turl           += "?uploadId=" + upload_id;
-  resource       += "?uploadId=" + upload_id;
+  query_string = "uploadId=" + upload_id;
+  turl           += "?" + query_string;
+  resource       += "?" + query_string;
   url             = prepare_url(turl.c_str());
   path            = tpath;
   requestHeaders  = NULL;
@@ -2571,6 +2600,19 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
 
   // to be done: what's the payload_hash value?
   string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+
+  unsigned char * cRequest = (unsigned char *)postContent.c_str(), *sRequest;
+  unsigned int cRequest_len= postContent.size();
+  unsigned int sRequest_len     = 0;
+  char hexsRequest[64];
+  unsigned int i;
+  s3fs_sha256(cRequest, cRequest_len, &sRequest, &sRequest_len);
+  for (i=0;i < sRequest_len;i++) sprintf(hexsRequest+(i*2), "%02x", sRequest[i]);
+
+
+  payload_hash.assign(hexsRequest, hexsRequest+sRequest_len*2);
+
   string canonical_uri = "";
   canonical_uri +=tpath;
   string contype = S3fsCurl::LookupMimeType(string(tpath));
@@ -2585,16 +2627,22 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   signed_headers.insert(0, "content-type;");
 
   requestHeaders = curl_slist_sort_insert(requestHeaders,
-    string("x-amz-date:" + date3).c_str());
+  string("x-amz-content-sha256:" + payload_hash).c_str());
+  canonical_headers += "x-amz-content-sha256:" + payload_hash + "\n";
+  signed_headers += ";x-amz-content-sha256";
+
+  requestHeaders = curl_slist_sort_insert(requestHeaders,
+  string("x-amz-date:" + date3).c_str());
   canonical_headers += "x-amz-date:" + date3 + "\n";
   signed_headers += ";x-amz-date";
+
 
   if(!S3fsCurl::IsPublicBucket()){
     requestHeaders = curl_slist_sort_insert(
           requestHeaders,
           string("Authorization: AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + date2
             + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + signed_headers + ", Signature=" +
-          CalcSignature("POST", canonical_uri, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
+          CalcSignatureReal("POST", canonical_uri, query_string, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
   }
 
   // setopt
@@ -2768,7 +2816,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   }
 
   // make request
-  string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string request_uri = "partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string urlargs  = "?" + request_uri;
   string resource;
   string turl;
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
@@ -2794,9 +2843,14 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   string canonical_headers = "host:" + bucket + "." + "s3.amazonaws.com" + "\n";
   string signed_headers = "host";
   // "x-amz-acl", rrs, sse
+  /* not for multipart
   requestHeaders = curl_slist_sort_insert(requestHeaders, string("x-amz-acl:" + S3fsCurl::default_acl).c_str());
   canonical_headers += "x-amz-acl:" + S3fsCurl::default_acl + "\n";
   signed_headers += ";x-amz-acl";
+  */
+
+  //payload_hash="AWS4-HMAC-SHA256-PAYLOAD";
+  payload_hash = s3fs_sha256sum(partdata.fd, partdata.startpos, partdata.size);
   requestHeaders = curl_slist_sort_insert(requestHeaders,
     string("x-amz-content-sha256:" + payload_hash).c_str());
   canonical_headers += "x-amz-content-sha256:" + payload_hash + "\n";
@@ -2813,7 +2867,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
           requestHeaders,
           string("Authorization: AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + date2
             + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + signed_headers + ", Signature=" +
-          CalcSignature("PUT", canonical_uri, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
+          CalcSignatureReal("PUT", canonical_uri, request_uri, date2, canonical_headers, payload_hash, signed_headers, date3)).c_str());
   }
 
   // setopt
@@ -3127,12 +3181,12 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
 }
 
 //-------------------------------------------------------------------
-// Class S3fsMultiCurl 
+// Class S3fsMultiCurl
 //-------------------------------------------------------------------
 #define MAX_MULTI_HEADREQ   20   // default: max request count in readdir curl_multi.
 
 //-------------------------------------------------------------------
-// Class method for S3fsMultiCurl 
+// Class method for S3fsMultiCurl
 //-------------------------------------------------------------------
 int S3fsMultiCurl::max_multireq = MAX_MULTI_HEADREQ;
 
@@ -3144,7 +3198,7 @@ int S3fsMultiCurl::SetMaxMultiRequest(int max)
 }
 
 //-------------------------------------------------------------------
-// method for S3fsMultiCurl 
+// method for S3fsMultiCurl
 //-------------------------------------------------------------------
 S3fsMultiCurl::S3fsMultiCurl() : hMulti(NULL), SuccessCallback(NULL), RetryCallback(NULL)
 {
@@ -3193,14 +3247,14 @@ S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(S3fsMultiSuccessCallb
   SuccessCallback = function;
   return old;
 }
-  
+
 S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback function)
 {
   S3fsMultiRetryCallback old = RetryCallback;
   RetryCallback = function;
   return old;
 }
-  
+
 bool S3fsMultiCurl::SetS3fsCurlObject(S3fsCurl* s3fscurl)
 {
   if(hMulti){
@@ -3638,7 +3692,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
   if(string::npos != pos){
     strnew = strnew.substr(0, pos);
   }
-  
+
   for(lastpos = NULL, curpos = list; curpos; curpos = curpos->next){
     string strcur = curpos->data;
     if(string::npos != (pos = strcur.find(':', 0))){

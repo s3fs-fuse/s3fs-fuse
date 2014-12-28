@@ -4,12 +4,12 @@
 //----------------------------------------------
 // class BodyData
 //----------------------------------------------
-// memory class for curl write memory callback 
+// memory class for curl write memory callback
 //
 class BodyData
 {
   private:
-    char* text;    
+    char* text;
     size_t lastpos;
     size_t bufsize;
 
@@ -110,7 +110,7 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 //
 class S3fsCurl
 {
-    friend class S3fsMultiCurl;  
+    friend class S3fsMultiCurl;
 
   private:
     enum REQTYPE {
@@ -222,6 +222,9 @@ class S3fsCurl
     std::string CalcSignaturev2(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
     std::string CalcSignature(std::string method, std::string canonical_uri, std::string date2, std::string cononical_headers,
                     std::string payload_hash, std::string signed_headers, std::string date3);
+    std::string CalcSignatureReal(std::string method, std::string canonical_uri, std::string query_string, std::string date2, std::string cononical_headers,
+                    std::string payload_hash, std::string signed_headers, std::string date3);
+
     bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
