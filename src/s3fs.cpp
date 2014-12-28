@@ -87,6 +87,7 @@ bool pathrequeststyle             = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
+std::string endpoint              = "us-east-1";
 std::string bucket                = "";
 
 //-------------------------------------------------------------------
@@ -2230,7 +2231,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
   if(delimiter && 0 < strlen(delimiter)){
     query += "delimiter=";
     query += delimiter;
-    query += "&";
+    query += "&max-keys=1000&";
   }
   query += "prefix=";
 
@@ -2241,12 +2242,12 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
   }else{
     query += urlEncode(s3_realpath.substr(1));
   }
-  query += "&max-keys=1000";
 
   while(truncated){
     string each_query = query;
     if(next_marker != ""){
-      each_query += "&marker=" + urlEncode(next_marker);
+      //each_query += "&marker=" + urlEncode(next_marker);
+      each_query.insert(each_query.find("&max-keys=1000&"),string("&marker=" + urlEncode(next_marker)));
       next_marker = "";
     }
     // request
@@ -3685,6 +3686,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
          found  = host.find_last_of('/');
          length = host.length();
       }
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "endpoint=")){
+      endpoint = strchr(arg, '=') + sizeof(char);
       return 0;
     }
     if(0 == strcmp(arg, "use_path_request_style")){

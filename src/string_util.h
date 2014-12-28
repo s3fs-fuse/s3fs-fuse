@@ -27,7 +27,10 @@ std::string trim(const std::string &s, const std::string &t = SPACES);
 std::string lower(std::string s);
 std::string IntToStr(int);
 std::string get_date();
+std::string get_date2();
+std::string get_date3();
 std::string urlEncode(const std::string &s);
+std::string urlEncode2(const std::string &s);
 std::string prepare_url(const char* url);
 bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
 

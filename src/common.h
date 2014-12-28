@@ -74,6 +74,7 @@ extern std::string program_name;
 extern std::string service_path;
 extern std::string host;
 extern std::string bucket;
+extern std::string endpoint;
 extern std::string mount_prefix;
 
 #endif // S3FS_COMMON_H_
