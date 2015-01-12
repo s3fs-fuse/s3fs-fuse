@@ -119,6 +119,7 @@ class FdEntity
     bool IsOpen(void) const { return (-1 != fd); }
     int Open(off_t size = -1, time_t time = -1);
     const char* GetPath(void) const { return path.c_str(); }
+    void SetPath(const std::string &newpath) { path = newpath; }
     int GetFd(void) const { return fd; }
     int SetMtime(time_t time);
     bool GetSize(off_t& size);
@@ -169,6 +170,7 @@ class FdManager
     FdEntity* GetFdEntity(const char* path);
     FdEntity* Open(const char* path, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
     FdEntity* ExistOpen(const char* path) { return Open(path, -1, -1, false, false); }
+    void Rename(const std::string &from, const std::string &to);
     bool Close(FdEntity* ent);
 };
 
