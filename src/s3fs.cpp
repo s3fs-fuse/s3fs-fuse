@@ -124,7 +124,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler);
-static int list_bucket(const char* path, S3ObjList& head, const char* delimiter);
+static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
 static bool is_truncated(xmlDocPtr doc);;
 static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
@@ -931,7 +931,7 @@ static int directory_empty(const char* path)
   int result;
   S3ObjList head;
 
-  if((result = list_bucket(path, head, "/")) != 0){
+  if((result = list_bucket(path, head, "/", true)) != 0){
     DPRNNN("list_bucket returns error.");
     return result;
   }
@@ -2254,7 +2254,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
   return result;
 }
 
-static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
+static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
 {
   int       result; 
   string    s3_realpath;
@@ -2281,7 +2281,11 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
   }else{
     query += urlEncode(s3_realpath.substr(1));
   }
-  query += "&max-keys=1000";
+  if (check_content_only){
+    query += "&max-keys=1";
+  }else{
+    query += "&max-keys=1000";
+  }
 
   while(truncated){
     string each_query = query;
@@ -2332,6 +2336,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter)
 
     // reset(initialize) curl object
     s3fscurl.DestroyCurlHandle();
+
+    if (check_content_only)
+      break;
   }
   S3FS_MALLOCTRIM(0);
 
