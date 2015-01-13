@@ -1177,6 +1177,19 @@ FdEntity* FdManager::Open(const char* path, off_t size, time_t time, bool force_
   return ent;
 }
 
+void FdManager::Rename(const std::string &from, const std::string &to)
+{
+  fdent_map_t::iterator iter = fent.find(from);
+  if(fent.end() != iter){
+    // found
+    FPRNINFO("[from=%s][to=%s]", from.c_str(), to.c_str());
+    FdEntity* ent = (*iter).second;
+    fent.erase(iter);
+    ent->SetPath(to);
+    fent[to] = ent;
+  }
+}
+
 bool FdManager::Close(FdEntity* ent)
 {
   FPRNINFO("[ent->file=%s][ent->fd=%d]", ent ? ent->GetPath() : "", ent ? ent->GetFd() : -1);

@@ -1077,6 +1077,9 @@ static int rename_object(const char* from, const char* to)
   if(0 != (result = put_headers(to, meta, true))){
     return result;
   }
+
+  FdManager::get()->Rename(from, to);
+
   result = s3fs_unlink(from);
   StatCache::getStatCacheData()->DelStat(to);
 
