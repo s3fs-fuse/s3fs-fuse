@@ -3729,6 +3729,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       AdditionalHeader::get()->Dump();
       return 0;
     }
+    if(0 == strcmp(arg, "nopagesmerge")){
+      S3fsCurl::SetPagesMerge(false);
+      return 0;
+    }
     if(0 == strcmp(arg, "noxmlns")){
       noxmlns = true;
       return 0;

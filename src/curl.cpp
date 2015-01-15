@@ -227,6 +227,7 @@ string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
+bool             S3fsCurl::pagesmerge          = true;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -918,6 +919,11 @@ bool S3fsCurl::SetMultipartSize(off_t size)
   }
   S3fsCurl::multipart_size = size;
   return true;
+}
+
+void S3fsCurl::SetPagesMerge(bool merge)
+{
+  S3fsCurl::pagesmerge = merge;
 }
 
 int S3fsCurl::SetMaxParallelCount(int value)
