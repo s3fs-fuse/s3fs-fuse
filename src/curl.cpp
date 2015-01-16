@@ -188,6 +188,7 @@ const char* BodyData::str(void) const
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
+#define MIN_MULTIPART_SIZE          (64*1024)           // 64k
 #define MULTIPART_SIZE              1048576           // 1MB
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
@@ -913,8 +914,7 @@ string S3fsCurl::SetIAMRole(const char* role)
 
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
-  size = size * 1024 * 1024;
-  if(size < MULTIPART_SIZE){
+  if(size < MIN_MULTIPART_SIZE){
     return false;
   }
   S3fsCurl::multipart_size = size;
