@@ -47,7 +47,14 @@ std::string trim(const std::string &s, const std::string &t = SPACES);
 std::string lower(std::string s);
 std::string IntToStr(int);
 std::string get_date();
+#ifndef	SIGV3
+std::string get_date2();
+std::string get_date3();
+#endif
 std::string urlEncode(const std::string &s);
+#ifndef	SIGV3
+std::string urlEncode2(const std::string &s);
+#endif
 bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
 
 #endif // S3FS_STRING_UTIL_H_
