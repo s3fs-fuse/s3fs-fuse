@@ -1839,8 +1839,7 @@ string S3fsCurl::CalcSignaturev2(string method, string strMD5, string content_ty
   return Signature;
 }
 
-string S3fsCurl::CalcSignatureReal(string method, string canonical_uri, string query_string , string date2,
-       string canonical_headers, string payload_hash, string signed_headers, string date3)
+string S3fsCurl::CalcSignatureReal(string method, string canonical_uri, string query_string, string date2, string canonical_headers, string payload_hash, string signed_headers, string date3)
 {
   string Signature, StringCQ, StringToSign;
   string uriencode;
@@ -1854,54 +1853,63 @@ string S3fsCurl::CalcSignatureReal(string method, string canonical_uri, string q
   }
 
   uriencode = urlEncode(canonical_uri);
-  StringCQ = method + "\n";
+  StringCQ  = method + "\n";
   if(0 == strcmp(method.c_str(),"HEAD") || 0 == strcmp(method.c_str(),"PUT") || 0 == strcmp(method.c_str(),"DELETE")){
     StringCQ += uriencode + "\n" + query_string + "\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 == strcmp(uriencode.c_str(), "")) {
     StringCQ +="/\n\n";
-  }else if (0 == strcmp(method.c_str(), "GET") && 0 == strncmp(uriencode.c_str(), "/",1)) {
+  }else if (0 == strcmp(method.c_str(), "GET") && 0 == strncmp(uriencode.c_str(), "/", 1)) {
     StringCQ += uriencode +"\n\n";
-  }else if (0 == strcmp(method.c_str(), "GET") && 0 != strncmp(uriencode.c_str(), "/",1)) {
+  }else if (0 == strcmp(method.c_str(), "GET") && 0 != strncmp(uriencode.c_str(), "/", 1)) {
     StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
   }else if (0 == strcmp(method.c_str(), "POST")) {
-      StringCQ += uriencode +"\n" + query_string +"\n";
+    StringCQ += uriencode +"\n" + query_string +"\n";
   }
   StringCQ += canonical_headers + "\n";
   StringCQ += signed_headers + "\n";
   StringCQ += payload_hash;
-  unsigned char * cRequest = (unsigned char *)StringCQ.c_str();
-  unsigned int cRequest_len= StringCQ.size();
+
+  char          kSecret[128];
+  unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = NULL;
+  unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len = 0;
+  char          hexsRequest[64 + 1];
+  int           kSecret_len = snprintf(kSecret, sizeof(kSecret), "AWS4%s", S3fsCurl::AWSSecretAccessKey.c_str());
+  unsigned int  i;
+
+  s3fs_HMAC(kSecret, kSecret_len, reinterpret_cast<const unsigned char*>(date2.data()), date2.size(), &kDate, &kDate_len);
+  s3fs_HMAC(kDate, kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion, &kRegion_len);
+  s3fs_HMAC(kRegion, kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService, &kService_len);
+  s3fs_HMAC(kService, kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning, &kSigning_len);
+  free(kDate);
+  free(kRegion);
+  free(kService);
+
+  const unsigned char* cRequest = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
+  unsigned int   cRequest_len   = StringCQ.size();
 //  DPRN("SHUNDEBUGXXXPUT: %s", cRequest);
-  char kSecret[128];
-  unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest                  = NULL;
-  unsigned int kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len     = 0;
-  char hexsRequest[64];
-  int kSecret_len = snprintf(kSecret, sizeof(kSecret), "AWS4%s", S3fsCurl::AWSSecretAccessKey.c_str());
-  unsigned int i;
-
-  s3fs_HMAC(kSecret, kSecret_len, (unsigned char*)date2.data(), date2.size(), &kDate, &kDate_len);
-  s3fs_HMAC(kDate, kDate_len, (unsigned char *)endpoint.c_str(), endpoint.size(), &kRegion, &kRegion_len);
-  s3fs_HMAC(kRegion, kRegion_len, (unsigned char *)"s3", sizeof("s3")-1, &kService, &kService_len);
-  s3fs_HMAC(kService, kService_len, (unsigned char *)"aws4_request", sizeof("aws4_request")-1, &kSigning, &kSigning_len);
-
   s3fs_sha256(cRequest, cRequest_len, &sRequest, &sRequest_len);
-  //for (i=0;i < sRequest_len;i++) printf("%02x", sRequest[i]);
-
-  for (i=0;i < sRequest_len;i++) sprintf(hexsRequest+(i*2), "%02x", sRequest[i]);
+  for(i = 0; i < sRequest_len; i++){
+    sprintf(&hexsRequest[i * 2], "%02x", sRequest[i]);
+  }
+  free(sRequest);
 
   StringToSign = "AWS4-HMAC-SHA256\n";
   StringToSign += date3+"\n";
   StringToSign += date2+"/" + endpoint + "/s3/aws4_request\n";
   StringToSign += hexsRequest;
 
+  const unsigned char* cscope = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
+  unsigned int   cscope_len   = StringToSign.size();
+  unsigned char* md           = NULL;
+  unsigned int   md_len       = 0;
+  char           hexSig[64 + 1];
 
-  unsigned char* cscope = (unsigned char*)StringToSign.c_str();
-  unsigned int cscope_len = StringToSign.size();
-  unsigned char* md          = NULL;
-  unsigned int md_len        = 0;
-  char hexSig[64];
   s3fs_HMAC(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
-  for (i=0; i < md_len; i++) sprintf(hexSig+(i*2), "%02x", md[i]);
+  for(i = 0; i < md_len; i++){
+    sprintf(&hexSig[i * 2], "%02x", md[i]);
+  }
+  free(kSigning);
+  free(md);
 
   Signature = hexSig;
 

@@ -2264,7 +2264,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 {
   int       result; 
   string    s3_realpath;
-  string    query;
+  string    query_delimiter;;
+  string    query_prefix;;
+  string    query_maxkey;;
   string    next_marker = "";
   bool      truncated = true;
   S3fsCurl  s3fscurl;
@@ -2274,31 +2276,34 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   FPRNN("[path=%s]", path);
 
   if(delimiter && 0 < strlen(delimiter)){
-    query += "delimiter=";
-    query += delimiter;
-    query += "&";
+    query_delimiter += "delimiter=";
+    query_delimiter += delimiter;
+    query_delimiter += "&";
   }
-  query += "prefix=";
 
+  query_prefix += "&prefix=";
   s3_realpath = get_realpath(path);
   if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
     // last word must be "/"
-    query += urlEncode(s3_realpath.substr(1) + "/");
+    query_prefix += urlEncode(s3_realpath.substr(1) + "/");
   }else{
-    query += urlEncode(s3_realpath.substr(1));
+    query_prefix += urlEncode(s3_realpath.substr(1));
   }
   if (check_content_only){
-    query += "&max-keys=1";
+    query_maxkey += "max-keys=1";
   }else{
-    query += "&max-keys=1000";
+    query_maxkey += "max-keys=1000";
   }
 
   while(truncated){
-    string each_query = query;
+    string each_query = query_delimiter;
     if(next_marker != ""){
-      each_query += "&marker=" + urlEncode(next_marker);
+      each_query += "marker=" + urlEncode(next_marker) + "&";
       next_marker = "";
     }
+    each_query += query_maxkey;
+    each_query += query_prefix;
+
     // request
     if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
       DPRN("ListBucketRequest returns with error.");
