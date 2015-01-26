@@ -1,0 +1,20 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+
+Source: 
+Disclaimer:
+ This package is not part of the GNU/Linux Debian distribution.
+ The contents of this package cannot be distributed as part of the Debian
+ distribution because the Anevia Software License covering it is not a free
+ software license.  No modifications of the included binaries are
+ permitted, and the binaries are not distributed with source code.
+
+Copyright: 2003-2014 Anevia. All rights reserved.
+License: Anevia Software License
+
+Files: *
+Copyright: 2003-2014 Anevia. All rights reserved.
+License: Anevia Software License
+
+License: Anevia Software License
+License For Customer Use of Anevia Software
+No you can't

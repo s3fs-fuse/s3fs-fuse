@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+# export DH_OPTIONS=-v
+
+%:
+	dh $@
+
+override_dh_usrlocal:
+
+override_dh_auto_test:
+override_dh_auto_configure:
+	./autogen.sh
+	./configure
+

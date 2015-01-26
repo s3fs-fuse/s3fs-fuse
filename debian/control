@@ -1,0 +1,15 @@
+Source: s3fs
+Section: anevia
+Priority: optional
+Maintainer: Frederic Cand <frederic.cand@anevia.com>
+Build-Depends: debhelper (>= 9), autoconf, automake, libfuse-dev, libcurl-dev, libxml2-dev
+Standards-Version: 3.9.6
+Homepage: https://github.com/s3fs-fuse/s3fs-fuse
+Vcs-Git: https://github.com/s3fs-fuse/s3fs-fuse.git
+
+Package: s3fs
+Architecture: any
+Depends: ${misc:Depends}, libfuse2, libcurl3, libxml2
+Description: s3 FUSE
+
+ 
