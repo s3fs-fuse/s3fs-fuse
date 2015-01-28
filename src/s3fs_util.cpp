@@ -975,11 +975,12 @@ void show_help (void)
     "\n"
     "   url (default=\"http://s3.amazonaws.com\")\n"
     "      - sets the url to use to access amazon s3\n"
-#ifndef	SIGV3
     "\n"
     "   endpoint (default=\"us-east-1\")\n"
     "      - sets the endpoint to use\n"
-#endif
+    "\n"
+    "   sigv2 (default is signature version 4)\n"
+    "      - sets signing AWS requests by sing Signature Version 2\n"
     "\n"
     "   nomultipart (disable multipart uploads)\n"
     "\n"

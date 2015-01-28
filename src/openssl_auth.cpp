@@ -32,9 +32,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
-#ifndef	SIGV3
 #include <openssl/sha.h>
-#endif
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <string>
@@ -185,7 +183,7 @@ bool s3fs_destroy_crypt_mutex(void)
 //-------------------------------------------------------------------
 // Utility Function for HMAC
 //-------------------------------------------------------------------
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen, bool is_sha256)
 {
   if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
     return false;
@@ -194,13 +192,23 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
   if(NULL == ((*digest) = (unsigned char*)malloc(*digestlen))){
     return false;
   }
-#ifdef	SIGV3
-  HMAC(EVP_sha1(), key, keylen, data, datalen, *digest, digestlen);
-#else
-  HMAC(EVP_sha256(), key, keylen, data, datalen, *digest, digestlen);
-#endif
+  if(is_sha256){
+    HMAC(EVP_sha256(), key, keylen, data, datalen, *digest, digestlen);
+  }else{
+    HMAC(EVP_sha1(), key, keylen, data, datalen, *digest, digestlen);
+  }
 
   return true;
+}
+
+bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+{
+  return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, false);
+}
+
+bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+{
+  return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
 }
 
 //-------------------------------------------------------------------
@@ -262,7 +270,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
   return result;
 }
 
-#ifndef	SIGV3
 //-------------------------------------------------------------------
 // Utility Function for SHA256
 //-------------------------------------------------------------------
@@ -274,12 +281,12 @@ size_t get_sha256_digest_length(void)
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
   (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
-  if(NULL == ((*digest) = (unsigned char*)malloc(*digestlen))){
+  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(*digestlen)))){
     return false;
   }
 
-  const EVP_MD *md = EVP_get_digestbyname("sha256");
-  EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
+  const EVP_MD* md    = EVP_get_digestbyname("sha256");
+  EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, data, datalen);
   EVP_DigestFinal_ex(mdctx, *digest, digestlen);
@@ -290,16 +297,15 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
 
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 {
-
-  const EVP_MD *md = EVP_get_digestbyname("sha256");
-  EVP_MD_CTX *sha256ctx = EVP_MD_CTX_create();
+  const EVP_MD* md        = EVP_get_digestbyname("sha256");
+  EVP_MD_CTX*   sha256ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(sha256ctx, md, NULL);
 
-  char buf[512];
-  ssize_t bytes;
+  char           buf[512];
+  ssize_t        bytes;
   unsigned char* result;
 
-  if(-1 == size) {
+  if(-1 == size){
     struct stat st;
     if(-1 == fstat(fd, &st)){
       return NULL;
@@ -339,7 +345,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
   }
   return result;
 }
-#endif
 
 /*
 * Local variables:

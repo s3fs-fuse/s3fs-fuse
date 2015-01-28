@@ -102,7 +102,6 @@ string s3fs_md5sum(int fd, off_t start, ssize_t size)
   return string(md5);
 }
 
-#ifndef	SIGV3
 string s3fs_sha256sum(int fd, off_t start, ssize_t size)
 {
   size_t digestlen = get_sha256_digest_length();
@@ -123,7 +122,6 @@ string s3fs_sha256sum(int fd, off_t start, ssize_t size)
 
   return string(sha256);
 }
-#endif
 
 /*
 * Local variables:

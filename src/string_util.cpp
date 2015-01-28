@@ -125,12 +125,10 @@ string urlEncode(const string &s)
   for (unsigned i = 0; i < s.length(); ++i) {
     if (s[i] == '/') { // Note- special case for fuse paths...
       result += s[i];
-#ifndef	SIGV3
     }else if (s[i] == '=') { // Note- special case for s3...
       result += s[i];
     }else if (s[i] == '&') { // Note- special case for s3...
       result += s[i];
-#endif
     } else if (isalnum(s[i])) {
       result += s[i];
     } else if (s[i] == '.' || s[i] == '-' || s[i] == '*' || s[i] == '_') {
@@ -145,11 +143,9 @@ string urlEncode(const string &s)
       result += hexAlphabet[static_cast<unsigned char>(s[i]) % 16];
     }
   }
-
   return result;
 }
 
-#ifndef	SIGV3
 /**
  * urlEncode a fuse path,
  * taking into special consideration "/",
@@ -177,10 +173,8 @@ string urlEncode2(const string &s)
       result += hexAlphabet[static_cast<unsigned char>(s[i]) % 16];
     }
   }
-
   return result;
 }
-#endif
 
 //
 // ex. target="http://......?keyword=value&..."
@@ -212,7 +206,7 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
  * Returns the current date
  * in a format suitable for a HTTP request header.
  */
-string get_date()
+string get_date_rfc850()
 {
   char buf[100];
   time_t t = time(NULL);
@@ -220,24 +214,26 @@ string get_date()
   return buf;
 }
 
-#ifndef	SIGV3
-string get_date2()
+void get_date_sigv3(string& date, string& date8601)
+{
+  time_t tm = time(NULL);
+  date     = get_date_string(tm);
+  date8601 = get_date_iso8601(tm);
+}
+
+string get_date_string(time_t tm)
 {
   char buf[100];
-  time_t t = time(NULL);
-  strftime(buf, sizeof(buf), "%Y%m%d", gmtime(&t));
+  strftime(buf, sizeof(buf), "%Y%m%d", gmtime(&tm));
   return buf;
 }
 
-string get_date3()
+string get_date_iso8601(time_t tm)
 {
   char buf[100];
-  time_t t = time(NULL);
-  strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime(&t));
+  strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime(&tm));
   return buf;
 }
-
-#endif
 
 /*
 * Local variables:

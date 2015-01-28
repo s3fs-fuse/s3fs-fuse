@@ -88,9 +88,7 @@ std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
 std::string bucket                = "";
-#ifndef	SIGV3
 std::string endpoint              = "us-east-1";
-#endif
 
 //-------------------------------------------------------------------
 // Static valiables
@@ -3767,12 +3765,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }
       return 0;
     }
-#ifndef	SIGV3
+    if(0 == strcmp(arg, "sigv2")){
+      S3fsCurl::SetSignatureV4(false);
+      return 0;
+    }
     if(0 == STR2NCMP(arg, "endpoint=")){
       endpoint = strchr(arg, '=') + sizeof(char);
       return 0;
     }
-#endif
     if(0 == strcmp(arg, "use_path_request_style")){
       pathrequeststyle = true;
       return 0;

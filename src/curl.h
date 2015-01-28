@@ -181,6 +181,7 @@ class S3fsCurl
     static mimes_t          mimeTypes;
     static int              max_parallel_cnt;
     static off_t            multipart_size;
+    static bool             is_sigv4;
 
     // variables
     CURL*                hCurl;
@@ -244,15 +245,8 @@ class S3fsCurl
     bool ResetHandle(void);
     bool RemakeHandle(void);
     bool ClearInternalData(void);
-#ifdef	SIGV3
-    std::string CalcSignature(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
-#else
-    std::string CalcSignaturev2(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
-    std::string CalcSignature(std::string method, std::string canonical_uri, std::string date2, std::string cononical_headers,
-                    std::string payload_hash, std::string signed_headers, std::string date3);
-    std::string CalcSignatureReal(std::string method, std::string canonical_uri, std::string query_string, std::string date2, std::string cononical_headers,
-                    std::string payload_hash, std::string signed_headers, std::string date3);
-#endif
+    std::string CalcSignatureV2(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
+    std::string CalcSignature(std::string method, std::string canonical_uri, std::string query_string, std::string strdate, std::string payload_hash, std::string date8601);
     bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
@@ -306,6 +300,8 @@ class S3fsCurl
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
     static bool SetMultipartSize(off_t size);
     static off_t GetMultipartSize(void) { return S3fsCurl::multipart_size; }
+    static bool SetSignatureV4(bool isset = true) { bool bresult = S3fsCurl::is_sigv4; S3fsCurl::is_sigv4 = isset; return bresult; }
+    static bool IsSignatureV4(void) { return S3fsCurl::is_sigv4; }
 
     // methods
     bool CreateCurlHandle(bool force = false);
@@ -429,6 +425,9 @@ std::string GetContentMD5(int fd);
 unsigned char* md5hexsum(int fd, off_t start, ssize_t size);
 std::string md5sum(int fd, off_t start, ssize_t size);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
+struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value);
+std::string get_sorted_header_keys(const struct curl_slist* list);
+std::string get_canonical_headers(const struct curl_slist* list, bool only_amz = false);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 

@@ -149,6 +149,12 @@ This option is lated to fd_page_size option and affects it.
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
 .TP
+\fB\-o\fR endpoint (default="us-east-1")
+sets the endpoint to use.
+.TP
+\fB\-o\fR sigv2 (default is signature version 4)
+sets signing AWS requests by sing Signature Version 2.
+.TP
 \fB\-o\fR nomultipart - disable multipart uploads
 .TP
 \fB\-o\fR enable_content_md5 ( default is disable )
