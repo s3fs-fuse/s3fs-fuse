@@ -179,7 +179,6 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
           (*pisforce) = ent->isforce;
         }
         ent->hit_count++;
-        ent->cache_date = time(NULL);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
@@ -222,7 +221,6 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
     if(!IsExpireTime|| ((*iter).second->cache_date + ExpireTime) >= time(NULL)){
       if((*iter).second->noobjcache){
         // noobjcache = true means no object.
-        (*iter).second->cache_date = time(NULL);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
