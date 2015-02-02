@@ -570,6 +570,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
   return -EPERM;
 }
 
+
 //
 // Check accessing the parent directories of the object by uid and gid.
 //
@@ -1225,6 +1226,7 @@ static int rename_directory(const char* from, const char* to)
   //
   // No delimiter is specified, the result(head) is all object keys.
   // (CommonPrefixes is empty, but all object is listed in Key.)
+
   if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
     DPRNNN("list_bucket returns error.");
     return result; 
@@ -1894,11 +1896,6 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
   struct stat st;
 
   FPRN("[path=%s][flags=%d]", path, fi->flags);
-
-  // clear stat for reading fresh stat.
-  // (if object stat is changed, we refresh it. then s3fs gets always
-  // stat when s3fs open the object).
-  StatCache::getStatCacheData()->DelStat(path);
 
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -3719,6 +3716,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }
       return 0;
     }
+    if(0 == STR2NCMP(arg, "prefetch=")){
+      size_t size = static_cast<size_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
+      if(!FdManager::SetPrefetch(size)){
+        fprintf(stderr, "%s: prefetch (bytes) option could not be set\n", program_name.c_str());
+        return -1;
+      }
+      return 0;
+    }
     if(0 == STR2NCMP(arg, "ahbe_conf=")){
       string ahbe_conf = strchr(arg, '=') + sizeof(char);
       if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
@@ -3875,6 +3880,8 @@ int main(int argc, char* argv[])
   // This is the fuse-style parser for the arguments
   // after which the bucket name and mountpoint names
   // should have been set
+  FdManager::SetPageSize(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
+
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
     exit(EXIT_FAILURE);

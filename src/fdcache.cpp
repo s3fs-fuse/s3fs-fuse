@@ -51,7 +51,7 @@ using namespace std;
 // Symbols
 //------------------------------------------------
 #define MAX_MULTIPART_CNT   10000                   // S3 multipart max count
-#define	FDPAGE_SIZE	    (50 * 1024 * 1024)      // 50MB(parallel uploading is 5 parallel(default) * 10 MB)
+#define	FDPAGE_SIZE	    (5 * 1024 * 1024)      // 5MB(parallel uploading is 5 parallel(default) * 1 MB)
 
 //------------------------------------------------
 // CacheFileStat class methods
@@ -490,6 +490,7 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
 {
   try{
     pthread_mutex_init(&fdent_lock, NULL);
+    pthread_mutex_init(&download_lock, NULL);
     is_lock_init = true;
   }catch(exception& e){
     DPRNCRIT("failed to init mutex");
@@ -503,6 +504,7 @@ FdEntity::~FdEntity()
   if(is_lock_init){
     try{
       pthread_mutex_destroy(&fdent_lock);
+      pthread_mutex_destroy(&download_lock);
     }catch(exception& e){
       DPRNCRIT("failed to destroy mutex");
     }
@@ -777,50 +779,120 @@ bool FdEntity::SetAllStatus(bool is_enable)
   return true;
 }
 
+struct fdentity_downloader_thread_info {
+  pthread_t thread_id;
+  pthread_mutex_t *download_lock;
+  char *path;
+  int fd;
+  off_t start;
+  size_t size;
+  bool nomultipart;
+  FdEntity *fdent;
+  PageList *pagelist;
+};
+
+static void* fdentity_downloader_thread_start(void *arg)
+{
+  struct fdentity_downloader_thread_info *tinfo = (struct fdentity_downloader_thread_info *) arg;
+
+  tinfo->fdent->Open();
+  AutoLock auto_lock(tinfo->download_lock);
+  S3fsCurl s3fscurl;
+  int result = 0;
+
+  if (!tinfo->pagelist->IsInit(tinfo->start, tinfo->size)){
+    if(tinfo->size >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !tinfo->nomultipart){
+      time_t backup = 0;
+      if(120 > S3fsCurl::GetReadwriteTimeout()){
+        backup = S3fsCurl::SetReadwriteTimeout(120);
+      }
+      result = S3fsCurl::ParallelGetObjectRequest(tinfo->path, tinfo->fd, tinfo->start, tinfo->size);
+      if(0 != backup){
+        S3fsCurl::SetReadwriteTimeout(backup);
+      }
+    } else {
+      result = s3fscurl.GetObjectRequest(tinfo->path, tinfo->fd, tinfo->start, tinfo->size);
+    }
+    if (0 == result)
+      tinfo->pagelist->SetInit(tinfo->start, static_cast<off_t>(tinfo->size), true);
+  }
+  FdManager::get()->Close(tinfo->fdent);
+  free(tinfo->path);
+  free(tinfo);
+  return NULL;
+}
+
 int FdEntity::Load(off_t start, off_t size)
 {
   int result = 0;
 
-  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
+//  std::list<pthread_t> download_threads;
 
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
   if(-1 == fd){
     return -EBADF;
   }
   AutoLock auto_lock(&fdent_lock);
-
   // check loaded area & load
   fdpage_list_t uninit_list;
   if(0 < pagelist.GetUninitPages(uninit_list, start)){
     for(fdpage_list_t::iterator iter = uninit_list.begin(); iter != uninit_list.end(); iter++){
-      if(-1 != size && (start + size) <= (*iter)->offset){
+      if(-1 != size && (start + size + FdManager::GetPrefetch()) <= (*iter)->offset){
         break;
       }
       // download
-      if((*iter)->bytes >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
-        // parallel request
-        // Additional time is needed for large files
-        time_t backup = 0;
-        if(120 > S3fsCurl::GetReadwriteTimeout()){
-          backup = S3fsCurl::SetReadwriteTimeout(120);
+      if(-1 != size && (start + size) <= (*iter)->offset) {
+        struct fdentity_downloader_thread_info *tinfo;
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        tinfo = (struct fdentity_downloader_thread_info *) malloc(sizeof(struct fdentity_downloader_thread_info));
+        tinfo->path = strdup(path.c_str());
+        tinfo->download_lock = &download_lock;
+        tinfo->fd = fd;
+        tinfo->start = (*iter)->offset;
+        tinfo->size = (*iter)->bytes;
+        tinfo->pagelist = &pagelist;
+        tinfo->nomultipart = nomultipart;
+        tinfo->fdent = this;
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        pthread_create(&tinfo->thread_id, &attr, &fdentity_downloader_thread_start, tinfo);
+        pthread_attr_destroy(&attr);
+
+        //download_threads.push_back(tinfo->thread_id);
+      } else {
+        if((*iter)->bytes >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
+          // parallel request
+          // Additional time is needed for large files
+          time_t backup = 0;
+          if(120 > S3fsCurl::GetReadwriteTimeout()){
+            backup = S3fsCurl::SetReadwriteTimeout(120);
+          }
+          result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, (*iter)->offset, (*iter)->bytes);
+          if(0 != backup){
+            S3fsCurl::SetReadwriteTimeout(backup);
+          }
+          if (0 == result) {
+            // Set init flag
+            pagelist.SetInit((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
+          }
+        }else{
+          // single request
+          AutoLock auto_lock(&download_lock);
+          S3fsCurl s3fscurl;
+          result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, (*iter)->bytes);
+          if (0 == result) {
+            // Set init flag
+            pagelist.SetInit((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
+          }
         }
-        result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, (*iter)->offset, (*iter)->bytes);
-        if(0 != backup){
-          S3fsCurl::SetReadwriteTimeout(backup);
-        }
-      }else{
-        // single request
-        S3fsCurl s3fscurl;
-        result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, (*iter)->bytes);
       }
       if(0 != result){
         break;
       }
-
-      // Set init flag
-      pagelist.SetInit((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
     }
     PageList::FreeList(uninit_list);
   }
+
   return result;
 }
 
@@ -945,7 +1017,6 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   // Reading
   {
     AutoLock auto_lock(&fdent_lock);
-
     if(-1 == (rsize = pread(fd, bytes, size, start))){
       DPRN("pread failed. errno(%d)", errno);
       return -errno;
@@ -997,6 +1068,7 @@ pthread_mutex_t FdManager::fd_manager_lock;
 bool            FdManager::is_lock_init(false);
 string          FdManager::cache_dir("");
 size_t          FdManager::page_size(FDPAGE_SIZE);
+size_t          FdManager::prefetch(0);
 
 //------------------------------------------------
 // FdManager class methods
@@ -1009,6 +1081,20 @@ bool FdManager::SetCacheDir(const char* dir)
     cache_dir = dir;
   }
   return true;
+}
+
+bool FdManager::SetPrefetch(size_t size)
+{
+  if (size < 0) {
+    return false;
+  }
+  FdManager::prefetch = size;
+  return true;
+}
+
+size_t FdManager::GetPrefetch()
+{
+  return FdManager::prefetch;
 }
 
 size_t FdManager::SetPageSize(size_t size)
