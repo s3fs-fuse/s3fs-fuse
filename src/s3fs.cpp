@@ -84,10 +84,12 @@ bool foreground                   = false;
 bool foreground2                  = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
+bool is_specified_endpoint        = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
 std::string bucket                = "";
+std::string endpoint              = "us-east-1";
 
 //-------------------------------------------------------------------
 // Static valiables
@@ -2261,7 +2263,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 {
   int       result; 
   string    s3_realpath;
-  string    query;
+  string    query_delimiter;;
+  string    query_prefix;;
+  string    query_maxkey;;
   string    next_marker = "";
   bool      truncated = true;
   S3fsCurl  s3fscurl;
@@ -2271,31 +2275,34 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   FPRNN("[path=%s]", path);
 
   if(delimiter && 0 < strlen(delimiter)){
-    query += "delimiter=";
-    query += delimiter;
-    query += "&";
+    query_delimiter += "delimiter=";
+    query_delimiter += delimiter;
+    query_delimiter += "&";
   }
-  query += "prefix=";
 
+  query_prefix += "&prefix=";
   s3_realpath = get_realpath(path);
   if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
     // last word must be "/"
-    query += urlEncode(s3_realpath.substr(1) + "/");
+    query_prefix += urlEncode(s3_realpath.substr(1) + "/");
   }else{
-    query += urlEncode(s3_realpath.substr(1));
+    query_prefix += urlEncode(s3_realpath.substr(1));
   }
   if (check_content_only){
-    query += "&max-keys=1";
+    query_maxkey += "max-keys=1";
   }else{
-    query += "&max-keys=1000";
+    query_maxkey += "max-keys=1000";
   }
 
   while(truncated){
-    string each_query = query;
+    string each_query = query_delimiter;
     if(next_marker != ""){
-      each_query += "&marker=" + urlEncode(next_marker);
+      each_query += "marker=" + urlEncode(next_marker) + "&";
       next_marker = "";
     }
+    each_query += query_maxkey;
+    each_query += query_prefix;
+
     // request
     if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
       DPRN("ListBucketRequest returns with error.");
@@ -2973,6 +2980,41 @@ static int s3fs_utility_mode(void)
   return result;
 }
 
+//
+// If calling with wrong region, s3fs gets following error body as 400 erro code.
+// "<Error><Code>AuthorizationHeaderMalformed</Code><Message>The authorization header is 
+//  malformed; the region 'us-east-1' is wrong; expecting 'ap-northeast-1'</Message>
+//  <Region>ap-northeast-1</Region><RequestId>...</RequestId><HostId>...</HostId>
+//  </Error>"
+//
+// So this is cheep codes but s3fs should get correct reagion automatically.
+//
+static bool check_region_error(const char* pbody, string& expectregion)
+{
+  if(!pbody){
+    return false;
+  }
+  const char* region;
+  const char* regionend;
+  if(NULL == (region = strcasestr(pbody, "<Message>The authorization header is malformed; the region "))){
+    return false;
+  }
+  if(NULL == (region = strcasestr(region, "expecting \'"))){
+    return false;
+  }
+  region += strlen("expecting \'");
+  if(NULL == (regionend = strchr(region, '\''))){
+    return false;
+  }
+  string strtmp(region, (regionend - region));
+  if(0 == strtmp.length()){
+    return false;
+  }
+  expectregion = strtmp;
+
+  return true;
+}
+
 static int s3fs_check_service(void)
 {
   FPRN("check services.");
@@ -2984,12 +3026,61 @@ static int s3fs_check_service(void)
   }
 
   S3fsCurl s3fscurl;
-  if(0 != s3fscurl.CheckBucket()){
+  if(-1 == s3fscurl.CheckBucket()){
     fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
     return EXIT_FAILURE;
   }
   long responseCode = s3fscurl.GetLastResponseCode();
 
+  if(responseCode == 400){
+    if(!S3fsCurl::IsSignatureV4()){
+      // signature version 2
+      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
+      return EXIT_FAILURE;
+    }
+    if(is_specified_endpoint){
+      // if specifies endpoint, do not retry to connect.
+      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
+      return EXIT_FAILURE;
+    }
+
+    // check region error for signature version 4
+    BodyData* body = s3fscurl.GetBodyData();
+    string    expectregion;
+    if(check_region_error(body->str(), expectregion)){
+      // not specified endpoint, so try to connect to expected region.
+      LOWSYSLOGPRINT(LOG_ERR, "Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
+      FPRN("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
+      endpoint = expectregion;
+
+      // retry to check
+      s3fscurl.DestroyCurlHandle();
+      if(-1 == s3fscurl.CheckBucket()){
+        fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+      responseCode = s3fscurl.GetLastResponseCode();
+    }
+
+    if(responseCode == 400){
+      // retry to use sigv2
+      LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
+      FPRN("Could not connect, so retry to connect by signature version 2.");
+      S3fsCurl::SetSignatureV4();
+
+      // retry to check
+      s3fscurl.DestroyCurlHandle();
+      if(-1 == s3fscurl.CheckBucket()){
+        fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+      responseCode = s3fscurl.GetLastResponseCode();
+      if(responseCode == 400){
+        fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+    }
+  }
   if(responseCode == 403){
     fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
     return EXIT_FAILURE;
@@ -3757,6 +3848,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
          found  = host.find_last_of('/');
          length = host.length();
       }
+      return 0;
+    }
+    if(0 == strcmp(arg, "sigv2")){
+      S3fsCurl::SetSignatureV4(false);
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "endpoint=")){
+      endpoint              = strchr(arg, '=') + sizeof(char);
+      is_specified_endpoint = true;
       return 0;
     }
     if(0 == strcmp(arg, "use_path_request_style")){

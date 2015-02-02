@@ -35,6 +35,7 @@
 #include "cache.h"
 #include "s3fs.h"
 #include "s3fs_util.h"
+#include "string_util.h"
 
 using namespace std;
 
@@ -269,24 +270,18 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   ent->meta.clear();
   //copy only some keys
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-    string tag   = (*iter).first;
-    string value = (*iter).second;
-    if(tag == "Content-Type"){
-      ent->meta[tag] = value;
-    }else if(tag == "Content-Length"){
-      ent->meta[tag] = value;
-    }else if(tag == "ETag"){
-      ent->meta[tag] = value;
-    }else if(tag == "Last-Modified"){
-      ent->meta[tag] = value;
+    string tag   = lower(iter->first);
+    string value = iter->second;
+    if(tag == "content-type"){
+      ent->meta[iter->first] = value;
+    }else if(tag == "content-length"){
+      ent->meta[iter->first] = value;
+    }else if(tag == "etag"){
+      ent->meta[iter->first] = value;
+    }else if(tag == "last-modified"){
+      ent->meta[iter->first] = value;
     }else if(tag.substr(0, 5) == "x-amz"){
-      ent->meta[tag] = value;
-    }else{
-      // Check for upper case
-      transform(tag.begin(), tag.end(), tag.begin(), static_cast<int (*)(int)>(std::tolower));
-      if(tag.substr(0, 5) == "x-amz"){
-        ent->meta[tag] = value;
-      }
+      ent->meta[tag] = value;		// key is lower case for "x-amz"
     }
   }
   // add
