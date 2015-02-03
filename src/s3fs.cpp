@@ -105,6 +105,7 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
+static bool facilitate_chroot     = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
 static mode_t s3fs_umask          = 0;
@@ -3474,7 +3475,8 @@ static int set_moutpoint_attribute(struct stat& mpst)
 {
   mp_uid  = geteuid();
   mp_gid  = getegid();
-  mp_mode = S_IFDIR | (allow_other ? (S_IRWXU | S_IRWXG | S_IRWXO) : S_IRWXU);
+  mp_mode = S_IFDIR | (allow_other && !facilitate_chroot ? (S_IRWXU | S_IRWXG | S_IRWXO) :
+  		(allow_other && facilitate_chroot ? (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) : S_IRWXU));
 
   FPRNNN("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
          (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
@@ -3611,6 +3613,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == strcmp(arg, "allow_other")){
       allow_other = true;
       return 1; // continue for fuse option
+    }
+    if(0 == strcmp(arg, "facilitate_chroot")){
+      facilitate_chroot = true;
+      return 0;
     }
     if(0 == STR2NCMP(arg, "default_acl=")){
       const char* acl = strchr(arg, '=') + sizeof(char);
