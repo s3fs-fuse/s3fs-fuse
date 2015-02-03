@@ -13,3 +13,11 @@ override_dh_auto_configure:
 	./autogen.sh
 	./configure
 
+override_dh_auto_install:
+	mkdir -p $(CURDIR)/debian/s3fs/usr/local/bin
+	cp src/s3fs $(CURDIR)/debian/s3fs/usr/local/bin/
+
+override_dh_strip:
+	dh_strip --dbg-package=s3fs-dbg
+
+.PHONY: override_dh_strip

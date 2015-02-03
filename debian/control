@@ -11,5 +11,13 @@ Package: s3fs
 Architecture: any
 Depends: ${misc:Depends}, libfuse2, libcurl3, libxml2
 Description: s3 FUSE
-
  
+
+Package: s3fs-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: s3fs (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for s3 FUSE
+ 
+
