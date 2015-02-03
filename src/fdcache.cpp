@@ -877,7 +877,6 @@ int FdEntity::Load(off_t start, off_t size)
           }
         }else{
           // single request
-          AutoLock auto_lock(&download_lock);
           S3fsCurl s3fscurl;
           result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, (*iter)->bytes);
           if (0 == result) {
