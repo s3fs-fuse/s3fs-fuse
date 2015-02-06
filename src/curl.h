@@ -181,6 +181,7 @@ class S3fsCurl
     static mimes_t          mimeTypes;
     static int              max_parallel_cnt;
     static off_t            multipart_size;
+    static bool             pagesmerge;
 
     // variables
     CURL*                hCurl;
@@ -298,6 +299,8 @@ class S3fsCurl
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
     static bool SetMultipartSize(off_t size);
     static off_t GetMultipartSize(void) { return S3fsCurl::multipart_size; }
+    static void SetPagesMerge(bool merge);
+    static bool GetPagesMerge(void) { return S3fsCurl::pagesmerge; }
 
     // methods
     bool CreateCurlHandle(bool force = false);

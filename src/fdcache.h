@@ -97,6 +97,7 @@ class FdEntity
 {
   private:
     pthread_mutex_t fdent_lock;
+    pthread_mutex_t download_lock;
     bool            is_lock_init;
     PageList        pagelist;
     int             refcnt;     // reference count
@@ -148,6 +149,7 @@ class FdManager
     static bool            is_lock_init;
     static std::string     cache_dir;
     static size_t          page_size;
+    static size_t          prefetch;
 
     fdent_map_t  fent;
 
@@ -166,6 +168,8 @@ class FdManager
     static size_t SetPageSize(size_t size);
     static size_t GetPageSize(void) { return FdManager::page_size; }
     static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true);
+    static bool SetPrefetch(size_t size);
+    static size_t GetPrefetch();
 
     FdEntity* GetFdEntity(const char* path);
     FdEntity* Open(const char* path, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);

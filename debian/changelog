@@ -1,0 +1,13 @@
+s3fs (1.78-0anevia1) unstable; urgency=low
+
+  * set correct git-hub urls
+  * fix deadlock
+  * add dbg package
+  * first commit for prefetch threaded downloads
+  * do not update cache date when reading cache; it should be updated only when reading actual data over network
+  * debian files for making debian packages
+  * SetMultipartSize method now takes value in bytes (instead of mbytes) and minimum is lowered to 64kb (instead of 1MB)
+  * add possibility to disable pagesmerge to download only what is asked
+  * disable pages merge to download only what is necessary and lower part size to 1MB
+
+ -- Frederic Cand <frederic.cand@anevia.com>  Fri, 6 Feb 2015 11:26:28 +0200

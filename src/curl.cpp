@@ -188,7 +188,8 @@ const char* BodyData::str(void) const
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
-#define MULTIPART_SIZE              10485760          // 10MB
+#define MIN_MULTIPART_SIZE          (64*1024)           // 64k
+#define MULTIPART_SIZE              1048576           // 1MB
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
 #define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timming
@@ -227,6 +228,7 @@ string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
+bool             S3fsCurl::pagesmerge          = true;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -912,12 +914,16 @@ string S3fsCurl::SetIAMRole(const char* role)
 
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
-  size = size * 1024 * 1024;
-  if(size < MULTIPART_SIZE){
+  if(size < MIN_MULTIPART_SIZE){
     return false;
   }
   S3fsCurl::multipart_size = size;
   return true;
+}
+
+void S3fsCurl::SetPagesMerge(bool merge)
+{
+  S3fsCurl::pagesmerge = merge;
 }
 
 int S3fsCurl::SetMaxParallelCount(int value)
