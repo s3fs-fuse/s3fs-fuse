@@ -159,6 +159,12 @@ So s3fs can know the correct region name, because s3fs can find it in an error f
 \fB\-o\fR sigv2 (default is signature version 4)
 sets signing AWS requests by sing Signature Version 2.
 .TP
+\fB\-o\fR mp_umask (default is "0000")
+sets umask for the mount point directory.
+If allow_other option is not set, s3fs allows access to the mount point only to the owner.
+In the opposite case s3fs allows access to all users as the default.
+But if you set the allow_other with this option, you can controll the permission permissions of the mount point by this option like umask.
+.TP
 \fB\-o\fR nomultipart - disable multipart uploads
 .TP
 \fB\-o\fR enable_content_md5 ( default is disable )
