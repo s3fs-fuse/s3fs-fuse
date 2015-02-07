@@ -97,6 +97,8 @@ std::string endpoint              = "us-east-1";
 static uid_t mp_uid               = 0;    // owner of mount point(only not specified uid opt)
 static gid_t mp_gid               = 0;    // group of mount point(only not specified gid opt)
 static mode_t mp_mode             = 0;    // mode of mount point
+static mode_t mp_umask            = 0;    // umask for mount point
+static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file    = "";
 static bool utility_mode          = false;
@@ -3474,7 +3476,7 @@ static int set_moutpoint_attribute(struct stat& mpst)
 {
   mp_uid  = geteuid();
   mp_gid  = getegid();
-  mp_mode = S_IFDIR | (allow_other ? (S_IRWXU | S_IRWXG | S_IRWXO) : S_IRWXU);
+  mp_mode = S_IFDIR | (allow_other ? (is_mp_umask ? (~mp_umask & (S_IRWXU | S_IRWXG | S_IRWXO)) : (S_IRWXU | S_IRWXG | S_IRWXO)) : S_IRWXU);
 
   FPRNNN("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
          (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
@@ -3611,6 +3613,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == strcmp(arg, "allow_other")){
       allow_other = true;
       return 1; // continue for fuse option
+    }
+    if(0 == STR2NCMP(arg, "mp_umask=")){
+      mp_umask = strtol(strchr(arg, '=') + sizeof(char), NULL, 0);
+      mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+      is_mp_umask = true;
+      return 0;
     }
     if(0 == STR2NCMP(arg, "default_acl=")){
       const char* acl = strchr(arg, '=') + sizeof(char);
