@@ -3068,7 +3068,7 @@ static int s3fs_check_service(void)
       // retry to use sigv2
       LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
       FPRN("Could not connect, so retry to connect by signature version 2.");
-      S3fsCurl::SetSignatureV4();
+      S3fsCurl::SetSignatureV4(false);
 
       // retry to check
       s3fscurl.DestroyCurlHandle();
