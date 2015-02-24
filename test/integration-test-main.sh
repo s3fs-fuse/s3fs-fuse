@@ -38,8 +38,29 @@ function rm_test_file {
     fi
 }
 
+function mk_test_dir {
+    mkdir ${TEST_DIR}
+
+    if [ ! -d ${TEST_DIR} ]; then
+        echo "Directory ${TEST_DIR} was not created"
+        exit 1
+    fi
+}
+
+function rm_test_dir {
+    rmdir ${TEST_DIR}
+    if [ -e $TEST_DIR ]; then
+        echo "Could not remove the test directory, it still exists: ${TEST_DIR}"
+        exit 1
+    fi
+}
+
 CUR_DIR=`pwd`
 TEST_BUCKET_MOUNT_POINT_1=$1
+if [ "$TEST_BUCKET_MOUNT_POINT_1" == "" ]; then
+    echo "Mountpoint missing"
+    exit 1
+fi
 cd $TEST_BUCKET_MOUNT_POINT_1
 
 if [ -e $TEST_TEXT_FILE ]
@@ -120,12 +141,7 @@ if [ -e $TEST_DIR ]; then
    exit 1
 fi
 
-mkdir ${TEST_DIR}
-
-if [ ! -d ${TEST_DIR} ]; then
-   echo "Directory ${TEST_DIR} was not created"
-   exit 1
-fi
+mk_test_dir
 
 mv ${TEST_DIR} ${TEST_DIR}_rename
 
@@ -192,18 +208,8 @@ if [ -e $TEST_DIR ]; then
    exit 1
 fi
 
-mkdir ${TEST_DIR}
-
-if [ ! -d ${TEST_DIR} ]; then
-   echo "Directory ${TEST_DIR} was not created"
-   exit 1
-fi
-
-rmdir ${TEST_DIR}
-if [ -e $TEST_DIR ]; then
-   echo "Could not remove the test directory, it still exists: ${TEST_DIR}"
-   exit 1
-fi
+mk_test_dir
+rm_test_dir
 
 ##########################################################
 # File permissions test (individual file)
@@ -248,6 +254,22 @@ fi
 
 # clean up
 rm_test_file
+
+##########################################################
+# Testing list
+##########################################################
+echo "Testing list"
+mk_test_file
+mk_test_dir
+
+file_cnt=$(ls -1 | wc -l)
+if [ $file_cnt != 2 ]; then
+    echo "Expected 2 file but got $file_cnt"
+    exit 1
+fi
+
+rm_test_file
+rm_test_dir
 
 ##########################################################
 # Testing rename before close
