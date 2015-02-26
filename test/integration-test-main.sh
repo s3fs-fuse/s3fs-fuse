@@ -9,6 +9,35 @@ TEST_DIR=testdir
 ALT_TEST_TEXT_FILE=test-s3fs-ALT.txt
 TEST_TEXT_FILE_LENGTH=15
 
+function mk_test_file {
+    if [ $# == 0 ]; then
+        TEXT=$TEST_TEXT
+    else
+        TEXT=$1
+    fi
+    echo $TEXT > $TEST_TEXT_FILE
+    if [ ! -e $TEST_TEXT_FILE ]
+    then
+        echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
+        exit 1
+    fi
+}
+
+function rm_test_file {
+    if [ $# == 0 ]; then
+        FILE=$TEST_TEXT_FILE
+    else
+        FILE=$1
+    fi
+    rm -f $FILE
+
+    if [ -e $FILE ]
+    then
+        echo "Could not cleanup file ${TEST_TEXT_FILE}"
+        exit 1
+    fi
+}
+
 CUR_DIR=`pwd`
 TEST_BUCKET_MOUNT_POINT_1=$1
 cd $TEST_BUCKET_MOUNT_POINT_1
@@ -60,12 +89,7 @@ then
 fi
 
 # create the test file again
-echo $TEST_TEXT > $TEST_TEXT_FILE
-if [ ! -e $TEST_TEXT_FILE ]
-then
-   echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
-   exit 1
-fi
+mk_test_file
 
 #rename the test file
 mv $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
@@ -85,13 +109,7 @@ then
 fi
 
 # clean up
-rm $ALT_TEST_TEXT_FILE
-
-if [ -e $ALT_TEST_TEXT_FILE ]
-then
-   echo "Could not cleanup file ${ALT_TEST_TEXT_FILE}, it still exists"
-   exit 1
-fi
+rm_test_file $ALT_TEST_TEXT_FILE
 
 ##########################################################
 # Rename test (individual directory)
@@ -127,12 +145,7 @@ fi
 ###################################################################
 echo "Testing redirects ..."
 
-echo ABCDEF > $TEST_TEXT_FILE
-if [ ! -e $TEST_TEXT_FILE ]
-then
-   echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
-   exit 1
-fi
+mk_test_file ABCDEF
 
 CONTENT=`cat $TEST_TEXT_FILE`
 
@@ -167,13 +180,7 @@ fi
 
 
 # clean up
-rm $TEST_TEXT_FILE
-
-if [ -e $TEST_TEXT_FILE ]
-then
-   echo "Could not cleanup file ${TEST_TEXT_FILE}, it still exists"
-   exit 1
-fi
+rm_test_file
 
 #####################################################################
 # Simple directory test mkdir/rmdir
@@ -204,12 +211,7 @@ fi
 echo "Testing chmod file function ..."
 
 # create the test file again
-echo $TEST_TEXT > $TEST_TEXT_FILE
-if [ ! -e $TEST_TEXT_FILE ]
-then
-   echo "Could not create file ${TEST_TEXT_FILE}"
-   exit 1
-fi
+mk_test_file
 
 ORIGINAL_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
 
@@ -223,13 +225,7 @@ then
 fi
 
 # clean up
-rm $TEST_TEXT_FILE
-
-if [ -e $TEST_TEXT_FILE ]
-then
-   echo "Could not cleanup file ${TEST_TEXT_FILE}"
-   exit 1
-fi
+rm_test_file
 
 ##########################################################
 # File permissions test (individual file)
@@ -237,12 +233,7 @@ fi
 echo "Testing chown file function ..."
 
 # create the test file again
-echo $TEST_TEXT > $TEST_TEXT_FILE
-if [ ! -e $TEST_TEXT_FILE ]
-then
-   echo "Could not create file ${TEST_TEXT_FILE}"
-   exit 1
-fi
+mk_test_file
 
 ORIGINAL_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
 
@@ -256,13 +247,7 @@ then
 fi
 
 # clean up
-rm -f $TEST_TEXT_FILE
-
-if [ -e $TEST_TEXT_FILE ]
-then
-   echo "Could not cleanup file ${TEST_TEXT_FILE}"
-   exit 1
-fi
+rm_test_file
 
 ##########################################################
 # Testing rename before close
@@ -275,13 +260,7 @@ if [ $? != 0 ]; then
 fi
 
 # clean up
-rm -f $TEST_TEXT_FILE
-
-if [ -e $TEST_TEXT_FILE ]
-then
-   echo "Could not cleanup file ${TEST_TEXT_FILE}"
-   exit 1
-fi
+rm_test_file
 
 #####################################################################
 # Tests are finished
