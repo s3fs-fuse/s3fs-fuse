@@ -300,7 +300,7 @@ class S3fsCurl
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
     static bool SetMultipartSize(off_t size);
     static off_t GetMultipartSize(void) { return S3fsCurl::multipart_size; }
-    static bool SetSignatureV4(bool isset = true) { bool bresult = S3fsCurl::is_sigv4; S3fsCurl::is_sigv4 = isset; return bresult; }
+    static bool SetSignatureV4(bool isset) { bool bresult = S3fsCurl::is_sigv4; S3fsCurl::is_sigv4 = isset; return bresult; }
     static bool IsSignatureV4(void) { return S3fsCurl::is_sigv4; }
 
     // methods
