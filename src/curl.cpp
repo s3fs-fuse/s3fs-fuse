@@ -2667,7 +2667,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
   string query_string = "uploads";
-  if(!S3fsCurl::is_sigv4){
+  if(S3fsCurl::is_sigv4){
     query_string += "=";
   }
   turl          += "?" + query_string;
@@ -2729,8 +2729,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }
 
   }else{
-    // to be done: what's the payload_hash value?
-    string payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+    string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
@@ -2838,8 +2837,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     }
 
   }else{
-    // to be done: what's the payload_hash value?
-    string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
