@@ -2833,7 +2833,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     if(!S3fsCurl::IsPublicBucket()){
-      string Signature = CalcSignatureV2("POST", "", "", date, resource);
+      string Signature = CalcSignatureV2("POST", "", contype, date, resource);
       requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", string("AWS " + AWSAccessKeyId + ":" + Signature).c_str());
     }
 
