@@ -6,7 +6,7 @@ REQUIRE_ROOT=require-root.sh
 source integration-test-common.sh
 
 java -jar "$S3PROXY_BINARY" --properties s3proxy.conf &
-S3PROXY_PID="$?"
+S3PROXY_PID="$!"
 
 # wait for S3Proxy to start
 for i in $(seq 30);
@@ -34,7 +34,7 @@ $S3FS $TEST_BUCKET_1 $TEST_BUCKET_MOUNT_POINT_1 \
 
 ./integration-test-main.sh $TEST_BUCKET_MOUNT_POINT_1
 
-umount $TEST_BUCKET_MOUNT_POINT_1
+fusermount -u $TEST_BUCKET_MOUNT_POINT_1
 
 kill $S3PROXY_PID
 
