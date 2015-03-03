@@ -8,6 +8,8 @@ TEST_TEXT_FILE=test-s3fs.txt
 TEST_DIR=testdir
 ALT_TEST_TEXT_FILE=test-s3fs-ALT.txt
 TEST_TEXT_FILE_LENGTH=15
+BIG_FILE=big-file-s3fs.txt
+BIG_FILE_LENGTH=$((25 * 1024 * 1024))
 
 function mk_test_file {
     if [ $# == 0 ]; then
@@ -84,13 +86,7 @@ then
    exit 1
 fi
 
-# Delete the test file
-rm $TEST_TEXT_FILE
-if [ -e $TEST_TEXT_FILE ]
-then
-   echo "Could not delete file, it still exists"
-   exit 1
-fi
+rm_test_file
 
 ##########################################################
 # Rename test (individual file)
@@ -283,6 +279,23 @@ fi
 
 # clean up
 rm_test_file
+
+##########################################################
+# Testing multi-part upload
+##########################################################
+echo "Testing multi-part upload ..."
+dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+
+# Verify contents of file
+echo "Comparing test file"
+if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}"
+then
+   exit 1
+fi
+
+rm -f "/tmp/${BIG_FILE}"
+rm -f "${BIG_FILE}"
 
 #####################################################################
 # Tests are finished
