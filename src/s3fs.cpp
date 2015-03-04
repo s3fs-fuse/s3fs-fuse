@@ -1953,7 +1953,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
   FPRNINFO("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
 
   FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path))){
+  if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
     DPRN("could not find opened fd(%s)", path);
     return -EIO;
   }
@@ -1984,7 +1984,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
   FPRNINFO("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
 
   FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path))){
+  if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
     DPRN("could not find opened fd(%s)", path);
     return -EIO;
   }
@@ -2030,7 +2030,7 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
   }
 
   FdEntity* ent;
-  if(NULL != (ent = FdManager::get()->ExistOpen(path))){
+  if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
     headers_t meta;
     if(0 != (result = get_object_attribute(path, NULL, &meta))){
       FdManager::get()->Close(ent);
@@ -2067,7 +2067,7 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
   }
 
   FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->GetFdEntity(path))){
+  if(NULL == (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
     DPRN("could not find fd(file=%s)", path);
     return -EIO;
   }
@@ -2078,7 +2078,7 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
 
   // check - for debug
   if(debug){
-    if(NULL != (ent = FdManager::get()->GetFdEntity(path))){
+    if(NULL != (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
       DPRNNN("Warning - file(%s),fd(%d) is still opened.", path, ent->GetFd());
     }
   }
