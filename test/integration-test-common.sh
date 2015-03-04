@@ -12,6 +12,7 @@ then
 	echo "Missing credentials file: $S3FS_CREDENTIALS_FILE"
 	exit 1
 fi
+chmod 600 "$S3FS_CREDENTIALS_FILE"
 
 S3PROXY_VERSION="1.3.0"
 S3PROXY_BINARY="s3proxy-${S3PROXY_VERSION}-jar-with-dependencies.jar"
