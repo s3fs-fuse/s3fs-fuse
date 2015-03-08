@@ -1254,6 +1254,10 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd)
         // found opend fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
           ent = (*iter).second;
+          // open
+          if(-1 == ent->Open(-1, -1)){
+            return NULL;
+          }
         }else{
           // found fd, but it is used another file(file discriptor is recycled)
           // so returns NULL.
