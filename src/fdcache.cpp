@@ -581,7 +581,9 @@ int FdEntity::Open(off_t size, time_t time)
   if(-1 != fd){
     // already opened, needs to increment refcnt.
     already_opened = true;
-
+    if (size != -1 && pagelist.Size() != size){
+      is_truncate = true;
+    }
   }else{
     // open
     if(0 != cachepath.size()){
