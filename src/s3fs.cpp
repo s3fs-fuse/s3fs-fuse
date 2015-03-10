@@ -185,6 +185,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 static int s3fs_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi);
 static int s3fs_statfs(const char* path, struct statvfs* stbuf);
 static int s3fs_flush(const char* path, struct fuse_file_info* fi);
+static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi);
 static int s3fs_release(const char* path, struct fuse_file_info* fi);
 static int s3fs_opendir(const char* path, struct fuse_file_info* fi);
 static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi);
@@ -2041,6 +2042,38 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
     time_t ent_mtime;
     if(ent->GetMtime(ent_mtime)){
       if(str(ent_mtime) != meta["x-amz-meta-mtime"]){
+        meta["x-amz-meta-mtime"] = str(ent_mtime);
+      }
+    }
+    result = ent->Flush(meta, false);
+    FdManager::get()->Close(ent);
+  }
+  S3FS_MALLOCTRIM(0);
+
+  return result;
+}
+
+// [NOTICE]
+// Assumption is a valid fd.
+//
+static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi)
+{
+  int result = 0;
+
+  FPRN("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+
+  FdEntity* ent;
+  if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+    headers_t meta;
+    if(0 != (result = get_object_attribute(path, NULL, &meta))){
+      FdManager::get()->Close(ent);
+      return result;
+    }
+
+    // If datasync is not zero, only flush data without meta updating.
+    time_t ent_mtime;
+    if(ent->GetMtime(ent_mtime)){
+      if(0 == datasync && str(ent_mtime) != meta["x-amz-meta-mtime"]){
         meta["x-amz-meta-mtime"] = str(ent_mtime);
       }
     }
@@ -4116,6 +4149,7 @@ int main(int argc, char* argv[])
   s3fs_oper.write     = s3fs_write;
   s3fs_oper.statfs    = s3fs_statfs;
   s3fs_oper.flush     = s3fs_flush;
+  s3fs_oper.fsync     = s3fs_fsync;
   s3fs_oper.release   = s3fs_release;
   s3fs_oper.opendir   = s3fs_opendir;
   s3fs_oper.readdir   = s3fs_readdir;
