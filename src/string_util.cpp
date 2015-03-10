@@ -127,8 +127,6 @@ string urlEncode(const string &s)
       result += s[i];
     }else if (s[i] == '=') { // Note- special case for s3...
       result += s[i];
-    }else if (s[i] == '&') { // Note- special case for s3...
-      result += s[i];
     } else if (isalnum(s[i])) {
       result += s[i];
     } else if (s[i] == '.' || s[i] == '-' || s[i] == '*' || s[i] == '_') {
