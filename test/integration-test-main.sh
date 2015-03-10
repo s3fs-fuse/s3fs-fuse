@@ -1,4 +1,8 @@
-#!/bin/bash -e
+#!/bin/bash
+
+set -o xtrace
+set -o errexit
+
 COMMON=integration-test-common.sh
 source $COMMON
 
