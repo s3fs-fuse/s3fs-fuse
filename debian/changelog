@@ -1,3 +1,9 @@
+s3fs (1.78-0anevia2) unstable; urgency=low
+
+  * fix truncate on already opened files (#6381)
+
+ -- Frederic Cand <frederic.cand@anevia.com>  Thu, 12 Mar 2015 09:46:28 +0200
+
 s3fs (1.78-0anevia1) unstable; urgency=low
 
   * set correct git-hub urls
