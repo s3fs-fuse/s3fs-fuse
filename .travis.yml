@@ -1,0 +1,14 @@
+language: cpp
+before_install:
+ - sudo apt-get update -qq
+ - sudo apt-get install -qq libfuse-dev
+script:
+ - ./autogen.sh
+ - ./configure
+ - make
+ - make check -C src
+# TODO: Travis does not support FUSE so integration tests cannot run:
+# https://github.com/travis-ci/travis-ci/issues/1100
+#after_script:
+#  - modprobe fuse
+#  - make check -C test
