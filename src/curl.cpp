@@ -51,6 +51,8 @@
 
 using namespace std;
 
+static const std::string empty_payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
 //-------------------------------------------------------------------
 // Utilities
 //-------------------------------------------------------------------
@@ -90,6 +92,36 @@ static bool make_md5_from_string(const char* pstr, string& md5)
   }
   fclose(fp);
   return true;
+}
+
+static string url_to_host(const std::string &url)
+{
+    DPRNNN("url is %s", url.c_str());
+
+    static const string http = "http://";
+    static const string https = "https://";
+    std::string host;
+
+    if (url.compare(0, http.size(), http) == 0) {
+        host = url.substr(http.size());
+    } else if (url.compare(0, https.size(), https) == 0) {
+        host = url.substr(https.size());
+    } else {
+        assert(!"url does not begin with http:// or https://");
+    }
+
+    size_t idx;
+
+    if ((idx = host.find(':')) != string::npos || (idx = host.find('/')) != string::npos) {
+        return host.substr(0, idx);
+    } else {
+        return host;
+    }
+}
+
+static string get_bucket_host()
+{
+    return bucket + "." + url_to_host(host);
 }
 
 #if 0 // noused
@@ -1946,12 +1978,12 @@ int S3fsCurl::DeleteRequest(const char* tpath)
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash  = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2086,12 +2118,12 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2246,12 +2278,12 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2381,11 +2413,11 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     get_date_sigv3(strdate, date8601);
 
     if(0 == payload_hash.length()){
-      payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+      payload_hash = empty_payload_hash;
     }
 
     //string canonical_headers, signed_headers;
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2468,12 +2500,12 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2560,12 +2592,12 @@ int S3fsCurl::CheckBucket(void)
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2627,12 +2659,12 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -2741,12 +2773,12 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }
 
   }else{
-    string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", NULL);
@@ -2866,7 +2898,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     }
     payload_hash.assign(hexsRequest, &hexsRequest[sRequest_len * 2]);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", get_date_rfc850().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
@@ -2932,12 +2964,12 @@ int S3fsCurl::MultipartListRequest(string& body)
     }
 
   }else{
-    string payload_hash  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -3000,12 +3032,12 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
     }
 
   }else{
-    string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -3093,7 +3125,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
@@ -3202,12 +3234,12 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
     }
 
   }else{
-    string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    string payload_hash = empty_payload_hash;
     string strdate;
     string date8601;
     get_date_sigv3(strdate, date8601);
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", string(bucket + ".s3.amazonaws.com").c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", payload_hash.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
