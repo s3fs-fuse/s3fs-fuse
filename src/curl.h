@@ -245,6 +245,7 @@ class S3fsCurl
     bool ResetHandle(void);
     bool RemakeHandle(void);
     bool ClearInternalData(void);
+    void insertV4Headers(const std::string &op, const std::string &path, const std::string &query_string, const std::string &payload_hash);
     std::string CalcSignatureV2(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
     std::string CalcSignature(std::string method, std::string canonical_uri, std::string query_string, std::string strdate, std::string payload_hash, std::string date8601);
     bool GetUploadId(std::string& upload_id);
