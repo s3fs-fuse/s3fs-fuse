@@ -15,7 +15,9 @@ fi
 chmod 600 "$S3FS_CREDENTIALS_FILE"
 
 S3PROXY_VERSION="1.4.0"
-S3PROXY_BINARY="s3proxy-${S3PROXY_VERSION}-20150307.195914-6-jar-with-dependencies.jar"
+S3PROXY_BINARY="s3proxy-${S3PROXY_VERSION}"
 if [ ! -e "${S3PROXY_BINARY}" ]; then
-    wget "https://oss.sonatype.org/content/repositories/snapshots/org/gaul/s3proxy/${S3PROXY_VERSION}-SNAPSHOT/${S3PROXY_BINARY}"
+    wget "https://github.com/andrewgaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
+            -O "${S3PROXY_BINARY}"
+    chmod +x "${S3PROXY_BINARY}"
 fi
