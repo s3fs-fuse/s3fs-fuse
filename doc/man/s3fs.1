@@ -100,10 +100,10 @@ If you specify this option for set "Content-Encoding" HTTP header, please take c
 \fB\-o\fR public_bucket (default="" which means disabled)
 anonymously mount a public bucket when set to 1, ignores the $HOME/.passwd-s3fs and /etc/passwd-s3fs files.
 .TP
-\fB\-o\fR connect_timeout (default="10" seconds)
+\fB\-o\fR connect_timeout (default="300" seconds)
 time to wait for connection before giving up.
 .TP
-\fB\-o\fR readwrite_timeout (default="30" seconds)
+\fB\-o\fR readwrite_timeout (default="60" seconds)
 time to wait between read/write activity before giving up.
 .TP
 \fB\-o\fR max_stat_cache_size (default="1000" entries (about 4MB))
