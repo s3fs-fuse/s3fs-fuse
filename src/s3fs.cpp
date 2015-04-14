@@ -3102,6 +3102,13 @@ static int s3fs_check_service(void)
       LOWSYSLOGPRINT(LOG_ERR, "Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
       FPRN("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
       endpoint = expectregion;
+      if (S3fsCurl::IsSignatureV4()) {
+          if (host == "http://s3.amazonaws.com") {
+              host = "http://s3-" + endpoint + ".amazonaws.com";
+          } else if (host == "https://s3.amazonaws.com") {
+              host = "https://s3-" + endpoint + ".amazonaws.com";
+          }
+      }
 
       // retry to check
       s3fscurl.DestroyCurlHandle();
