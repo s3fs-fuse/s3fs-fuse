@@ -1,4 +1,5 @@
 language: cpp
+dist: trusty
 cache: apt
 before_install:
  - sudo apt-get update -qq
@@ -8,8 +9,7 @@ script:
  - ./configure
  - make
  - make check -C src
-# TODO: Travis does not support FUSE so integration tests cannot run:
-# https://github.com/travis-ci/travis-ci/issues/1100
-#after_script:
-#  - modprobe fuse
-#  - make check -C test
+ # Travis granted s3fs access to their upcoming alpha testing stack which may
+ # allow us to use FUSE.
+ - modprobe fuse
+ - make check -C test
