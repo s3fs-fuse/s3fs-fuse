@@ -1629,9 +1629,8 @@ int S3fsCurl::RequestPerform(void)
           DPRNNN("curl_easy_getinfo failed while trying to retrieve HTTP response code");
           return -EIO;
         }
-        DPRNNN("HTTP response code %ld", LastResponseCode);
-
         if(400 > LastResponseCode){
+          DPRNNN("HTTP response code %ld", LastResponseCode);
           return 0;
         }
         if(500 <= LastResponseCode){
@@ -1716,10 +1715,13 @@ int S3fsCurl::RequestPerform(void)
         break;
 
       case CURLE_SSL_CACERT:
+        DPRN("### CURLE_SSL_CACERT");
+
         // try to locate cert, if successful, then set the
         // option and continue
         if(0 == S3fsCurl::curl_ca_bundle.size()){
           if(!S3fsCurl::LocateBundle()){
+            DPRNCRIT("could not get CURL_CA_BUNDLE.");
             exit(EXIT_FAILURE);
           }
           break; // retry with CAINFO
@@ -1730,6 +1732,8 @@ int S3fsCurl::RequestPerform(void)
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
       case CURLE_PEER_FAILED_VERIFICATION:
+        DPRN("### CURLE_PEER_FAILED_VERIFICATION");
+
         first_pos = bucket.find_first_of(".");
         if(first_pos != string::npos){
           FPRNNN("curl returned a CURL_PEER_FAILED_VERIFICATION error");
