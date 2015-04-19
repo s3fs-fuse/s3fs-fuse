@@ -121,7 +121,10 @@ static string url_to_host(const std::string &url)
 
 static string get_bucket_host()
 {
+  if(!pathrequeststyle){
     return bucket + "." + url_to_host(host);
+  }
+  return url_to_host(host) + "/" + bucket;
 }
 
 #if 0 // noused
