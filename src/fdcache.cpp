@@ -942,13 +942,14 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool force_sync)
   }
   return result;
 }
-/*
+
 ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 {
   int     result;
   ssize_t rsize;
 
   FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
+
   if(-1 == fd){
     return -EBADF;
   }
@@ -969,164 +970,19 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
       DPRN("pread failed. errno(%d)", errno);
       return -errno;
     }
-    if(usingPrivateKey)
-    	rsize = decrypt(bytes, rsize);
   }
-  return rsize;
-}
-
-ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
-{
-  int     result;
-  ssize_t wsize;
-
-  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
-
-  if(-1 == fd){
-    return -EBADF;
+  if (usingPrivateKey){
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+      string cypherText(bytes);
+      string plainText;
+      plainText.replace(start, rsize, cypherText, start, rsize); 
+      const char* temp = decrypt(plainText).c_str();  
+      strncpy(bytes, temp, rsize);
+      exit (0);
+    }     
   }
-
-  // Load unitialized area which starts from 0 to (start + size) before writing.
-  if(0 != (result = Load(0, start))){
-    DPRN("failed to load uninitialized area before writing(errno=%d)", result);
-    return static_cast<ssize_t>(result);
-  }
-
-  // Writing
-  {
-    AutoLock auto_lock(&fdent_lock);  
-   
-    if(usingPrivateKey){	   
-	    char * uplodedBytes = encrypt(bytes, size );	
-      DPRNNN("Data size %s", (uplodedBytes)); 
-      
-	    if(-1 == (wsize = pwrite(fd, uplodedBytes, size, start))){
-	      DPRN("pwrite failed. errno(%s)", uplodedBytes);
-	      return -errno;
-	  	}	  	
-	   	free(uplodedBytes);	   
-  	}
-  	else{
-      AutoLock auto_lock(&fdent_lock);
-  		if(-1 == (wsize = pwrite(fd, bytes, size, start))){
-	      DPRN("pwrite failed. errno(%s)", bytes);
-	      return -errno;
-	  	}
-	}
-
-    if(!is_modify){
-      is_modify = true;
-    }
-    if(0 < wsize){
-      pagelist.SetInit(start, static_cast<off_t>(wsize), true);
-    }
-    
-  }
-  return wsize;
-}
-
-char * FdEntity::encrypt(const char* bytes, size_t & size){
-	char * uplodedBytes;
-	
-  // Generate a random IV
-  byte iv[CryptoPP::AES::BLOCKSIZE];
-  CryptoPP::AutoSeededRandomPool rnd;
-  rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
-  std::string plaintext(bytes);
-	std::string ciphertext;
-  std::string decryptedtext;
-
-  CryptoPP::AES::Encryption aesEncryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, iv );
-
-  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink( ciphertext ) );
-  stfEncryptor.Put( reinterpret_cast<const unsigned char*>(bytes ), strlen(bytes) + 1 );
-  stfEncryptor.MessageEnd();
-
-  size = strlen(bytes)+1+CryptoPP::AES::BLOCKSIZE;
-  
-  //size = (((strlen(bytes)+1)/CryptoPP::AES::BLOCKSIZE) + 2) * (CryptoPP::AES::BLOCKSIZE);
-  uplodedBytes = (char*)realloc(uplodedBytes,size);
-
-  memcpy( uplodedBytes, iv, CryptoPP::AES::BLOCKSIZE );
-  memcpy( uplodedBytes + CryptoPP::AES::BLOCKSIZE, ciphertext.c_str(), size); //- CryptoPP::AES::BLOCKSIZE);
-  DPRNNN("Data size %s", (uplodedBytes));
-  DPRNNN("output size %d", size);
-  return uplodedBytes;
-
-}
-
-
-ssize_t FdEntity::decrypt(char* bytes,  ssize_t size){
-
-  	// Generate a random IV
-    byte iv[CryptoPP::AES::BLOCKSIZE];
-    DPRNNN("Data size %s", (bytes));
-    memcpy( iv, bytes, CryptoPP::AES::BLOCKSIZE);
-    DPRNNN("size %d", size);
-    memmove( bytes,  bytes + CryptoPP::AES::BLOCKSIZE , size -  CryptoPP::AES::BLOCKSIZE );
-    DPRNNN("Data size %d", strlen(bytes));
-    
-    std::string ciphertext(bytes);
-    std::string decryptedtext;
-    DPRNNN("ciphertext size %d", ciphertext.length());
-    CryptoPP::AES::Decryption aesDecryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, iv );
-
-    CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink( decryptedtext ) );
-    stfDecryptor.Put( reinterpret_cast<const unsigned char*>(  bytes + CryptoPP::AES::BLOCKSIZE ), size - CryptoPP::AES::BLOCKSIZE);
-    stfDecryptor.MessageEnd();
-    
-    strcpy(bytes, decryptedtext.c_str());
-	  return strlen(bytes)+1;
-
-}
-*/ 
-
-ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
-{
-  int     result;
-  ssize_t rsize;
-
-  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
- 
-  if(-1 == fd){
-    return -EBADF;
-  }
-  if(force_load){
-    AutoLock auto_lock(&fdent_lock);
-    pagelist.SetInit(start, static_cast<off_t>(size), false);
-  }
-  
-  // Loading
-  if(0 != (result = Load(start, size))){
-    DPRN("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
-    return -EIO;
-  }
-  // Reading
-  {
-    AutoLock auto_lock(&fdent_lock);
-
-    if(-1 == (rsize = pread(fd, bytes, size, start))){
-      DPRN("pread failed. errno(%d)", errno);
-      return -errno;
-    }
-    DPRNNN("data rsize Read: %d", rsize);
-  }
-
-
-  pid_t pid = fork();
-  if (pid == 0)
-  {
-    string cypherText(bytes);
-    string plainText;
-    plainText.replace(start, rsize, cypherText, start, rsize); 
-    const char* temp = decrypt(plainText).c_str();  
-    strncpy(bytes, temp, rsize);
-    exit (0);
-  }     
-
-  
 
   return rsize;
 }
@@ -1147,33 +1003,31 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     DPRN("failed to load uninitialized area before writing(errno=%d)", result);
     return static_cast<ssize_t>(result);
   }
-
-  pid_t pid = fork();
-  if (pid == 0)
-  {
-    string plainText(bytes);
-    string cipherText = encrypt(plainText, size);
-    bytes = cipherText.c_str(); //converts to const char* format
-    exit(0);
+  if (usingPrivateKey){
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+      string plainText(bytes);
+      string cipherText = encrypt(plainText, size);
+      bytes = cipherText.c_str(); //converts to const char* format
+      exit(0);
+    }
   }
 
   // Writing
   {
-    AutoLock auto_lock(&fdent_lock);   
+    AutoLock auto_lock(&fdent_lock);
 
-   
     if(-1 == (wsize = pwrite(fd, bytes, size, start))){
-      DPRN("pwrite failed. errno(%s)", bytes);
+      DPRN("pwrite failed. errno(%d)", errno);
       return -errno;
     }
-    //DPRNNN("data uplodedBytes Write: %s\n wsize size: %d\n", uplodedBytes, wsize);
     if(!is_modify){
       is_modify = true;
     }
     if(0 < wsize){
       pagelist.SetInit(start, static_cast<off_t>(wsize), true);
     }
-    //delete uplodedBytes;
   }
   return wsize;
 }
@@ -1221,6 +1075,7 @@ string FdEntity::decrypt(string bytes){
 
 //------------------------------------------------
 // FdManager symbol
+//------------------------------------------------
 // [NOTE]
 // NOCACHE_PATH_PREFIX symbol needs for not using cache mode.
 // Now s3fs I/F functions in s3fs.cpp has left the processing

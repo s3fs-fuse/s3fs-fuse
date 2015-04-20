@@ -129,7 +129,7 @@ class FdEntity
     bool SetAllEnable(void) { return SetAllStatus(true); }
     bool SetAllDisable(void) { return SetAllStatus(false); }
     bool LoadFull(off_t* size = NULL, bool force_load = false);
-    int Load(off_t start, off_t size)   ;
+    int Load(off_t start, off_t size);
     int RowFlush(const char* tpath, headers_t& meta, bool force_sync = false);
     int Flush(headers_t& meta, bool force_sync = false) { return RowFlush(NULL, meta, force_sync); }
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
@@ -176,7 +176,6 @@ class FdManager
     FdEntity* ExistOpen(const char* path, int existfd = -1);
     void Rename(const std::string &from, const std::string &to);
     bool Close(FdEntity* ent);
-
 };
 
 #endif // FD_CACHE_H_

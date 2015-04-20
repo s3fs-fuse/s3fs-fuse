@@ -198,7 +198,6 @@ static int s3fs_access(const char* path, int mask);
 static void* s3fs_init(struct fuse_conn_info* conn);
 static void s3fs_destroy(void*);
 
-
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
@@ -1978,8 +1977,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
     DPRN("failed to read file(%s). result=%zd", path, res);
-  }  
-
+  }
   FdManager::get()->Close(ent);
 
   return static_cast<int>(res);
@@ -1999,12 +1997,9 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
   if(ent->GetFd() != static_cast<int>(fi->fh)){
     DPRNNN("Warning - different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
-  
   if(0 > (res = ent->Write(buf, offset, size))){
     DPRN("failed to write file(%s). result=%zd", path, res);
   }
-  
-
   FdManager::get()->Close(ent);
 
   return static_cast<int>(res);
@@ -3564,14 +3559,8 @@ static int set_moutpoint_attribute(struct stat& mpst)
 //  or the mountpoint. The bucket name will always come before the mountpoint
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
-  DPRNNN("arg Is: %s", (char*)arg);
-  DPRNNN("key Is: %d", key);
-    
-    
   if(key == FUSE_OPT_KEY_NONOPT){
     // the first NONOPT option is the bucket name
-     
-    
     if(bucket.size() == 0){
       // extract remote mount path
       char *bucket_name = (char*)arg;
@@ -3589,14 +3578,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
           }
         }
-      }
-      else{
+      }else{
         bucket = arg;
       }
       return 0;
     }
-    
-    
 
     // the second NONPOT option is the mountpoint(not utility mode)
     if(0 == mountpoint.size() && 0 == utility_mode){
@@ -3640,7 +3626,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         closedir(dp);
       }
       return 1;
-    }  
+    }
 
     if (!enteredPrivateKey && usingPrivateKey){
       if (strlen(arg) != CryptoPP::AES::DEFAULT_KEYLENGTH){
@@ -3981,7 +3967,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == strcmp(arg, "-k")){
-      usingPrivateKey = true;       
+      usingPrivateKey = true;
       return 0;
     }
     if(0 == strcmp(arg, "curldbg")){
