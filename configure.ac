@@ -164,7 +164,7 @@ case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL) 
   PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 libcrypto++ >= 0.9])
-   CFLAGS="-I/usr/include/crypto++ $CFLAGS"
+   DEPS_CFLAGS="-I/usr/include/crypto++ -I/usr/include/cryptopp $DEPS_CFLAGS"
   ;;
 gnutls)
   AC_MSG_RESULT(GnuTLS-gcrypt)
@@ -175,7 +175,7 @@ gnutls)
     [
       PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 libcrypto >= 0.9 libcrypto++ >= 0.9])
       LIBS="-lgnutls -lgcrypt $LIBS"
-      CFLAGS="-I/usr/include/crypto++ $CFLAGS"
+      DEPS_CFLAGS="-I/usr/include/crypto++ -I/usr/include/cryptopp $DEPS_CFLAGS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(gcrypt)
     ],
@@ -190,7 +190,7 @@ nettle)
     [
       PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 libcrypto >= 0.9 libcrypto++ >= 0.9])
       LIBS="-lgnutls -lnettle $LIBS"
-      CFLAGS="-I/usr/include/crypto++ $CFLAGS"
+      DEPS_CFLAGS="-I/usr/include/crypto++ -I/usr/include/cryptopp $DEPS_CFLAGS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(nettle)
     ],
@@ -199,7 +199,7 @@ nettle)
 nss)
   AC_MSG_RESULT(NSS)
   PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 libcrypto >= 0.9 cryptopp >= 0.9])
-   CFLAGS="-I/usr/include/crypto++ $CFLAGS"
+   DEPS_CFLAGS="-I/usr/include/crypto++ -I/usr/include/cryptopp $DEPS_CFLAGS"
    ;;
 *)
   AC_MSG_ERROR([unknown ssl library type.])

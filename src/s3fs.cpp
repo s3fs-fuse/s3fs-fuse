@@ -51,6 +51,9 @@
 #include "fdcache.h"
 #include "s3fs_auth.h"
 
+#include "modes.h"
+#include "filters.h"
+#include "aes.h"
 using namespace std;
 
 //-------------------------------------------------------------------
@@ -85,12 +88,14 @@ bool foreground2                  = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool is_specified_endpoint        = false;
+bool usingPrivateKey              = false;
+bool enteredPrivateKey            = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
 std::string bucket                = "";
 std::string endpoint              = "us-east-1";
-
+byte privateKey[CryptoPP::AES::DEFAULT_KEYLENGTH];
 //-------------------------------------------------------------------
 // Static valiables
 //-------------------------------------------------------------------
@@ -192,6 +197,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 static int s3fs_access(const char* path, int mask);
 static void* s3fs_init(struct fuse_conn_info* conn);
 static void s3fs_destroy(void*);
+
 
 //-------------------------------------------------------------------
 // Functions
@@ -1972,7 +1978,8 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
     DPRN("failed to read file(%s). result=%zd", path, res);
-  }
+  }  
+
   FdManager::get()->Close(ent);
 
   return static_cast<int>(res);
@@ -1992,9 +1999,12 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
   if(ent->GetFd() != static_cast<int>(fi->fh)){
     DPRNNN("Warning - different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
+  
   if(0 > (res = ent->Write(buf, offset, size))){
     DPRN("failed to write file(%s). result=%zd", path, res);
   }
+  
+
   FdManager::get()->Close(ent);
 
   return static_cast<int>(res);
@@ -3554,8 +3564,14 @@ static int set_moutpoint_attribute(struct stat& mpst)
 //  or the mountpoint. The bucket name will always come before the mountpoint
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
+  DPRNNN("arg Is: %s", (char*)arg);
+  DPRNNN("key Is: %d", key);
+    
+    
   if(key == FUSE_OPT_KEY_NONOPT){
     // the first NONOPT option is the bucket name
+     
+    
     if(bucket.size() == 0){
       // extract remote mount path
       char *bucket_name = (char*)arg;
@@ -3573,11 +3589,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
           }
         }
-      }else{
+      }
+      else{
         bucket = arg;
       }
       return 0;
     }
+    
+    
 
     // the second NONPOT option is the mountpoint(not utility mode)
     if(0 == mountpoint.size() && 0 == utility_mode){
@@ -3621,7 +3640,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         closedir(dp);
       }
       return 1;
-    }
+    }  
+
+    if (!enteredPrivateKey && usingPrivateKey){
+      if (strlen(arg) != CryptoPP::AES::DEFAULT_KEYLENGTH){
+        fprintf(stderr, "%s: Key must be of length %d %s\n", program_name.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH, strerror(errno));
+        exit(EXIT_FAILURE);
+      }
+      enteredPrivateKey = true;    
+      for (int i =0 ; i < CryptoPP::AES::DEFAULT_KEYLENGTH ; i++ ){
+        privateKey[i] = (byte)(arg[i]);
+      }
+      return 0;
+    }  
 
     // Unknow option
     if(0 == utility_mode){
@@ -3949,6 +3980,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       foreground2 = true;
       return 0;
     }
+    if(0 == strcmp(arg, "-k")){
+      usingPrivateKey = true;       
+      return 0;
+    }
     if(0 == strcmp(arg, "curldbg")){
       S3fsCurl::SetVerbose(true);
       return 0;
@@ -3979,6 +4014,7 @@ int main(int argc, char* argv[])
     {"help",    no_argument, NULL, 'h'},
     {"version", no_argument, 0,     0},
     {"debug",   no_argument, NULL, 'd'},
+    {"key",   required_argument, NULL, 'k'},
     {0, 0, 0, 0}
   };
 
@@ -3994,31 +4030,34 @@ int main(int argc, char* argv[])
     program_name.replace(0, found+1, "");
   }
 
-  while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
+  while((ch = getopt_long(argc, argv, "dho:kfsu", long_opts, &option_index)) != -1){
     switch(ch){
-    case 0:
-      if(strcmp(long_opts[option_index].name, "version") == 0){
-        show_version();
+      case 0:
+        if(strcmp(long_opts[option_index].name, "version") == 0){
+          show_version();
+          exit(EXIT_SUCCESS);
+        }
+        break;
+      case 'h':
+        show_help();
         exit(EXIT_SUCCESS);
-      }
-      break;
-    case 'h':
-      show_help();
-      exit(EXIT_SUCCESS);
-    case 'o':
-      break;
-    case 'd':
-      break;
-    case 'f':
-      foreground = true;
-      break;
-    case 's':
-      break;
-    case 'u':
-      utility_mode = 1;
-      break;
-    default:
-      exit(EXIT_FAILURE);
+      case 'o':
+        break;
+      case 'k':
+
+        break;
+      case 'd':
+        break;
+      case 'f':
+        foreground = true;
+        break;
+      case 's':
+        break;
+      case 'u':
+        utility_mode = 1;
+        break;
+      default:
+        exit(EXIT_FAILURE);
     }
   }
 

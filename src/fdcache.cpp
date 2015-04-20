@@ -39,11 +39,14 @@
 #include <list>
 #include <vector>
 
-#include <osrng.h>
-
+#include "config.h"
+#include "hex.h"
+#include "files.h"
+#include "cryptlib.h"
 #include "modes.h"
-#include "aes.h"
+#include "osrng.h"
 #include "filters.h"
+#include "aes.h"
 
 #include "common.h"
 #include "fdcache.h"
@@ -59,6 +62,12 @@ using namespace std;
 //------------------------------------------------
 #define MAX_MULTIPART_CNT   10000                   // S3 multipart max count
 #define FDPAGE_SIZE         (50 * 1024 * 1024)      // 50MB(parallel uploading is 5 parallel(default) * 10 MB)
+
+//------------------------------------------------
+// Global valiables
+//------------------------------------------------
+extern bool usingPrivateKey;
+extern byte privateKey[CryptoPP::AES::DEFAULT_KEYLENGTH];
 
 //------------------------------------------------
 // CacheFileStat class methods
@@ -933,14 +942,13 @@ int FdEntity::RowFlush(const char* tpath, headers_t& meta, bool force_sync)
   }
   return result;
 }
-
+/*
 ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 {
   int     result;
   ssize_t rsize;
 
   FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
-  DPRNNN("data bytes Read: %s", bytes);
   if(-1 == fd){
     return -EBADF;
   }
@@ -948,7 +956,6 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     AutoLock auto_lock(&fdent_lock);
     pagelist.SetInit(start, static_cast<off_t>(size), false);
   }
-  DPRNNN("data size Read: %d", size);
   // Loading
   if(0 != (result = Load(start, size))){
     DPRN("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
@@ -962,10 +969,8 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
       DPRN("pread failed. errno(%d)", errno);
       return -errno;
     }
-    DPRNNN("data rsize Read: %d", rsize);
-    rsize = decrypt(bytes, rsize);
-
-    DPRNNN("data data %s \nrsize Read: %d", bytes,rsize);
+    if(usingPrivateKey)
+    	rsize = decrypt(bytes, rsize);
   }
   return rsize;
 }
@@ -989,17 +994,178 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
   // Writing
   {
-    AutoLock auto_lock(&fdent_lock);
-    DPRNNN("data bytes Write: %s", bytes);
-    char * uplodedBytes;// = new char [strlen(bytes)+1+ CryptoPP::AES::BLOCKSIZE];
-    //DPRNNN("data bytes Write2: %s  \n%s", bytes);
-    //strcpy(uplodedBytes, bytes);
-    //DPRNNN("data bytes Write3: %s\ndata uplodedBytes Write3: %s\n length: %d \n side of byte: %d\n side of uplodedBytes: %d\n ", bytes , uplodedBytes, size, strlen(bytes)+1, strlen(uplodedBytes)+1 );
-    size = encrypt(uplodedBytes, bytes, size );
-    if(-1 == (wsize = pwrite(fd, uplodedBytes, size, start))){
-      DPRN("pwrite failed. errno(%s)", uplodedBytes);
-      return -errno;
+    AutoLock auto_lock(&fdent_lock);  
+   
+    if(usingPrivateKey){	   
+	    char * uplodedBytes = encrypt(bytes, size );	
+      DPRNNN("Data size %s", (uplodedBytes)); 
+      
+	    if(-1 == (wsize = pwrite(fd, uplodedBytes, size, start))){
+	      DPRN("pwrite failed. errno(%s)", uplodedBytes);
+	      return -errno;
+	  	}	  	
+	   	free(uplodedBytes);	   
   	}
+  	else{
+      AutoLock auto_lock(&fdent_lock);
+  		if(-1 == (wsize = pwrite(fd, bytes, size, start))){
+	      DPRN("pwrite failed. errno(%s)", bytes);
+	      return -errno;
+	  	}
+	}
+
+    if(!is_modify){
+      is_modify = true;
+    }
+    if(0 < wsize){
+      pagelist.SetInit(start, static_cast<off_t>(wsize), true);
+    }
+    
+  }
+  return wsize;
+}
+
+char * FdEntity::encrypt(const char* bytes, size_t & size){
+	char * uplodedBytes;
+	
+  // Generate a random IV
+  byte iv[CryptoPP::AES::BLOCKSIZE];
+  CryptoPP::AutoSeededRandomPool rnd;
+  rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
+  std::string plaintext(bytes);
+	std::string ciphertext;
+  std::string decryptedtext;
+
+  CryptoPP::AES::Encryption aesEncryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH);
+  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, iv );
+
+  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink( ciphertext ) );
+  stfEncryptor.Put( reinterpret_cast<const unsigned char*>(bytes ), strlen(bytes) + 1 );
+  stfEncryptor.MessageEnd();
+
+  size = strlen(bytes)+1+CryptoPP::AES::BLOCKSIZE;
+  
+  //size = (((strlen(bytes)+1)/CryptoPP::AES::BLOCKSIZE) + 2) * (CryptoPP::AES::BLOCKSIZE);
+  uplodedBytes = (char*)realloc(uplodedBytes,size);
+
+  memcpy( uplodedBytes, iv, CryptoPP::AES::BLOCKSIZE );
+  memcpy( uplodedBytes + CryptoPP::AES::BLOCKSIZE, ciphertext.c_str(), size); //- CryptoPP::AES::BLOCKSIZE);
+  DPRNNN("Data size %s", (uplodedBytes));
+  DPRNNN("output size %d", size);
+  return uplodedBytes;
+
+}
+
+
+ssize_t FdEntity::decrypt(char* bytes,  ssize_t size){
+
+  	// Generate a random IV
+    byte iv[CryptoPP::AES::BLOCKSIZE];
+    DPRNNN("Data size %s", (bytes));
+    memcpy( iv, bytes, CryptoPP::AES::BLOCKSIZE);
+    DPRNNN("size %d", size);
+    memmove( bytes,  bytes + CryptoPP::AES::BLOCKSIZE , size -  CryptoPP::AES::BLOCKSIZE );
+    DPRNNN("Data size %d", strlen(bytes));
+    
+    std::string ciphertext(bytes);
+    std::string decryptedtext;
+    DPRNNN("ciphertext size %d", ciphertext.length());
+    CryptoPP::AES::Decryption aesDecryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH);
+    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, iv );
+
+    CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink( decryptedtext ) );
+    stfDecryptor.Put( reinterpret_cast<const unsigned char*>(  bytes + CryptoPP::AES::BLOCKSIZE ), size - CryptoPP::AES::BLOCKSIZE);
+    stfDecryptor.MessageEnd();
+    
+    strcpy(bytes, decryptedtext.c_str());
+	  return strlen(bytes)+1;
+
+}
+*/ 
+
+ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
+{
+  int     result;
+  ssize_t rsize;
+
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
+ 
+  if(-1 == fd){
+    return -EBADF;
+  }
+  if(force_load){
+    AutoLock auto_lock(&fdent_lock);
+    pagelist.SetInit(start, static_cast<off_t>(size), false);
+  }
+  
+  // Loading
+  if(0 != (result = Load(start, size))){
+    DPRN("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
+    return -EIO;
+  }
+  // Reading
+  {
+    AutoLock auto_lock(&fdent_lock);
+
+    if(-1 == (rsize = pread(fd, bytes, size, start))){
+      DPRN("pread failed. errno(%d)", errno);
+      return -errno;
+    }
+    DPRNNN("data rsize Read: %d", rsize);
+  }
+
+
+  pid_t pid = fork();
+  if (pid == 0)
+  {
+    string cypherText(bytes);
+    string plainText;
+    plainText.replace(start, rsize, cypherText, start, rsize); 
+    const char* temp = decrypt(plainText).c_str();  
+    strncpy(bytes, temp, rsize);
+    exit (0);
+  }     
+
+  
+
+  return rsize;
+}
+
+ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
+{
+  int     result;
+  ssize_t wsize;
+
+  FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
+
+  if(-1 == fd){
+    return -EBADF;
+  }
+
+  // Load unitialized area which starts from 0 to (start + size) before writing.
+  if(0 != (result = Load(0, start))){
+    DPRN("failed to load uninitialized area before writing(errno=%d)", result);
+    return static_cast<ssize_t>(result);
+  }
+
+  pid_t pid = fork();
+  if (pid == 0)
+  {
+    string plainText(bytes);
+    string cipherText = encrypt(plainText, size);
+    bytes = cipherText.c_str(); //converts to const char* format
+    exit(0);
+  }
+
+  // Writing
+  {
+    AutoLock auto_lock(&fdent_lock);   
+
+   
+    if(-1 == (wsize = pwrite(fd, bytes, size, start))){
+      DPRN("pwrite failed. errno(%s)", bytes);
+      return -errno;
+    }
     //DPRNNN("data uplodedBytes Write: %s\n wsize size: %d\n", uplodedBytes, wsize);
     if(!is_modify){
       is_modify = true;
@@ -1007,93 +1173,52 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     if(0 < wsize){
       pagelist.SetInit(start, static_cast<off_t>(wsize), true);
     }
-    delete uplodedBytes;
+    //delete uplodedBytes;
   }
   return wsize;
 }
 
-size_t FdEntity::encrypt(char*& uplodedBytes, const char* bytes, size_t size){
-	 DPRNNN("entered encrypt");
-    // Generate a random IV
-    byte iv[CryptoPP::AES::BLOCKSIZE];
-    CryptoPP::AutoSeededRandomPool rnd;
-    DPRNNN("data iv block size: %d encrypt: %s", CryptoPP::AES::BLOCKSIZE, iv);
-    rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
-    DPRNNN("data iv block size: %d encrypt: %s", CryptoPP::AES::BLOCKSIZE, iv);
-    //byte key[CryptoPP::AES::DEFAULT_KEYLENGTH];
-    //rnd.GenerateBlock(key, CryptoPP::AES::DEFAULT_KEYLENGTH); 
- 		
-  	//char Ckey[] = "ZaidNackasha1992";
-  	char a = 'a';
- 	byte key[CryptoPP::AES::DEFAULT_KEYLENGTH];
-  	for (int i =0 ; i < CryptoPP::AES::DEFAULT_KEYLENGTH ; i++ ){
-		key[i] = (byte)a;
-  	}
+string FdEntity::encrypt(string bytes,  size_t & size){
 
-  	DPRNNN("data iv block size: %d encrypt: %s", CryptoPP::AES::DEFAULT_KEYLENGTH , key);
- 	std::string plaintext(bytes);
-  	std::string ciphertext;
-    std::string decryptedtext;
+  // Generate a random IV
+  byte iv[CryptoPP::AES::BLOCKSIZE];
+  CryptoPP::AutoSeededRandomPool rnd; 
+  rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
+ 
+  size += (CryptoPP::AES::BLOCKSIZE - (size|(CryptoPP::AES::BLOCKSIZE -1))) + (CryptoPP::AES::BLOCKSIZE*2) +1;
+  if ((size/16) % 2 == 1) size += CryptoPP::AES::BLOCKSIZE;
+   
+  CryptoPP::CBC_Mode< CryptoPP::Rijndael >::Encryption encryption( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, iv );
+  string cipher;
+  CryptoPP::StringSource( bytes, true, new CryptoPP::StreamTransformationFilter(encryption, new CryptoPP::StringSink(cipher)));
 
-    DPRNNN("data encrypt: %s",  plaintext.c_str());
+  string ivstring(iv, iv + CryptoPP::AES::BLOCKSIZE);
+  return ivstring+cipher;
+}
 
-    CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, iv );
 
-    CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink( ciphertext ) );
-    stfEncryptor.Put( reinterpret_cast<const unsigned char*>( plaintext.c_str() ), plaintext.length() + 1 );
-    stfEncryptor.MessageEnd();
-    DPRNNN("data bytes encrypt0: %s", bytes);
+string FdEntity::decrypt(string bytes){
 
-    uplodedBytes = new char [strlen(ciphertext.c_str()) + 1 + CryptoPP::AES::BLOCKSIZE];
-    memcpy( uplodedBytes, iv, CryptoPP::AES::BLOCKSIZE );
-	//strcpy(bytes, (char*)iv);
-	DPRNNN("data iv encrypt: %s", iv);
-	DPRNNN("data uplodedBytes encrypt1: %s", uplodedBytes);
-	DPRNNN("data ciphertext encrypt2: %s",  ciphertext.c_str());
-	DPRNNN("size of iv: %d",  sizeof(iv));
-	DPRNNN("size of data: %d",  sizeof(ciphertext.c_str()));
-    DPRNNN("size of total: %d",  sizeof(iv)+ sizeof(ciphertext.c_str()));
-    memcpy( uplodedBytes + CryptoPP::AES::BLOCKSIZE, ciphertext.c_str(), ciphertext.length()+1);
-    //strcat(bytes, ciphertext.c_str());
-    DPRNNN("data uplodedBytes encrypt3: %s", uplodedBytes);
-    DPRNNN("size of uplodedBytes  : %d", strlen(uplodedBytes) + 1);
-    DPRNNN("size: %d total size: %d", size, size + CryptoPP::AES::BLOCKSIZE);
-    return strlen(uplodedBytes) + 1;
+  //decode iv & cipher text
+  string binary_text;
+  CryptoPP::StringSource(bytes, true, new CryptoPP::HexDecoder(new CryptoPP::StringSink(binary_text)));
+
+  string iv;
+  iv.assign(bytes, 0, CryptoPP::AES::BLOCKSIZE);
+
+  string cipher;
+  cipher.assign(bytes, CryptoPP::AES::BLOCKSIZE, string::npos);
+
+  //decrypt cipher
+  CryptoPP::CBC_Mode< CryptoPP::Rijndael >::Decryption decryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, (byte *)iv.c_str());
+  string planetext;
+  CryptoPP::StringSource( cipher, true, new CryptoPP::StreamTransformationFilter(decryption, new CryptoPP::StringSink(planetext)));
+
+  return planetext;
 
 }
 
 
-ssize_t FdEntity::decrypt(char* bytes,  ssize_t size){
-
-  	char a = 'a';
-    byte key[CryptoPP::AES::DEFAULT_KEYLENGTH];
-    for (int i =0 ; i < CryptoPP::AES::DEFAULT_KEYLENGTH ; i++ ){
-      key[i] = (byte)a;
-    }
-    // Generate a random IV
-    DPRNNN("data bytes Decrypt1: %s", bytes);
-    byte iv[CryptoPP::AES::BLOCKSIZE];
-    memcpy( iv, bytes, CryptoPP::AES::BLOCKSIZE);
-    DPRNNN("data bytes Decrypt2: %s\n blocksize %d\n ", bytes, CryptoPP::AES::BLOCKSIZE );
-    memmove( bytes,  bytes + CryptoPP::AES::BLOCKSIZE , size -  CryptoPP::AES::BLOCKSIZE );
-    DPRNNN("data iv Decrypt1: %s\n", (char*)iv);
-    DPRNNN("data bytes Decrypt3: %s\n", bytes);
-  	std::string ciphertext(bytes);
-    std::string decryptedtext;
-
-    CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, iv );
-
-    CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink( decryptedtext ) );
-    stfDecryptor.Put( reinterpret_cast<const unsigned char*>( ciphertext.c_str() ), ciphertext.size() );
-    stfDecryptor.MessageEnd();
-    DPRNNN("data bytes Decrypt4: %s\n", decryptedtext.c_str());
-	strcpy(bytes, decryptedtext.c_str());
-	DPRNNN("data bytes Decrypt5: %s\n", bytes);
-    return strlen(bytes)+1;
-
-}
 //------------------------------------------------
 // FdManager symbol
 // [NOTE]

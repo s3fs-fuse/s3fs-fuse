@@ -134,9 +134,9 @@ class FdEntity
     int Flush(headers_t& meta, bool force_sync = false) { return RowFlush(NULL, meta, force_sync); }
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
-
-    size_t encrypt(char*& uplodedBytes, const char* bytes,  size_t size);
-    ssize_t decrypt(char* bytes,  ssize_t size);
+    
+    std::string encrypt(std::string bytes,  size_t & size);
+    std::string decrypt(std::string bytes);
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
 
