@@ -174,6 +174,49 @@ string urlEncode2(const string &s)
   return result;
 }
 
+string urlDecode(const string& s)
+{
+  string result;
+  for(unsigned i = 0; i < s.length(); ++i){
+    if(s[i] != '%'){
+      result += s[i];
+    }else{
+      char ch = 0;
+      if(s.length() <= ++i){
+        break;       // wrong format.
+      }
+      ch += ('0' <= s[i] && s[i] <= '9') ? (s[i] - '0') : ('A' <= s[i] && s[i] <= 'F') ? (s[i] - 'A' + 0x10) : ('a' <= s[i] && s[i] <= 'f') ? (s[i] - 'a' + 0x10) : 0x00;
+      if(s.length() <= ++i){
+        break;       // wrong format.
+      }
+      ch *= 16;
+      ch += ('0' <= s[i] && s[i] <= '9') ? (s[i] - '0') : ('A' <= s[i] && s[i] <= 'F') ? (s[i] - 'A' + 0x10) : ('a' <= s[i] && s[i] <= 'f') ? (s[i] - 'a' + 0x10) : 0x00;
+      result += ch;
+    }
+  }
+  return result;
+}
+
+bool takeout_str_dquart(string& str)
+{
+  size_t pos;
+
+  // '"' for start
+  if(string::npos != (pos = str.find_first_of("\""))){
+    str = str.substr(pos + 1);
+
+    // '"' for end
+    if(string::npos == (pos = str.find_last_of("\""))){
+      return false;
+    }
+    str = str.substr(0, pos);
+    if(string::npos != str.find_first_of("\"")){
+      return false;
+    }
+  }
+  return true;
+}
+
 //
 // ex. target="http://......?keyword=value&..."
 //
