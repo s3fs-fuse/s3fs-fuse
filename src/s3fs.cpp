@@ -4050,9 +4050,9 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
-  // bucket names cannot contain upper case characters
-  if(lower(bucket) != bucket){
-    fprintf(stderr, "%s: BUCKET %s, upper case characters are not supported\n",
+  // bucket names cannot contain upper case characters in virtual-hosted style
+  if((!pathrequeststyle) && (lower(bucket) != bucket)){
+    fprintf(stderr, "%s: BUCKET %s, name not compatible with virtual-hosted style\n",
       program_name.c_str(), bucket.c_str());
     exit(EXIT_FAILURE);
   }
