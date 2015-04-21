@@ -2914,9 +2914,6 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
-  if(0 != (result = check_object_owner(path, NULL))){
-    return result;
-  }
 
   // get headders
   if(0 != (result = get_object_attribute(path, NULL, &meta))){
@@ -2966,9 +2963,6 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   if(0 != (result = check_parent_object_access(path, X_OK))){
     return result;
   }
-  if(0 != (result = check_object_owner(path, NULL))){
-    return result;
-  }
 
   // get headders
   if(0 != (result = get_object_attribute(path, NULL, &meta))){
@@ -2978,7 +2972,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   // get xattrs
   if(meta.end() == meta.find("x-amz-meta-xattr")){
     // object does not have xattrs
-    return -ENOATTR;
+    return 0;
   }
   string strxattrs = urlDecode(meta["x-amz-meta-xattr"]);
   parse_xattrs(strxattrs, xattrs);
@@ -2986,7 +2980,12 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   // calculate total name length
   size_t total = 0;
   for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    total += iter->first.length() + 1;
+    if(0 < iter->first.length()){
+      total += iter->first.length() + 1;
+    }
+  }
+  if(0 == total){
+    return 0;
   }
 
   // check parameters
@@ -3000,10 +2999,11 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   // copy to list
   char* setpos = list;
   for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    strcpy(setpos, iter->first.c_str());
-    setpos = &setpos[strlen(setpos) + 1];
+    if(0 < iter->first.length()){
+      strcpy(setpos, iter->first.c_str());
+      setpos = &setpos[strlen(setpos) + 1];
+    }
   }
-
   return total;
 }
 
