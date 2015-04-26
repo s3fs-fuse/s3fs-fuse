@@ -30,6 +30,18 @@ AC_PROG_CC
 
 CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64"
 
+case "$target" in
+   *-darwin* )
+      # Do something specific for mac
+      min_fuse_version=2.7.3
+      ;;
+   *)
+      # Default Case
+      # assume other supported linux system
+      min_fuse_version=2.8.4
+      ;;
+esac
+
 dnl ----------------------------------------------
 dnl Choice SSL library
 dnl ----------------------------------------------
@@ -156,13 +168,13 @@ dnl
 dnl For PKG_CONFIG before checking nss/gnutls.
 dnl this is redundant checking, but we need checking before following.
 dnl
-PKG_CHECK_MODULES([common_lib_checking], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6])
+PKG_CHECK_MODULES([common_lib_checking], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6])
 
 AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
-  PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9])
+  PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9])
   ;;
 gnutls)
   AC_MSG_RESULT(GnuTLS-gcrypt)
@@ -171,7 +183,7 @@ gnutls)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
   AS_IF([test $gnutls_nettle = 0],
     [
-      PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])
+      PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])
       LIBS="-lgnutls -lgcrypt $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(gcrypt)
@@ -185,7 +197,7 @@ nettle)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
   AS_IF([test $gnutls_nettle = 1],
     [
-      PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])
+      PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])
       LIBS="-lgnutls -lnettle $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(nettle)
@@ -194,7 +206,7 @@ nettle)
   ;;
 nss)
   AC_MSG_RESULT(NSS)
-  PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4 libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])
+  PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])
   ;;
 *)
   AC_MSG_ERROR([unknown ssl library type.])
