@@ -19,5 +19,8 @@
 /src/Makefile
 /src/Makefile.in
 /src/s3fs
+/src/test_*
+/test/.deps/
 /test/Makefile
 /test/Makefile.in
+/test/*.log
