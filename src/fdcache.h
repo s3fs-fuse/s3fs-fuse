@@ -135,7 +135,7 @@ class FdEntity
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
     
-    std::string encrypt(std::string bytes,  size_t & size);
+    std::string encrypt(std::string bytes);
     std::string decrypt(std::string bytes);
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*

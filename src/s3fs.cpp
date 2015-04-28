@@ -96,6 +96,7 @@ std::string host                  = "http://s3.amazonaws.com";
 std::string bucket                = "";
 std::string endpoint              = "us-east-1";
 byte privateKey[CryptoPP::AES::DEFAULT_KEYLENGTH];
+byte iv[CryptoPP::AES::BLOCKSIZE];
 //-------------------------------------------------------------------
 // Static valiables
 //-------------------------------------------------------------------
