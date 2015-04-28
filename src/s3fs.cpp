@@ -2741,9 +2741,11 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   }
 
   // Investigate system capabilities
+  #ifndef __APPLE__
   if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
      conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
   }
+  #endif
   // cache
   if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
     DPRNINFO("Could not inilialize cache directory.");
