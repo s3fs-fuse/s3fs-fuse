@@ -1630,7 +1630,7 @@ int S3fsCurl::RequestPerform(void)
         // Need to look at the HTTP response code
         if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
           DPRNNN("curl_easy_getinfo failed while trying to retrieve HTTP response code");
-          return -EIO;
+          return 1;
         }
         if(400 > LastResponseCode){
           DPRNNN("HTTP response code %ld", LastResponseCode);
@@ -1779,11 +1779,11 @@ int S3fsCurl::RequestPerform(void)
 
     if(!RemakeHandle()){
       DPRNNN("Failed to reset handle and internal data for retrying.");
-      return -EIO;
+      return 1;
     }
   }
   DPRN("### giving up");
-  return -EIO;
+  return 1;
 }
 
 //

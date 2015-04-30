@@ -3078,28 +3078,17 @@ static int s3fs_check_service(void)
   }
 
   S3fsCurl s3fscurl;
-  if(-1 == s3fscurl.CheckBucket()){
+  if(1 == s3fscurl.CheckBucket()){
     fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
     return EXIT_FAILURE;
   }
   long responseCode = s3fscurl.GetLastResponseCode();
 
-  if(responseCode == 400){
-    if(!S3fsCurl::IsSignatureV4()){
-      // signature version 2
-      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
-      return EXIT_FAILURE;
-    }
-    if(is_specified_endpoint){
-      // if specifies endpoint, do not retry to connect.
-      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
-      return EXIT_FAILURE;
-    }
-
+  if(responseCode == 400) {
     // check region error for signature version 4
     BodyData* body = s3fscurl.GetBodyData();
     string    expectregion;
-    if(check_region_error(body->str(), expectregion)){
+    if(check_region_error(body->str(), expectregion) && !is_specified_endpoint){
       // not specified endpoint, so try to connect to expected region.
       LOWSYSLOGPRINT(LOG_ERR, "Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
       FPRN("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
@@ -3120,26 +3109,27 @@ static int s3fs_check_service(void)
       }
       responseCode = s3fscurl.GetLastResponseCode();
     }
+  }
 
+  if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+    // retry to use sigv2
+    LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
+    FPRN("Could not connect, so retry to connect by signature version 2.");
+    S3fsCurl::SetSignatureV4(false);
+
+    // retry to check
+    s3fscurl.DestroyCurlHandle();
+    if(-1 == s3fscurl.CheckBucket()){
+      fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
+      return EXIT_FAILURE;
+    }
+    responseCode = s3fscurl.GetLastResponseCode();
     if(responseCode == 400){
-      // retry to use sigv2
-      LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
-      FPRN("Could not connect, so retry to connect by signature version 2.");
-      S3fsCurl::SetSignatureV4(false);
-
-      // retry to check
-      s3fscurl.DestroyCurlHandle();
-      if(-1 == s3fscurl.CheckBucket()){
-        fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
-        return EXIT_FAILURE;
-      }
-      responseCode = s3fscurl.GetLastResponseCode();
-      if(responseCode == 400){
-        fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
-        return EXIT_FAILURE;
-      }
+      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
+      return EXIT_FAILURE;
     }
   }
+
   if(responseCode == 403){
     fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
     return EXIT_FAILURE;
