@@ -791,7 +791,20 @@ static int do_create_bucket(void)
   headers_t meta;
 
   S3fsCurl s3fscurl(true);
-  return s3fscurl.PutRequest("/", meta, -1);    // fd=-1 means for creating zero byte object.
+  long res = s3fscurl.PutRequest("/", meta, -1);
+  if (1 != res) {    // fd=-1 means for creating zero byte object.
+    long responseCode = s3fscurl.GetLastResponseCode();
+    if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+      LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
+      FPRN("Could not connect, so retry to connect by signature version 2.");
+      S3fsCurl::SetSignatureV4(false);
+      // retry to check
+      s3fscurl.DestroyCurlHandle();
+      res = s3fscurl.PutRequest("/", meta, -1);
+    }
+  }
+
+  return res;
 }
 
 // common function for creation of a plain object
