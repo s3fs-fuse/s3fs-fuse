@@ -20,6 +20,16 @@
 #ifndef FD_CACHE_H_
 #define FD_CACHE_H_
 
+
+#include "config.h"
+#include "hex.h"
+#include "files.h"
+#include "cryptlib.h"
+#include "modes.h"
+#include "osrng.h"
+#include "filters.h"
+#include "aes.h"
+#include "gcm.h"
 //------------------------------------------------
 // CacheFileStat
 //------------------------------------------------
@@ -105,7 +115,7 @@ class FdEntity
     int             fd;         // file discriptor(tmp file or cache file)
     FILE*           file;       // file pointer(tmp file or cache file)
     bool            is_modify;  // if file is changed, this flag is true
-
+    CryptoPP::CTR_Mode< CryptoPP::AES>::Encryption encryption;
   private:
     void Clear(void);
     int Dup(void);
@@ -134,9 +144,11 @@ class FdEntity
     int Flush(headers_t& meta, bool force_sync = false) { return RowFlush(NULL, meta, force_sync); }
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
-    
+
     std::string encrypt(std::string bytes);
     std::string decrypt(std::string bytes);
+    
+    //std::string decrypt(std::string bytes);
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
 

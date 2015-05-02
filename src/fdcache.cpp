@@ -47,6 +47,7 @@
 #include "osrng.h"
 #include "filters.h"
 #include "aes.h"
+#include "gcm.h"
 
 #include "common.h"
 #include "fdcache.h"
@@ -972,8 +973,12 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
       return -errno;
     }
   }
-  string cypherText(bytes, rsize);
 
+  DPRNNN("start = %d", start);   
+    DPRNNN("size = %d", size);
+   DPRNNN("rsize = %d", rsize);
+  string cypherText(bytes, rsize);
+   DPRNNN("length = %d" , cypherText.length());
   const char* temp = decrypt(cypherText).c_str();
   strncpy(bytes, temp, rsize);
   return rsize;
@@ -981,21 +986,16 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 
 string FdEntity::decrypt(string bytes){
 
-  //decode iv & cipher text
-  string binary_text;
-  CryptoPP::StringSource(bytes, true, new CryptoPP::HexDecoder(new CryptoPP::StringSink(binary_text)));
-
-  //decode hex key
-  string binary_key;
-  CryptoPP::StringSource(bytes, true, new CryptoPP::HexDecoder(new CryptoPP::StringSink(binary_key)));
+  
 
   string IV(bytes, bytes.length() - CryptoPP::AES::BLOCKSIZE, string::npos);
   string cypherText(bytes, 0, bytes.length() - CryptoPP::AES::BLOCKSIZE);
   //decrypt cipher
-  CryptoPP::CBC_Mode< CryptoPP::Rijndael >::Decryption decryption(privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, (byte *)IV.c_str());
+  CryptoPP::CTR_Mode< CryptoPP::AES >::Decryption decryption;
+  decryption.SetKeyWithIV( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, (byte *)IV.c_str() , CryptoPP::AES::BLOCKSIZE);
+  
   string planetext;
-
-  CryptoPP::StringSource( cypherText, true, new CryptoPP::StreamTransformationFilter(decryption, new CryptoPP::StringSink(planetext)));
+  CryptoPP::StringSource( cypherText, true, new CryptoPP::StreamTransformationFilter(decryption , new CryptoPP::StringSink(planetext)));
 
   return planetext;
 
@@ -1004,8 +1004,7 @@ string FdEntity::decrypt(string bytes){
 ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 {
   int     result;
-  ssize_t wsize;
-
+  int     wsize;
   FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
@@ -1017,33 +1016,32 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     DPRN("failed to load uninitialized area before writing(errno=%d)", result);
     return static_cast<ssize_t>(result);
   }
-  int sizeoffset = 0 , startoffset = 0 , newsize = 0;
+  int sizeoffset = 0 , startoffset = 0;
+  int nsize = 0;
+ 
   string ivstring;
-  DPRNNN("\n\n%s\n\n" , bytes);
+  string cypherText;
+  cypherText.assign(bytes, size);
+
   if (usingPrivateKey){
     if (start == 0) {
       CryptoPP::AutoSeededRandomPool rnd;
       rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
-    }
+      encryption.SetKeyWithIV( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, iv , CryptoPP::AES::BLOCKSIZE);
+    }        
+    cypherText = encrypt(cypherText);
 
-    string cipherText;
-    cipherText.assign(bytes, size);
-    cipherText = encrypt(cipherText);
     if (size < 4096){
       ivstring.assign((char*)iv, CryptoPP::AES::BLOCKSIZE);
       sizeoffset = CryptoPP::AES::BLOCKSIZE;
-      cipherText = cipherText + ivstring;
+      cypherText = cypherText + ivstring;      
     }
-    else
-       cipherText = cipherText;
-    bytes = cipherText.c_str(); //converts to const char* format
-    newsize = cipherText.length();
   }
   // Writing
   {
     AutoLock auto_lock(&fdent_lock);
-
-    if(-1 == (wsize = pwrite(fd, bytes, newsize, start ))){
+    
+    if(-1 == (wsize = pwrite(fd, cypherText.c_str(), cypherText.length(), start))){
       DPRN("pwrite failed. errno(%d)", errno);
       return -errno;
     }
@@ -1055,20 +1053,15 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     }
   }
 
-  return  ( wsize - (newsize - size));
+  return  wsize - sizeoffset;
+
 }
 
 string FdEntity::encrypt(string bytes){
 
-  // Generate a random IV
-  string binary;
-  CryptoPP::StringSource(privateKey, true, new CryptoPP::HexDecoder(new CryptoPP::StringSink(binary)));
-
-  CryptoPP::CBC_Mode< CryptoPP::Rijndael >::Encryption encryption( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, iv );
-  
   string cipher;
-  CryptoPP::StringSource( bytes, true, new CryptoPP::StreamTransformationFilter(encryption, new CryptoPP::StringSink(cipher)));
-
+  CryptoPP::StringSource( bytes, true,  new CryptoPP::StreamTransformationFilter(encryption, new CryptoPP::StringSink(cipher)));
+ 
   return  cipher;
 }
 
