@@ -974,12 +974,8 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     }
   }
 
-  DPRNNN("start = %d", start);   
-    DPRNNN("size = %d", size);
-   DPRNNN("rsize = %d", rsize);
-  string cypherText(bytes, rsize);
-   DPRNNN("length = %d" , cypherText.length());
-  const char* temp = decrypt(cypherText).c_str();
+  string cipherText(bytes, rsize);
+  const char* temp = decrypt(cipherText).c_str();
   strncpy(bytes, temp, rsize);
   return rsize;
 }
@@ -989,13 +985,13 @@ string FdEntity::decrypt(string bytes){
   
 
   string IV(bytes, bytes.length() - CryptoPP::AES::BLOCKSIZE, string::npos);
-  string cypherText(bytes, 0, bytes.length() - CryptoPP::AES::BLOCKSIZE);
+  string cipherText(bytes, 0, bytes.length() - CryptoPP::AES::BLOCKSIZE);
   //decrypt cipher
   CryptoPP::CTR_Mode< CryptoPP::AES >::Decryption decryption;
   decryption.SetKeyWithIV( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, (byte *)IV.c_str() , CryptoPP::AES::BLOCKSIZE);
   
   string planetext;
-  CryptoPP::StringSource( cypherText, true, new CryptoPP::StreamTransformationFilter(decryption , new CryptoPP::StringSink(planetext)));
+  CryptoPP::StringSource( cipherText, true, new CryptoPP::StreamTransformationFilter(decryption , new CryptoPP::StringSink(planetext)));
 
   return planetext;
 
@@ -1016,12 +1012,10 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     DPRN("failed to load uninitialized area before writing(errno=%d)", result);
     return static_cast<ssize_t>(result);
   }
-  int sizeoffset = 0 , startoffset = 0;
-  int nsize = 0;
+  int sizeoffset = 0;
  
   string ivstring;
-  string cypherText;
-  cypherText.assign(bytes, size);
+  string cipherText(bytes, size);
 
   if (usingPrivateKey){
     if (start == 0) {
@@ -1029,19 +1023,19 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
       encryption.SetKeyWithIV( privateKey, CryptoPP::AES::DEFAULT_KEYLENGTH, iv , CryptoPP::AES::BLOCKSIZE);
     }        
-    cypherText = encrypt(cypherText);
+    cipherText = encrypt(cipherText);
 
     if (size < 4096){
       ivstring.assign((char*)iv, CryptoPP::AES::BLOCKSIZE);
       sizeoffset = CryptoPP::AES::BLOCKSIZE;
-      cypherText = cypherText + ivstring;      
+      cipherText = cipherText + ivstring;      
     }
   }
   // Writing
   {
     AutoLock auto_lock(&fdent_lock);
     
-    if(-1 == (wsize = pwrite(fd, cypherText.c_str(), cypherText.length(), start))){
+    if(-1 == (wsize = pwrite(fd, cipherText.c_str(), cipherText.length(), start))){
       DPRN("pwrite failed. errno(%d)", errno);
       return -errno;
     }
@@ -1052,7 +1046,6 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       pagelist.SetInit(start, static_cast<off_t>(wsize), true);
     }
   }
-
   return  wsize - sizeoffset;
 
 }
