@@ -3867,7 +3867,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "multipart_size=")){
       off_t size = static_cast<off_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       if(!S3fsCurl::SetMultipartSize(size)){
-        fprintf(stderr, "%s: multipart_size option could not be specified over 10(MB)\n", program_name.c_str());
+        fprintf(stderr, "%s: multipart_size option must be at least 10 MB\n", program_name.c_str());
         return -1;
       }
       if(FdManager::GetPageSize() < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
