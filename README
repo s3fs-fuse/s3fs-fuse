@@ -1,14 +1,15 @@
 Author Zaid Nackasha 
 
 In order to compile s3fs with encryption you will need the following packages:
-•	FUSE:         
+
+	S3FS:         
 •	Build-essential
 •	Libfuse-dev
 •	Libbcurl4-openssl-dev
 •	Libxml2-dev
 •	Mime-support
 
-•	CryptoPP:
+	CryptoPP:
 •	libcrypto++-utils
 •	libcrypto++9
 •	libcrypto++9-dbg
