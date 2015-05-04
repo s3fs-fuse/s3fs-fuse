@@ -1034,8 +1034,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   }
   // Writing
   {
-    AutoLock auto_lock(&fdent_lock);
-    
+    AutoLock auto_lock(&fdent_lock);    
     if(-1 == (wsize = pwrite(fd, cipherText.c_str(), cipherText.length(), start))){
       DPRN("pwrite failed. errno(%d)", errno);
       return -errno;
