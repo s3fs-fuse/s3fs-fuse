@@ -1000,7 +1000,8 @@ string FdEntity::decrypt(string bytes){
 ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 {
   int     result;
-  int     wsize;
+  ssize_t wsize;
+
   FPRNINFO("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
