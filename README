@@ -2,6 +2,8 @@ Author Zaid Nackasha
 
 In order to compile s3fs with encryption you will need the following packages:
 
+	FUSE - this is already installed on Ubuntu but may need to be installed if you are using a different distribution
+	
 	S3FS:         
 •	Build-essential
 •	Libfuse-dev
