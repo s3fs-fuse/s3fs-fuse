@@ -30,7 +30,7 @@ git clone git://github.com/s3fs-fuse/s3fs-fuse.git
 Go inside the directory that has been created (s3fs-fuse) and run: ./autogen.sh
 This will generate a number of scripts in the project directory, including a configure script which you should run with: ./configure
 If configure succeeded, you can now run: make. If it didn't, make sure you meet the dependencies above.
-This should compile the code. If everything goes OK, you'll be greated with "ok!" at the end and you'll have a binary file called "s3fs"
+This should compile the code. If everything goes OK, you'll be greeted with "ok!" at the end and you'll have a binary file called "s3fs"
 in the src/ directory.
 
 As root (you can use su, su -, sudo) do: "make install" -this will copy the "s3fs" binary to /usr/local/bin.
