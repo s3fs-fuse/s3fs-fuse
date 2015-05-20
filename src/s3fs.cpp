@@ -3808,6 +3808,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       service_path = strchr(arg, '=') + sizeof(char);
       return 0;
     }
+    if(0 == strcmp(arg, "no_check_certificate")){
+        S3fsCurl::SetCheckCertificate(false);
+        return 0;
+    }
     if(0 == STR2NCMP(arg, "connect_timeout=")){
       long contimeout = static_cast<long>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       S3fsCurl::SetConnectTimeout(contimeout);
