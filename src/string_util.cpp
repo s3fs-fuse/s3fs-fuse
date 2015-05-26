@@ -123,20 +123,20 @@ string urlEncode(const string &s)
 {
   string result;
   for (unsigned i = 0; i < s.length(); ++i) {
-    if (s[i] == '/') { // Note- special case for fuse paths...
-      result += s[i];
-    } else if (isalnum(s[i])) {
-      result += s[i];
-    } else if (s[i] == '.' || s[i] == '-' || s[i] == '*' || s[i] == '_') {
-      result += s[i];
-    } else if (s[i] == ' ') {
-      result += '%';
-      result += '2';
-      result += '0';
+    char c = s[i];
+    if (c == '/' // Note- special case for fuse paths...
+      || c == '.'
+      || c == '-'
+      || c == '_'
+      || c == '~'
+      || (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')) {
+      result += c;
     } else {
       result += "%";
-      result += hexAlphabet[static_cast<unsigned char>(s[i]) / 16];
-      result += hexAlphabet[static_cast<unsigned char>(s[i]) % 16];
+      result += hexAlphabet[static_cast<unsigned char>(c) / 16];
+      result += hexAlphabet[static_cast<unsigned char>(c) % 16];
     }
   }
   return result;
@@ -151,24 +151,22 @@ string urlEncode2(const string &s)
 {
   string result;
   for (unsigned i = 0; i < s.length(); ++i) {
-    if (s[i] == '=') { // Note- special case for fuse paths...
-      result += s[i];
-    }else if (s[i] == '&') { // Note- special case for s3...
-      result += s[i];
-    }else if(s[i] == '%'){
-      result += s[i];
-    } else if (isalnum(s[i])) {
-      result += s[i];
-    } else if (s[i] == '.' || s[i] == '-' || s[i] == '*' || s[i] == '_') {
-      result += s[i];
-    } else if (s[i] == ' ') {
-      result += '%';
-      result += '2';
-      result += '0';
+    char c = s[i];
+    if (c == '=' // Note- special case for fuse paths...
+      || c == '&' // Note- special case for s3...
+      || c == '%'
+      || c == '.'
+      || c == '-'
+      || c == '_'
+      || c == '~'
+      || (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')) {
+      result += c;
     } else {
       result += "%";
-      result += hexAlphabet[static_cast<unsigned char>(s[i]) / 16];
-      result += hexAlphabet[static_cast<unsigned char>(s[i]) % 16];
+      result += hexAlphabet[static_cast<unsigned char>(c) / 16];
+      result += hexAlphabet[static_cast<unsigned char>(c) % 16];
     }
   }
   return result;

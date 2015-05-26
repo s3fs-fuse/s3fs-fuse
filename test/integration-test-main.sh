@@ -303,6 +303,17 @@ fi
 rm -f "/tmp/${BIG_FILE}"
 rm -f "${BIG_FILE}"
 
+##########################################################
+# Testing special characters
+##########################################################
+echo "Testing special characters ..."
+
+ls 'special' 2>&1 | grep -q 'No such file or directory'
+ls 'special?' 2>&1 | grep -q 'No such file or directory'
+ls 'special*' 2>&1 | grep -q 'No such file or directory'
+ls 'special~' 2>&1 | grep -q 'No such file or directory'
+ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
+
 #####################################################################
 # Tests are finished
 #####################################################################
