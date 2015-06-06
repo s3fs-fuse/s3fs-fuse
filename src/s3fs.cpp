@@ -158,7 +158,8 @@ static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const c
 static void print_uncomp_mp_list(uncomp_mp_list_t& list);
 static bool abort_uncomp_mp_list(uncomp_mp_list_t& list);
 static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list);
-static bool parse_xattr_keyval(const std::string& xattrpair, string& key, string& val);
+static void free_xattrs(xattrs_t& xattrs);
+static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_utility_mode(void);
@@ -2720,21 +2721,37 @@ static int remote_mountpath_exists(const char* path)
   return 0;
 }
 
-static bool parse_xattr_keyval(const std::string& xattrpair, string& key, string& val)
+
+static void free_xattrs(xattrs_t& xattrs)
+{
+  for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); xattrs.erase(iter++)){
+    if(iter->second){
+      delete iter->second;
+    }
+  }
+}
+
+static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval)
 {
   // parse key and value
   size_t pos;
+  string tmpval;
   if(string::npos == (pos = xattrpair.find_first_of(":"))){
     DPRNNN("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
     return false;
   }
-  key = xattrpair.substr(0, pos);
-  val = xattrpair.substr(pos + 1);
+  key    = xattrpair.substr(0, pos);
+  tmpval = xattrpair.substr(pos + 1);
 
-  if(!takeout_str_dquart(key) || !takeout_str_dquart(val)){
+  if(!takeout_str_dquart(key) || !takeout_str_dquart(tmpval)){
     DPRNNN("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
     return false;
   }
+
+  pval = new XATTRVAL;
+  pval->length = 0;
+  pval->pvalue = s3fs_decode64(tmpval.c_str(), &pval->length);
+
   return true;
 }
 
@@ -2742,33 +2759,35 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
 {
   xattrs.clear();
 
+  // decode
+  string jsonxattrs = urlDecode(strxattrs);
+
   // get from "{" to "}"
   string restxattrs;
   {
     size_t startpos = string::npos;
     size_t endpos   = string::npos;
-    if(string::npos != (startpos = strxattrs.find_first_of("{"))){
-      endpos = strxattrs.find_last_of("}");
+    if(string::npos != (startpos = jsonxattrs.find_first_of("{"))){
+      endpos = jsonxattrs.find_last_of("}");
     }
     if(startpos == string::npos || endpos == string::npos || endpos <= startpos){
-      DPRNNN("xattr header(%s) is not json format.", strxattrs.c_str());
+      DPRNNN("xattr header(%s) is not json format.", jsonxattrs.c_str());
       return 0;
     }
-    restxattrs = strxattrs.substr(startpos + 1, endpos - (startpos + 1));
+    restxattrs = jsonxattrs.substr(startpos + 1, endpos - (startpos + 1));
   }
 
   // parse each key:val
   for(size_t pair_nextpos = restxattrs.find_first_of(","); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(",")){
     string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
-    string key  = "";
-    string val  = "";
-    if(!parse_xattr_keyval(pair, key, val)){
+    string    key  = "";
+    PXATTRVAL pval = NULL;
+    if(!parse_xattr_keyval(pair, key, pval)){
       // something format error, so skip this.
       continue;
     }
-    xattrs[key] = val;
+    xattrs[key] = pval;
   }
-
   return xattrs.size();
 }
 
@@ -2786,10 +2805,19 @@ static std::string build_xattrs(const xattrs_t& xattrs)
     strxattrs += '\"';
     strxattrs += iter->first;
     strxattrs += "\":\"";
-    strxattrs += iter->second;
+
+    if(iter->second){
+      char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
+      if(base64val){
+        strxattrs += base64val;
+        free(base64val);
+      }
+    }
     strxattrs += '\"';
   }
   strxattrs += '}';
+
+  strxattrs = urlEncode(strxattrs);
 
   return strxattrs;
 }
@@ -2809,24 +2837,48 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
       // found xattr header but flags is only creating, so failure.
       return -EEXIST;
     }
-    strxattrs = urlDecode(meta["x-amz-meta-xattr"]);
+    strxattrs = meta["x-amz-meta-xattr"];
   }
 
   // get map as xattrs_t
   parse_xattrs(strxattrs, xattrs);
 
   // add name(do not care overwrite and empty name/value)
-  xattrs[string(name)] = value ? string(value, size) : string("");
+  if(xattrs.end() != xattrs.find(string(name))){
+    // found same head. free value.
+    delete xattrs[string(name)];
+  }
+
+  PXATTRVAL pval = new XATTRVAL;
+  pval->length = size;
+  if(0 < size){
+    if(NULL == (pval->pvalue = (unsigned char*)malloc(size))){
+      delete pval;
+      free_xattrs(xattrs);
+      return -ENOMEM;
+    }
+    memcpy(pval->pvalue, value, size);
+  }else{
+    pval->pvalue = NULL;
+  }
+  xattrs[string(name)] = pval;
 
   // build new strxattrs(not encoded) and set it to headers_t
   meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
+
+  free_xattrs(xattrs);
 
   return 0;
 }
 
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
 {
-  FPRN("[path=%s][name=%s][value=%s][size=%zu][flags=%d]", path, name, value, size, flags);
+  FPRN("[path=%s][name=%s][value=%p][size=%zu][flags=%d]", path, name, value, size, flags);
+
+  if((value && 0 == size) || (!value && 0 < size)){
+    DPRN("Wrong parameter: value(%p), size(%zu)", value, size);
+    return 0;
+  }
 
   int         result;
   string      strpath;
@@ -2925,26 +2977,39 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     // object does not have xattrs
     return -ENOATTR;
   }
-  string strxattrs = urlDecode(meta["x-amz-meta-xattr"]);
+  string strxattrs = meta["x-amz-meta-xattr"];
+
   parse_xattrs(strxattrs, xattrs);
 
   // search name
   string strname = name;
   if(xattrs.end() == xattrs.find(strname)){
     // not found name in xattrs
+    free_xattrs(xattrs);
     return -ENOATTR;
   }
 
-  if(size <= 0){
-    return static_cast<int>(xattrs[strname].length() + 1);
+  // decode
+  size_t         length = 0;
+  unsigned char* pvalue = NULL;
+  if(NULL != xattrs[strname]){
+    length = xattrs[strname]->length;
+    pvalue = xattrs[strname]->pvalue;
   }
-  if(!value || size <= xattrs[strname].length()){
-    // over buffer size
-    return -ERANGE;
-  }
-  strcpy(value, xattrs[strname].c_str());
 
-  return static_cast<int>(strlen(value) + 1);
+  if(0 < size){
+    if(static_cast<size_t>(size) < length){
+      // over buffer size
+      free_xattrs(xattrs);
+      return -ERANGE;
+    }
+    if(pvalue){
+      memcpy(value, pvalue, length);
+    }
+  }
+  free_xattrs(xattrs);
+
+  return static_cast<int>(length);
 }
 
 static int s3fs_listxattr(const char* path, char* list, size_t size)
@@ -2974,7 +3039,8 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     // object does not have xattrs
     return 0;
   }
-  string strxattrs = urlDecode(meta["x-amz-meta-xattr"]);
+  string strxattrs = meta["x-amz-meta-xattr"];
+
   parse_xattrs(strxattrs, xattrs);
 
   // calculate total name length
@@ -2984,15 +3050,19 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
       total += iter->first.length() + 1;
     }
   }
+
   if(0 == total){
+    free_xattrs(xattrs);
     return 0;
   }
 
   // check parameters
   if(size <= 0){
+    free_xattrs(xattrs);
     return total;
   }
   if(!list || size < total){
+    free_xattrs(xattrs);
     return -ERANGE;
   }
 
@@ -3004,6 +3074,8 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
       setpos = &setpos[strlen(setpos) + 1];
     }
   }
+  free_xattrs(xattrs);
+
   return total;
 }
 
@@ -3051,18 +3123,29 @@ static int s3fs_removexattr(const char* path, const char* name)
     // object does not have xattrs
     return -ENOATTR;
   }
-  string strxattrs = urlDecode(meta["x-amz-meta-xattr"]);
+  string strxattrs = meta["x-amz-meta-xattr"];
+
   parse_xattrs(strxattrs, xattrs);
 
   // check name xattrs
   string strname = name;
   if(xattrs.end() == xattrs.find(strname)){
+    free_xattrs(xattrs);
     return -ENOATTR;
   }
 
   // make new header_t after deleting name xattr
+  if(xattrs[strname]){
+    delete xattrs[strname];
+  }
   xattrs.erase(strname);
-  meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
+
+  // build new xattr
+  if(0 < xattrs.size()){
+    meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
+  }else{
+    meta.erase("x-amz-meta-xattr");
+  }
 
   if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
     // Should rebuild directory object(except new type)
@@ -3072,6 +3155,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     if(IS_RMTYPEDIR(nDirType)){
       S3fsCurl s3fscurl;
       if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
+        free_xattrs(xattrs);
         return result;
       }
     }
@@ -3079,6 +3163,7 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     // Make new directory object("dir/")
     if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+      free_xattrs(xattrs);
       return result;
     }
 
@@ -3092,9 +3177,12 @@ static int s3fs_removexattr(const char* path, const char* name)
   meta["x-amz-metadata-directive"] = "REPLACE";
 
   if(0 != put_headers(strpath.c_str(), meta, true)){
+    free_xattrs(xattrs);
     return -EIO;
   }
   StatCache::getStatCacheData()->DelStat(nowcache);
+
+  free_xattrs(xattrs);
 
   return 0;
 }
