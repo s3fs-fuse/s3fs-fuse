@@ -2973,17 +2973,19 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
   }
 
   // get xattrs
-  if(meta.end() == meta.find("x-amz-meta-xattr")){
+  headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
+  if(meta.end() == hiter){
     // object does not have xattrs
     return -ENOATTR;
   }
-  string strxattrs = meta["x-amz-meta-xattr"];
+  string strxattrs = hiter->second;
 
   parse_xattrs(strxattrs, xattrs);
 
   // search name
-  string strname = name;
-  if(xattrs.end() == xattrs.find(strname)){
+  string             strname = name;
+  xattrs_t::iterator xiter   = xattrs.find(strname);
+  if(xattrs.end() == xiter){
     // not found name in xattrs
     free_xattrs(xattrs);
     return -ENOATTR;
@@ -2992,9 +2994,9 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
   // decode
   size_t         length = 0;
   unsigned char* pvalue = NULL;
-  if(NULL != xattrs[strname]){
-    length = xattrs[strname]->length;
-    pvalue = xattrs[strname]->pvalue;
+  if(NULL != xiter->second){
+    length = xiter->second->length;
+    pvalue = xiter->second->pvalue;
   }
 
   if(0 < size){
@@ -3143,7 +3145,7 @@ static int s3fs_removexattr(const char* path, const char* name)
   xattrs.erase(strname);
 
   // build new xattr
-  if(0 < xattrs.size()){
+  if(!xattrs.empty()){
     meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
   }else{
     meta.erase("x-amz-meta-xattr");
