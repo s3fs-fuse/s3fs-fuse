@@ -3119,24 +3119,26 @@ static int s3fs_removexattr(const char* path, const char* name)
   }
 
   // get xattrs
-  if(meta.end() == meta.find("x-amz-meta-xattr")){
+  headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
+  if(meta.end() == hiter){
     // object does not have xattrs
     return -ENOATTR;
   }
-  string strxattrs = meta["x-amz-meta-xattr"];
+  string strxattrs = hiter->second;
 
   parse_xattrs(strxattrs, xattrs);
 
   // check name xattrs
-  string strname = name;
-  if(xattrs.end() == xattrs.find(strname)){
+  string             strname = name;
+  xattrs_t::iterator xiter   = xattrs.find(strname);
+  if(xattrs.end() == xiter){
     free_xattrs(xattrs);
     return -ENOATTR;
   }
 
   // make new header_t after deleting name xattr
-  if(xattrs[strname]){
-    delete xattrs[strname];
+  if(xiter->second){
+    delete xiter->second;
   }
   xattrs.erase(strname);
 
