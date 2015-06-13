@@ -157,6 +157,7 @@ class S3fsCurl
     static pthread_mutex_t  curl_share_lock[SHARE_MUTEX_MAX];
     static bool             is_initglobal_done;
     static CURLSH*          hCurlShare;
+    static bool             is_cert_check;
     static bool             is_dns_cache;
     static bool             is_ssl_session_cache;
     static long             connect_timeout;
@@ -267,6 +268,7 @@ class S3fsCurl
 
     // class methods(valiables)
     static std::string LookupMimeType(std::string name);
+    static bool SetCheckCertificate(bool isCertCheck);
     static bool SetDnsCache(bool isCache);
     static bool SetSslSessionCache(bool isCache);
     static long SetConnectTimeout(long timeout);
