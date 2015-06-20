@@ -11,5 +11,7 @@ script:
  - make check -C src
  # Travis granted s3fs access to their upcoming alpha testing stack which may
  # allow us to use FUSE.
- - modprobe fuse
- - make check -C test
+ # TODO: Travis changed their infrastructure some time in June 2015 such that
+ # this does not work currently
+ #- modprobe fuse
+ #- make check -C test
