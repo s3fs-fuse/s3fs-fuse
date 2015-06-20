@@ -804,7 +804,20 @@ static int do_create_bucket(void)
   headers_t meta;
 
   S3fsCurl s3fscurl(true);
-  return s3fscurl.PutRequest("/", meta, -1);    // fd=-1 means for creating zero byte object.
+  long     res = s3fscurl.PutRequest("/", meta, -1);
+  if(res < 0){    // fd=-1 means for creating zero byte object.
+    long responseCode = s3fscurl.GetLastResponseCode();
+    if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+      LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
+      FPRN("Could not connect, so retry to connect by signature version 2.");
+      S3fsCurl::SetSignatureV4(false);
+
+      // retry to check
+      s3fscurl.DestroyCurlHandle();
+      res = s3fscurl.PutRequest("/", meta, -1);
+    }
+  }
+  return res;
 }
 
 // common function for creation of a plain object
@@ -3561,83 +3574,73 @@ static int s3fs_check_service(void)
   }
 
   S3fsCurl s3fscurl;
-  if(-1 == s3fscurl.CheckBucket()){
-    fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
-    return EXIT_FAILURE;
-  }
-  long responseCode = s3fscurl.GetLastResponseCode();
+  int      res;
+  if(0 > (res = s3fscurl.CheckBucket())){
+    // get response code
+    long responseCode = s3fscurl.GetLastResponseCode();
 
-  if(responseCode == 400){
-    if(!S3fsCurl::IsSignatureV4()){
-      // signature version 2
-      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
-      return EXIT_FAILURE;
-    }
-    if(is_specified_endpoint){
-      // if specifies endpoint, do not retry to connect.
-      fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
-      return EXIT_FAILURE;
-    }
+    // check wrong endpoint, and automatically switch endpoint
+    if(responseCode == 400 && !is_specified_endpoint){
+      // check region error
+      BodyData* body = s3fscurl.GetBodyData();
+      string    expectregion;
+      if(check_region_error(body->str(), expectregion)){
+        // not specified endpoint, so try to connect to expected region.
+        LOWSYSLOGPRINT(LOG_ERR, "Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
+        FPRN("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
+        endpoint = expectregion;
+        if(S3fsCurl::IsSignatureV4()){
+            if(host == "http://s3.amazonaws.com"){
+                host = "http://s3-" + endpoint + ".amazonaws.com";
+            }else if(host == "https://s3.amazonaws.com"){
+                host = "https://s3-" + endpoint + ".amazonaws.com";
+            }
+        }
 
-    // check region error for signature version 4
-    BodyData* body = s3fscurl.GetBodyData();
-    string    expectregion;
-    if(check_region_error(body->str(), expectregion)){
-      // not specified endpoint, so try to connect to expected region.
-      LOWSYSLOGPRINT(LOG_ERR, "Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
-      FPRN("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
-      endpoint = expectregion;
-      if (S3fsCurl::IsSignatureV4()) {
-          if (host == "http://s3.amazonaws.com") {
-              host = "http://s3-" + endpoint + ".amazonaws.com";
-          } else if (host == "https://s3.amazonaws.com") {
-              host = "https://s3-" + endpoint + ".amazonaws.com";
-          }
+        // retry to check with new endpoint
+        s3fscurl.DestroyCurlHandle();
+        res          = s3fscurl.CheckBucket();
+        responseCode = s3fscurl.GetLastResponseCode();
       }
-
-      // retry to check
-      s3fscurl.DestroyCurlHandle();
-      if(-1 == s3fscurl.CheckBucket()){
-        fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
-        return EXIT_FAILURE;
-      }
-      responseCode = s3fscurl.GetLastResponseCode();
     }
 
-    if(responseCode == 400){
-      // retry to use sigv2
+    // try signature v2
+    if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+      // switch sigv2
       LOWSYSLOGPRINT(LOG_ERR, "Could not connect, so retry to connect by signature version 2.");
       FPRN("Could not connect, so retry to connect by signature version 2.");
       S3fsCurl::SetSignatureV4(false);
 
-      // retry to check
+      // retry to check with sigv2
       s3fscurl.DestroyCurlHandle();
-      if(-1 == s3fscurl.CheckBucket()){
-        fprintf(stderr, "%s: Failed to access bucket.\n", program_name.c_str());
-        return EXIT_FAILURE;
-      }
+      res          = s3fscurl.CheckBucket();
       responseCode = s3fscurl.GetLastResponseCode();
+    }
+
+    // check errors(after retrying)
+    if(0 > res && responseCode != 200 && responseCode != 301){
       if(responseCode == 400){
         fprintf(stderr, "%s: Bad Request\n", program_name.c_str());
         return EXIT_FAILURE;
       }
+      if(responseCode == 403){
+        fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+      if(responseCode == 404){
+        fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+      // unable to connect
+      if(responseCode == CURLE_OPERATION_TIMEDOUT){
+        fprintf(stderr, "%s: unable to connect bucket and timeout\n", program_name.c_str());
+        return EXIT_FAILURE;
+      }
+
+      // another error
+      fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
+      return EXIT_FAILURE;
     }
-  }
-  if(responseCode == 403){
-    fprintf(stderr, "%s: invalid credentials\n", program_name.c_str());
-    return EXIT_FAILURE;
-  }
-  if(responseCode == 404){
-    fprintf(stderr, "%s: bucket not found\n", program_name.c_str());
-    return EXIT_FAILURE;
-  }
-  // unable to connect
-  if(responseCode == CURLE_OPERATION_TIMEDOUT){
-    return EXIT_SUCCESS;
-  }
-  if(responseCode != 200 && responseCode != 301){
-    fprintf(stderr, "%s: unable to connect\n", program_name.c_str());
-    return EXIT_FAILURE;
   }
 
   // make sure remote mountpath exists and is a directory
