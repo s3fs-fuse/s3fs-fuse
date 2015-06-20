@@ -82,6 +82,26 @@
 typedef std::map<std::string, std::string> headers_t;
 
 //
+// Header "x-amz-meta-xattr" is for extended attributes.
+// This header is url encoded string which is json formated.
+//   x-amz-meta-xattr:urlencod({"xattr-1":"base64(value-1)","xattr-2":"base64(value-2)","xattr-3":"base64(value-3)"})
+//
+typedef struct xattr_value{
+  unsigned char* pvalue;
+  size_t         length;
+
+  xattr_value(unsigned char* pval = NULL, size_t len = 0) : pvalue(pval), length(len) {}
+  ~xattr_value()
+  {
+    if(pvalue){
+      free(pvalue);
+    }
+  }
+}XATTRVAL, *PXATTRVAL;
+
+typedef std::map<std::string, PXATTRVAL> xattrs_t;
+
+//
 // Global valiables
 //
 extern bool debug;
