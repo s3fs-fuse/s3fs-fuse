@@ -1053,14 +1053,14 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-    DPRN("Cloud not duplicate file discriptor(errno=%d)", errno);
+    DPRN("Could not duplicate file descriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
     }
     return -errno;
   }
   if(-1 == fstat(fd2, &st)){
-    DPRN("Invalid file discriptor(errno=%d)", errno);
+    DPRN("Invalid file descriptor(errno=%d)", errno);
     close(fd2);
     return -errno;
   }
@@ -3192,14 +3192,14 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
 
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-    DPRN("Cloud not duplicate file discriptor(errno=%d)", errno);
+    DPRN("Could not duplicate file descriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
     }
     return -errno;
   }
   if(-1 == fstat(fd2, &st)){
-    DPRN("Invalid file discriptor(errno=%d)", errno);
+    DPRN("Invalid file descriptor(errno=%d)", errno);
     close(fd2);
     return -errno;
   }

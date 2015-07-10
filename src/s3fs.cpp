@@ -1808,7 +1808,7 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
   FPRNN("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
 
   if(0 == strcmp(path, "/")){
-    DPRNNN("Could not change mtime for maount point.");
+    DPRNNN("Could not change mtime for mount point.");
     return -EIO;
   }
   if(0 != (result = check_parent_object_access(path, X_OK))){

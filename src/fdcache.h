@@ -102,7 +102,7 @@ class FdEntity
     int             refcnt;     // reference count
     std::string     path;       // object path
     std::string     cachepath;  // local cache file path
-    int             fd;         // file discriptor(tmp file or cache file)
+    int             fd;         // file descriptor(tmp file or cache file)
     FILE*           file;       // file pointer(tmp file or cache file)
     bool            is_modify;  // if file is changed, this flag is true
 
