@@ -1001,10 +1001,10 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 // NOCACHE_PATH_PREFIX symbol needs for not using cache mode.
 // Now s3fs I/F functions in s3fs.cpp has left the processing
 // to FdManager and FdEntity class. FdManager class manages
-// the list of local file stat and file discriptor in conjunction
+// the list of local file stat and file descriptor in conjunction
 // with the FdEntity class.
 // When s3fs is not using local cache, it means FdManager must
-// return new temporary file discriptor at each opening it.
+// return new temporary file descriptor at each opening it.
 // Then FdManager caches fd by key which is dummy file path
 // instead of real file path.
 // This process may not be complete, but it is easy way can
@@ -1176,7 +1176,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
         if(0 == strcmp((*iter).second->GetPath(), path)){
           return (*iter).second;
         }
-        // found fd, but it is used another file(file discriptor is recycled)
+        // found fd, but it is used another file(file descriptor is recycled)
         // so returns NULL.
         break;
       }
@@ -1259,7 +1259,7 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd)
             return NULL;
           }
         }else{
-          // found fd, but it is used another file(file discriptor is recycled)
+          // found fd, but it is used another file(file descriptor is recycled)
           // so returns NULL.
         }
         break;
