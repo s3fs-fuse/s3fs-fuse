@@ -138,7 +138,7 @@ It is necessary to set this value depending on a CPU and a network band.
 This option is lated to fd_page_size option and affects it.
 .TP
 \fB\-o\fR fd_page_size(default="52428800"(50MB))
-number of internal management page size for each file discriptor.
+number of internal management page size for each file descriptor.
 For delayed reading and writing by s3fs, s3fs manages pages which is separated from object. Each pages has a status that data is already loaded(or not loaded yet).
 This option should not be changed when you don't have a trouble with performance.
 This value is changed automatically by parallel_count and multipart_size values(fd_page_size value = parallel_count * multipart_size).

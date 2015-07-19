@@ -201,8 +201,13 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 static int s3fs_access(const char* path, int mask);
 static void* s3fs_init(struct fuse_conn_info* conn);
 static void s3fs_destroy(void*);
+#if defined(__APPLE__)
+static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position);
+static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position);
+#else
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags);
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size);
+#endif
 static int s3fs_listxattr(const char* path, char* list, size_t size);
 static int s3fs_removexattr(const char* path, const char* name);
 
@@ -1803,7 +1808,7 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
   FPRNN("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
 
   if(0 == strcmp(path, "/")){
-    DPRNNN("Could not change mtime for maount point.");
+    DPRNNN("Could not change mtime for mount point.");
     return -EIO;
   }
   if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -2884,7 +2889,11 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
   return 0;
 }
 
+#if defined(__APPLE__)
+static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position)
+#else
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
+#endif
 {
   FPRN("[path=%s][name=%s][value=%p][size=%zu][flags=%d]", path, name, value, size, flags);
 
@@ -2892,6 +2901,13 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     DPRN("Wrong parameter: value(%p), size(%zu)", value, size);
     return 0;
   }
+
+#if defined(__APPLE__)
+  if (position != 0) {
+    // No resource fork support
+    return -EINVAL;
+  }
+#endif
 
   int         result;
   string      strpath;
@@ -2963,13 +2979,24 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
   return 0;
 }
 
+#if defined(__APPLE__)
+static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
+#else
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
+#endif
 {
   FPRN("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
 
   if(!path || !name){
     return -EIO;
   }
+
+#if (__APPLE__)
+  if (position != 0) {
+    // No resource fork support
+    return -EINVAL;
+  }
+#endif
 
   int       result;
   headers_t meta;

@@ -1,16 +1,69 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.79 -- Jul 19, 2015
+issue #60 - Emit user-friendly log messages on failed CheckBucket requests
+issue #62 - Remove stray chars from source files
+issue #63 - Fix spelling errors
+issue #68 - FreeBSD issue
+issue #69 - Address clang always true warnings
+issue #73 - Small gitignore fixes
+issue #74 - url: handle scheme omission
+issue #83 - Changed option processing to use strtol() to get a umask
+issue #93 - Add simple unit tests for trim functions
+issue #100 - CURL handles not properly initialized to use DNS or SSL session caching
+issue #101 - Optimized function "bool directory_empty()"
+issue #103 - Remove prefix option in s3fs man page - issue#87
+issue #104 - fix rename before close
+issue #116 - Supported signature version 4
+issue #119 - Added new mp_umask option about issue#107, pr#110
+issue #124 - Fallback to v2 signatures correctly.
+issue #130 - refactor integration tests create/cleanup file
+issue #131 - Test ls
+issue #132 - Use S3Proxy to run integration tests
+issue #134 - Include Content-Type in complete MPU V2 signature
+issue #135 - Correct V4 signature for initiate multipart upload
+issue #136 - Small fixes to integration tests
+issue #137 - Add test for multi-part upload
+issue #138 - Fixed bugs, not turn use_cache off and ty to load to end - issue#97
+issue #143 - Fixed a bug no use_cache case about fixed #138 - issue#141
+issue #144 - Add Travis configuration
+issue #146 - add exit handler to cleanup on failures
+issue #147 - Use S3Proxy 1.4.0-SNAPSHOT
+issue #150 - Fixed a bug not handling fsync - #145
+issue #154 - Fixed url-encoding for ampersand etc on sigv4 - Improvement/#149
+issue #155 - Fixed a bug: unable to mount bucket subdirectory
+issue #156 - Fixed a bug about ssl session sharing with libcurl older 7.23.0 - issue#126
+issue #159 - Upgrade to S3Proxy 1.4.0
+issue #164 - send the correct Host header when using -o url
+issue #165 - Auth v4 refactor
+issue #167 - Increased default connecting/reading/writing timeout value
+issue #168 - switch to use region specific endpoints to compute correct v4 signature
+issue #170 - Reviewed and fixed response codes print in curl.cpp - #157
+issue #171 - Support buckets with mixed-case names
+issue #173 - Run integration tests via Travis
+issue #176 - configure.ac: detect target, if target is darwin (OSX), then #176
+issue #177 - Add .mailmap
+issue #178 - Update .gitignore
+issue #184 - Add usage information for multipart_size
+issue #185 - Correct obvious typos in usage and README
+issue #190 - Add a no_check_certificate option.
+issue #194 - Tilda in a file-name breaks things (EPERM)
+issue #198 - Disasble integration tests for Travis 
+issue #199 - Supported extended attributes(retry)
+issue #200 - fixed fallback to sigv2 for bucket create and GCS
+issue #202 - Specialize {set,get}xattr for OS X
+issue #204 - Add integration test for xattr
+issue #207 - Fixed a few small spelling issues.
+
 Version 1.78 -- Sep 15, 2014
 issue #29 - Possible to create Debian/Ubuntu packages?(googlecode issue 109)
 issue 417(googlecode) - Password file with DOS format is not handled properly
 issue #41 - Failed making signature
-issue #40 - Moving a directory containing more than 1000 files truncates the
-directory
+issue #40 - Moving a directory containing more than 1000 files truncates the directory
 issue #49 - use_sse is ignored when creating new files
 issue #39 - Support for SSE-C
-issue #50 - Cannot find pkg-config when configured with any SSL backend except
-openssl
+issue #50 - Cannot find pkg-config when configured with any SSL backend except openssl
 
 Version 1.77 -- Apr 19, 2014
 issue 405(googlecode) - enable_content_md5 Input/output error

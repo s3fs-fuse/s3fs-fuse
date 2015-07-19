@@ -65,7 +65,7 @@ struct filepart
 {
   bool        uploaded;     // does finish uploading
   std::string etag;         // expected etag value
-  int         fd;           // base file(temporary full file) discriptor
+  int         fd;           // base file(temporary full file) descriptor
   off_t       startpos;     // seek fd point for uploading
   ssize_t     size;         // uploading size
   etaglist_t* etaglist;     // use only parallel upload
