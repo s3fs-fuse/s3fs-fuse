@@ -272,6 +272,16 @@ rm_test_file
 rm_test_dir
 
 ##########################################################
+# Testing removing a non-empty directory
+##########################################################
+echo "Testing removing a non-empty directory"
+mk_test_dir
+touch "${TEST_DIR}/file"
+rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
+rm "${TEST_DIR}/file"
+rm_test_dir
+
+##########################################################
 # Testing rename before close
 ##########################################################
 if false; then
