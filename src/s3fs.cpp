@@ -120,6 +120,7 @@ static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 static bool create_bucket         = false;
+static int64_t singlepart_copy_limit = FIVE_GB;
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -1388,7 +1389,7 @@ static int s3fs_rename(const char* from, const char* to)
   // files larger than 5GB must be modified via the multipart interface
   if(S_ISDIR(buf.st_mode)){
     result = rename_directory(from, to);
-  }else if(!nomultipart && buf.st_size >= FIVE_GB){
+  }else if(!nomultipart && buf.st_size >= singlepart_copy_limit){
     result = rename_large_object(from, to);
   }else{
     if(!nocopyapi && !norenameapi){
@@ -4390,6 +4391,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       if(FdManager::GetPageSize() < static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
         FdManager::SetPageSize(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
       }
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "singlepart_copy_limit=")){
+      singlepart_copy_limit = static_cast<int64_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
       return 0;
     }
     if(0 == STR2NCMP(arg, "ahbe_conf=")){

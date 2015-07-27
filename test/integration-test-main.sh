@@ -301,7 +301,31 @@ then
 fi
 
 rm -f "/tmp/${BIG_FILE}"
-rm -f "${BIG_FILE}"
+rm_test_file "${BIG_FILE}"
+
+##########################################################
+# Testing multi-part copy
+##########################################################
+# TODO: test disabled until S3Proxy 1.5.0 is released
+if false
+then
+
+echo "Testing multi-part copy ..."
+dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+mv "${BIG_FILE}" "${BIG_FILE}-copy"
+
+# Verify contents of file
+echo "Comparing test file"
+if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}-copy"
+then
+   exit 1
+fi
+
+rm -f "/tmp/${BIG_FILE}"
+rm_test_file "${BIG_FILE}-copy"
+
+fi
 
 ##########################################################
 # Testing special characters
