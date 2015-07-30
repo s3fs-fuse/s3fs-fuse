@@ -263,6 +263,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     }else if(-1 == bytes){
       // error
       DPRNNN("file read error(%d)", errno);
+      PK11_DestroyContext(sha256ctx, PR_TRUE);
       return NULL;
     }
     PK11_DigestOp(sha256ctx, buf, bytes);
