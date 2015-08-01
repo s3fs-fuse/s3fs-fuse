@@ -33,3 +33,4 @@ test_PROGRAMS=rename_before_close
 
 rename_before_close_SOURCES = rename_before_close.c
 
+install:
