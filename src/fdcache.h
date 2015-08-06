@@ -35,7 +35,7 @@ class CacheFileStat
   public:
     static bool DeleteCacheFileStat(const char* path);
 
-    CacheFileStat(const char* tpath = NULL);
+    explicit CacheFileStat(const char* tpath = NULL);
     ~CacheFileStat();
 
     bool Open(void);
@@ -76,7 +76,7 @@ class PageList
   public:
     static void FreeList(fdpage_list_t& list);
 
-    PageList(off_t size = 0, bool is_init = false);
+    explicit PageList(off_t size = 0, bool is_init = false);
     ~PageList();
 
     off_t Size(void) const;
@@ -112,7 +112,7 @@ class FdEntity
     bool SetAllStatus(bool is_enable);
 
   public:
-    FdEntity(const char* tpath = NULL, const char* cpath = NULL);
+    explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
     ~FdEntity();
 
     void Close(void);

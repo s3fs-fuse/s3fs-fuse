@@ -211,7 +211,7 @@ class S3fsCurl
 
   public:
     // constructor/destructor
-    S3fsCurl(bool ahbe = false);
+    explicit S3fsCurl(bool ahbe = false);
     ~S3fsCurl();
 
   private:
