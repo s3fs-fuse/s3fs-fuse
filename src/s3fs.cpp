@@ -216,12 +216,12 @@ static int s3fs_removexattr(const char* path, const char* name);
 //-------------------------------------------------------------------
 static bool is_special_name_folder_object(const char* path)
 {
-  string    strpath = path;
-  headers_t header;
-
   if(!path || '\0' == path[0]){
     return false;
   }
+
+  string    strpath = path;
+  headers_t header;
 
   strpath = path;
   if(string::npos == strpath.find("_$folder$", 0)){
@@ -703,7 +703,7 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
   // files larger than 5GB must be modified via the multipart interface
   // *** If there is not target object(a case of move command),
   //     get_object_attribute() returns error with initilizing buf.
-  get_object_attribute(path, &buf);
+  (void)get_object_attribute(path, &buf);
 
   if(buf.st_size >= FIVE_GB){
     // multipart
