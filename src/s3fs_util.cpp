@@ -425,51 +425,14 @@ void free_mvnodes(MVNODE *head)
 //-------------------------------------------------------------------
 // Class AutoLock
 //-------------------------------------------------------------------
-AutoLock::AutoLock(pthread_mutex_t* pmutex) : auto_mutex(pmutex), is_locked(false)
+AutoLock::AutoLock(pthread_mutex_t* pmutex) : auto_mutex(pmutex)
 {
-  Lock();
+  pthread_mutex_lock(auto_mutex);
 }
 
 AutoLock::~AutoLock()
 {
-  Unlock();
-}
-
-bool AutoLock::Lock(void)
-{
-  if(!auto_mutex){
-    return false;
-  }
-  if(is_locked){
-    // already locked
-    return true;
-  }
-  try{
-    pthread_mutex_lock(auto_mutex);
-    is_locked = true;
-  }catch(exception& e){
-    is_locked = false;
-    return false;
-  }
-  return true;
-}
-
-bool AutoLock::Unlock(void)
-{
-  if(!auto_mutex){
-    return false;
-  }
-  if(!is_locked){
-    // already unlocked
-    return true;
-  }
-  try{
-    pthread_mutex_unlock(auto_mutex);
-    is_locked = false;
-  }catch(exception& e){
-    return false;
-  }
-  return true;
+  pthread_mutex_unlock(auto_mutex);
 }
 
 //-------------------------------------------------------------------

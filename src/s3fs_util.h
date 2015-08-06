@@ -88,14 +88,10 @@ class AutoLock
 {
   private:
     pthread_mutex_t* auto_mutex;
-    bool             is_locked;
 
   public:
-    explicit AutoLock(pthread_mutex_t* pmutex = NULL);
+    explicit AutoLock(pthread_mutex_t* pmutex);
     ~AutoLock();
-
-    bool Lock(void);
-    bool Unlock(void);
 };
 
 //-------------------------------------------------------------------
