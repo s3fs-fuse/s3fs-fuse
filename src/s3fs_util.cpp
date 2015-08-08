@@ -233,7 +233,7 @@ bool S3ObjList::GetLastName(std::string& lastname) const
 {
   bool result = false;
   lastname = "";
-  for(s3obj_t::const_iterator iter = objects.begin(); iter != objects.end(); iter++){
+  for(s3obj_t::const_iterator iter = objects.begin(); iter != objects.end(); ++iter){
     if((*iter).second.orgname.length()){
       if(0 > strcmp(lastname.c_str(), (*iter).second.orgname.c_str())){
         lastname = (*iter).second.orgname;
@@ -253,7 +253,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
 {
   s3obj_t::const_iterator iter;
 
-  for(iter = objects.begin(); objects.end() != iter; iter++){
+  for(iter = objects.begin(); objects.end() != iter; ++iter){
     if(OnlyNormalized && 0 != (*iter).second.normalname.length()){
       continue;
     }
@@ -275,7 +275,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
   s3obj_h_t::iterator hiter;
   s3obj_list_t::const_iterator liter;
 
-  for(liter = list.begin(); list.end() != liter; liter++){
+  for(liter = list.begin(); list.end() != liter; ++liter){
     string strtmp = (*liter);
     if(1 < strtmp.length() && '/' == strtmp[strtmp.length() - 1]){
       strtmp = strtmp.substr(0, strtmp.length() - 1);

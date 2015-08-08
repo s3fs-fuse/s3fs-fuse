@@ -330,7 +330,7 @@ bool StatCache::AddNoObjectCache(string& key)
 
 bool StatCache::TruncateCache(void)
 {
-  if(0 == stat_cache.size()){
+  if(stat_cache.empty()){
     return true;
   }
 
@@ -340,7 +340,7 @@ bool StatCache::TruncateCache(void)
   stat_cache_t::iterator iter_to_delete = stat_cache.end();
   stat_cache_t::iterator iter;
 
-  for(iter = stat_cache.begin(); iter != stat_cache.end(); iter++) {
+  for(iter = stat_cache.begin(); iter != stat_cache.end(); ++iter) {
     if((*iter).second){
       if(lowest_time > (*iter).second->cache_date){
         lowest_time    = (*iter).second->cache_date;

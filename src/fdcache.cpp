@@ -212,7 +212,7 @@ PageList::~PageList()
 
 off_t PageList::Size(void) const
 {
-  if(0 == pages.size()){
+  if(pages.empty()){
     return 0;
   }
   fdpage_list_t::const_reverse_iterator riter = pages.rbegin();
@@ -246,7 +246,7 @@ int PageList::Resize(off_t size, bool is_init)
     }
 
   }else if(total > size){
-    for(fdpage_list_t::reverse_iterator riter = pages.rbegin(); riter != pages.rend(); riter++){
+    for(fdpage_list_t::reverse_iterator riter = pages.rbegin(); riter != pages.rend(); ++riter){
       if((*riter)->offset < size){
         (*riter)->bytes = static_cast<size_t>(size - (*riter)->offset);
         break;
@@ -276,7 +276,7 @@ bool PageList::IsInit(off_t start, off_t size)
 {
   off_t next = start + size;
 
-  if(0 == pages.size()){
+  if(pages.empty()){
     return false;
   }
   // check end
@@ -285,7 +285,7 @@ bool PageList::IsInit(off_t start, off_t size)
     // size is over end of page list.
     return false;
   }
-  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++){
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(next <= (*iter)->offset){
       break;
     }
@@ -309,7 +309,7 @@ bool PageList::SetInit(off_t start, off_t size, bool is_init)
   }
 
   off_t next = start + size;
-  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++){
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if((*iter)->end() < start){
       // out of area
       //   iter:start < iter:end < start < end
@@ -333,7 +333,7 @@ bool PageList::SetInit(off_t start, off_t size, bool is_init)
 
 bool PageList::FindUninitPage(off_t start, off_t& resstart, size_t& ressize)
 {
-  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++){
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(start <= (*iter)->end()){
       if(!(*iter)->init){
         resstart = (*iter)->offset;
@@ -347,7 +347,7 @@ bool PageList::FindUninitPage(off_t start, off_t& resstart, size_t& ressize)
 
 int PageList::GetUninitPages(fdpage_list_t& uninit_list, off_t start, off_t size)
 {
-  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++){
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(start <= (*iter)->end()){
       if((start + size) <= (*iter)->offset){
         // reach to end
@@ -382,7 +382,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     stringstream ssall;
     ssall << Size();
 
-    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++){
+    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
       ssall << "\n" << (*iter)->offset << ":" << (*iter)->bytes << ":" << ((*iter)->init ? "1" : "0");
     }
 
@@ -481,7 +481,7 @@ void PageList::Dump(void)
   int cnt = 0;
 
   DPRNINFO("pages = {");
-  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); iter++, cnt++){
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
     DPRNINFO("  [%08d] -> {%014jd - %014zu : %s}", cnt, (intmax_t)((*iter)->offset), (*iter)->bytes, (*iter)->init ? "true" : "false");
   }
   DPRNINFO("}");
@@ -491,7 +491,7 @@ void PageList::Dump(void)
 // FdEntity methods
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath)
-          : is_lock_init(false), path(SAFESTRPTR(tpath)), cachepath(SAFESTRPTR(cpath)), fd(-1), file(NULL), is_modify(false)
+          : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)), cachepath(SAFESTRPTR(cpath)), fd(-1), file(NULL), is_modify(false)
 {
   try{
     pthread_mutex_init(&fdent_lock, NULL);
@@ -796,7 +796,7 @@ int FdEntity::Load(off_t start, off_t size)
   // check loaded area & load
   fdpage_list_t uninit_list;
   if(0 < pagelist.GetUninitPages(uninit_list, start, size)){
-    for(fdpage_list_t::iterator iter = uninit_list.begin(); iter != uninit_list.end(); iter++){
+    for(fdpage_list_t::iterator iter = uninit_list.begin(); iter != uninit_list.end(); ++iter){
       if(-1 != size && (start + size) <= (*iter)->offset){
         break;
       }
@@ -1136,7 +1136,7 @@ FdManager::FdManager()
 FdManager::~FdManager()
 {
   if(this == FdManager::get()){
-    for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; iter++){
+    for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
       FdEntity* ent = (*iter).second;
       delete ent;
     }
@@ -1170,7 +1170,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
   }
 
   if(-1 != existfd){
-    for(iter = fent.begin(); iter != fent.end(); iter++){
+    for(iter = fent.begin(); iter != fent.end(); ++iter){
       if((*iter).second && (*iter).second->GetFd() == existfd){
         // found opend fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
@@ -1249,7 +1249,7 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd)
     // search from all fdentity because of not using cache.
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); iter++){
+    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
       if((*iter).second && (*iter).second->GetFd() == existfd && (*iter).second->IsOpen()){
         // found opend fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
@@ -1288,7 +1288,7 @@ bool FdManager::Close(FdEntity* ent)
 
   AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-  for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); iter++){
+  for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
     if((*iter).second == ent){
       ent->Close();
       if(!ent->IsOpen()){

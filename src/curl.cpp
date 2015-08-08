@@ -879,7 +879,7 @@ bool S3fsCurl::LoadEnvSseKeys(void)
 //
 bool S3fsCurl::GetSseKey(string& md5, string& ssekey)
 {
-  for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); iter++){
+  for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter){
     if(0 == md5.length() || md5 == (*iter).begin()->first){
       md5    = iter->begin()->first;
       ssekey = iter->begin()->second;
@@ -898,7 +898,7 @@ bool S3fsCurl::GetSseKeyMd5(int pos, string& md5)
     return false;
   }
   int cnt = 0;
-  for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); iter++, cnt++){
+  for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter, ++cnt){
     if(pos == cnt){
       md5 = iter->begin()->first;
       return true;
@@ -1756,7 +1756,7 @@ int S3fsCurl::RequestPerform(void)
           FPRNNN("This check can be over-ridden by using the -o ssl_verify_hostname=0");
           FPRNNN("The certificate will still be checked but the hostname will not be verified.");
           FPRNNN("A more secure method would be to use a bucket name without periods.");
-        }else
+        }else{
           DPRNNN("my_curl_easy_perform: curlCode: %d -- %s", curlCode, curl_easy_strerror(curlCode));
         }
         exit(EXIT_FAILURE);
@@ -3539,7 +3539,7 @@ int S3fsMultiCurl::Request(void)
   // Send multi request loop( with retry )
   // (When many request is sends, sometimes gets "Couldn't connect to server")
   //
-  while(0 < cMap_all.size()){
+  while(!cMap_all.empty()){
     // populate the multi interface with an initial set of requests
     if(NULL == (hMulti = curl_multi_init())){
       Clear();
