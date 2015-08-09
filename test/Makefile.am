@@ -28,8 +28,3 @@ EXTRA_DIST = \
    sample_ahbe.conf
 
 testdir = test
-
-test_PROGRAMS=rename_before_close
-
-rename_before_close_SOURCES = rename_before_close.c
-
