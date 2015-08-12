@@ -224,7 +224,6 @@ static bool is_special_name_folder_object(const char* path)
   string    strpath = path;
   headers_t header;
 
-  strpath = path;
   if(string::npos == strpath.find("_$folder$", 0)){
     if('/' == strpath[strpath.length() - 1]){
       strpath = strpath.substr(0, strpath.length() - 1);
@@ -610,7 +609,7 @@ static int check_parent_object_access(const char* path, int mask)
     return 0;
   }
   if(X_OK == (mask & X_OK)){
-    for(parent = mydirname(path); 0 < parent.size(); parent = mydirname(parent.c_str())){
+    for(parent = mydirname(path); 0 < parent.size(); parent = mydirname(parent)){
       if(parent == "."){
         parent = "/";
       }
@@ -1281,7 +1280,7 @@ static int rename_directory(const char* from, const char* to)
   S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
 
   s3obj_list_t::const_iterator liter;
-  for(liter = headlist.begin(); headlist.end() != liter; liter++){
+  for(liter = headlist.begin(); headlist.end() != liter; ++liter){
     // make "from" and "to" object name.
     string from_name = basepath + (*liter);
     string to_name   = strto + (*liter);
@@ -2236,7 +2235,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
   curlmulti.SetRetryCallback(multi_head_retry_callback);
 
   // Loop
-  while(0 < headlist.size()){
+  while(!headlist.empty()){
     s3obj_list_t::iterator iter;
     long                   cnt;
 
@@ -2282,7 +2281,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
     // populate fuse buffer
     // here is best posision, because a case is cache size < files in directory
     //
-    for(iter = fillerlist.begin(); fillerlist.end() != iter; iter++){
+    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
       struct stat st;
       string bpath = mybasename((*iter));
       if(StatCache::getStatCacheData()->GetStat((*iter), &st)){
@@ -3344,11 +3343,11 @@ static void print_uncomp_mp_list(uncomp_mp_list_t& list)
   printf("Lists the parts that have been uploaded for a specific multipart upload.\n");
   printf("\n");
 
-  if(0 < list.size()){
+  if(!list.empty()){
     printf("---------------------------------------------------------------\n");
 
     int cnt = 0;
-    for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); iter++, cnt++){
+    for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
       printf(" Path     : %s\n", (*iter).key.c_str());
       printf(" UploadId : %s\n", (*iter).id.c_str());
       printf(" Date     : %s\n", (*iter).date.c_str());
@@ -3365,7 +3364,7 @@ static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
 {
   char buff[1024];
 
-  if(0 >= list.size()){
+  if(list.empty()){
     return true;
   }
   memset(buff, 0, sizeof(buff));
@@ -3386,7 +3385,7 @@ static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
   // do removing their.
   S3fsCurl s3fscurl;
   bool     result = true;
-  for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); iter++){
+  for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
     const char* tpath     = (*iter).key.c_str();
     string      upload_id = (*iter).id;
 

@@ -28,3 +28,13 @@ dist-hook:
 release : dist ../utils/release.sh
 	../utils/release.sh $(DIST_ARCHIVES)
 
+cppcheck:
+	cppcheck --quiet --error-exitcode=1 \
+            -U CURLE_PEER_FAILED_VERIFICATION \
+            --enable=warning \
+            --enable=performance \
+            --enable=portability \
+            --enable=information \
+            --enable=missingInclude \
+            --suppress=missingIncludeSystem \
+            src/ test/
