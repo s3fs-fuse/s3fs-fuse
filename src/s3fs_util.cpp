@@ -589,7 +589,10 @@ int mkdirp(const string& path, mode_t mode)
   stringstream ss(path);
   while (getline(ss, component, '/')) {
     base += "/" + component;
-    mkdir(base.c_str(), mode);
+    int result = mkdir(base.c_str(), mode);
+    if(0 != result){
+      return result;
+    }
   }
   return 0;
 }
