@@ -659,7 +659,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
     // Force to lower, only "x-amz"
     string lkey = key;
     transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
-    if(lkey.substr(0, 5) == "x-amz"){
+    if(lkey.compare(0, 5, "x-amz") == 0){
       key = lkey;
     }
     string value;
