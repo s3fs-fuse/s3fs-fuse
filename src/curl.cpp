@@ -3127,12 +3127,35 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
 
   int result = RequestPerform();
   if(0 == result){
-    const char* start_etag= strstr(bodydata->str(), "ETag");
-    const char* end_etag  = strstr(bodydata->str(), "/ETag>");
-
-    partdata.etag.assign((start_etag + 11), (size_t)(end_etag - (start_etag + 11) - 7));
-    partdata.uploaded = true;
+    // parse ETag from response
+    xmlDocPtr doc;
+    if(NULL == (doc = xmlReadMemory(bodydata->str(), bodydata->size(), "", NULL, 0))){
+      return result;
+    }
+    if(NULL == doc->children){
+      S3FS_XMLFREEDOC(doc);
+      return result;
+    }
+    for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
+      if(XML_ELEMENT_NODE == cur_node->type){
+        string elementName = reinterpret_cast<const char*>(cur_node->name);
+        if(cur_node->children){
+          if(XML_TEXT_NODE == cur_node->children->type){
+            if(elementName == "ETag") {
+              string etag = reinterpret_cast<const char *>(cur_node->children->content);
+              if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
+                etag.assign(etag.substr(1, etag.size() - 2));
+              }
+              partdata.etag.assign(etag);
+              partdata.uploaded = true;
+            }
+          }
+        }
+      }
+    }
+    S3FS_XMLFREEDOC(doc);
   }
+
   delete bodydata;
   bodydata = NULL;
   delete headdata;
