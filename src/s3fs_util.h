@@ -91,7 +91,7 @@ class AutoLock
     bool             is_locked;
 
   public:
-    AutoLock(pthread_mutex_t* pmutex = NULL);
+    explicit AutoLock(pthread_mutex_t* pmutex = NULL);
     ~AutoLock();
 
     bool Lock(void);

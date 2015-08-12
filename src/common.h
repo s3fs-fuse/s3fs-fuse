@@ -90,7 +90,7 @@ typedef struct xattr_value{
   unsigned char* pvalue;
   size_t         length;
 
-  xattr_value(unsigned char* pval = NULL, size_t len = 0) : pvalue(pval), length(len) {}
+  explicit xattr_value(unsigned char* pval = NULL, size_t len = 0) : pvalue(pval), length(len) {}
   ~xattr_value()
   {
     if(pvalue){
