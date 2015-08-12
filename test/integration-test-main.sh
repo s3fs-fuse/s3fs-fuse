@@ -286,14 +286,18 @@ rm_test_dir
 ##########################################################
 if false; then
 echo "Testing rename before close ..."
-$CUR_DIR/rename_before_close $TEST_TEXT_FILE
-if [ $? != 0 ]; then
+(
+    echo foo
+    mv $TEST_TEXT_FILE ${TEST_TEXT_FILE}.new
+) > $TEST_TEXT_FILE
+
+if ! cmp <(echo foo) ${TEST_TEXT_FILE}.new; then
     echo "rename before close failed"
     exit 1
 fi
 
-# clean up
-rm_test_file
+rm_test_file ${TEST_TEXT_FILE}.new
+rm -f ${TEST_TEXT_FILE}
 fi
 
 ##########################################################
