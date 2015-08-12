@@ -297,10 +297,8 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
 
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 {
-  const EVP_MD* md        = EVP_get_digestbyname("sha256");
-  EVP_MD_CTX*   sha256ctx = EVP_MD_CTX_create();
-  EVP_DigestInit_ex(sha256ctx, md, NULL);
-
+  const EVP_MD*  md = EVP_get_digestbyname("sha256");
+  EVP_MD_CTX*    sha256ctx;
   char           buf[512];
   ssize_t        bytes;
   unsigned char* result;
@@ -318,6 +316,9 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     return NULL;
   }
 
+  sha256ctx = EVP_MD_CTX_create();
+  EVP_DigestInit_ex(sha256ctx, md, NULL);
+
   memset(buf, 0, 512);
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
@@ -328,12 +329,14 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     }else if(-1 == bytes){
       // error
       DPRNNN("file read error(%d)", errno);
+      EVP_MD_CTX_destroy(sha256ctx);
       return NULL;
     }
     EVP_DigestUpdate(sha256ctx, buf, bytes);
     memset(buf, 0, 512);
   }
   if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
+    EVP_MD_CTX_destroy(sha256ctx);
     return NULL;
   }
   EVP_DigestFinal_ex(sha256ctx, result, NULL);
