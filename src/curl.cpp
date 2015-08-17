@@ -514,7 +514,7 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
 // @param s e.g., "index.html"
 // @return e.g., "text/html"
 //
-string S3fsCurl::LookupMimeType(string name)
+string S3fsCurl::LookupMimeType(const string& name)
 {
   string result("application/octet-stream");
   string::size_type last_pos = name.find_last_of('.');
@@ -1902,7 +1902,7 @@ int S3fsCurl::RequestPerform(void)
 // @param date e.g., get_date_rfc850()
 // @param resource e.g., "/pub"
 //
-string S3fsCurl::CalcSignatureV2(string method, string strMD5, string content_type, string date, string resource)
+string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, const string& content_type, const string& date, const string& resource)
 {
   string Signature;
   string StringToSign;
@@ -1944,7 +1944,7 @@ string S3fsCurl::CalcSignatureV2(string method, string strMD5, string content_ty
   return Signature;
 }
 
-string S3fsCurl::CalcSignature(string method, string canonical_uri, string query_string, string strdate, string payload_hash, string date8601)
+string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri, const string& query_string, const string& strdate, const string& payload_hash, const string& date8601)
 {
   string Signature, StringCQ, StringToSign;
   string uriencode;
@@ -3079,7 +3079,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
 // Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZGGieSRlbHZpbmc=
 //
 
-int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& upload_id)
+int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const string& upload_id)
 {
   S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), partdata.size, part_num);
 
@@ -3158,7 +3158,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   return 0;
 }
 
-int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, string& upload_id)
+int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const string& upload_id)
 {
   int result;
 
@@ -3393,7 +3393,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   return 0;
 }
 
-int S3fsCurl::MultipartUploadRequest(string upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list)
+int S3fsCurl::MultipartUploadRequest(const string& upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list)
 {
   S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%jd][size=%jd]", upload_id.c_str(), SAFESTRPTR(tpath), fd, (intmax_t)offset, (intmax_t)size);
 
