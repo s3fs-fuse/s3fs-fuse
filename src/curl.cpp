@@ -619,7 +619,7 @@ bool S3fsCurl::LocateBundle(void)
 
 size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBlocks, void* data)
 {
-  BodyData* body  = (BodyData*)data;
+  BodyData* body  = static_cast<BodyData*>(data);
 
   if(!body->Append(ptr, blockSize, numBlocks)){
     DPRNCRIT("BodyData.Append() returned false.");

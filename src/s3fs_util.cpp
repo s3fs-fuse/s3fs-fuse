@@ -479,7 +479,6 @@ bool AutoLock::Unlock(void)
 string get_username(uid_t uid)
 {
   static size_t maxlen = 0;	// set onece
-  int result;
   char* pbuf;
   struct passwd pwinfo;
   struct passwd* ppwinfo = NULL;
@@ -499,7 +498,7 @@ string get_username(uid_t uid)
     return string("");
   }
   // get group information
-  if(0 != (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
+  if(0 != getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo)){
     DPRNNN("could not get pw information.");
     free(pbuf);
     return string("");

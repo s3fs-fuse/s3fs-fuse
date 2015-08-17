@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,7 +78,7 @@ inline unsigned char char_decode64(const char ch)
   }else if('=' == ch){                         // =
     by = 64;
   }else{                                       // something wrong
-    by = 64;
+    by = UCHAR_MAX;
   }
   return by;
 }
