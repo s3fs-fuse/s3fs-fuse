@@ -1069,8 +1069,7 @@ void show_help (void)
     "                   disable multi-threaded operation\n"
     "\n"
     "\n"
-    "Report bugs to <s3fs-devel@googlegroups.com>\n"
-    "s3fs home page: <http://code.google.com/p/s3fs/>\n"
+    "s3fs home page: <https://github.com/s3fs-fuse/s3fs-fuse>\n"
   );
   return;
 }
