@@ -1013,7 +1013,7 @@ void show_help (void)
     "   nomultipart (disable multipart uploads)\n"
     "\n"
     "   enable_content_md5 (default is disable)\n"
-    "      - verifying uploaded object without multipart by content-md5 header.\n"
+    "      - ensure data integrity during writes with MD5 hash.\n"
     "\n"
     "   iam_role (default is no role)\n"
     "      - set the IAM Role that will supply the credentials from the \n"

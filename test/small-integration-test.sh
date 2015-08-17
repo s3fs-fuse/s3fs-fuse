@@ -57,6 +57,7 @@ then
 fi
 stdbuf -oL -eL $S3FS $TEST_BUCKET_1 $TEST_BUCKET_MOUNT_POINT_1 \
     -o createbucket \
+    -o enable_content_md5 \
     -o passwd_file=$S3FS_CREDENTIALS_FILE \
     -o sigv2 \
     -o singlepart_copy_limit=$((10 * 1024)) \
