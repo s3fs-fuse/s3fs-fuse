@@ -3472,8 +3472,9 @@ int S3fsMultiCurl::MultiRead(void)
       return -EIO;
     }
     hCurl    = msg->easy_handle;
-    if(cMap_req.end() != cMap_req.find(hCurl)){
-      s3fscurl = cMap_req[hCurl];
+    s3fscurlmap_t::iterator iter;
+    if(cMap_req.end() != (iter = cMap_req.find(hCurl))){
+      s3fscurl = iter->second;
     }else{
       s3fscurl = NULL;
     }
@@ -3691,12 +3692,13 @@ bool AdditionalHeader::Load(const char* file)
       charcntlist.push_back(keylen);
     }
     // set addheader
-    if(addheader.end() == addheader.find(key)){
+    addheader_t::iterator aiter;
+    if(addheader.end() == (aiter = addheader.find(key))){
       headerpair_t hpair;
       hpair[head]    = value;
       addheader[key] = hpair;
     }else{
-      (addheader[key])[head] = value;
+      aiter->second[head] = value;
     }
     // set flag
     if(!is_enable){
@@ -3730,10 +3732,11 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
     }
     // make target suffix(same character count) & find
     string suffix(&path[nPathLen - (*iter)]);
-    if(addheader.end() == addheader.find(suffix)){
+    addheader_t::const_iterator aiter;
+    if(addheader.end() == (aiter = addheader.find(suffix))){
       continue;
     }
-    for(headerpair_t::const_iterator piter = addheader.at(suffix).begin(); piter != addheader.at(suffix).end(); ++piter){
+    for(headerpair_t::const_iterator piter = aiter->second.begin(); piter != aiter->second.end(); ++piter){
       // Adding header
       meta[(*piter).first] = (*piter).second;
     }
