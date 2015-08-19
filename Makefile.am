@@ -31,10 +31,9 @@ release : dist ../utils/release.sh
 cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             -U CURLE_PEER_FAILED_VERIFICATION \
-            --enable=warning \
-            --enable=performance \
-            --enable=portability \
-            --enable=information \
-            --enable=missingInclude \
+            --enable=all \
             --suppress=missingIncludeSystem \
+            --suppress=unsignedLessThanZero \
+            --suppress=unusedFunction \
+            --suppress=variableScope \
             src/ test/

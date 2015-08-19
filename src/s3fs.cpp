@@ -844,7 +844,6 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
   int       result;
-  headers_t meta;
   struct fuse_context* pcxt;
 
   FPRN("[path=%s][mode=%04o][dev=%ju]", path, mode, (uintmax_t)rdev);
@@ -866,7 +865,6 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
 {
   int result;
-  headers_t meta;
   struct fuse_context* pcxt;
 
   FPRN("[path=%s][mode=%04o][flags=%d]", path, mode, fi->flags);
@@ -1937,7 +1935,6 @@ static int s3fs_truncate(const char* path, off_t size)
 static int s3fs_open(const char* path, struct fuse_file_info* fi)
 {
   int result;
-  headers_t meta;
   struct stat st;
 
   FPRN("[path=%s][flags=%d]", path, fi->flags);
@@ -2301,7 +2298,6 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
 static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
 {
   S3ObjList head;
-  s3obj_list_t headlist;
   int result;
 
   FPRN("[path=%s]", path);
@@ -2672,7 +2668,6 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
   }
 
   // Make dir path and filename
-  string   strfullpath= (char*)fullpath;
   string   strdirpath = mydirname(string((char*)fullpath));
   string   strmybpath = mybasename(string((char*)fullpath));
   const char* dirpath = strdirpath.c_str();
