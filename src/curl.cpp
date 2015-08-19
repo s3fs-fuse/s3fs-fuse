@@ -2768,8 +2768,8 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
       return -1;
     }
     postContent += "<Part>\n";
-    postContent += "  <PartNumber>" + IntToStr(cnt + 1) + "</PartNumber>\n";
-    postContent += "  <ETag>\""     + parts[cnt]        + "\"</ETag>\n";
+    postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
+    postContent += "  <ETag>\""     + parts[cnt]   + "\"</ETag>\n";
     postContent += "</Part>\n";
   }  
   postContent += "</CompleteMultipartUpload>\n";
@@ -2983,7 +2983,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   }
 
   // make request
-  string request_uri = "partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string request_uri = "partNumber=" + str(part_num) + "&uploadId=" + upload_id;
   string urlargs     = "?" + request_uri;
   string resource;
   string turl;
@@ -3070,7 +3070,7 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   if(!CreateCurlHandle(true)){
     return -1;
   }
-  string urlargs  = "?partNumber=" + IntToStr(part_num) + "&uploadId=" + upload_id;
+  string urlargs  = "?partNumber=" + str(part_num) + "&uploadId=" + upload_id;
   string resource;
   string turl;
   MakeUrlResource(get_realpath(to).c_str(), resource, turl);

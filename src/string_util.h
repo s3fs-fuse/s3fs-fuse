@@ -45,7 +45,6 @@ std::string trim_left(const std::string &s, const std::string &t = SPACES);
 std::string trim_right(const std::string &s, const std::string &t = SPACES);
 std::string trim(const std::string &s, const std::string &t = SPACES);
 std::string lower(std::string s);
-std::string IntToStr(int);
 std::string get_date_rfc850(void);
 void get_date_sigv3(std::string& date, std::string& date8601);
 std::string get_date_string(time_t tm);
