@@ -55,6 +55,10 @@ std::string urlDecode(const std::string& s);
 bool takeout_str_dquart(std::string& str);
 bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
 
+std::string s3fs_hex(const unsigned char* input, size_t length);
+char* s3fs_base64(const unsigned char* input, size_t length);
+unsigned char* s3fs_decode64(const char* input, size_t* plength);
+
 #endif // S3FS_STRING_UTIL_H_
 
 /*
