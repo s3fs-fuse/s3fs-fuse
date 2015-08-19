@@ -2840,7 +2840,8 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
   string   strxattrs;
   xattrs_t xattrs;
 
-  if(meta.end() == meta.find("x-amz-meta-xattr")){
+  headers_t::iterator iter;
+  if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
     if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
       // there is no xattr header but flags is replace, so failure.
       return -ENOATTR;
@@ -2850,16 +2851,17 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
       // found xattr header but flags is only creating, so failure.
       return -EEXIST;
     }
-    strxattrs = meta["x-amz-meta-xattr"];
+    strxattrs = iter->second;
   }
 
   // get map as xattrs_t
   parse_xattrs(strxattrs, xattrs);
 
   // add name(do not care overwrite and empty name/value)
-  if(xattrs.end() != xattrs.find(string(name))){
+  xattrs_t::iterator xiter;
+  if(xattrs.end() != (xiter = xattrs.find(string(name)))){
     // found same head. free value.
-    delete xattrs[string(name)];
+    delete xiter->second;
   }
 
   PXATTRVAL pval = new XATTRVAL;
@@ -3072,11 +3074,12 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   }
 
   // get xattrs
-  if(meta.end() == meta.find("x-amz-meta-xattr")){
+  headers_t::iterator iter;
+  if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
     // object does not have xattrs
     return 0;
   }
-  string strxattrs = meta["x-amz-meta-xattr"];
+  string strxattrs = iter->second;
 
   parse_xattrs(strxattrs, xattrs);
 
@@ -3177,7 +3180,7 @@ static int s3fs_removexattr(const char* path, const char* name)
   if(xiter->second){
     delete xiter->second;
   }
-  xattrs.erase(strname);
+  xattrs.erase(xiter);
 
   // build new xattr
   if(!xattrs.empty()){
