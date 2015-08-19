@@ -347,6 +347,7 @@ bool StatCache::TruncateCache(void)
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
   if(stat_cache.empty()){
+    pthread_mutex_unlock(&StatCache::stat_cache_lock);
     return true;
   }
 
