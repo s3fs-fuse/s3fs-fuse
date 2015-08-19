@@ -31,6 +31,17 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility Function
 //-------------------------------------------------------------------
+std::string s3fs_hex(const unsigned char* input, size_t length)
+{
+  std::string hex;
+  for(size_t pos = 0; pos < length; ++pos){
+    char hexbuf[3];
+    snprintf(hexbuf, 3, "%02x", input[pos]);
+    hex += hexbuf;
+  }
+  return hex;
+}
+
 char* s3fs_base64(const unsigned char* input, size_t length)
 {
   static const char* base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -140,22 +151,16 @@ string s3fs_get_content_md5(int fd)
 string s3fs_md5sum(int fd, off_t start, ssize_t size)
 {
   size_t digestlen = get_md5_digest_length();
-  char md5[2 * digestlen + 1];
-  char hexbuf[3];
   unsigned char* md5hex;
 
   if(NULL == (md5hex = s3fs_md5hexsum(fd, start, size))){
     return string("");
   }
 
-  memset(md5, 0, 2 * digestlen + 1);
-  for(size_t pos = 0; pos < digestlen; pos++){
-    snprintf(hexbuf, 3, "%02x", md5hex[pos]);
-    strncat(md5, hexbuf, 2);
-  }
+  std::string md5 = s3fs_hex(md5hex, digestlen);
   free(md5hex);
 
-  return string(md5);
+  return md5;
 }
 
 string s3fs_sha256sum(int fd, off_t start, ssize_t size)

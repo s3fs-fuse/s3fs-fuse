@@ -2972,11 +2972,16 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
   }
 
   // make md5 and file pointer
-  partdata.etag = s3fs_md5sum(partdata.fd, partdata.startpos, partdata.size);
-  if(partdata.etag.empty()){
+  unsigned char *md5raw = s3fs_md5hexsum(partdata.fd, partdata.startpos, partdata.size);
+  if(md5raw == NULL){
     DPRN("Could not make md5 for file(part %d)", part_num);
     return -1;
   }
+  partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
+  char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
+  std::string md5base64 = md5base64p;
+  free(md5base64p);
+  free(md5raw);
 
   // create handle
   if(!CreateCurlHandle(true)){
@@ -3004,8 +3009,14 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, string& 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", date.c_str());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
 
+    string strMD5;
+    if(S3fsCurl::is_content_md5){
+      strMD5 = md5base64;
+      requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
+    }
+
     if(!S3fsCurl::IsPublicBucket()){
-      string Signature = CalcSignatureV2("PUT", "", "", date, resource);
+      string Signature = CalcSignatureV2("PUT", strMD5, "", date, resource);
       requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", string("AWS " + AWSAccessKeyId + ":" + Signature).c_str());
     }
 
