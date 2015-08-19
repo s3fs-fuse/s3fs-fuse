@@ -2821,6 +2821,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     for(cnt = 0; cnt < sRequest_len; cnt++){
       sprintf(&hexsRequest[cnt * 2], "%02x", sRequest[cnt]);
     }
+    free(sRequest);
     payload_hash.assign(hexsRequest, &hexsRequest[sRequest_len * 2]);
 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", get_date_rfc850().c_str());
