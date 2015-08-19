@@ -247,10 +247,17 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   }
   DPRNNN("add stat cache entry[path=%s]", key.c_str());
 
-  if(stat_cache.end() != stat_cache.find(key)){
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  bool found = stat_cache.end() != stat_cache.find(key);
+  bool do_truncate = stat_cache.size() > CacheSize;
+
+  pthread_mutex_unlock(&StatCache::stat_cache_lock);
+
+  if(found){
     DelStat(key.c_str());
   }else{
-    if(stat_cache.size() > CacheSize){
+    if(do_truncate){
       if(!TruncateCache()){
         return false;
       }
@@ -302,10 +309,17 @@ bool StatCache::AddNoObjectCache(string& key)
   }
   DPRNNN("add no object cache entry[path=%s]", key.c_str());
 
-  if(stat_cache.end() != stat_cache.find(key)){
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  bool found = stat_cache.end() != stat_cache.find(key);
+  bool do_truncate = stat_cache.size() > CacheSize;
+
+  pthread_mutex_unlock(&StatCache::stat_cache_lock);
+
+  if(found){
     DelStat(key.c_str());
   }else{
-    if(stat_cache.size() > CacheSize){
+    if(do_truncate){
       if(!TruncateCache()){
         return false;
       }
@@ -330,11 +344,11 @@ bool StatCache::AddNoObjectCache(string& key)
 
 bool StatCache::TruncateCache(void)
 {
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+
   if(stat_cache.empty()){
     return true;
   }
-
-  pthread_mutex_lock(&StatCache::stat_cache_lock);
 
   time_t lowest_time = time(NULL) + 1;
   stat_cache_t::iterator iter_to_delete = stat_cache.end();
