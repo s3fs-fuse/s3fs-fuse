@@ -29,6 +29,18 @@ template <typename T> void assert_equals(const T &x, const T &y, const char *fil
   }
 }
 
+void assert_strequals(const char *x, const char *y, const char *file, int line)
+{
+  if(x == NULL && y == NULL){
+    return;
+  } else if((x == NULL || y == NULL) || strcmp(x, y) != 0){
+    std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
+    std::exit(1);
+  }
+}
+
 #define ASSERT_EQUALS(x, y) \
   assert_equals((x), (y), __FILE__, __LINE__)
 
+#define ASSERT_STREQUALS(x, y) \
+  assert_strequals((x), (y), __FILE__, __LINE__)
