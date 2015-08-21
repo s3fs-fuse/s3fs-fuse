@@ -18,6 +18,6 @@ S3PROXY_VERSION="1.4.0"
 S3PROXY_BINARY="s3proxy-${S3PROXY_VERSION}"
 if [ ! -e "${S3PROXY_BINARY}" ]; then
     wget "https://github.com/andrewgaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
-            -O "${S3PROXY_BINARY}"
+            --quiet -O "${S3PROXY_BINARY}"
     chmod +x "${S3PROXY_BINARY}"
 fi
