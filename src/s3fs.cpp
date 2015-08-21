@@ -3231,8 +3231,8 @@ static int s3fs_removexattr(const char* path, const char* name)
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-  FPRN("init");
-  LOWSYSLOGPRINT(LOG_ERR, "init v%s (%s)", VERSION, s3fs_crypt_lib_name());
+  FPRN("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
+  LOWSYSLOGPRINT(LOG_ERR, "init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
 
   // ssl init
   if(!s3fs_init_global_ssl()){

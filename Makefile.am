@@ -19,7 +19,7 @@
 ######################################################################
 SUBDIRS=src test doc
 
-EXTRA_DIST=doc
+EXTRA_DIST=doc default_commit_hash
 
 dist-hook:
 	rm -rf `find $(distdir)/doc -type d -name .svn`
