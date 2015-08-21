@@ -549,14 +549,12 @@ int mkdirp(const string& path, mode_t mode)
   string base;
   string component;
   stringstream ss(path);
+  int result = 0;
   while (getline(ss, component, '/')) {
     base += "/" + component;
-    int result = mkdir(base.c_str(), mode);
-    if(0 != result){
-      return result;
-    }
+    result = mkdir(base.c_str(), mode);
   }
-  return 0;
+  return result;
 }
 
 bool delete_files_in_dir(const char* dir, bool is_remove_own)
