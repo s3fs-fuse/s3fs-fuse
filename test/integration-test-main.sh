@@ -323,6 +323,9 @@ function test_special_characters {
 }
 
 function test_extended_attributes {
+    command -v setfattr >/dev/null 2>&1 || \
+        { echo "Skipping extended attribute tests" ; return; }
+
     echo "Testing extended attributes ..."
 
     rm -f $TEST_TEXT_FILE
