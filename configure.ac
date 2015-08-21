@@ -226,7 +226,6 @@ dnl ----------------------------------------------
 dnl check functions
 dnl ----------------------------------------------
 dnl malloc_trim function
-#AC_CHECK_FUNCS(malloc_trim, , )
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl ----------------------------------------------
