@@ -109,6 +109,7 @@ int is_uid_inculde_group(uid_t uid, gid_t gid);
 std::string mydirname(std::string path);
 std::string mybasename(std::string path);
 int mkdirp(const std::string& path, mode_t mode);
+bool check_exist_dir_permission(const char* dirpath);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
 time_t get_mtime(const char *s);

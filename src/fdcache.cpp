@@ -66,7 +66,11 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
   top_path       += ".stat";
 
   if(is_create_dir){
-    mkdirp(top_path + mydirname(path), 0777);
+    int result;
+    if(0 != (result = mkdirp(top_path + mydirname(path), 0777))){
+      DPRNINFO("failed to create dir(%s) by errno(%d).", path, result);
+      return false;
+    }
   }
   if(!path || '\0' == path[0]){
     sfile_path = top_path;
@@ -74,6 +78,20 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
     sfile_path = top_path + SAFESTRPTR(path);
   }
   return true;
+}
+
+bool CacheFileStat::CheckCacheFileStatTopDir(void)
+{
+  if(!FdManager::IsCacheDir()){
+    return true;
+  }
+  // make stat dir top path( "/<cache_dir>/.<bucket_name>.stat" )
+  string top_path = FdManager::GetCacheDir();
+  top_path       += "/.";
+  top_path       += bucket;
+  top_path       += ".stat";
+
+  return check_exist_dir_permission(top_path.c_str());
 }
 
 bool CacheFileStat::DeleteCacheFileStat(const char* path)
@@ -1095,7 +1113,11 @@ bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_crea
   }
   string resolved_path(FdManager::cache_dir + "/" + bucket);
   if(is_create_dir){
-    mkdirp(resolved_path + mydirname(path), 0777);
+    int result;
+    if(0 != (result = mkdirp(resolved_path + mydirname(path), 0777))){
+      DPRNINFO("failed to create dir(%s) by errno(%d).", path, result);
+      return false;
+    }
   }
   if(!path || '\0' == path[0]){
     cache_path = resolved_path;
@@ -1103,6 +1125,16 @@ bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_crea
     cache_path = resolved_path + SAFESTRPTR(path);
   }
   return true;
+}
+
+bool FdManager::CheckCacheTopDir(void)
+{
+  if(0 == FdManager::cache_dir.size()){
+    return true;
+  }
+  string toppath(FdManager::cache_dir + "/" + bucket);
+
+  return check_exist_dir_permission(toppath.c_str());
 }
 
 bool FdManager::MakeRandomTempPath(const char* path, string& tmppath)
