@@ -546,15 +546,71 @@ string mybasename(string path)
 // mkdir --parents
 int mkdirp(const string& path, mode_t mode)
 {
-  string base;
-  string component;
+  string       base;
+  string       component;
   stringstream ss(path);
-  int result = 0;
   while (getline(ss, component, '/')) {
     base += "/" + component;
-    result = mkdir(base.c_str(), mode);
+
+    struct stat st;
+    if(0 == stat(base.c_str(), &st)){
+      if(!S_ISDIR(st.st_mode)){
+        return EPERM;
+      }
+    }else{
+      if(0 != mkdir(base.c_str(), mode)){
+        return errno;
+     }
+    }
   }
-  return result;
+  return 0;
+}
+
+bool check_exist_dir_permission(const char* dirpath)
+{
+  if(!dirpath || '\0' == dirpath[0]){
+    return false;
+  }
+
+  // exists
+  struct stat st;
+  if(0 != stat(dirpath, &st)){
+    if(ENOENT == errno){
+      // dir does not exitst
+      return true;
+    }
+    if(EACCES == errno){
+      // could not access directory
+      return false;
+    }
+    // somthing error occured
+    return false;
+  }
+
+  // check type
+  if(!S_ISDIR(st.st_mode)){
+    // path is not directory
+    return false;
+  }
+
+  // check permission
+  uid_t myuid = geteuid();
+  if(myuid == st.st_uid){
+    if(S_IRWXU != (st.st_mode & S_IRWXU)){
+      return false;
+    }
+  }else{
+    if(1 == is_uid_inculde_group(myuid, st.st_gid)){
+      if(S_IRWXG != (st.st_mode & S_IRWXG)){
+        return false;
+      }
+    }else{
+      if(S_IRWXO != (st.st_mode & S_IRWXO)){
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 bool delete_files_in_dir(const char* dir, bool is_remove_own)

@@ -4622,6 +4622,13 @@ int main(int argc, char* argv[])
     // like checking for appropriate lengths and characters  
   }
 
+  // check cache dir permission
+  if(!FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
+    fprintf(stderr, "%s: could not allow cache directory permission, check permission of cache directories.\n",
+      program_name.c_str());
+    exit(EXIT_FAILURE);
+  }
+
   // There's room for more command line error checking
 
   // Check to see if the bucket name contains periods and https (SSL) is
