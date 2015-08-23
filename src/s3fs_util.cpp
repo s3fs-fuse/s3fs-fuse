@@ -558,10 +558,9 @@ int mkdirp(const string& path, mode_t mode)
         return EPERM;
       }
     }else{
-      int result;
-      if(0 != (result = mkdir(base.c_str(), mode))){
+      if(0 != mkdir(base.c_str(), mode)){
         return errno;
-      }
+     }
     }
   }
   return 0;
