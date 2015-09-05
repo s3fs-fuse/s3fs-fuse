@@ -55,6 +55,12 @@ Enter your S3 identity and credential in a file `/path/to/passwd`:
 echo MYIDENTITY:MYCREDENTIAL > /path/to/passwd
 ```
 
+Make sure the file has proper permissions (if you get 'permissions' error when mounting) `/path/to/passwd`:
+
+```
+chmod 600 /path/to/passwd
+```
+
 Run s3fs with an existing bucket `mybucket` and directory `/path/to/mountpoint`:
 
 ```
