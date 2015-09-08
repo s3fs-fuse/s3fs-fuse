@@ -73,7 +73,7 @@ If you encounter any errors, enable debug output:
 s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -d -d -f -o f2 -o curldbg
 ```
 
-You can also automatically mount via fstab:
+You can also mount on boot by entering the following line to `/etc/fstab`:
 
 ```
 s3fs#mybucket /path/to/mountpoint fuse allow_other 0 0
