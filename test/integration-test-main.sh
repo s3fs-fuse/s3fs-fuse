@@ -261,7 +261,10 @@ function test_remove_nonempty_directory {
     echo "Testing removing a non-empty directory"
     mk_test_dir
     touch "${TEST_DIR}/file"
-    rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
+    if ! (rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"); then
+        echo "Did not get \"Directory not empty\""
+        exit 1
+    fi
     rm "${TEST_DIR}/file"
     rm_test_dir
 }
