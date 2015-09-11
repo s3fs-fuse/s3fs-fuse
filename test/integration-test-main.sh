@@ -69,10 +69,8 @@ function test_append_file {
     # Write a small test file
     for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
     do
-       echo "echo ${TEST_TEXT} ${x} to ${TEST_TEXT_FILE}"
-       echo "$TEST_TEXT ${x}" >&3
-    done
-    exec 3>&-  # close
+       echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
+    done > ${TEST_TEXT_FILE}
 
     # Verify contents of file
     echo "Verifying length of test file"
@@ -261,10 +259,7 @@ function test_remove_nonempty_directory {
     echo "Testing removing a non-empty directory"
     mk_test_dir
     touch "${TEST_DIR}/file"
-    if ! (rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"); then
-        echo "Did not get \"Directory not empty\""
-        exit 1
-    fi
+    rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
     rm "${TEST_DIR}/file"
     rm_test_dir
 }
