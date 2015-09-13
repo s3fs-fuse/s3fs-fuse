@@ -63,13 +63,14 @@ function rm_test_dir {
 
 function test_append_file {
     echo "Testing append to file ..."
-
+    # Open and close file outside of loop to avoid eventual object consistency
+    # issues
+    exec 3<> ${TEST_TEXT_FILE}  # open
     # Write a small test file
     for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
     do
        echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
-       echo $TEST_TEXT >> $TEST_TEXT_FILE
-    done
+    done > ${TEST_TEXT_FILE}
 
     # Verify contents of file
     echo "Verifying length of test file"
