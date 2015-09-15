@@ -76,7 +76,7 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -d -d -f -o f2 
 You can also mount on boot by entering the following line to `/etc/fstab`:
 
 ```
-s3fs#mybucket /path/to/mountpoint fuse allow_other 0 0
+s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other 0 0
 ```
 
 Limitations
