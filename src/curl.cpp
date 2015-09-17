@@ -252,7 +252,7 @@ time_t           S3fsCurl::readwrite_timeout   = 60;   // default
 int              S3fsCurl::retries             = 3;    // default
 bool             S3fsCurl::is_public_bucket    = false;
 string           S3fsCurl::default_acl         = "private";
-bool             S3fsCurl::is_use_rrs          = false;
+storage_class_t  S3fsCurl::storage_class       = STANDARD;
 sseckeylist_t    S3fsCurl::sseckeys;
 bool             S3fsCurl::is_use_sse          = false;
 bool             S3fsCurl::is_content_md5      = false;
@@ -790,10 +790,10 @@ string S3fsCurl::SetDefaultAcl(const char* acl)
   return old;
 }
 
-bool S3fsCurl::SetUseRrs(bool flag)
+storage_class_t S3fsCurl::SetStorageClass(storage_class_t storage_class)
 {
-  bool old = S3fsCurl::is_use_rrs;
-  S3fsCurl::is_use_rrs = flag;
+  storage_class_t old = S3fsCurl::storage_class;
+  S3fsCurl::storage_class = storage_class;
   return old;
 }
 
@@ -2263,10 +2263,12 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     }
   }
 
-  // "x-amz-acl", rrs, sse
+  // "x-amz-acl", storage class, sse
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
-  if(S3fsCurl::is_use_rrs){
+  if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
+  } else if(STANDARD_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
   if(S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
@@ -2381,10 +2383,12 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
       // skip this header, because this header is specified after logic.
     }
   }
-  // "x-amz-acl", rrs, sse
+  // "x-amz-acl", storage class, sse
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
-  if(S3fsCurl::is_use_rrs){
+  if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
+  } else if(STANDARD_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
   if(S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
@@ -2684,10 +2688,12 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
       }
     }
   }
-  // "x-amz-acl", rrs, sse
+  // "x-amz-acl", storage class, sse
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
-  if(S3fsCurl::is_use_rrs){
+  if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
+  } else if(STANDARD_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
   if(S3fsCurl::is_use_sse){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");

@@ -4218,6 +4218,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       nomultipart = true;
       return 0;
     }
+    // old format for storage_class
     if(0 == strcmp(arg, "use_rrs") || 0 == STR2NCMP(arg, "use_rrs=")){
       off_t rrs = 1;
       // for an old format.
@@ -4225,23 +4226,41 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         rrs = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));
       }
       if(0 == rrs){
-        S3fsCurl::SetUseRrs(false);
+        S3fsCurl::SetStorageClass(STANDARD);
       }else if(1 == rrs){
         if(S3fsCurl::GetUseSse()){
           fprintf(stderr, "%s: use_rrs option could not be specified with use_sse.\n", program_name.c_str());
           return -1;
         }
-        S3fsCurl::SetUseRrs(true);
+        S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
       }else{
         fprintf(stderr, "%s: poorly formed argument to option: use_rrs\n", program_name.c_str());
         return -1;
       }
       return 0;
     }
+    if(0 == STR2NCMP(arg, "storage_class=")){
+      const char *storage_class = strchr(arg, '=') + sizeof(char);
+      if(0 == strcmp(storage_class, "standard")){
+        S3fsCurl::SetStorageClass(STANDARD);
+      }else if(0 == strcmp(storage_class, "standard_ia")){
+        S3fsCurl::SetStorageClass(STANDARD_IA);
+      }else if(0 == strcmp(storage_class, "reduced_redundancy")){
+        if(S3fsCurl::GetUseSse()){
+          fprintf(stderr, "%s: storage class reduced_redundancy option could not be specified with use_sse.\n", program_name.c_str());
+          return -1;
+        }
+        S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
+      }else{
+        fprintf(stderr, "%s: unknown value for storage_class: %s\n", program_name.c_str(), storage_class);
+        return -1;
+      }
+      return 0;
+    }
     if(0 == strcmp(arg, "use_sse") || 0 == STR2NCMP(arg, "use_sse=")){
       if(0 == STR2NCMP(arg, "use_sse=")){
-        if(S3fsCurl::GetUseRrs()){
-          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
+        if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass()){
+          fprintf(stderr, "%s: use_sse option could not be specified with storage class reduced_redundancy.\n", program_name.c_str());
           return -1;
         }
         const char* ssecfile = &arg[strlen("use_sse=")];
@@ -4268,8 +4287,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           }
         }
       }else{
-        if(S3fsCurl::GetUseRrs()){
-          fprintf(stderr, "%s: use_sse option could not be specified with use_rrs.\n", program_name.c_str());
+        if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass()){
+          fprintf(stderr, "%s: use_sse option could not be specified with storage class reduced_redundancy.\n", program_name.c_str());
           return -1;
         }
         if(S3fsCurl::IsSseCustomMode()){
