@@ -122,6 +122,12 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
 typedef std::list<sseckeymap_t>            sseckeylist_t;
 
+enum storage_class_t {
+  STANDARD,
+  STANDARD_IA,
+  REDUCED_REDUNDANCY,
+};
+
 // share
 #define	SHARE_MUTEX_DNS         0
 #define	SHARE_MUTEX_SSL_SESSION 1
@@ -165,7 +171,7 @@ class S3fsCurl
     static int              retries;
     static bool             is_public_bucket;
     static std::string      default_acl;             // TODO: to enum
-    static bool             is_use_rrs;
+    static storage_class_t  storage_class;
     static sseckeylist_t    sseckeys;
     static bool             is_use_sse;
     static bool             is_content_md5;
@@ -278,8 +284,8 @@ class S3fsCurl
     static bool SetPublicBucket(bool flag);
     static bool IsPublicBucket(void) { return S3fsCurl::is_public_bucket; }
     static std::string SetDefaultAcl(const char* acl);
-    static bool SetUseRrs(bool flag);
-    static bool GetUseRrs(void) { return S3fsCurl::is_use_rrs; }
+    static storage_class_t SetStorageClass(storage_class_t storage_class);
+    static storage_class_t GetStorageClass() { return S3fsCurl::storage_class; }
     static bool SetSseKeys(const char* filepath);
     static bool LoadEnvSseKeys(void);
     static bool GetSseKey(std::string& md5, std::string& ssekey);
