@@ -62,10 +62,16 @@ local folder to use for local file cache.
 \fB\-o\fR del_cache - delete local file cache
 delete local file cache when s3fs starts and exits.
 .TP
+\fB\-o\fR storage_class (default is standard)
+store object with specified storage class.
+this option replaces the old option use_rrs.
+Possible values: standard, standard_ia, and reduced_redundancy.
+.TP
 \fB\-o\fR use_rrs (default is disable)
 use Amazon's Reduced Redundancy Storage.
 this option can not be specified with use_sse.
 (can specify use_rrs=1 for old version)
+this option has been replaced by new storage_class option.
 .TP
 \fB\-o\fR use_sse (default is disable)
 use Amazon's Server-Site Encryption or Server-Side Encryption with Customer-Provided Encryption Keys.
@@ -118,7 +124,8 @@ s3fs always has to check whether file(or sub directory) exists under object(path
 It increases ListBucket request and makes performance bad.
 You can specify this option for performance, s3fs memorizes in stat cache that the object(file or directory) does not exist.
 .TP
-\fB\-o\fR no_check_certificate (by default this option is disabled) - do not check ssl certificate.
+\fB\-o\fR no_check_certificate (by default this option is disabled)
+do not check ssl certificate.
 server certificate won't be checked against the available certificate authorities.
 .TP
 \fB\-o\fR nodnscache - disable dns cache.
