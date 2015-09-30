@@ -248,6 +248,8 @@ class S3fsCurl
     static bool SetIAMCredentials(const char* response);
     static bool PushbackSseKeys(std::string& onekey);
 
+    static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+
     // methods
     bool ResetHandle(void);
     bool RemakeHandle(void);
