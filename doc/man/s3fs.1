@@ -201,6 +201,14 @@ If this option is specified with nocopapi, the s3fs ignores it.
 .TP
 \fB\-o\fR use_path_request_style (use legacy API calling style)
 Enble compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
+.TP
+\fB\-o\fR dbglevel (default="crit")
+Set the debug message level. set value as crit(critical), err(error), warn(warning), info(information) to debug level. default debug level is critical.
+If s3fs run with "-d" option, the debug level is set information.
+When s3fs catch the signal SIGUSR2, the debug level is bumpup.
+.TP
+\fB\-o\fR curldbg - put curl debug message
+Put the debug message from libcurl when this option is specified.
 .SH FUSE/MOUNT OPTIONS
 .TP
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.

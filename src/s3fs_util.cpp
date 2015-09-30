@@ -450,19 +450,19 @@ string get_username(uid_t uid)
   if(0 == maxlen){
     long res = sysconf(_SC_GETPW_R_SIZE_MAX);
     if(0 > res){
-      DPRNNN("could not get max pw length.");
+      S3FS_PRN_WARN("could not get max pw length.");
       maxlen = 0;
       return string("");
     }
     maxlen = res;
   }
   if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-    DPRNCRIT("failed to allocate memory.");
+    S3FS_PRN_CRIT("failed to allocate memory.");
     return string("");
   }
   // get group information
   if(0 != getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo)){
-    DPRNNN("could not get pw information.");
+    S3FS_PRN_WARN("could not get pw information.");
     free(pbuf);
     return string("");
   }
@@ -488,19 +488,19 @@ int is_uid_inculde_group(uid_t uid, gid_t gid)
   if(0 == maxlen){
     long res = sysconf(_SC_GETGR_R_SIZE_MAX);
     if(0 > res){
-      DPRNNN("could not get max name length.");
+      S3FS_PRN_ERR("could not get max name length.");
       maxlen = 0;
       return -ERANGE;
     }
     maxlen = res;
   }
   if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-    DPRNCRIT("failed to allocate memory.");
+    S3FS_PRN_CRIT("failed to allocate memory.");
     return -ENOMEM;
   }
   // get group information
   if(0 != (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-    DPRNNN("could not get group information.");
+    S3FS_PRN_ERR("could not get group information.");
     free(pbuf);
     return -result;
   }
@@ -619,7 +619,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
   struct dirent* dent;
 
   if(NULL == (dp = opendir(dir))){
-    DPRNINFO("could not open dir(%s) - errno(%d)", dir, errno);
+    S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);
     return false;
   }
 
@@ -632,20 +632,20 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
     fullpath         += dent->d_name;
     struct stat st;
     if(0 != lstat(fullpath.c_str(), &st)){
-      DPRN("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
+      S3FS_PRN_ERR("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
       closedir(dp);
       return false;
     }
     if(S_ISDIR(st.st_mode)){
       // dir -> Reentrant
       if(!delete_files_in_dir(fullpath.c_str(), true)){
-        DPRNINFO("could not remove sub dir(%s) - errno(%d)", fullpath.c_str(), errno);
+        S3FS_PRN_ERR("could not remove sub dir(%s) - errno(%d)", fullpath.c_str(), errno);
         closedir(dp);
         return false;
       }
     }else{
       if(0 != unlink(fullpath.c_str())){
-        DPRN("could not remove file(%s) - errno(%d)", fullpath.c_str(), errno);
+        S3FS_PRN_ERR("could not remove file(%s) - errno(%d)", fullpath.c_str(), errno);
         closedir(dp);
         return false;
       }
@@ -654,7 +654,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
   closedir(dp);
 
   if(is_remove_own && 0 != rmdir(dir)){
-    DPRN("could not remove dir(%s) - errno(%d)", dir, errno);
+    S3FS_PRN_ERR("could not remove dir(%s) - errno(%d)", dir, errno);
     return false;
   }
   return true;
@@ -1064,6 +1064,16 @@ void show_help (void)
     "        Enble compatibility with S3-like APIs which do not support\n"
     "        the virtual-host request style, by using the older path request\n"
     "        style.\n"
+    "\n"
+    "   dbglevel (default=\"crit\")\n"
+    "        Set the debug message level. set value as crit(critical), err\n"
+    "        (error), warn(warning), info(information) to debug level.\n"
+    "        default debug level is critical. If s3fs run with \"-d\" option,\n"
+    "        the debug level is set information. When s3fs catch the signal\n"
+    "        SIGUSR2, the debug level is bumpup.\n"
+    "\n"
+    "   curldbg - put curl debug message\n"
+    "        Put the debug message from libcurl when this option is specified.\n"
     "\n"
     "FUSE/mount Options:\n"
     "\n"

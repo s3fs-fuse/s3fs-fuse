@@ -164,11 +164,11 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       }
       if(is_delete_cache){
         // not hit by different ETag
-        DPRNNN("stat cache not hit by ETag[path=%s][time=%jd][hit count=%lu][ETag(%s)!=(%s)]",
+        S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%jd][hit count=%lu][ETag(%s)!=(%s)]",
           strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count, petag ? petag : "null", ent->meta["ETag"].c_str());
       }else{
         // hit 
-        DPRNNN("stat cache hit [path=%s][time=%jd][hit count=%lu]", strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count);
+        S3FS_PRN_DBG("stat cache hit [path=%s][time=%jd][hit count=%lu]", strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count);
 
         if(pst!= NULL){
           *pst= ent->stbuf;
@@ -245,7 +245,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   if(CacheSize< 1){
     return true;
   }
-  DPRNNN("add stat cache entry[path=%s]", key.c_str());
+  S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
@@ -307,7 +307,7 @@ bool StatCache::AddNoObjectCache(string& key)
   if(CacheSize < 1){
     return true;
   }
-  DPRNNN("add no object cache entry[path=%s]", key.c_str());
+  S3FS_PRN_INFO3("add no object cache entry[path=%s]", key.c_str());
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
@@ -364,7 +364,7 @@ bool StatCache::TruncateCache(void)
     }
   }
   if(stat_cache.end() != iter_to_delete){
-    DPRNNN("truncate stat cache[path=%s]", (*iter_to_delete).first.c_str());
+    S3FS_PRN_DBG("truncate stat cache[path=%s]", (*iter_to_delete).first.c_str());
     if((*iter_to_delete).second){
       delete (*iter_to_delete).second;
     }
@@ -382,7 +382,7 @@ bool StatCache::DelStat(const char* key)
   if(!key){
     return false;
   }
-  DPRNNN("delete stat cache entry[path=%s]", key);
+  S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key);
 
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
