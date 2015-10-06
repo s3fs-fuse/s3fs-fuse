@@ -84,8 +84,6 @@
 
 #endif // HAVE_MALLOC_TRIM
 
-char* get_object_sseckey_md5(const char* path);
-
 #endif // S3FS_S3_H_
 
 /*
