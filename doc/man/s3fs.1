@@ -74,13 +74,29 @@ this option can not be specified with use_sse.
 this option has been replaced by new storage_class option.
 .TP
 \fB\-o\fR use_sse (default is disable)
-use Amazon's Server-Site Encryption or Server-Side Encryption with Customer-Provided Encryption Keys.
-this option can not be specified with use_rrs. specifying only "use_sse" or "use_sse=1" enables Server-Side Encryption.(use_sse=1 for old version)
-specifying this option with file path which has some SSE-C secret key enables Server-Side Encryption with Customer-Provided Encryption Keys.(use_sse=file)
-the file must be 600 permission. the file can have some lines, each line is one SSE-C key. the first line in file is used as Customer-Provided Encryption Keys for uploading and change headers etc.
-if there are some keys after first line, those are used downloading object which are encripted by not first key.
-so that, you can keep all SSE-C keys in file, that is SSE-C key history.
-if AWSSSECKEYS environment is set, you can set SSE-C key instead of this option.
+Specify three type Amazon's Server-Site Encryption: SSE-S3, SSE-C or SSE-KMS. SSE-S3 uses Amazon S3-managed encryption keys, SSE-C uses customer-provided encryption keys, and SSE-KMS uses the master key which you manage in AWS KMS.
+You can specify "use_sse" or "use_sse=1" enables SSE-S3 type (use_sse=1 is old type parameter).
+Case of setting SSE-C, you can specify "use_sse=custom", "use_sse=custom:<custom key file path>" or "use_sse=<custom key file path>"(only <custom key file path> specified is old type parameter).
+You can use "c" for short "custom".
+The custom key file must be 600 permission. The file can have some lines, each line is one SSE-C key.
+The first line in file is used as Customer-Provided Encryption Keys for uploading and changing headers etc.
+If there are some keys after first line, those are used downloading object which are encrypted by not first key.
+So that, you can keep all SSE-C keys in file, that is SSE-C key history.
+If you specify "custom"("c") without file path, you need to set custom key by load_sse_c option or AWSSSECKEYS environment.(AWSSSECKEYS environment has some SSE-C keys with ":" separator.)
+This option is used to decide the SSE type.
+So that if you do not want to encrypt a object at uploading, but you need to decrypt encrypted object at downloaing, you can use load_sse_c option instead of this option.
+For setting SSE-KMS, specify "use_sse=kmsid" or "use_sse=kmsid:<kms id>".
+You can use "k" for short "kmsid".
+If you san specify SSE-KMS type with your <kms id> in AWS KMS, you can set it after "kmsid:"(or "k:").
+If you specify only "kmsid"("k"), you need to set AWSSSEKMSID environment which value is <kms id>.
+You must be careful about that you can not use the KMS id which is not same EC2 region.
+.TP
+\fB\-o\fR load_sse_c - specify SSE-C keys
+Specify the custom-provided encription keys file path for decrypting at duwnloading.
+If you use the custom-provided encription key at uploading, you specify with "use_sse=custom".
+The file has many lines, one line means one custom key.
+So that you can keep all SSE-C keys in file, that is SSE-C key history.
+AWSSSECKEYS environment is as same as this file contents.
 .TP
 \fB\-o\fR passwd_file (default="")
 specify the path to the password file, which which takes precedence over the password in $HOME/.passwd-s3fs and /etc/passwd-s3fs
@@ -161,7 +177,7 @@ sets the url to use to access Amazon S3. If you want to use HTTPS, then you can 
 .TP
 \fB\-o\fR endpoint (default="us-east-1")
 sets the endpoint to use.
-If this option is not specified, s3fs uses \"us-east-1\" region as the default.
+If this option is not specified, s3fs uses "us-east-1" region as the default.
 If the s3fs could not connect to the region specified by this option, s3fs could not run.
 But if you do not specify this option, and if you can not connect with the default region, s3fs will retry to automatically connect to the other region.
 So s3fs can know the correct region name, because s3fs can find it in an error from the S3 server.

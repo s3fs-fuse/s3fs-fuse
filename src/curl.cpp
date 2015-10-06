@@ -253,7 +253,8 @@ bool             S3fsCurl::is_public_bucket    = false;
 string           S3fsCurl::default_acl         = "private";
 storage_class_t  S3fsCurl::storage_class       = STANDARD;
 sseckeylist_t    S3fsCurl::sseckeys;
-bool             S3fsCurl::is_use_sse          = false;
+std::string      S3fsCurl::ssekmsid            = "";
+sse_type_t       S3fsCurl::ssetype             = SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
 string           S3fsCurl::AWSAccessKeyId;
@@ -808,7 +809,7 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
   // make base64
   char* pbase64_key;
   if(NULL == (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))){
-    S3FS_PRN_ERR("Failed to convert base64 from sse-c key %s", onekey.c_str());
+    S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
     return false;
   }
   string base64_key = pbase64_key;
@@ -828,12 +829,29 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
   return true;
 }
 
-bool S3fsCurl::SetSseKeys(const char* filepath)
+sse_type_t S3fsCurl::SetSseType(sse_type_t type)
+{
+  sse_type_t    old = S3fsCurl::ssetype;
+  S3fsCurl::ssetype = type;
+  return old;
+}
+
+bool S3fsCurl::SetSseCKeys(const char* filepath)
 {
   if(!filepath){
     S3FS_PRN_ERR("SSE-C keys filepath is empty.");
     return false;
   }
+  struct stat st;
+  if(0 != stat(filepath, &st)){
+    S3FS_PRN_ERR("could not open use_sse keys file(%s).", filepath);
+    return false;
+  }
+  if(st.st_mode & (S_IXUSR | S_IRWXG | S_IRWXO)){
+    S3FS_PRN_ERR("use_sse keys file %s should be 0600 permissions.", filepath);
+    return false;
+  }
+
   S3fsCurl::sseckeys.clear();
 
   ifstream ssefs(filepath);
@@ -852,12 +870,54 @@ bool S3fsCurl::SetSseKeys(const char* filepath)
   }
   return true;
 }
+
+bool S3fsCurl::SetSseKmsid(const char* kmsid)
+{
+  if(!kmsid || '\0' == kmsid[0]){
+    S3FS_PRN_ERR("SSE-KMS kms id is empty.");
+    return false;
+  }
+  S3fsCurl::ssekmsid = kmsid;
+  return true;
+}
+
+// [NOTE]
+// Because SSE is set by some options and environment, 
+// this function check the integrity of the SSE data finally.
+bool S3fsCurl::FinalCheckSse(void)
+{
+  if(SSE_DISABLE == S3fsCurl::ssetype){
+    S3fsCurl::ssekmsid.erase();
+  }else if(SSE_S3 == S3fsCurl::ssetype){
+    S3fsCurl::ssekmsid.erase();
+  }else if(SSE_C == S3fsCurl::ssetype){
+    if(0 == S3fsCurl::sseckeys.size()){
+      S3FS_PRN_ERR("sse type is SSE-C, but there is no custom key.");
+      return false;
+    }
+    S3fsCurl::ssekmsid.erase();
+  }else if(SSE_KMS == S3fsCurl::ssetype){
+    if(S3fsCurl::ssekmsid.empty()){
+      S3FS_PRN_ERR("sse type is SSE-KMS, but there is no specified kms id.");
+      return false;
+    }
+    if(!S3fsCurl::IsSignatureV4()){
+      S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
+      return false;
+    }
+  }else{
+    S3FS_PRN_ERR("sse type is unknown(%d).", S3fsCurl::ssetype);
+    return false;
+  }
+  return true;
+}
                                                                                                                                                    
-bool S3fsCurl::LoadEnvSseKeys(void)
+bool S3fsCurl::LoadEnvSseCKeys(void)
 {
   char* envkeys = getenv("AWSSSECKEYS");
   if(NULL == envkeys){
-    return false;
+    // nothing to do
+    return true;
   }
   S3fsCurl::sseckeys.clear();
 
@@ -871,6 +931,16 @@ bool S3fsCurl::LoadEnvSseKeys(void)
     return false;
   }
   return true;
+}
+
+bool S3fsCurl::LoadEnvSseKmsid(void)
+{
+  char* envkmsid = getenv("AWSSSEKMSID");
+  if(NULL == envkmsid){
+    // nothing to do
+    return true;
+  }
+  return S3fsCurl::SetSseKmsid(envkmsid);
 }
 
 //
@@ -909,18 +979,6 @@ bool S3fsCurl::GetSseKeyMd5(int pos, string& md5)
 int S3fsCurl::GetSseKeyCount(void)
 {
   return S3fsCurl::sseckeys.size();
-}
-
-bool S3fsCurl::IsSseCustomMode(void)
-{
-  return (0 < S3fsCurl::sseckeys.size());
-}
-
-bool S3fsCurl::SetUseSse(bool flag)
-{
-  bool old = S3fsCurl::is_use_sse;
-  S3fsCurl::is_use_sse = flag;
-  return old;
 }
 
 bool S3fsCurl::SetContentMd5(bool flag)
@@ -1142,8 +1200,9 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
 
   // duplicate request(setup new curl object)
   S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
-  if(0 != (result = newcurl->PreGetObjectRequest(
-           s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size, s3fscurl->b_ssekey_md5))){
+  if(0 != (result = newcurl->PreGetObjectRequest(s3fscurl->path.c_str(), s3fscurl->partdata.fd,
+     s3fscurl->partdata.startpos, s3fscurl->partdata.size, s3fscurl->b_ssetype, s3fscurl->b_ssevalue)))
+  {
     S3FS_PRN_ERR("failed downloading part setup(%d)", result);
     delete newcurl;
     return NULL;;
@@ -1157,14 +1216,13 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 {
   S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
-  string sseckeymd5("");
-  char*  psseckeymd5;
-  if(NULL != (psseckeymd5 = get_object_sseckey_md5(tpath))){
-    sseckeymd5 = psseckeymd5;
-    free(psseckeymd5);
+  sse_type_t ssetype;
+  string     ssevalue;
+  if(!get_object_sse_type(tpath, ssetype, ssevalue)){
+    S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
   }
-  int     result = 0;
-  ssize_t remaining_bytes;
+  int        result = 0;
+  ssize_t    remaining_bytes;
 
   // cycle through open fd, pulling off 10MB chunks at a time
   for(remaining_bytes = size; 0 < remaining_bytes; ){
@@ -1183,7 +1241,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 
       // s3fscurl sub object
       S3fsCurl* s3fscurl_para = new S3fsCurl();
-      if(0 != (result = s3fscurl_para->PreGetObjectRequest(tpath, fd, (start + size - remaining_bytes), chunk, sseckeymd5))){
+      if(0 != (result = s3fscurl_para->PreGetObjectRequest(tpath, fd, (start + size - remaining_bytes), chunk, ssetype, ssevalue))){
         S3FS_PRN_ERR("failed downloading part setup(%d)", result);
         delete s3fscurl_para;
         return result;
@@ -1327,7 +1385,7 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
-    b_ssekey_pos(-1), b_ssekey_md5("")
+    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE)
 {
   type = REQTYPE_UNSET;
 }
@@ -2110,25 +2168,35 @@ int S3fsCurl::GetIAMCredentials(void)
   return result;
 }
 
-//
-// If md5 is empty, build by first(current) sse key
-//
-bool S3fsCurl::AddSseKeyRequestHead(string& md5, bool is_copy)
+bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, string& ssevalue, bool is_only_c, bool is_copy)
 {
-  if(!S3fsCurl::IsSseCustomMode()){
-    // Nothing to do
-    return true;
-  }
-  string sseckey;
-  if(S3fsCurl::GetSseKey(md5, sseckey)){
-    if(is_copy){
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-algorithm", "AES256");
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-key",       sseckey.c_str());
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-key-md5",   md5.c_str());
+  if(SSE_S3 == ssetype){
+    if(!is_only_c){
+      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
+    }
+  }else if(SSE_C == ssetype){
+    string sseckey;
+    if(S3fsCurl::GetSseKey(ssevalue, sseckey)){
+      if(is_copy){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-algorithm", "AES256");
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-key",       sseckey.c_str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-copy-source-server-side-encryption-customer-key-md5",   ssevalue.c_str());
+      }else{
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-algorithm", "AES256");
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key",       sseckey.c_str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key-md5",   ssevalue.c_str());
+      }
     }else{
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-algorithm", "AES256");
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key",       sseckey.c_str());
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key-md5",   md5.c_str());
+      S3FS_PRN_WARN("Failed to insert SSE-C header.");
+    }
+
+  }else if(SSE_KMS == ssetype){
+    if(!is_only_c){
+      if(ssevalue.empty()){
+        ssevalue = S3fsCurl::GetSseKmsId();
+      }
+      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "aws:kms");
+      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-aws-kms-key-id", ssevalue.c_str());
     }
   }
   return true;
@@ -2138,12 +2206,12 @@ bool S3fsCurl::AddSseKeyRequestHead(string& md5, bool is_copy)
 // tpath :      target path for head request
 // bpath :      saved into base_path
 // savedpath :  saved into saved_path
-// ssekey_pos : -1 means "not use sse", 0 - X means "use sseckey" and "sseckey position".
-//              sseckey position 0 is latest key.
+// ssekey_pos : -1    means "not" SSE-C type
+//              0 - X means SSE-C type and position for SSE-C key(0 is latest key)
 //
 bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath, int ssekey_pos)
 {
-  S3FS_PRN_INFO3("[tpath=%s][bpath=%s][save=%s]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath));
+  S3FS_PRN_INFO3("[tpath=%s][bpath=%s][save=%s][sseckeypos=%d]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath), ssekey_pos);
 
   if(!tpath){
     return false;
@@ -2164,10 +2232,11 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
   responseHeaders.clear();
 
   // requestHeaders
-  if(0 <= ssekey_pos && S3fsCurl::IsSseCustomMode()){
-    string md5;
-    if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseKeyRequestHead(md5, false)){
-      S3FS_PRN_WARN("Failed to set SSE-C headers for md5(%s).", md5.c_str());
+  if(0 <= ssekey_pos){
+    string md5("");
+    if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(SSE_C, md5, true, false)){
+      S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%d)(=md5(%s)).", ssekey_pos, md5.c_str());
+      return false;
     }
   }
   b_ssekey_pos = ssekey_pos;
@@ -2206,11 +2275,11 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
 
   S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
-  if(S3fsCurl::IsSseCustomMode()){
-    // SSE-C mode, check all sse-c key at first
-    int pos;
-    for(pos = 0; static_cast<size_t>(pos) < S3fsCurl::sseckeys.size(); pos++){
-      if(0 != pos && !DestroyCurlHandle()){
+  // At first, try to get without SSE-C headers
+  if(!PreHeadRequest(tpath) || 0 != (result = RequestPerform())){
+    // If has SSE-C keys, try to get with all SSE-C keys.
+    for(int pos = 0; static_cast<size_t>(pos) < S3fsCurl::sseckeys.size(); pos++){
+      if(!DestroyCurlHandle()){
         return result;
       }
       if(!PreHeadRequest(tpath, NULL, NULL, pos)){
@@ -2220,16 +2289,8 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
         break;
       }
     }
-    if(S3fsCurl::sseckeys.size() <= static_cast<size_t>(pos)){
-      // If sse-c mode is enable, s3fs fails to get head request for normal and sse object.
-      // So try to get head without sse-c header.
-      if(!DestroyCurlHandle() || !PreHeadRequest(tpath, NULL, NULL, -1) || 0 != (result = RequestPerform())){
-        return result;
-      }
-    }
-  }else{
-    // Not sse-c mode
-    if(!PreHeadRequest(tpath) || 0 != (result = RequestPerform())){
+    if(0 != result){
+      DestroyCurlHandle();  // not check result.
       return result;
     }
   }
@@ -2295,8 +2356,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
       // skip this header, because this header is specified with "x-amz-...-customer-key-md5".
     }else if(is_copy && key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
-      if(!AddSseKeyRequestHead(value, is_copy)){
-        S3FS_PRN_WARN("Failed to insert sse(-c) header.");
+      if(!AddSseRequestHead(SSE_C, value, true, is_copy)){
+        S3FS_PRN_WARN("Failed to insert SSE-C header.");
       }
     }
   }
@@ -2308,13 +2369,10 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
-  if(S3fsCurl::is_use_sse){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
-  }else if(S3fsCurl::IsSseCustomMode()){
-    string md5;
-    if(!AddSseKeyRequestHead(md5, false)){
-      S3FS_PRN_WARN("Failed to insert sse(-c) header.");
-    }
+  // SSE
+  string ssevalue("");
+  if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, true, false)){
+    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
   }
   if(is_use_ahbe){
     // set additional header by ahbe conf
@@ -2428,13 +2486,10 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
-  if(S3fsCurl::is_use_sse){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
-  }else if(S3fsCurl::IsSseCustomMode()){
-    string md5;
-    if(!AddSseKeyRequestHead(md5, false)){
-      S3FS_PRN_WARN("Failed to insert sse(-c) header.");
-    }
+  // SSE
+  string ssevalue("");
+  if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
   }
   if(is_use_ahbe){
     // set additional header by ahbe conf
@@ -2482,7 +2537,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   return result;
 }
 
-int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, string& ssekeymd5)
+int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, string& ssevalue)
 {
   S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
 
@@ -2509,12 +2564,10 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
     range       += str(start + size - 1);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Range", range.c_str());
   }
-  if(0 < ssekeymd5.length()){
-    if(!AddSseKeyRequestHead(ssekeymd5, false)){
-      S3FS_PRN_WARN("Failed to insert sse(-c) header.");
-    }
+  // SSE
+  if(!AddSseRequestHead(ssetype, ssevalue, true, false)){
+    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
   }
-
   if(!S3fsCurl::is_sigv4){
     string date    = get_date_rfc850();
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", date.c_str());
@@ -2543,7 +2596,9 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
   partdata.size       = size;
   b_partdata_startpos = start;
   b_partdata_size     = size;
-  b_ssekey_md5        = ssekeymd5;
+  b_ssetype           = ssetype;
+  b_ssevalue          = ssevalue;
+  b_ssekey_pos        = -1;         // not use this value for get object.
 
   type = REQTYPE_GET;
 
@@ -2559,13 +2614,13 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
   if(!tpath){
     return -1;
   }
-  string sseckeymd5("");
-  char*  psseckeymd5;
-  if(NULL != (psseckeymd5 = get_object_sseckey_md5(tpath))){
-    sseckeymd5 = psseckeymd5;
-    free(psseckeymd5);
+  sse_type_t ssetype;
+  string     ssevalue;
+  if(!get_object_sse_type(tpath, ssetype, ssevalue)){
+    S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
   }
-  if(0 != (result = PreGetObjectRequest(tpath, fd, start, size, sseckeymd5))){
+
+  if(0 != (result = PreGetObjectRequest(tpath, fd, start, size, ssetype, ssevalue))){
     return result;
   }
 
@@ -2721,8 +2776,8 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
       // skip this header, because this header is specified with "x-amz-...-customer-key-md5".
     }else if(is_copy && key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
-      if(!AddSseKeyRequestHead(value, is_copy)){
-        S3FS_PRN_WARN("Failed to insert sse(-c) header.");
+      if(!AddSseRequestHead(SSE_C, value, false, is_copy)){
+        S3FS_PRN_WARN("Failed to insert SSE-C header.");
       }
     }
   }
@@ -2733,13 +2788,10 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
-  if(S3fsCurl::is_use_sse){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
-  }else if(S3fsCurl::IsSseCustomMode()){
-    string md5;
-    if(!AddSseKeyRequestHead(md5, false)){
-      S3FS_PRN_WARN("Failed to insert sse(-c) header.");
-    }
+  // SSE
+  string ssevalue("");
+  if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
   }
   if(is_use_ahbe){
     // set additional header by ahbe conf

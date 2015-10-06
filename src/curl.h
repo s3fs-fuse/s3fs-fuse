@@ -122,10 +122,19 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
 typedef std::list<sseckeymap_t>            sseckeylist_t;
 
+// strage class(rrs)
 enum storage_class_t {
   STANDARD,
   STANDARD_IA,
   REDUCED_REDUNDANCY,
+};
+
+// sse type
+enum sse_type_t {
+  SSE_DISABLE = 0,      // not use server side encrypting
+  SSE_S3,               // server side encrypting by S3 key
+  SSE_C,                // server side encrypting by custom key
+  SSE_KMS               // server side encrypting by kms id
 };
 
 // share
@@ -173,7 +182,8 @@ class S3fsCurl
     static std::string      default_acl;             // TODO: to enum
     static storage_class_t  storage_class;
     static sseckeylist_t    sseckeys;
-    static bool             is_use_sse;
+    static std::string      ssekmsid;
+    static sse_type_t       ssetype;
     static bool             is_content_md5;
     static bool             is_verbose;
     static std::string      AWSAccessKeyId;
@@ -212,8 +222,9 @@ class S3fsCurl
     int                  b_postdata_remaining; // backup for retrying
     off_t                b_partdata_startpos;  // backup for retrying
     ssize_t              b_partdata_size;      // backup for retrying
-    bool                 b_ssekey_pos;         // backup for retrying
-    std::string          b_ssekey_md5;         // backup for retrying
+    int                  b_ssekey_pos;         // backup for retrying
+    std::string          b_ssevalue;           // backup for retrying
+    sse_type_t           b_ssetype;            // backup for retrying
 
   public:
     // constructor/destructor
@@ -246,6 +257,8 @@ class S3fsCurl
 
     static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
     static bool SetIAMCredentials(const char* response);
+    static bool LoadEnvSseCKeys(void);
+    static bool LoadEnvSseKmsid(void);
     static bool PushbackSseKeys(std::string& onekey);
 
     static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
@@ -288,14 +301,21 @@ class S3fsCurl
     static std::string SetDefaultAcl(const char* acl);
     static storage_class_t SetStorageClass(storage_class_t storage_class);
     static storage_class_t GetStorageClass() { return S3fsCurl::storage_class; }
-    static bool SetSseKeys(const char* filepath);
-    static bool LoadEnvSseKeys(void);
+    static bool LoadEnvSse(void) { return (S3fsCurl::LoadEnvSseCKeys() && S3fsCurl::LoadEnvSseKmsid()); }
+    static sse_type_t SetSseType(sse_type_t type);
+    static sse_type_t GetSseType(void) { return S3fsCurl::ssetype; }
+    static bool IsSseDisable(void) { return (SSE_DISABLE == S3fsCurl::ssetype); }
+    static bool IsSseS3Type(void) { return (SSE_S3 == S3fsCurl::ssetype); }
+    static bool IsSseCType(void) { return (SSE_C == S3fsCurl::ssetype); }
+    static bool IsSseKmsType(void) { return (SSE_KMS == S3fsCurl::ssetype); }
+    static bool FinalCheckSse(void);
+    static bool SetSseCKeys(const char* filepath);
+    static bool SetSseKmsid(const char* kmsid);
+    static bool IsSetSseKmsId(void) { return !S3fsCurl::ssekmsid.empty(); }
+    static const char* GetSseKmsId(void) { return S3fsCurl::ssekmsid.c_str(); }
     static bool GetSseKey(std::string& md5, std::string& ssekey);
     static bool GetSseKeyMd5(int pos, std::string& md5);
     static int GetSseKeyCount(void);
-    static bool IsSseCustomMode(void);
-    static bool SetUseSse(bool flag);
-    static bool GetUseSse(void) { return S3fsCurl::is_use_sse; }
     static bool SetContentMd5(bool flag);
     static bool SetVerbose(bool flag);
     static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
@@ -318,7 +338,7 @@ class S3fsCurl
     bool CreateCurlHandle(bool force = false);
     bool DestroyCurlHandle(void);
 
-    bool AddSseKeyRequestHead(std::string& md5, bool is_copy);
+    bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
     bool GetResponseCode(long& responseCode);
     int RequestPerform(void);
     int DeleteRequest(const char* tpath);
@@ -329,7 +349,7 @@ class S3fsCurl
     int HeadRequest(const char* tpath, headers_t& meta);
     int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
     int PutRequest(const char* tpath, headers_t& meta, int fd);
-    int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, std::string& ssekeymd5);
+    int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, std::string& ssevalue);
     int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
@@ -441,6 +461,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list);
 std::string get_canonical_headers(const struct curl_slist* list, bool only_amz = false);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
+bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
 
 #endif // S3FS_CURL_H_
 

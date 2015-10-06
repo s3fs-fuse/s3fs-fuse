@@ -684,27 +684,35 @@ static int check_parent_object_access(const char* path, int mask)
 }
 
 //
-// This function is global, is called fom curl class(GetObject).
+// ssevalue is MD5 for SSE-C type, or KMS id for SSE-KMS
 //
-char* get_object_sseckey_md5(const char* path)
+bool get_object_sse_type(const char* path, sse_type_t& ssetype, string& ssevalue)
 {
   if(!path){
-    return NULL;
+    return false;
   }
-  headers_t meta;
 
+  headers_t meta;
   if(0 != get_object_attribute(path, NULL, &meta)){
     S3FS_PRN_ERR("Failed to get object(%s) headers", path);
-    return NULL;
+    return false;
   }
 
+  ssetype = SSE_DISABLE;
+  ssevalue.erase();
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-    string key   = (*iter).first;
-    if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
-      return strdup((*iter).second.c_str());
+    string key = (*iter).first;
+    if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
+      ssetype  = SSE_S3;
+    }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
+      ssetype  = SSE_KMS;
+      ssevalue = (*iter).second;
+    }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
+      ssetype  = SSE_C;
+      ssevalue = (*iter).second;
     }
   }
-  return NULL;
+  return true;
 }
 
 static FdEntity* get_local_fent(const char* path, bool is_load)
@@ -2229,23 +2237,19 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return NULL;
   }
-  int ssec_key_pos     = s3fscurl->GetLastPreHeadSeecKeyPos();
-  int next_retry_count = s3fscurl->GetMultipartRetryCount() + 1;
+  int ssec_key_pos= s3fscurl->GetLastPreHeadSeecKeyPos();
+  int retry_count = s3fscurl->GetMultipartRetryCount();
 
-  if(s3fscurl->IsOverMultipartRetryCount()){
-    if(S3fsCurl::IsSseCustomMode()){
-      // If sse-c mode, start check not sse-c(ssec_key_pos = -1).
-      // do increment ssec_key_pos for checking all sse-c key.
-      next_retry_count = 0;
-      ssec_key_pos++;
-      if(S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
-        S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
-        return NULL;
-      }
-    }else{
+  // retry next sse key.
+  // if end of sse key, set retry master count is up.
+  ssec_key_pos = (ssec_key_pos < 0 ? 0 : ssec_key_pos + 1);
+  if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
+    if(s3fscurl->IsOverMultipartRetryCount()){
       S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
       return NULL;
     }
+    ssec_key_pos= -1;
+    retry_count++;
   }
 
   S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
@@ -2258,7 +2262,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     delete newcurl;
     return NULL;
   }
-  newcurl->SetMultipartRetryCount(next_retry_count);
+  newcurl->SetMultipartRetryCount(retry_count);
 
   return newcurl;
 }
@@ -2300,8 +2304,8 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
         continue;
       }
 
-      // First check for directory, start checking "not sse-c".
-      // If checking failed, retry to check with "sse-c" by retry callback func when sse-c mode.
+      // First check for directory, start checking "not SSE-C".
+      // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
       S3fsCurl* s3fscurl = new S3fsCurl();
       if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
         S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
@@ -2319,8 +2323,16 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
 
     // Multi request
     if(0 != (result = curlmulti.Request())){
-      S3FS_PRN_ERR("error occuered in multi request(errno=%d).", result); 
-      break;
+      // If result is -EIO, it is somthing error occurred.
+      // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
+      // So s3fs set result to 0 in order to continue the process.
+      if(-EIO == result){
+        S3FS_PRN_WARN("error occuered in multi request(errno=%d), but continue...", result);
+        result = 0;
+      }else{
+        S3FS_PRN_ERR("error occuered in multi request(errno=%d).", result);
+        break;
+      }
     }
 
     // populate fuse buffer
@@ -4246,10 +4258,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       if(0 == rrs){
         S3fsCurl::SetStorageClass(STANDARD);
       }else if(1 == rrs){
-        if(S3fsCurl::GetUseSse()){
-          S3FS_PRN_EXIT("use_rrs option could not be specified with use_sse.");
-          return -1;
-        }
         S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
       }else{
         S3FS_PRN_EXIT("poorly formed argument to option: use_rrs");
@@ -4264,10 +4272,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }else if(0 == strcmp(storage_class, "standard_ia")){
         S3fsCurl::SetStorageClass(STANDARD_IA);
       }else if(0 == strcmp(storage_class, "reduced_redundancy")){
-        if(S3fsCurl::GetUseSse()){
-          S3FS_PRN_EXIT("storage class reduced_redundancy option could not be specified with use_sse.");
-          return -1;
-        }
         S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
       }else{
         S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class);
@@ -4275,47 +4279,113 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }
       return 0;
     }
-    if(0 == strcmp(arg, "use_sse") || 0 == STR2NCMP(arg, "use_sse=")){
-      if(0 == STR2NCMP(arg, "use_sse=")){
-        if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass()){
-          S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
+    //
+    // [NOTE]
+    // use_sse                        Set Server Side Encrypting type to SSE-S3
+    // use_sse=1
+    // use_sse=file                   Set Server Side Encrypting type to Custom key(SSE-C) and load custom keys
+    // use_sse=custom(c):file
+    // use_sse=custom(c)              Set Server Side Encrypting type to Custom key(SSE-C)
+    // use_sse=kmsid(k):kms-key-id    Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS) and load KMS id
+    // use_sse=kmsid(k)               Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS)
+    //
+    // load_sse_c=file                Load Server Side Encrypting custom keys
+    //
+    // AWSSSECKEYS                    Loaing Environment for Server Side Encrypting custom keys
+    // AWSSSEKMSID                    Loaing Environment for Server Side Encrypting Key id
+    //
+    if(0 == STR2NCMP(arg, "use_sse")){
+      if(0 == strcmp(arg, "use_sse") || 0 == strcmp(arg, "use_sse=1")){ // use_sse=1 is old type paraemter
+        // sse type is SSE_S3
+        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseS3Type()){
+          S3FS_PRN_EXIT("already set SSE another type, so confrict use_sse option or environment.");
           return -1;
         }
-        const char* ssecfile = &arg[strlen("use_sse=")];
-        if(0 == strcmp(ssecfile, "1")){
-          if(S3fsCurl::IsSseCustomMode()){
-            S3FS_PRN_EXIT("already set SSE-C key by environment, and confrict use_sse option.");
-            return -1;
-          }
-          S3fsCurl::SetUseSse(true);
+        S3fsCurl::SetSseType(SSE_S3);
+
+      }else if(0 == strcmp(arg, "use_sse=kmsid") || 0 == strcmp(arg, "use_sse=k")){
+        // sse type is SSE_KMS with out kmsid(expecting id is loaded by environment)
+        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
+          S3FS_PRN_EXIT("already set SSE another type, so confrict use_sse option or environment.");
+          return -1;
+        }
+        if(!S3fsCurl::IsSetSseKmsId()){
+          S3FS_PRN_EXIT("use_sse=kms but not loaded kms id by environemnt.");
+          return -1;
+        }
+        S3fsCurl::SetSseType(SSE_KMS);
+
+      }else if(0 == STR2NCMP(arg, "use_sse=kmsid:") || 0 == STR2NCMP(arg, "use_sse=k:")){
+        // sse type is SSE_KMS with kmsid
+        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
+          S3FS_PRN_EXIT("already set SSE another type, so confrict use_sse option or environment.");
+          return -1;
+        }
+        const char* kmsid;
+        if(0 == STR2NCMP(arg, "use_sse=kmsid:")){
+          kmsid = &arg[strlen("use_sse=kmsid:")];
         }else{
-          // testing sse-c, try to load AES256 keys
-          struct stat st;
-          if(0 != stat(ssecfile, &st)){
-            S3FS_PRN_EXIT("could not open use_sse keys file(%s).", ssecfile);
-            return -1;
-          }
-          if(st.st_mode & (S_IXUSR | S_IRWXG | S_IRWXO)){
-            S3FS_PRN_EXIT("use_sse keys file %s should be 0600 permissions.", ssecfile);
-            return -1;
-          }
-          if(!S3fsCurl::SetSseKeys(ssecfile)){
-            S3FS_PRN_EXIT("failed to load use_sse keys file %s.", ssecfile);
-            return -1;
-          }
+          kmsid = &arg[strlen("use_sse=k:")];
         }
+        if(!S3fsCurl::SetSseKmsid(kmsid)){
+          S3FS_PRN_EXIT("failed to load use_sse kms id.");
+          return -1;
+        }
+        S3fsCurl::SetSseType(SSE_KMS);
+
+      }else if(0 == strcmp(arg, "use_sse=custom") || 0 == strcmp(arg, "use_sse=c")){
+        // sse type is SSE_C with out custom keys(expecting keays are loaded by environment or load_sse_c option)
+        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
+          S3FS_PRN_EXIT("already set SSE another type, so confrict use_sse option or environment.");
+          return -1;
+        }
+        // [NOTE]
+        // do not check ckeys exists here.
+        //
+        S3fsCurl::SetSseType(SSE_C);
+
+      }else if(0 == STR2NCMP(arg, "use_sse=custom:") || 0 == STR2NCMP(arg, "use_sse=c:")){
+        // sse type is SSE_C with custom keys
+        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
+          S3FS_PRN_EXIT("already set SSE another type, so confrict use_sse option or environment.");
+          return -1;
+        }
+        const char* ssecfile;
+        if(0 == STR2NCMP(arg, "use_sse=custom:")){
+          ssecfile = &arg[strlen("use_sse=custom:")];
+        }else{
+          ssecfile = &arg[strlen("use_sse=c:")];
+        }
+        if(!S3fsCurl::SetSseCKeys(ssecfile)){
+          S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+          return -1;
+        }
+        S3fsCurl::SetSseType(SSE_C);
+
+      }else if(0 == strcmp(arg, "use_sse=")){    // this type is old style(paraemter is custom key file path)
+        // SSE_C with custom keys.
+        const char* ssecfile = &arg[strlen("use_sse=")];
+        if(!S3fsCurl::SetSseCKeys(ssecfile)){
+          S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+          return -1;
+        }
+        S3fsCurl::SetSseType(SSE_C);
+
       }else{
-        if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass()){
-          S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
-          return -1;
-        }
-        if(S3fsCurl::IsSseCustomMode()){
-          S3FS_PRN_EXIT("already set SSE-C key by environment, and confrict use_sse option.");
-          return -1;
-        }
-        S3fsCurl::SetUseSse(true);
+        // never come here.
+        S3FS_PRN_EXIT("something wrong use_sse optino.");
+        return -1;
       }
       return 0;
+    }
+    // [NOTE]
+    // Do only load SSE custom keys, care for set without set sse type.
+    if(0 == STR2NCMP(arg, "load_sse_c=")){
+      const char* ssecfile = &arg[strlen("load_sse_c=")];
+      if(!S3fsCurl::SetSseCKeys(ssecfile)){
+        S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+        return -1;
+      }
     }
     if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
       long sslvh = static_cast<long>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
@@ -4601,8 +4671,11 @@ int main(int argc, char* argv[])
     }
   }
 
-  // Load SSE-C Key from env
-  S3fsCurl::LoadEnvSseKeys();
+  // Load SSE environment
+  if(!S3fsCurl::LoadEnvSse()){
+    S3FS_PRN_EXIT("something wrong about SSE environment.");
+    exit(EXIT_FAILURE);
+  }
 
   // clear this structure
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
@@ -4612,6 +4685,18 @@ int main(int argc, char* argv[])
   // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
+    exit(EXIT_FAILURE);
+  }
+
+  // [NOTE]
+  // exclusive option check here.
+  //
+  if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
+    S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
+    exit(EXIT_FAILURE);
+  }
+  if(!S3fsCurl::FinalCheckSse()){
+    S3FS_PRN_EXIT("something wrong about SSE options.");
     exit(EXIT_FAILURE);
   }
 
