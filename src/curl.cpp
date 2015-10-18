@@ -3373,6 +3373,41 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   return 0;
 }
 
+int S3fsCurl::MultipartUploadRequest(string upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list)
+{
+  S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%jd][size=%jd]", upload_id.c_str(), SAFESTRPTR(tpath), fd, (intmax_t)offset, (intmax_t)size);
+
+  // duplicate fd
+  int fd2;
+  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
+    S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
+    if(-1 != fd2){
+      close(fd2);
+    }
+    return -errno;
+  }
+
+  // set
+  partdata.fd         = fd2;
+  partdata.startpos   = offset;
+  partdata.size       = size;
+  b_partdata_startpos = partdata.startpos;
+  b_partdata_size     = partdata.size;
+
+  // upload part
+  int   result;
+  if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
+    S3FS_PRN_ERR("failed uploading part(%d)", result);
+    close(fd2);
+    return result;
+  }
+  list.push_back(partdata.etag);
+  DestroyCurlHandle();
+  close(fd2);
+
+  return 0;
+}
+
 int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size)
 {
   int            result;
@@ -3604,7 +3639,7 @@ int S3fsMultiCurl::MultiRead(void)
             isRetry = true;
           }else if(404 == responseCode){
             // not found
-            S3FS_PRN_ERR("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+            S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
           }else if(500 == responseCode){
             // case of all other result, do retry.(11/13/2013)
             // because it was found that s3fs got 500 error from S3, but could success
