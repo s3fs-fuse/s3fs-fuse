@@ -21,6 +21,11 @@
 #define S3FS_CURL_H_
 
 //----------------------------------------------
+// Symbols
+//----------------------------------------------
+#define MIN_MULTIPART_SIZE          5242880           // 5MB
+
+//----------------------------------------------
 // class BodyData
 //----------------------------------------------
 // memory class for curl write memory callback 
@@ -273,10 +278,7 @@ class S3fsCurl
     bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
-    int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
-    int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
     int UploadMultipartPostSetup(const char* tpath, int part_num, std::string& upload_id);
-    int UploadMultipartPostRequest(const char* tpath, int part_num, std::string& upload_id);
     int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
 
   public:
@@ -353,10 +355,14 @@ class S3fsCurl
     int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
     int CheckBucket(void);
     int ListBucketRequest(const char* tpath, const char* query);
+    int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
+    int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
+    int UploadMultipartPostRequest(const char* tpath, int part_num, std::string& upload_id);
     int MultipartListRequest(std::string& body);
     int AbortMultipartUpload(const char* tpath, std::string& upload_id);
     int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
     int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy);
+    int MultipartUploadRequest(std::string upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
     // methods(valiables)

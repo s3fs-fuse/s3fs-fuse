@@ -20,6 +20,9 @@
 #ifndef FD_CACHE_H_
 #define FD_CACHE_H_
 
+#include <sys/statvfs.h>
+#include "curl.h"
+
 //------------------------------------------------
 // CacheFileStat
 //------------------------------------------------
@@ -53,40 +56,49 @@ struct fdpage
 {
   off_t  offset;
   size_t bytes;
-  bool   init;
+  bool   loaded;
 
-  fdpage(off_t start = 0, size_t size = 0, bool is_init = false)
-           : offset(start), bytes(size), init(is_init) {}
+  fdpage(off_t start = 0, size_t size = 0, bool is_loaded = false)
+           : offset(start), bytes(size), loaded(is_loaded) {}
 
   off_t next(void) const { return (offset + bytes); }
   off_t end(void) const { return (0 < bytes ? offset + bytes - 1 : 0); }
 };
 typedef std::list<struct fdpage*> fdpage_list_t;
 
+class FdEntity;
+
 //
 // Management of loading area/modifying
 //
 class PageList
 {
+  friend class FdEntity;    // only one method access directly pages.
+
   private:
     fdpage_list_t pages;
 
   private:
     void Clear(void);
+    bool Compress(void);
+    bool Parse(off_t new_pos);
 
   public:
     static void FreeList(fdpage_list_t& list);
 
-    explicit PageList(off_t size = 0, bool is_init = false);
+    explicit PageList(size_t size = 0, bool is_loaded = false);
     ~PageList();
 
-    off_t Size(void) const;
-    int Resize(off_t size, bool is_init);
-    int Init(off_t size, bool is_init);
-    bool IsInit(off_t start, off_t size);
-    bool SetInit(off_t start, off_t size, bool is_init = true);
-    bool FindUninitPage(off_t start, off_t& resstart, size_t& ressize);
-    int GetUninitPages(fdpage_list_t& uninit_list, off_t start = 0, off_t size = -1);
+    bool Init(size_t size, bool is_loaded);
+    size_t Size(void) const;
+    bool Resize(size_t size, bool is_loaded);
+
+    bool IsPageLoaded(off_t start = 0, size_t size = 0) const;                  // size=0 is checking to end of list
+    bool SetPageLoadedStatus(off_t start, size_t size, bool is_loaded = true, bool is_compress = true);
+    bool FindUnloadedPage(off_t start, off_t& resstart, size_t& ressize) const;
+    size_t GetTotalUnloadedPageSize(off_t start = 0, size_t size = 0) const;    // size=0 is checking to end of list
+    int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, size_t size = 0) const;  // size=0 is checking to end of list
+
     bool Serialize(CacheFileStat& file, bool is_output);
     void Dump(void);
 };
@@ -100,17 +112,28 @@ class FdEntity
     pthread_mutex_t fdent_lock;
     bool            is_lock_init;
     PageList        pagelist;
-    int             refcnt;     // reference count
-    std::string     path;       // object path
-    std::string     cachepath;  // local cache file path
-    int             fd;         // file descriptor(tmp file or cache file)
-    FILE*           file;       // file pointer(tmp file or cache file)
-    bool            is_modify;  // if file is changed, this flag is true
+    int             refcnt;         // reference count
+    std::string     path;           // object path
+    std::string     cachepath;      // local cache file path
+                                    // (if this is empty, does not load/save pagelist.)
+    int             fd;             // file descriptor(tmp file or cache file)
+    FILE*           pfile;          // file pointer(tmp file or cache file)
+    bool            is_modify;      // if file is changed, this flag is true
+    headers_t       orgmeta;        // original headers at opening
+    size_t          size_orgmeta;   // original file size in original headers
+
+    std::string     upload_id;      // for no cached multipart uploading when no disk space
+    etaglist_t      etaglist;       // for no cached multipart uploading when no disk space
+    off_t           mp_start;       // start position for no cached multipart(write method only)
+    size_t          mp_size;        // size for no cached multipart(write method only)
 
   private:
+    static int FillFile(int fd, unsigned char byte, size_t size, off_t start);
+
     void Clear(void);
-    int Dup(void);
-    bool SetAllStatus(bool is_enable);
+    bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
+    //bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
+    bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
 
   public:
     explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
@@ -118,21 +141,32 @@ class FdEntity
 
     void Close(void);
     bool IsOpen(void) const { return (-1 != fd); }
-    int Open(off_t size = -1, time_t time = -1);
+    int Open(headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1);
+    bool OpenAndLoadAll(headers_t* pmeta = NULL, size_t* size = NULL, bool force_load = false);
+    int Dup(void);
+
     const char* GetPath(void) const { return path.c_str(); }
     void SetPath(const std::string &newpath) { path = newpath; }
     int GetFd(void) const { return fd; }
-    int SetMtime(time_t time);
-    bool GetSize(off_t& size);
-    bool GetMtime(time_t& time);
-    bool GetStats(struct stat& st);
 
-    bool SetAllEnable(void) { return SetAllStatus(true); }
-    bool SetAllDisable(void) { return SetAllStatus(false); }
-    bool LoadFull(off_t* size = NULL, bool force_load = false);
-    int Load(off_t start, off_t size);
-    int RowFlush(const char* tpath, headers_t& meta, bool force_sync = false);
-    int Flush(headers_t& meta, bool force_sync = false) { return RowFlush(NULL, meta, force_sync); }
+    bool GetStats(struct stat& st);
+    int SetMtime(time_t time);
+    bool UpdateMtime(void);
+    bool GetSize(size_t& size);
+    bool SetMode(mode_t mode);
+    bool SetUId(uid_t uid);
+    bool SetGId(gid_t gid);
+    bool SetContentType(const char* path);
+
+    int Load(off_t start = 0, size_t size = 0);                 // size=0 means loading to end
+    int NoCacheLoadAndPost(off_t start = 0, size_t size = 0);   // size=0 means loading to end
+    int NoCachePreMultipartPost(void);
+    int NoCacheMultipartPost(int tgfd, off_t start, size_t size);
+    int NoCacheCompleteMultipartPost(void);
+
+    int RowFlush(const char* tpath, bool force_sync = false);
+    int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }
+
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
 };
@@ -148,9 +182,12 @@ class FdManager
     static pthread_mutex_t fd_manager_lock;
     static bool            is_lock_init;
     static std::string     cache_dir;
-    static size_t          page_size;
+    static size_t          free_disk_space; // limit free disk space
 
-    fdent_map_t  fent;
+    fdent_map_t            fent;
+
+  private:
+    static fsblkcnt_t GetFreeDiskSpace(const char* path);
 
   public:
     FdManager();
@@ -164,17 +201,21 @@ class FdManager
     static bool SetCacheDir(const char* dir);
     static bool IsCacheDir(void) { return (0 < FdManager::cache_dir.size()); }
     static const char* GetCacheDir(void) { return FdManager::cache_dir.c_str(); }
-    static size_t SetPageSize(size_t size);
-    static size_t GetPageSize(void) { return FdManager::page_size; }
     static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true);
     static bool CheckCacheTopDir(void);
     static bool MakeRandomTempPath(const char* path, std::string& tmppath);
 
+    static size_t GetEnsureFreeDiskSpace(void) { return FdManager::free_disk_space; }
+    static size_t SetEnsureFreeDiskSpace(size_t size);
+    static size_t InitEnsureFreeDiskSpace(void) { return SetEnsureFreeDiskSpace(0); }
+    static bool IsSafeDiskSpace(const char* path, size_t size);
+
     FdEntity* GetFdEntity(const char* path, int existfd = -1);
-    FdEntity* Open(const char* path, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
+    FdEntity* Open(const char* path, headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
     FdEntity* ExistOpen(const char* path, int existfd = -1);
     void Rename(const std::string &from, const std::string &to);
     bool Close(FdEntity* ent);
+    bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
 };
 
 #endif // FD_CACHE_H_

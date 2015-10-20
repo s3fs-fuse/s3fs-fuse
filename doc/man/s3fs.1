@@ -158,19 +158,16 @@ number of parallel request for uploading big objects.
 s3fs uploads large object(default:over 20MB) by multipart post request, and sends parallel requests.
 This option limits parallel request count which s3fs requests at once.
 It is necessary to set this value depending on a CPU and a network band.
-This option is lated to fd_page_size option and affects it.
-.TP
-\fB\-o\fR fd_page_size(default="52428800"(50MB))
-number of internal management page size for each file descriptor.
-For delayed reading and writing by s3fs, s3fs manages pages which is separated from object. Each pages has a status that data is already loaded(or not loaded yet).
-This option should not be changed when you don't have a trouble with performance.
-This value is changed automatically by parallel_count and multipart_size values(fd_page_size value = parallel_count * multipart_size).
 .TP
 \fB\-o\fR multipart_size(default="10"(10MB))
 number of one part size in multipart uploading request.
-The default size is 10MB(10485760byte), this value is minimum size.
-Specify number of MB and over 10(MB).
-This option is lated to fd_page_size option and affects it.
+The default size is 10MB(10485760byte), minimum value is 5MB(5242880byte).
+Specify number of MB and over 5(MB).
+.TP
+\fB\-o\fR ensure_diskfree(default the same as multipart_size value)
+sets MB to ensure disk free space. This option means the threshold of free space size on disk which is used for the cache file by s3fs.
+s3fs makes file for downloading, and uploading and caching files.
+If the disk free space is smaller than this value, s3fs do not use diskspace as possible in exchange for the performance.
 .TP
 \fB\-o\fR url (default="http://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
