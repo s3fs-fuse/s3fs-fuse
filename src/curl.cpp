@@ -1025,7 +1025,7 @@ string S3fsCurl::SetIAMRole(const char* role)
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
   size = size * 1024 * 1024;
-  if(size < MULTIPART_SIZE){
+  if(size < MIN_MULTIPART_SIZE){
     return false;
   }
   S3fsCurl::multipart_size = size;

@@ -4469,11 +4469,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "multipart_size=")){
       off_t size = static_cast<off_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       if(!S3fsCurl::SetMultipartSize(size)){
-        S3FS_PRN_EXIT("multipart_size option must be at least 10 MB.");
+        S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
         return -1;
       }
-      // update ensure free disk space
-      FdManager::SetEnsureFreeDiskSpace();
+      // update ensure free disk space if it is not set.
+      FdManager::InitEnsureFreeDiskSpace();
       return 0;
     }
     if(0 == STR2NCMP(arg, "ensure_diskfree=")){

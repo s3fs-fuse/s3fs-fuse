@@ -206,7 +206,6 @@ class FdManager
 
     static size_t GetEnsureFreeDiskSpace(void) { return FdManager::free_disk_space; }
     static size_t SetEnsureFreeDiskSpace(size_t size);
-    static size_t SetEnsureFreeDiskSpace(void) { return FdManager::SetEnsureFreeDiskSpace(FdManager::free_disk_space); }
     static size_t InitEnsureFreeDiskSpace(void) { return FdManager::SetEnsureFreeDiskSpace(0); }
     static bool IsSafeDiskSpace(const char* path, size_t size);
 

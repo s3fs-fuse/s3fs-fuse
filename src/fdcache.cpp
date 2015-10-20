@@ -317,17 +317,15 @@ bool PageList::Resize(size_t size, bool is_loaded)
 
   }else if(size < total){
     // cut area
-    fdpage_list_t::iterator iter;
-    for(fdpage_list_t::reverse_iterator riter = pages.rbegin(); riter != pages.rend(); ){
-      if(size < static_cast<size_t>((*riter)->offset)){
-        // cut over area
-        iter = riter.base();
-        ++riter;
-        pages.erase(iter);
-      }else{    // size < static_cast<size_t>((*riter)->offset + (*riter)->bytes)
-        // change size of last area
-        (*riter)->bytes = size - static_cast<size_t>((*riter)->offset);
-        break;
+    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
+      if(static_cast<size_t>((*iter)->next()) <= size){
+        ++iter;
+      }else{
+        if(size <= static_cast<size_t>((*iter)->offset)){
+          iter = pages.erase(iter);
+        }else{
+          (*iter)->bytes = size - static_cast<size_t>((*iter)->offset);
+        }
       }
     }
   }else{    // total == size
@@ -408,45 +406,62 @@ bool PageList::FindUnloadedPage(off_t start, off_t& resstart, size_t& ressize) c
 size_t PageList::GetTotalUnloadedPageSize(off_t start, size_t size) const
 {
   size_t restsize = 0;
+  off_t  next     = static_cast<off_t>(start + size);
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if(start <= (*iter)->end()){
-      if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
-        // reach to end
-        break;
+    if((*iter)->next() <= start){
+      continue;
+    }
+    if(next <= (*iter)->offset){
+      break;
+    }
+    if((*iter)->loaded){
+      continue;
+    }
+    size_t tmpsize;
+    if((*iter)->offset <= start){
+      if((*iter)->next() <= next){
+        tmpsize = static_cast<size_t>((*iter)->next() - start);
+      }else{
+        tmpsize = static_cast<size_t>(next - start);                         // = size
       }
-      // after start pos
-      if(!(*iter)->loaded){
-        // found unloadedialized area
-        restsize += (*iter)->bytes;
+    }else{
+      if((*iter)->next() <= next){
+        tmpsize = static_cast<size_t>((*iter)->next() - (*iter)->offset);   // = (*iter)->bytes
+      }else{
+        tmpsize = static_cast<size_t>(next - (*iter)->offset);
       }
     }
+    restsize += tmpsize;
   }
   return restsize;
 }
 
 int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, size_t size) const
 {
-  for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if(start < (*iter)->offset){
-      continue;
+  // If size is 0, it means loading to end.
+  if(0 == size){
+    if(static_cast<size_t>(start) < Size()){
+      size = static_cast<size_t>(Size() - start);
     }
+  }
+  off_t next = static_cast<off_t>(start + size);
+
+  for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if((*iter)->next() <= start){
       continue;
     }
-    if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
-      break;    // reach end
+    if(next <= (*iter)->offset){
+      break;
     }
     if((*iter)->loaded){
       continue; // already loaded
     }
+
     // page area
     off_t  page_start = max((*iter)->offset, start);
-    size_t page_size;
-    if(0 == size || (*iter)->next() < static_cast<off_t>(start + size)){
-      page_size = static_cast<size_t>((*iter)->next() - page_start);
-    }else{
-      page_size = static_cast<size_t>((start + size) - page_start);
-    }
+    off_t  page_next  = min((*iter)->next(), next);
+    size_t page_size  = static_cast<size_t>(page_next - page_start);
+
     // add list
     fdpage_list_t::reverse_iterator riter = unloaded_list.rbegin();
     if(riter != unloaded_list.rend() && (*riter)->next() == page_start){
@@ -1096,6 +1111,22 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
       off_t offset    = (*iter)->offset + totalread;
       oneread         = min(((*iter)->bytes - totalread), static_cast<size_t>(S3fsCurl::GetMultipartSize()));
 
+      // check rest size is over minimum part size
+      //
+      // [NOTE]
+      // If the final part size is smaller than 5MB, it is not allowed by S3 API.
+      // For this case, if the previous part of the final part is not over 5GB,
+      // we incorporate the final part to the previous part. If the previous part
+      // is over 5GB, we want to even out the last part and the previous part.
+      //
+      if(((*iter)->bytes - totalread - oneread) < MIN_MULTIPART_SIZE){
+        if(FIVE_GB < ((*iter)->bytes - totalread)){
+          oneread = ((*iter)->bytes - totalread) / 2;
+        }else{
+          oneread = ((*iter)->bytes - totalread);
+        }
+      }
+
       if(!(*iter)->loaded){
         //
         // loading or initializing
@@ -1405,21 +1436,23 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
         }
       }
     }
-  }
-  // load size(for prefetch)
-  size_t  load_size = size;
-  if(static_cast<size_t>(start + size) < pagelist.Size()){
-    if(static_cast<size_t>(start + S3fsCurl::GetMultipartSize()) < pagelist.Size()){
-      load_size = S3fsCurl::GetMultipartSize();
-    }else{
-      load_size = static_cast<size_t>(pagelist.Size() - start);
-    }
-  }
 
-  // Loading
-  if(0 < size && 0 != (result = Load(start, load_size))){
-    S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
-    return -EIO;
+    // load size(for prefetch)
+    size_t load_size = size;
+    if(static_cast<size_t>(start + size) < pagelist.Size()){
+      size_t prefetch_max_size = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+
+      if(static_cast<size_t>(start + prefetch_max_size) < pagelist.Size()){
+        load_size = prefetch_max_size;
+      }else{
+        load_size = static_cast<size_t>(pagelist.Size() - start);
+      }
+    }
+    // Loading
+    if(0 < size && 0 != (result = Load(start, load_size))){
+      S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
+      return -EIO;
+    }
   }
   // Reading
   if(-1 == (rsize = pread(fd, bytes, size, start))){
@@ -1446,6 +1479,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     size_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
     if(FdManager::IsSafeDiskSpace(NULL, restsize)){
       // enough disk space
+
       // Load unitialized area which starts from 0 to (start + size) before writing.
       if(0 < start && 0 != (result = Load(0, static_cast<size_t>(start)))){
         S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
@@ -1641,9 +1675,17 @@ size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
 {
   size_t old = FdManager::free_disk_space;
   if(0 == size){
-    FdManager::free_disk_space = static_cast<size_t>(S3fsCurl::GetMultipartSize());
+    if(0 == FdManager::free_disk_space){
+      FdManager::free_disk_space = static_cast<size_t>(S3fsCurl::GetMultipartSize());
+    }
   }else{
-    FdManager::free_disk_space = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+    if(0 == FdManager::free_disk_space){
+      FdManager::free_disk_space = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+    }else{
+      if(static_cast<size_t>(S3fsCurl::GetMultipartSize()) <= size){
+        FdManager::free_disk_space = size;
+      }
+    }
   }
   return old;
 }

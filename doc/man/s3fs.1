@@ -161,8 +161,8 @@ It is necessary to set this value depending on a CPU and a network band.
 .TP
 \fB\-o\fR multipart_size(default="10"(10MB))
 number of one part size in multipart uploading request.
-The default size is 10MB(10485760byte), this value is minimum size.
-Specify number of MB and over 10(MB).
+The default size is 10MB(10485760byte), minimum value is 5MB(5242880byte).
+Specify number of MB and over 5(MB).
 .TP
 \fB\-o\fR ensure_diskfree(default the same as multipart_size value)
 sets MB to ensure disk free space. This option means the threshold of free space size on disk which is used for the cache file by s3fs.
