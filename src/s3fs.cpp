@@ -1193,8 +1193,7 @@ static int rename_object(const char* from, const char* to)
 
 static int rename_object_nocopy(const char* from, const char* to)
 {
-  int       result;
-  headers_t meta;
+  int result;
 
   S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
@@ -1207,18 +1206,16 @@ static int rename_object_nocopy(const char* from, const char* to)
     return result;
   }
 
-  // Get attributes
-  if(0 != (result = get_object_attribute(from, NULL, &meta))){
-    return result;
-  }
-
-  // Set header
-  meta["Content-Type"] = S3fsCurl::LookupMimeType(string(to));
-
   // open & load
   FdEntity* ent;
   if(NULL == (ent = get_local_fent(from, true))){
     S3FS_PRN_ERR("could not open and read file(%s)", from);
+    return -EIO;
+  }
+
+  // Set header
+  if(!ent->SetContentType(to)){
+    S3FS_PRN_ERR("could not set content-type for %s", to);
     return -EIO;
   }
 

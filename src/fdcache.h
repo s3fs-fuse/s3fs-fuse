@@ -132,7 +132,7 @@ class FdEntity
 
     void Clear(void);
     bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
-    bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
+    //bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
     bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
 
   public:
@@ -156,6 +156,7 @@ class FdEntity
     bool SetMode(mode_t mode);
     bool SetUId(uid_t uid);
     bool SetGId(gid_t gid);
+    bool SetContentType(const char* path);
 
     int Load(off_t start = 0, size_t size = 0);                 // size=0 means loading to end
     int NoCacheLoadAndPost(off_t start = 0, size_t size = 0);   // size=0 means loading to end
@@ -206,7 +207,7 @@ class FdManager
 
     static size_t GetEnsureFreeDiskSpace(void) { return FdManager::free_disk_space; }
     static size_t SetEnsureFreeDiskSpace(size_t size);
-    static size_t InitEnsureFreeDiskSpace(void) { return FdManager::SetEnsureFreeDiskSpace(0); }
+    static size_t InitEnsureFreeDiskSpace(void) { return SetEnsureFreeDiskSpace(0); }
     static bool IsSafeDiskSpace(const char* path, size_t size);
 
     FdEntity* GetFdEntity(const char* path, int existfd = -1);

@@ -960,7 +960,15 @@ bool FdEntity::SetGId(gid_t gid)
 {
   orgmeta["x-amz-meta-gid"] = str(gid);
   return true;
+}
 
+bool FdEntity::SetContentType(const char* path)
+{
+  if(!path){
+    return false;
+  }
+  orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(string(path));
+  return true;
 }
 
 bool FdEntity::SetAllStatus(bool is_loaded)
@@ -1902,13 +1910,15 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 {
   AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-  for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+  for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
     if((*iter).second == ent){
-      fent.erase(iter);
+      fent.erase(iter++);
 
       string tmppath("");
       FdManager::MakeRandomTempPath(path, tmppath);
       fent[tmppath] = ent;
+    }else{
+      ++iter;
     }
   }
   return false;
