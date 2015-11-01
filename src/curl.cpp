@@ -2351,13 +2351,21 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     }else if(key == "x-amz-copy-source"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-server-side-encryption"){
-      // skip this header, because this header is specified after logic.
-    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
-      // skip this header, because this header is specified with "x-amz-...-customer-key-md5".
-    }else if(is_copy && key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
-      if(!AddSseRequestHead(SSE_C, value, true, is_copy)){
-        S3FS_PRN_WARN("Failed to insert SSE-C header.");
+      if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
+        S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+      }
+    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
+      // Only copy mode.
+      if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
+        S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+      }
+    }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
+      // Only copy mode.
+      if(is_copy){
+        if(!AddSseRequestHead(SSE_C, value, true, true) || !AddSseRequestHead(SSE_C, value, true, false)){
+          S3FS_PRN_WARN("Failed to insert SSE-C header.");
+        }
       }
     }
   }
@@ -2370,9 +2378,11 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
   // SSE
-  string ssevalue("");
-  if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, true, false)){
-    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+  if(!is_copy){
+    string ssevalue("");
+    if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+      S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+    }
   }
   if(is_use_ahbe){
     // set additional header by ahbe conf
@@ -2771,13 +2781,21 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }else if(key.substr(0, 10) == "x-amz-meta"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-server-side-encryption"){
-      // skip this header, because this header is specified after logic.
-    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
-      // skip this header, because this header is specified with "x-amz-...-customer-key-md5".
-    }else if(is_copy && key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
-      if(!AddSseRequestHead(SSE_C, value, false, is_copy)){
-        S3FS_PRN_WARN("Failed to insert SSE-C header.");
+      if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
+        S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+      }
+    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
+      // Only copy mode.
+      if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
+        S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+      }
+    }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
+      // Only copy mode.
+      if(is_copy){
+        if(!AddSseRequestHead(SSE_C, value, true, true) || !AddSseRequestHead(SSE_C, value, true, false)){
+          S3FS_PRN_WARN("Failed to insert SSE-C header.");
+        }
       }
     }
   }
@@ -2789,9 +2807,11 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
   }
   // SSE
-  string ssevalue("");
-  if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
-    S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+  if(!is_copy){
+    string ssevalue("");
+    if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+      S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+    }
   }
   if(is_use_ahbe){
     // set additional header by ahbe conf
