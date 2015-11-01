@@ -2793,7 +2793,6 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
       if(is_copy){
-        string tmpvalue("");
         if(!AddSseRequestHead(SSE_C, value, true, true) || !AddSseRequestHead(SSE_C, value, true, false)){
           S3FS_PRN_WARN("Failed to insert SSE-C header.");
         }
