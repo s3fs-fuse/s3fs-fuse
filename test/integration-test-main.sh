@@ -320,6 +320,22 @@ function test_special_characters {
     ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
 }
 
+function test_symlink {
+    echo "Testing symlinks ..."
+
+    rm -f $TEST_TEXT_FILE
+    rm -f $ALT_TEST_TEXT_FILE
+    echo foo > $TEST_TEXT_FILE
+
+    ln -s $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
+    cmp $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
+
+    rm -f $TEST_TEXT_FILE
+
+    [ -L $ALT_TEST_TEXT_FILE ]
+    [ ! -f $ALT_TEST_TEXT_FILE ]
+}
+
 function test_extended_attributes {
     command -v setfattr >/dev/null 2>&1 || \
         { echo "Skipping extended attribute tests" ; return; }
@@ -360,6 +376,7 @@ function run_all_tests {
     # TODO: test disabled until S3Proxy 1.5.0 is released
     #test_multipart_copy
     test_special_characters
+    test_symlink
     test_extended_attributes
 }
 
