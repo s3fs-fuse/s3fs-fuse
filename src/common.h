@@ -66,16 +66,16 @@ enum s3fs_log_level{
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
        if(S3FS_LOG_CRIT == level || (S3FS_LOG_CRIT != debug_level && level == (debug_level & level))){ \
          if(foreground){ \
-           fprintf(stdout, "%s%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), __func__, __LINE__, __VA_ARGS__); \
+           fprintf(stdout, "%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
-           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s(%d): " fmt "%s", __func__, __LINE__, __VA_ARGS__); \
+           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s:%s(%d): " fmt "%s", __FILE__, __func__, __LINE__, __VA_ARGS__); \
          } \
        }
 
 #define S3FS_LOW_LOGPRN2(level, nest, fmt, ...) \
        if(S3FS_LOG_CRIT == level || (S3FS_LOG_CRIT != debug_level && level == (debug_level & level))){ \
          if(foreground){ \
-           fprintf(stdout, "%s%s%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), S3FS_LOG_NEST(nest), __func__, __LINE__, __VA_ARGS__); \
+           fprintf(stdout, "%s%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), S3FS_LOG_NEST(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
            syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s" fmt "%s", S3FS_LOG_NEST(nest), __VA_ARGS__); \
          } \
