@@ -81,6 +81,24 @@ function test_append_file {
     rm_test_file
 }
 
+function test_truncate_file {
+    echo "Testing truncate file ..."
+    # Write a small test file
+    echo "${TEST_TEXT}" > ${TEST_TEXT_FILE}
+ 
+    # Truncate file to 0 length.  This should trigger open(path, O_RDWR | O_TRUNC...)
+    : > ${TEST_TEXT_FILE}
+  
+    # Verify file is zero length
+    if [ -s ${TEST_TEXT_FILE} ]
+    then
+        echo "error: expected ${TEST_TEXT_FILE} to be zero length"
+        exit 1
+    fi
+    rm_test_file
+}
+
+
 function test_mv_file {
     echo "Testing mv file function ..."
 
@@ -362,6 +380,7 @@ function test_extended_attributes {
 
 function run_all_tests {
     test_append_file
+    test_truncate_file
     test_mv_file
     test_mv_directory
     test_redirects
