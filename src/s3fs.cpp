@@ -2002,6 +2002,7 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
 {
   int result;
   struct stat st;
+  bool needs_flush = false;
 
   S3FS_PRN_INFO("[path=%s][flags=%d]", path, fi->flags);
 
@@ -2026,6 +2027,7 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
 
   if((unsigned int)fi->flags & O_TRUNC){
     st.st_size = 0;
+    needs_flush = true;
   }
   if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
     st.st_mtime = -1;
@@ -2037,6 +2039,15 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
   if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(st.st_size), st.st_mtime, false, true))){
     return -EIO;
   }
+  
+  if (needs_flush){
+    if(0 != (result = ent->RowFlush(path, true))){
+      S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+      FdManager::get()->Close(ent);
+      return result;
+    }
+  }
+
   fi->fh = ent->GetFd();
   S3FS_MALLOCTRIM(0);
 
