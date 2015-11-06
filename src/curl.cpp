@@ -2435,7 +2435,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   if(-1 != fd){
     // duplicate fd
     if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
-      S3FS_PRN_ERR("Could not duplicate file discriptor(errno=%d)", errno);
+      S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
       if(-1 != fd2){
         close(fd2);
       }
