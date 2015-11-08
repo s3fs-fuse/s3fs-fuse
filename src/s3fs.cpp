@@ -2026,8 +2026,10 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
   }
 
   if((unsigned int)fi->flags & O_TRUNC){
-    st.st_size = 0;
-    needs_flush = true;
+    if(0 != st.st_size){
+      st.st_size = 0;
+      needs_flush = true;
+    }
   }
   if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
     st.st_mtime = -1;
