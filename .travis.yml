@@ -1,17 +1,16 @@
 language: cpp
+sudo: required
 dist: trusty
 cache: apt
 before_install:
  - sudo apt-get update -qq
- - sudo apt-get install -qq libfuse-dev
+ - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
 script:
  - ./autogen.sh
  - ./configure
  - make
+ - make cppcheck
  - make check -C src
- # Travis granted s3fs access to their upcoming alpha testing stack which may
- # allow us to use FUSE.
- # TODO: Travis changed their infrastructure some time in June 2015 such that
- # this does not work currently
- #- modprobe fuse
- #- make check -C test
+ - modprobe fuse
+ - make check -C test
+ - cat test/test-suite.log

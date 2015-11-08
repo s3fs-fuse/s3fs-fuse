@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,13 +84,6 @@ string lower(string s)
     s[i] = tolower(s[i]);
   }
   return s;
-}
-
-string IntToStr(int n)
-{
-  stringstream result;
-  result << n;
-  return result.str();
 }
 
 string trim_left(const string &s, const string &t /* = SPACES */)
@@ -273,6 +267,104 @@ string get_date_iso8601(time_t tm)
   char buf[100];
   strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime(&tm));
   return buf;
+}
+
+std::string s3fs_hex(const unsigned char* input, size_t length)
+{
+  std::string hex;
+  for(size_t pos = 0; pos < length; ++pos){
+    char hexbuf[3];
+    snprintf(hexbuf, 3, "%02x", input[pos]);
+    hex += hexbuf;
+  }
+  return hex;
+}
+
+char* s3fs_base64(const unsigned char* input, size_t length)
+{
+  static const char* base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  char* result;
+
+  if(!input || 0 >= length){
+    return NULL;
+  }
+  if(NULL == (result = (char*)malloc((((length / 3) + 1) * 4 + 1) * sizeof(char)))){
+    return NULL; // ENOMEM
+  }
+
+  unsigned char parts[4];
+  size_t rpos;
+  size_t wpos;
+  for(rpos = 0, wpos = 0; rpos < length; rpos += 3){
+    parts[0] = (input[rpos] & 0xfc) >> 2;
+    parts[1] = ((input[rpos] & 0x03) << 4) | ((((rpos + 1) < length ? input[rpos + 1] : 0x00) & 0xf0) >> 4);
+    parts[2] = (rpos + 1) < length ? (((input[rpos + 1] & 0x0f) << 2) | ((((rpos + 2) < length ? input[rpos + 2] : 0x00) & 0xc0) >> 6)) : 0x40;
+    parts[3] = (rpos + 2) < length ? (input[rpos + 2] & 0x3f) : 0x40;
+
+    result[wpos++] = base[parts[0]];
+    result[wpos++] = base[parts[1]];
+    result[wpos++] = base[parts[2]];
+    result[wpos++] = base[parts[3]];
+  }
+  result[wpos] = '\0';
+
+  return result;
+}
+
+inline unsigned char char_decode64(const char ch)
+{
+  unsigned char by;
+  if('A' <= ch && ch <= 'Z'){                   // A - Z
+    by = static_cast<unsigned char>(ch - 'A');
+  }else if('a' <= ch && ch <= 'z'){             // a - z
+    by = static_cast<unsigned char>(ch - 'a' + 26);
+  }else if('0' <= ch && ch <= '9'){             // 0 - 9
+    by = static_cast<unsigned char>(ch - '0' + 52);
+  }else if('+' == ch){                         // +
+    by = 62;
+  }else if('/' == ch){                         // /
+    by = 63;
+  }else if('=' == ch){                         // =
+    by = 64;
+  }else{                                       // something wrong
+    by = UCHAR_MAX;
+  }
+  return by;
+}
+
+unsigned char* s3fs_decode64(const char* input, size_t* plength)
+{
+  unsigned char* result;
+  if(!input || 0 == strlen(input) || !plength){
+    return NULL;
+  }
+  if(NULL == (result = (unsigned char*)malloc((strlen(input) + 1)))){
+    return NULL; // ENOMEM
+  }
+
+  unsigned char parts[4];
+  size_t input_len = strlen(input);
+  size_t rpos;
+  size_t wpos;
+  for(rpos = 0, wpos = 0; rpos < input_len; rpos += 4){
+    parts[0] = char_decode64(input[rpos]);
+    parts[1] = (rpos + 1) < input_len ? char_decode64(input[rpos + 1]) : 64;
+    parts[2] = (rpos + 2) < input_len ? char_decode64(input[rpos + 2]) : 64;
+    parts[3] = (rpos + 3) < input_len ? char_decode64(input[rpos + 3]) : 64;
+
+    result[wpos++] = ((parts[0] << 2) & 0xfc) | ((parts[1] >> 4) & 0x03);
+    if(64 == parts[2]){
+      break;
+    }
+    result[wpos++] = ((parts[1] << 4) & 0xf0) | ((parts[2] >> 2) & 0x0f);
+    if(64 == parts[3]){
+      break;
+    }
+    result[wpos++] = ((parts[2] << 6) & 0xc0) | (parts[3] & 0x3f);
+  }
+  result[wpos] = '\0';
+  *plength = wpos;
+  return result;
 }
 
 /*

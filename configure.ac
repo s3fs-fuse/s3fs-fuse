@@ -21,15 +21,19 @@ dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
 AC_INIT(s3fs, 1.79)
+AC_CONFIG_HEADER([config.h])
 
 AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE()
+AM_INIT_AUTOMAKE([foreign])
 
 AC_PROG_CXX
 AC_PROG_CC
 
 CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64"
 
+dnl ----------------------------------------------
+dnl For OSX
+dnl ----------------------------------------------
 case "$target" in
    *-darwin* )
       # Do something specific for mac
@@ -219,12 +223,40 @@ AM_CONDITIONAL([USE_GNUTLS_NETTLE], [test "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_SSL_NSS], [test "$auth_lib" = nss])
 
 dnl ----------------------------------------------
-dnl end of ssl library
+dnl check functions
 dnl ----------------------------------------------
-
 dnl malloc_trim function
-AC_CHECK_FUNCS(malloc_trim, , )
+AC_CHECK_FUNCS([malloc_trim])
 
+dnl ----------------------------------------------
+dnl output files
+dnl ----------------------------------------------
 AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)
+
+dnl ----------------------------------------------
+dnl short commit hash
+dnl ----------------------------------------------
+AC_CHECK_PROG([GITCMD], [git —version], [yes], [no])
+AC_CHECK_FILE([.git], [DOTGITDIR=yes], [DOTGITDIR=no])
+
+AC_MSG_CHECKING([github short commit hash])
+if test “x${GITCMD}” = “xyes” -a “x${DOTGITDIR}” = “xyes”; then
+    GITCOMMITHASH=`git rev-parse --short HEAD`
+elif test -f default_commit_hash; then
+    GITCOMMITHASH=`cat default_commit_hash`
+else
+    GITCOMMITHASH="unknown"
+fi
+AC_MSG_RESULT([${GITCOMMITHASH}])
+
+AC_DEFINE_UNQUOTED([COMMIT_HASH_VAL], ["${GITCOMMITHASH}"], [short commit hash value on github])
+
+dnl ----------------------------------------------
+dnl put
+dnl ----------------------------------------------
 AC_OUTPUT
+
+dnl ----------------------------------------------
+dnl end configuration
+dnl ----------------------------------------------
 

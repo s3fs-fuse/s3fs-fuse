@@ -19,6 +19,28 @@
 # 
 #  See the file ChangeLog for a revision history. 
 
+echo "--- Make commit hash file -------"
+
+SHORTHASH="unknown"
+type git > /dev/null 2>&1
+if [ $? -eq 0 -a -d .git ]; then
+	RESULT=`git rev-parse --short HEAD`
+	if [ $? -eq 0 ]; then
+		SHORTHASH=${RESULT}
+	fi
+fi
+echo ${SHORTHASH} > default_commit_hash
+
+echo "--- Finished commit hash file ---"
+
+echo "--- Start autotools -------------"
+
 aclocal \
+&& autoheader \
 && automake --add-missing \
 && autoconf
+
+echo "--- Finished autotools ----------"
+
+exit 0
+

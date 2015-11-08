@@ -217,7 +217,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
       return NULL;
     }
     md5_update(&ctx_md5, bytes, buf);
@@ -261,7 +261,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 
   memset(buf, 0, 512);
   if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_md5, GCRY_MD_MD5, 0))){
-    DPRNN("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    S3FS_PRN_ERR("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
     return NULL;
   }
 
@@ -273,7 +273,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
       return NULL;
     }
     gcry_md_write(ctx_md5, buf, bytes);
@@ -344,7 +344,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
       return NULL;
     }
     sha256_update(&ctx_sha256, bytes, buf);
@@ -375,7 +375,7 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
   gcry_md_hd_t   ctx_sha256;
   gcry_error_t   err;
   if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_sha256, GCRY_MD_SHA256, 0))){
-    DPRNN("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    S3FS_PRN_ERR("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
     free(*digest);
     return false;
   }
@@ -409,7 +409,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 
   memset(buf, 0, 512);
   if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_sha256, GCRY_MD_SHA256, 0))){
-    DPRNN("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
+    S3FS_PRN_ERR("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
     return NULL;
   }
 
@@ -421,7 +421,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
       return NULL;
     }
     gcry_md_write(ctx_sha256, buf, bytes);

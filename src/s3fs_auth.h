@@ -20,14 +20,15 @@
 #ifndef S3FS_AUTH_H_
 #define S3FS_AUTH_H_
 
+#include <string>
+#include <sys/types.h>
+
 //-------------------------------------------------------------------
 // Utility functions for Authentication
 //-------------------------------------------------------------------
 //
 // in common_auth.cpp
 //
-char* s3fs_base64(const unsigned char* input, size_t length);
-unsigned char* s3fs_decode64(const char* input, size_t* plength);
 std::string s3fs_get_content_md5(int fd);
 std::string s3fs_md5sum(int fd, off_t start, ssize_t size);
 std::string s3fs_sha256sum(int fd, off_t start, ssize_t size);

@@ -105,7 +105,7 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
   struct CRYPTO_dynlock_value* dyndata;
 
   if(NULL == (dyndata = static_cast<struct CRYPTO_dynlock_value*>(malloc(sizeof(struct CRYPTO_dynlock_value))))){
-    DPRNCRIT("Could not allocate memory for CRYPTO_dynlock_value");
+    S3FS_PRN_CRIT("Could not allocate memory for CRYPTO_dynlock_value");
     return NULL;
   }
   pthread_mutex_init(&(dyndata->dyn_mutex), NULL);
@@ -134,14 +134,14 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
 bool s3fs_init_crypt_mutex(void)
 {
   if(s3fs_crypt_mutex){
-    FPRNNN("s3fs_crypt_mutex is not NULL, destroy it.");
+    S3FS_PRN_DBG("s3fs_crypt_mutex is not NULL, destroy it.");
     if(!s3fs_destroy_crypt_mutex()){
-      DPRN("Failed to s3fs_crypt_mutex");
+      S3FS_PRN_ERR("Failed to s3fs_crypt_mutex");
       return false;
     }
   }
   if(NULL == (s3fs_crypt_mutex = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t))))){
-    DPRNCRIT("Could not allocate memory for s3fs_crypt_mutex");
+    S3FS_PRN_CRIT("Could not allocate memory for s3fs_crypt_mutex");
     return false;
   }
   for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
@@ -250,7 +250,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
       return NULL;
     }
     MD5_Update(&md5ctx, buf, bytes);
@@ -297,10 +297,8 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
 
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 {
-  const EVP_MD* md        = EVP_get_digestbyname("sha256");
-  EVP_MD_CTX*   sha256ctx = EVP_MD_CTX_create();
-  EVP_DigestInit_ex(sha256ctx, md, NULL);
-
+  const EVP_MD*  md = EVP_get_digestbyname("sha256");
+  EVP_MD_CTX*    sha256ctx;
   char           buf[512];
   ssize_t        bytes;
   unsigned char* result;
@@ -318,6 +316,9 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     return NULL;
   }
 
+  sha256ctx = EVP_MD_CTX_create();
+  EVP_DigestInit_ex(sha256ctx, md, NULL);
+
   memset(buf, 0, 512);
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
@@ -327,13 +328,15 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
       break;
     }else if(-1 == bytes){
       // error
-      DPRNNN("file read error(%d)", errno);
+      S3FS_PRN_ERR("file read error(%d)", errno);
+      EVP_MD_CTX_destroy(sha256ctx);
       return NULL;
     }
     EVP_DigestUpdate(sha256ctx, buf, bytes);
     memset(buf, 0, 512);
   }
   if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
+    EVP_MD_CTX_destroy(sha256ctx);
     return NULL;
   }
   EVP_DigestFinal_ex(sha256ctx, result, NULL);

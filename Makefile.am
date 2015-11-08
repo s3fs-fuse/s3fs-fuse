@@ -19,7 +19,7 @@
 ######################################################################
 SUBDIRS=src test doc
 
-EXTRA_DIST=doc
+EXTRA_DIST=doc default_commit_hash
 
 dist-hook:
 	rm -rf `find $(distdir)/doc -type d -name .svn`
@@ -28,3 +28,12 @@ dist-hook:
 release : dist ../utils/release.sh
 	../utils/release.sh $(DIST_ARCHIVES)
 
+cppcheck:
+	cppcheck --quiet --error-exitcode=1 \
+            -U CURLE_PEER_FAILED_VERIFICATION \
+            --enable=all \
+            --suppress=missingIncludeSystem \
+            --suppress=unsignedLessThanZero \
+            --suppress=unusedFunction \
+            --suppress=variableScope \
+            src/ test/
