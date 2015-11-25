@@ -85,7 +85,8 @@ enum s3fs_log_level{
        if(foreground){ \
          fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
        }else{ \
-         syslog(S3FS_LOG_CRIT, "s3fs: " fmt "%s", __VA_ARGS__); \
+         fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
+         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_CRIT), "s3fs: " fmt "%s", __VA_ARGS__); \
        }
 
 // [NOTE]
