@@ -100,6 +100,10 @@ References
 * [s3ql](https://bitbucket.org/nikratio/s3ql/) - similar to s3fs but uses its own object format
 * [YAS3FS](https://github.com/danilop/yas3fs) - similar to s3fs but uses SNS to allow multiple clients to mount a bucket
 
+Frequently Asked Questions
+--------------------------
+* [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ) 
+
 License
 -------
 
