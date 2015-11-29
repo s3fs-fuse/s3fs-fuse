@@ -774,7 +774,7 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
   }
 
   FdEntity* ent = NULL;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path))){
+  if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !(FdManager::get()->IsCacheDir())))){
     // no opened fd
     if(FdManager::get()->IsCacheDir()){
       // create cache file if be needed

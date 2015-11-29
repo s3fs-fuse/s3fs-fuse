@@ -212,7 +212,7 @@ class FdManager
 
     FdEntity* GetFdEntity(const char* path, int existfd = -1);
     FdEntity* Open(const char* path, headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
-    FdEntity* ExistOpen(const char* path, int existfd = -1);
+    FdEntity* ExistOpen(const char* path, int existfd = -1, bool ignore_existfd = false);
     void Rename(const std::string &from, const std::string &to);
     bool Close(FdEntity* ent);
     bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
