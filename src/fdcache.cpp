@@ -1448,7 +1448,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     // load size(for prefetch)
     size_t load_size = size;
     if(static_cast<size_t>(start + size) < pagelist.Size()){
-      size_t prefetch_max_size = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+      size_t prefetch_max_size = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
 
       if(static_cast<size_t>(start + prefetch_max_size) < pagelist.Size()){
         load_size = prefetch_max_size;
