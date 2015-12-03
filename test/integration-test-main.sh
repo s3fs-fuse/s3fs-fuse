@@ -378,6 +378,36 @@ function test_extended_attributes {
     getfattr -n key2 --only-values $TEST_TEXT_FILE | grep -q '^value2$'
 }
 
+function test_mtime_file {
+    echo "Testing mtime preservation function ..."
+
+    # if the rename file exists, delete it
+    if [ -e $ALT_TEST_TEXT_FILE ]
+    then
+       rm $ALT_TEST_TEXT_FILE
+    fi
+
+    if [ -e $ALT_TEST_TEXT_FILE ]
+    then
+       echo "Could not delete file ${ALT_TEST_TEXT_FILE}, it still exists"
+       exit 1
+    fi
+
+    # create the test file again
+    mk_test_file
+    sleep 2 # allow for some time to pass to compare the timestamps between test & alt
+
+    #copy the test file with preserve mode
+    cp -p $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
+    testmtime=`stat -c %Y $TEST_TEXT_FILE`
+    altmtime=`stat -c %Y $ALT_TEST_TEXT_FILE`
+    if [ "$testmtime" -ne "$altmtime" ]
+    then
+       echo "File times do not match:  $testmtime != $altmtime"
+       exit 1
+    fi
+}
+
 function run_all_tests {
     test_append_file
     test_truncate_file
@@ -397,6 +427,7 @@ function run_all_tests {
     test_special_characters
     test_symlink
     test_extended_attributes
+    test_mtime_file
 }
 
 # Mount the bucket
