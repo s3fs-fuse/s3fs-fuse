@@ -1684,13 +1684,13 @@ size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
   size_t old = FdManager::free_disk_space;
   if(0 == size){
     if(0 == FdManager::free_disk_space){
-      FdManager::free_disk_space = static_cast<size_t>(S3fsCurl::GetMultipartSize());
+      FdManager::free_disk_space = static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount());
     }
   }else{
     if(0 == FdManager::free_disk_space){
-      FdManager::free_disk_space = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+      FdManager::free_disk_space = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
     }else{
-      if(static_cast<size_t>(S3fsCurl::GetMultipartSize()) <= size){
+      if(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()) <= size){
         FdManager::free_disk_space = size;
       }
     }
