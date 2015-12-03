@@ -619,13 +619,7 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
   try{
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-#ifdef PTHREAD_MUTEX_RECURSIVE_NP
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);   // recursive mutex
-#elif PTHREAD_MUTEX_RECURSIVE
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);   // recursive mutex
-#else
-#error "Either PTHREAD_MUTEX_RECURSIVE_NP or PTHREAD_MUTEX_RECURSIVE must be defined."
-#endif
     pthread_mutex_init(&fdent_lock, &attr);
     is_lock_init = true;
   }catch(exception& e){
