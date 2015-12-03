@@ -245,7 +245,7 @@ function test_chown {
     chown 1000:1000 $TEST_TEXT_FILE;
 
     # if they're the same, we have a problem.
-    if [ $(stat --format=%a $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
+    if [ $(stat --format=%u:%g $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
     then
       echo "Could not modify $TEST_TEXT_FILE ownership"
       exit 1
@@ -382,7 +382,7 @@ function test_mtime_file {
     echo "Testing mtime preservation function ..."
 
     # if the rename file exists, delete it
-    if [ -e $ALT_TEST_TEXT_FILE ]
+    if [ -e $ALT_TEST_TEXT_FILE -o -L $ALT_TEST_TEXT_FILE ]
     then
        rm $ALT_TEST_TEXT_FILE
     fi
