@@ -619,7 +619,7 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
   try{
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);   // recursive mutex
+    pthread_mutexattr_settype(&attr, S3FS_MUTEX_RECURSIVE);   // recursive mutex
     pthread_mutex_init(&fdent_lock, &attr);
     is_lock_init = true;
   }catch(exception& e){

@@ -229,6 +229,29 @@ dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl ----------------------------------------------
+dnl check symbols/macros/enums
+dnl ----------------------------------------------
+dnl PTHREAD_MUTEX_RECURSIVE
+AC_MSG_CHECKING([pthread mutex recursive])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <pthread.h>]],
+                   [[int i = PTHREAD_MUTEX_RECURSIVE;]])
+  ],
+  [AC_DEFINE(S3FS_MUTEX_RECURSIVE, PTHREAD_MUTEX_RECURSIVE, [Define if you have PTHREAD_MUTEX_RECURSIVE])
+   AC_MSG_RESULT(PTHREAD_MUTEX_RECURSIVE)
+  ],
+  [AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([[#include <pthread.h>]],
+                     [[int i = PTHREAD_MUTEX_RECURSIVE_NP;]])
+    ],
+    [AC_DEFINE(S3FS_MUTEX_RECURSIVE, PTHREAD_MUTEX_RECURSIVE_NP, [Define if you have PTHREAD_MUTEX_RECURSIVE_NP])
+     AC_MSG_RESULT(PTHREAD_MUTEX_RECURSIVE_NP)
+    ],
+    [AC_MSG_ERROR([do not have PTHREAD_MUTEX_RECURSIVE symbol])])
+  ]
+)
+
+dnl ----------------------------------------------
 dnl output files
 dnl ----------------------------------------------
 AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)
