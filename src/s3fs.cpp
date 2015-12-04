@@ -2074,7 +2074,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
   // check real file size
   size_t realsize = 0;
   if(!ent->GetSize(realsize) || realsize <= 0){
-    S3FS_PRN_ERR("file size is 0, so break to read.");
+    S3FS_PRN_DBG("file size is 0, so break to read.");
     FdManager::get()->Close(ent);
     return 0;
   }
