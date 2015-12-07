@@ -7,6 +7,9 @@
 /config.log
 /config.status
 /config.sub
+/stamp-h1
+/config.h
+/config.h.in
 /configure
 /depcomp
 /test-driver
@@ -24,3 +27,4 @@
 /test/Makefile
 /test/Makefile.in
 /test/*.log
+/default_commit_hash
