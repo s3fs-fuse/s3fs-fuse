@@ -89,6 +89,7 @@ bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool is_specified_endpoint        = false;
+int  s3fs_init_deferred_exit_status = 0;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
@@ -3291,6 +3292,19 @@ static int s3fs_removexattr(const char* path, const char* name)
 
   return 0;
 }
+   
+// s3fs_init calls this function to exit cleanly from the fuse event loop.
+//
+// There's no way to pass an exit status to the high-level event loop API, so 
+// this function stores the exit value in a global for main()
+static void s3fs_exit_fuseloop(int exit_status) {
+    S3FS_PRN_ERR("Exiting FUSE event loop due to errors\n");
+    s3fs_init_deferred_exit_status = exit_status;
+    struct fuse_context *ctx = fuse_get_context();
+    if (NULL != ctx) {
+        fuse_exit(ctx->fuse);
+    }
+}
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
@@ -3299,13 +3313,15 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   // ssl init
   if(!s3fs_init_global_ssl()){
     S3FS_PRN_CRIT("could not initialize for ssl libraries.");
-    exit(EXIT_FAILURE);
+    s3fs_exit_fuseloop(EXIT_FAILURE);
+    return NULL;
   }
 
   // init curl
   if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
     S3FS_PRN_CRIT("Could not initiate curl library.");
-    exit(EXIT_FAILURE);
+    s3fs_exit_fuseloop(EXIT_FAILURE);
+    return NULL;
   }
 
   if (create_bucket){
@@ -3318,7 +3334,8 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   if(!S3fsCurl::IsPublicBucket()){
     int result;
     if(EXIT_SUCCESS != (result = s3fs_check_service())){
-      exit(result);
+      s3fs_exit_fuseloop(result);
+      return NULL;
     }
   }
 
