@@ -49,7 +49,7 @@ function exit_handler {
     then
         kill $S3PROXY_PID
     fi
-    retry 30 fusermount -u $TEST_BUCKET_MOUNT_POINT_1
+    retry 30 grep $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts && fusermount -u $TEST_BUCKET_MOUNT_POINT_1
 }
 trap exit_handler EXIT
 
