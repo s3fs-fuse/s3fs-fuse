@@ -2170,6 +2170,9 @@ static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi)
   }
   S3FS_MALLOCTRIM(0);
 
+  // Issue 320: Delete stat cache entry because st_size may have changed.
+  StatCache::getStatCacheData()->DelStat(path);
+
   return result;
 }
 
