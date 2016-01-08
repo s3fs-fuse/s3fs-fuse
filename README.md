@@ -94,6 +94,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 References
 ----------
 
+* [goofys](https://github.com/kahing/goofys) - similar to s3fs but has better performance and less POSIX compatibility
 * [s3backer](https://github.com/archiecobbs/s3backer) - mount an S3 bucket as a single file
 * [s3fs-python](https://fedorahosted.org/s3fs/) - an older and less complete implementation written in Python
 * [S3Proxy](https://github.com/andrewgaul/s3proxy) - combine with s3fs to mount EMC Atmos, Microsoft Azure, and OpenStack Swift buckets
