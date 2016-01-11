@@ -111,7 +111,7 @@ static string url_to_host(const std::string &url)
   }
 
   size_t idx;
-  if ((idx = host.find(':')) != string::npos || (idx = host.find('/')) != string::npos) {
+  if ((idx = host.find('/')) != string::npos) {
     return host.substr(0, idx);
   } else {
     return host;
@@ -123,7 +123,7 @@ static string get_bucket_host()
   if(!pathrequeststyle){
     return bucket + "." + url_to_host(host);
   }
-  return url_to_host(host) + "/" + bucket;
+  return url_to_host(host);
 }
 
 #if 0 // noused
