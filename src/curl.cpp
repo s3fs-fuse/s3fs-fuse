@@ -2072,6 +2072,7 @@ void S3fsCurl::insertV4Headers(const string &op, const string &path, const strin
   get_date_sigv3(strdate, date8601);
 
   string contentSHA256 = payload_hash.empty() ? empty_payload_hash : payload_hash;
+  const std::string realpath = pathrequeststyle ? "/" + bucket + path : path;
 
   //string canonical_headers, signed_headers;
   requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
@@ -2079,7 +2080,7 @@ void S3fsCurl::insertV4Headers(const string &op, const string &path, const strin
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 
   if(!S3fsCurl::IsPublicBucket()){
-    string Signature = CalcSignature(op, path, query_string, strdate, contentSHA256, date8601);
+    string Signature = CalcSignature(op, realpath, query_string, strdate, contentSHA256, date8601);
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
         "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
