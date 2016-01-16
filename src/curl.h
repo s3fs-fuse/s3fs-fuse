@@ -273,12 +273,12 @@ class S3fsCurl
     bool RemakeHandle(void);
     bool ClearInternalData(void);
     void insertV4Headers(const std::string &op, const std::string &path, const std::string &query_string, const std::string &payload_hash);
-    std::string CalcSignatureV2(std::string method, std::string strMD5, std::string content_type, std::string date, std::string resource);
-    std::string CalcSignature(std::string method, std::string canonical_uri, std::string query_string, std::string strdate, std::string payload_hash, std::string date8601);
+    std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
+    std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
     bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
-    int UploadMultipartPostSetup(const char* tpath, int part_num, std::string& upload_id);
+    int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
     int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
 
   public:
@@ -290,7 +290,7 @@ class S3fsCurl
     static bool CheckIAMCredentialUpdate(void);
 
     // class methods(valiables)
-    static std::string LookupMimeType(std::string name);
+    static std::string LookupMimeType(const std::string& name);
     static bool SetCheckCertificate(bool isCertCheck);
     static bool SetDnsCache(bool isCache);
     static bool SetSslSessionCache(bool isCache);
@@ -357,12 +357,12 @@ class S3fsCurl
     int ListBucketRequest(const char* tpath, const char* query);
     int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
     int CompleteMultipartPostRequest(const char* tpath, std::string& upload_id, etaglist_t& parts);
-    int UploadMultipartPostRequest(const char* tpath, int part_num, std::string& upload_id);
+    int UploadMultipartPostRequest(const char* tpath, int part_num, const std::string& upload_id);
     int MultipartListRequest(std::string& body);
     int AbortMultipartUpload(const char* tpath, std::string& upload_id);
     int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
     int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy);
-    int MultipartUploadRequest(std::string upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list);
+    int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
     // methods(valiables)
