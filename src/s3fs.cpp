@@ -88,8 +88,6 @@ typedef std::list<UNCOMP_MP_INFO> uncomp_mp_list_t;
 bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
-bool is_specified_endpoint        = false;
-int  s3fs_init_deferred_exit_status = 0;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
@@ -123,6 +121,8 @@ static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
+static bool is_specified_endpoint = false;
+static int s3fs_init_deferred_exit_status = 0;
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -143,7 +143,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
-static bool is_truncated(xmlDocPtr doc);;
+static bool is_truncated(xmlDocPtr doc);
 static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
               const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head);
 static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
@@ -2495,7 +2495,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   return 0;
 }
 
-const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
+static const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
 
 static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
        const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head)
@@ -3055,7 +3055,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     return -EIO;
   }
 
-#if (__APPLE__)
+#if defined(__APPLE__)
   if (position != 0) {
     // No resource fork support
     return -EINVAL;
