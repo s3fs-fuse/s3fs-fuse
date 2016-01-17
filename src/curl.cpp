@@ -1960,16 +1960,17 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   uriencode = urlEncode(canonical_uri);
   StringCQ  = method + "\n";
   if(0 == strcmp(method.c_str(),"HEAD") || 0 == strcmp(method.c_str(),"PUT") || 0 == strcmp(method.c_str(),"DELETE")){
-    StringCQ += uriencode + "\n" + query_string + "\n";
+    StringCQ += uriencode + "\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 == strcmp(uriencode.c_str(), "")) {
-    StringCQ +="/\n\n";
+    StringCQ +="/\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 == strncmp(uriencode.c_str(), "/", 1)) {
-    StringCQ += uriencode +"\n\n";
+    StringCQ += uriencode +"\n";
   }else if (0 == strcmp(method.c_str(), "GET") && 0 != strncmp(uriencode.c_str(), "/", 1)) {
     StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
   }else if (0 == strcmp(method.c_str(), "POST")) {
-    StringCQ += uriencode +"\n" + query_string +"\n";
+    StringCQ += uriencode + "\n";
   }
+  StringCQ += urlEncode2(query_string) + "\n";
   StringCQ += get_canonical_headers(requestHeaders) + "\n";
   StringCQ += get_sorted_header_keys(requestHeaders) + "\n";
   StringCQ += payload_hash;
@@ -2723,7 +2724,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     }
 
   }else{
-    insertV4Headers("GET", query, "", "");
+    insertV4Headers("GET", "/", query, "");
   }
 
   // setopt
