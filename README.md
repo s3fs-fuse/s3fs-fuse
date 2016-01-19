@@ -79,6 +79,14 @@ You can also mount on boot by entering the following line to `/etc/fstab`:
 s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other 0 0
 ```
 
+Note: You may also want to create the global credential file first
+
+```
+echo MYIDENTITY:MYCREDENTIAL > /etc/passwd-s3fs
+chmod 600 /path/to/passwd
+```
+
+
 Limitations
 -----------
 
@@ -103,7 +111,7 @@ References
 
 Frequently Asked Questions
 --------------------------
-* [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ) 
+* [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ)
 
 License
 -------
