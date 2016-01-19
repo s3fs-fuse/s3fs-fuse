@@ -76,7 +76,7 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -d -d -f -o f2 
 You can also mount on boot by entering the following line to `/etc/fstab`:
 
 ```
-s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other 0 0
+s3fs#mybucket /path/to/mountpoint fuse _netdev,retries=3,allow_other 0 0
 ```
 
 Note: You may also want to create the global credential file first
@@ -85,6 +85,8 @@ Note: You may also want to create the global credential file first
 echo MYIDENTITY:MYCREDENTIAL > /etc/passwd-s3fs
 chmod 600 /path/to/passwd
 ```
+
+Note2: You may also need to make sure `netfs` service is start on boot
 
 
 Limitations
