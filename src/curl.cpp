@@ -1456,7 +1456,16 @@ bool S3fsCurl::CreateCurlHandle(bool force)
     S3FS_PRN_ERR("Failed to create handle.");
     return false;
   }
-  type = REQTYPE_UNSET;
+
+  // [NOTE]
+  // If type is REQTYPE_IAMCRED, do not clear type.
+  // Because that type only uses HTTP protocol, then the special
+  // logic in ResetHandle function.
+  //
+  if(type != REQTYPE_IAMCRED){
+    type = REQTYPE_UNSET;
+  }
+
   ResetHandle();
 
   pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
