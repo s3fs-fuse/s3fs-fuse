@@ -2429,7 +2429,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     query_prefix += urlEncode(s3_realpath.substr(1));
   }
   if (check_content_only){
-    query_maxkey += "max-keys=1";
+    // Just need to know if there are child objects in dir
+    // For dir with children, expect "dir/" and "dir/child"
+    query_maxkey += "max-keys=2";
   }else{
     query_maxkey += "max-keys=1000";
   }
@@ -2568,7 +2570,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
       }
       free(name);
     }else{
-      S3FS_PRN_WARN("name is file or subdir in dir. but continue.");
+      S3FS_PRN_DBG("name is file or subdir in dir. but continue.");
     }
     xmlXPathFreeObject(key);
   }
