@@ -4253,7 +4253,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "use_cache=")){
-      FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char));
+      if(!FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char))){
+        S3FS_PRN_EXIT("cache directory(%s) is specified, but it does not exist or is not directory.", strchr(arg, '=') + sizeof(char));
+        return -1;
+      }
       return 0;
     }
     if(0 == strcmp(arg, "del_cache")){
