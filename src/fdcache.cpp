@@ -276,6 +276,7 @@ bool PageList::Compress(void)
         fdpage_list_t::iterator biter = iter;
         --biter;
         (*biter)->bytes += (*iter)->bytes;
+        delete *iter;
         iter = pages.erase(iter);
       }else{
         is_last_loaded = (*iter)->loaded;
@@ -322,6 +323,7 @@ bool PageList::Resize(size_t size, bool is_loaded)
         ++iter;
       }else{
         if(size <= static_cast<size_t>((*iter)->offset)){
+          delete *iter;
           iter = pages.erase(iter);
         }else{
           (*iter)->bytes = size - static_cast<size_t>((*iter)->offset);
