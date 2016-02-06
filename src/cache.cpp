@@ -29,6 +29,7 @@
 #include <syslog.h>
 #include <string>
 #include <map>
+#include <vector>
 #include <algorithm>
 #include <list>
 
@@ -38,6 +39,66 @@
 #include "string_util.h"
 
 using namespace std;
+
+//-------------------------------------------------------------------
+// Utility
+//-------------------------------------------------------------------
+inline void SetStatCacheTime(struct timespec& ts)
+{
+  if(-1 == clock_gettime(CLOCK_MONOTONIC_COARSE, &ts)){
+    ts.tv_sec  = time(NULL);
+    ts.tv_nsec = 0;
+  }
+}
+
+inline void InitStatCacheTime(struct timespec& ts)
+{
+  ts.tv_sec  = 0;
+  ts.tv_nsec = 0;
+}
+
+inline int CompareStatCacheTime(struct timespec& ts1, struct timespec& ts2)
+{
+  // return -1:  ts1 < ts2
+  //         0:  ts1 == ts2
+  //         1:  ts1 > ts2
+  if(ts1.tv_sec < ts2.tv_sec){
+    return -1;
+  }else if(ts1.tv_sec > ts2.tv_sec){
+    return 1;
+  }else{
+    if(ts1.tv_nsec < ts2.tv_nsec){
+      return -1;
+    }else if(ts1.tv_nsec > ts2.tv_nsec){
+      return 1;
+    }
+  }
+  return 0;
+}
+
+inline bool IsExpireStatCacheTime(const struct timespec& ts, const time_t& expire)
+{
+  return ((ts.tv_sec + expire) < time(NULL));
+}
+
+//
+// For cache out 
+//
+typedef std::vector<stat_cache_t::iterator>   statiterlist_t;
+
+struct sort_statiterlist{
+  // ascending order
+  bool operator()(const stat_cache_t::iterator& src1, const stat_cache_t::iterator& src2) const
+  {
+    int result = CompareStatCacheTime(src1->second->cache_date, src2->second->cache_date);
+    if(0 == result){
+      if(src1->second->hit_count < src2->second->hit_count){
+        result = -1;
+      }
+    }
+    return (result < 0);
+  }
+};
 
 //-------------------------------------------------------------------
 // Static
@@ -144,7 +205,7 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
 
   if(iter != stat_cache.end() && (*iter).second){
     stat_cache_entry* ent = (*iter).second;
-    if(!IsExpireTime|| (ent->cache_date + ExpireTime) >= time(NULL)){
+    if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
       if(ent->noobjcache){
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         if(!IsCacheNoObject){
@@ -164,11 +225,12 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
       }
       if(is_delete_cache){
         // not hit by different ETag
-        S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%jd][hit count=%lu][ETag(%s)!=(%s)]",
-          strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count, petag ? petag : "null", ent->meta["ETag"].c_str());
+        S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%jd.%09ld][hit count=%lu][ETag(%s)!=(%s)]",
+          strpath.c_str(), (intmax_t)(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count, petag ? petag : "null", ent->meta["ETag"].c_str());
       }else{
         // hit 
-        S3FS_PRN_DBG("stat cache hit [path=%s][time=%jd][hit count=%lu]", strpath.c_str(), (intmax_t)(ent->cache_date), ent->hit_count);
+        S3FS_PRN_DBG("stat cache hit [path=%s][time=%jd.%09ld][hit count=%lu]",
+          strpath.c_str(), (intmax_t)(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
 
         if(pst!= NULL){
           *pst= ent->stbuf;
@@ -180,7 +242,7 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
           (*pisforce) = ent->isforce;
         }
         ent->hit_count++;
-        ent->cache_date = time(NULL);
+        SetStatCacheTime(ent->cache_date);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
@@ -220,10 +282,10 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
   }
 
   if(iter != stat_cache.end() && (*iter).second) {
-    if(!IsExpireTime|| ((*iter).second->cache_date + ExpireTime) >= time(NULL)){
+    if(!IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
       if((*iter).second->noobjcache){
         // noobjcache = true means no object.
-        (*iter).second->cache_date = time(NULL);
+        SetStatCacheTime((*iter).second->cache_date);
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
@@ -271,10 +333,10 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
     return false;
   }
   ent->hit_count  = 0;
-  ent->cache_date = time(NULL); // Set time.
   ent->isforce    = forcedir;
   ent->noobjcache = false;
   ent->meta.clear();
+  SetStatCacheTime(ent->cache_date);    // Set time.
   //copy only some keys
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string tag   = lower(iter->first);
@@ -330,10 +392,10 @@ bool StatCache::AddNoObjectCache(string& key)
   stat_cache_entry* ent = new stat_cache_entry();
   memset(&(ent->stbuf), 0, sizeof(struct stat));
   ent->hit_count  = 0;
-  ent->cache_date = time(NULL); // Set time.
   ent->isforce    = false;
   ent->noobjcache = true;
   ent->meta.clear();
+  SetStatCacheTime(ent->cache_date);    // Set time.
   // add
   pthread_mutex_lock(&StatCache::stat_cache_lock);
   stat_cache[key] = ent;
@@ -344,33 +406,47 @@ bool StatCache::AddNoObjectCache(string& key)
 
 bool StatCache::TruncateCache(void)
 {
+  if(stat_cache.empty()){
+    return true;
+  }
+
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
-  if(stat_cache.empty()){
+  // 1) erase over expire time
+  if(IsExpireTime){
+    for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
+      stat_cache_entry* entry = iter->second;
+      if(!entry || IsExpireStatCacheTime(entry->cache_date, ExpireTime)){
+        stat_cache.erase(iter++);
+      }else{
+        ++iter;
+      }
+    }
+  }
+
+  // 2) check stat cache count
+  if(stat_cache.size() < CacheSize){
     pthread_mutex_unlock(&StatCache::stat_cache_lock);
     return true;
   }
 
-  time_t lowest_time = time(NULL) + 1;
-  stat_cache_t::iterator iter_to_delete = stat_cache.end();
-  stat_cache_t::iterator iter;
+  // 3) erase from the old cache in order
+  size_t            erase_count= stat_cache.size() - CacheSize + 1;
+  statiterlist_t    erase_iters;
+  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ++iter){
+    erase_iters.push_back(iter);
+    sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
+    if(erase_count < erase_iters.size()){
+      erase_iters.pop_back();
+    }
+  }
+  for(statiterlist_t::iterator iiter = erase_iters.begin(); iiter != erase_iters.end(); ++iiter){
+    stat_cache_t::iterator siter = *iiter;
 
-  for(iter = stat_cache.begin(); iter != stat_cache.end(); ++iter) {
-    if((*iter).second){
-      if(lowest_time > (*iter).second->cache_date){
-        lowest_time    = (*iter).second->cache_date;
-        iter_to_delete = iter;
-      }
-    }
+    S3FS_PRN_DBG("truncate stat cache[path=%s]", siter->first.c_str());
+    stat_cache.erase(siter);
   }
-  if(stat_cache.end() != iter_to_delete){
-    S3FS_PRN_DBG("truncate stat cache[path=%s]", (*iter_to_delete).first.c_str());
-    if((*iter_to_delete).second){
-      delete (*iter_to_delete).second;
-    }
-    stat_cache.erase(iter_to_delete);
-    S3FS_MALLOCTRIM(0);
-  }
+  S3FS_MALLOCTRIM(0);
 
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
