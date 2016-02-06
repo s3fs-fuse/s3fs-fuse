@@ -3315,6 +3315,11 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 {
   S3FS_PRN_CRIT("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
 
+  // cache(remove cache dirs at first)
+  if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
+    S3FS_PRN_DBG("Could not inilialize cache directory.");
+  }
+
   // ssl init
   if(!s3fs_init_global_ssl()){
     S3FS_PRN_CRIT("could not initialize for ssl libraries.");
@@ -3350,10 +3355,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
      conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
   }
   #endif
-  // cache
-  if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
-    S3FS_PRN_DBG("Could not inilialize cache directory.");
-  }
+
   return NULL;
 }
 
@@ -3365,8 +3367,8 @@ static void s3fs_destroy(void*)
   if(!S3fsCurl::DestroyS3fsCurl()){
     S3FS_PRN_WARN("Could not release curl library.");
   }
-  // cache
-  if(is_remove_cache && !FdManager::DeleteCacheDirectory()){
+  // cache(remove at last)
+  if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
     S3FS_PRN_WARN("Could not remove cache directory.");
   }
   // ssl

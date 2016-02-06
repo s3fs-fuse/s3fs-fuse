@@ -124,6 +124,23 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
   return true;
 }
 
+// [NOTE]
+// If remove stat file directory, it should do before removing
+// file cache directory.
+//
+bool CacheFileStat::DeleteCacheFileStatDirectory(void)
+{
+  string top_path = FdManager::GetCacheDir();
+
+  if(top_path.empty() || bucket.empty()){
+    return true;
+  }
+  top_path       += "/.";
+  top_path       += bucket;
+  top_path       += ".stat";
+  return delete_files_in_dir(top_path.c_str(), true);
+}
+
 //------------------------------------------------
 // CacheFileStat methods
 //------------------------------------------------

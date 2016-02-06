@@ -38,6 +38,7 @@ class CacheFileStat
   public:
     static bool DeleteCacheFileStat(const char* path);
     static bool CheckCacheFileStatTopDir(void);
+    static bool DeleteCacheFileStatDirectory(void);
 
     explicit CacheFileStat(const char* tpath = NULL);
     ~CacheFileStat();
