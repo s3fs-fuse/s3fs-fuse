@@ -1584,6 +1584,16 @@ bool FdManager::SetCacheDir(const char* dir)
   if(!dir || '\0' == dir[0]){
     cache_dir = "";
   }else{
+    // check the directory
+    struct stat st;
+    if(0 != stat(dir, &st)){
+      S3FS_PRN_ERR("could not access to cache directory(%s) by errno(%d).", cache_dir.c_str(), errno);
+      return false;
+    }
+    if(!S_ISDIR(st.st_mode)){
+      S3FS_PRN_ERR("the cache directory(%s) is not directory.", cache_dir.c_str());
+      return false;
+    }
     cache_dir = dir;
   }
   return true;
