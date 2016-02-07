@@ -367,7 +367,12 @@ function test_rm_rf_dir {
    fi
 }
 
+function test_always_fail {
+   return 1
+}
+
 function add_all_tests {
+    add_tests test_always_fail
     add_tests test_append_file 
     add_tests test_truncate_file 
     add_tests test_mv_file
