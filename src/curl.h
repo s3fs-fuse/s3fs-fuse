@@ -428,24 +428,31 @@ class S3fsMultiCurl
 //----------------------------------------------
 // class AdditionalHeader
 //----------------------------------------------
-typedef std::list<int> charcnt_list_t;
-typedef std::map<std::string, std::string> headerpair_t;
-typedef std::map<std::string, headerpair_t> addheader_t;
+#include <regex.h>
+
+typedef struct add_header{
+  regex_t*      pregex;         // not NULL means using regex, NULL means comparing suffix directly.
+  std::string   basestring;
+  std::string   headkey;
+  std::string   headvalue;
+}ADDHEAD, *PADDHEAD;
+
+typedef std::vector<PADDHEAD>  addheadlist_t;
 
 class AdditionalHeader
 {
   private:
     static AdditionalHeader singleton;
     bool                    is_enable;
-    charcnt_list_t          charcntlist;
-    addheader_t             addheader;
+    addheadlist_t           addheadlist;
+
+  protected:
+    AdditionalHeader();
+    ~AdditionalHeader();
 
   public:
     // Reference singleton
     static AdditionalHeader* get(void) { return &singleton; }
-
-    AdditionalHeader();
-    ~AdditionalHeader();
 
     bool Load(const char* file);
     void Unload(void);

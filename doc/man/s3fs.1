@@ -105,16 +105,17 @@ specify the path to the password file, which which takes precedence over the pas
 This option specifies the configuration file path which file is the additional HTTP header by file(object) extension.
  The configuration file format is below:
  -----------
- line         = [file suffix] HTTP-header [HTTP-values]
- file suffix  = file(object) suffix, if this field is empty, it means "*"(all object).
+ line         = [file suffix or regex] HTTP-header [HTTP-values]
+ file suffix  = file(object) suffix, if this field is empty, it means "reg:(.*)".(=all object).
+ regex        = regular expression to match the file(object) path. this type starts with "reg:" prefix.
  HTTP-header  = additional HTTP header name
  HTTP-values  = additional HTTP header value
  -----------
  Sample:
  -----------
- .gz      Content-Encoding     gzip
- .Z       Content-Encoding     compress
-          X-S3FS-MYHTTPHEAD    myvalue
+ .gz                    Content-Encoding  gzip
+ .Z                     Content-Encoding  compress
+ reg:^/MYDIR/(.*)[.]t2$ Content-Encoding  text2
  -----------
  A sample configuration file is uploaded in "test" directory.
 If you specify this option for set "Content-Encoding" HTTP header, please take care for RFC 2616.

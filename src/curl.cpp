@@ -3781,6 +3781,11 @@ int S3fsMultiCurl::Request(void)
 }
 
 //-------------------------------------------------------------------
+// Symbols
+//-------------------------------------------------------------------
+#define ADD_HEAD_REGEX              "reg:"
+
+//-------------------------------------------------------------------
 // Class AdditionalHeader
 //-------------------------------------------------------------------
 AdditionalHeader AdditionalHeader::singleton;
@@ -3821,7 +3826,8 @@ bool AdditionalHeader::Load(const char* file)
   }
 
   // read file
-  string line;
+  string   line;
+  PADDHEAD paddhead;
   while(getline(AH, line)){
     if('#' == line[0]){
       continue;
@@ -3854,26 +3860,44 @@ bool AdditionalHeader::Load(const char* file)
       return false;
     }
 
-    // set charcntlist
-    int keylen = key.size();
-    charcnt_list_t::iterator iter;
-    for(iter = charcntlist.begin(); iter != charcntlist.end(); ++iter){
-      if(keylen == (*iter)){
-        break;
+    paddhead = new ADDHEAD;
+    if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
+      // regex
+      if(key.size() <= strlen(ADD_HEAD_REGEX)){
+        S3FS_PRN_ERR("file format error: %s key(suffix) does not have key string.", key.c_str());
+        continue;
       }
-    }
-    if(iter == charcntlist.end()){
-      charcntlist.push_back(keylen);
-    }
-    // set addheader
-    addheader_t::iterator aiter;
-    if(addheader.end() == (aiter = addheader.find(key))){
-      headerpair_t hpair;
-      hpair[head]    = value;
-      addheader[key] = hpair;
+      key = key.substr(strlen(ADD_HEAD_REGEX));
+
+      // compile
+      regex_t*  preg = new regex_t;
+      int       result;
+      char      errbuf[256];
+      if(0 != (result = regcomp(preg, key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
+        regerror(result, preg, errbuf, sizeof(errbuf));
+        S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
+        delete preg;
+        delete paddhead;
+        continue;
+      }
+
+      // set
+      paddhead->pregex     = preg;
+      paddhead->basestring = key;
+      paddhead->headkey    = head;
+      paddhead->headvalue  = value;
+
     }else{
-      aiter->second[head] = value;
+      // not regex, directly comparing
+      paddhead->pregex     = NULL;
+      paddhead->basestring = key;
+      paddhead->headkey    = head;
+      paddhead->headvalue  = value;
     }
+
+    // add list
+    addheadlist.push_back(paddhead);
+
     // set flag
     if(!is_enable){
       is_enable = true;
@@ -3885,8 +3909,17 @@ bool AdditionalHeader::Load(const char* file)
 void AdditionalHeader::Unload(void)
 {
   is_enable = false;
-  charcntlist.clear();
-  addheader.clear();
+
+  for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); iter = addheadlist.erase(iter)){
+    PADDHEAD paddhead = *iter;
+    if(paddhead){
+      if(paddhead->pregex){
+        regfree(paddhead->pregex);
+        delete paddhead->pregex;
+      }
+      delete paddhead;
+    }
+  }
 }
 
 bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
@@ -3898,21 +3931,35 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
     S3FS_PRN_WARN("path is NULL.");
     return false;
   }
-  int nPathLen = strlen(path);
-  for(charcnt_list_t::const_iterator iter = charcntlist.begin(); iter != charcntlist.end(); ++iter){
-    // get target character count
-    if(nPathLen < (*iter)){
+
+  size_t pathlength = strlen(path);
+
+  // loop
+  for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
+    const PADDHEAD paddhead = *iter;
+    if(!paddhead){
       continue;
     }
-    // make target suffix(same character count) & find
-    string suffix(&path[nPathLen - (*iter)]);
-    addheader_t::const_iterator aiter;
-    if(addheader.end() == (aiter = addheader.find(suffix))){
-      continue;
-    }
-    for(headerpair_t::const_iterator piter = aiter->second.begin(); piter != aiter->second.end(); ++piter){
-      // Adding header
-      meta[(*piter).first] = (*piter).second;
+
+    if(paddhead->pregex){
+      // regex
+      int        result;
+      regmatch_t match;         // not use
+
+      if(0 == (result = regexec(paddhead->pregex, path, 1, &match, 0))){
+        // match -> adding header
+        meta[paddhead->headkey] = paddhead->headvalue;
+        break;
+      }
+    }else{
+      // directly comparing
+      if(paddhead->basestring.length() < pathlength){
+        if(0 == paddhead->basestring.length() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
+          // match -> adding header
+          meta[paddhead->headkey] = paddhead->headvalue;
+          break;
+        }
+      }
     }
   }
   return true;
@@ -3939,26 +3986,31 @@ bool AdditionalHeader::Dump(void) const
   if(!IS_S3FS_LOG_DBG()){
     return true;
   }
-  // character count list
-  stringstream ssdbg;
-  ssdbg << "Character count list[" << charcntlist.size() << "] = {";
-  for(charcnt_list_t::const_iterator citer = charcntlist.begin(); citer != charcntlist.end(); ++citer){
-    ssdbg << " " << (*citer);
-  }
-  ssdbg << " }\n";
 
-  // additional header
-  ssdbg << "Additional Header list[" << addheader.size() << "] = {\n";
-  for(addheader_t::const_iterator aiter = addheader.begin(); aiter != addheader.end(); ++aiter){
-    string key = (*aiter).first;
-    if(0 == key.size()){
-      key = "*";
+  stringstream ssdbg;
+  int          cnt = 1;
+
+  ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
+
+  for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
+    const PADDHEAD paddhead = *iter;
+
+    ssdbg << "    [" << cnt << "] = {" << endl;
+
+    if(paddhead){
+      if(paddhead->pregex){
+        ssdbg << "        type\t\t--->\tregex" << endl;
+      }else{
+        ssdbg << "        type\t\t--->\tsuffix matching" << endl;
+      }
+      ssdbg << "        base string\t--->\t" << paddhead->basestring << endl;
+      ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << endl;
     }
-    for(headerpair_t::const_iterator piter = (*aiter).second.begin(); piter != (*aiter).second.end(); ++piter){
-      ssdbg << "    " << key << "\t--->\t" << (*piter).first << ": " << (*piter).second << "\n";
-    }
+    ssdbg << "    }" << endl;
   }
-  ssdbg << "}";
+
+
+  ssdbg << "}" << endl;
 
   // print all
   S3FS_PRN_DBG("%s", ssdbg.str().c_str());
