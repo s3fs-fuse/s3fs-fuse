@@ -201,10 +201,8 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
 
     if(paddhead->pregex){
       // regex
-      int        result;
       regmatch_t match;         // not use
-
-      if(0 == (result = regexec(paddhead->pregex, path, 1, &match, 0))){
+      if(0 == regexec(paddhead->pregex, path, 1, &match, 0)){
         // match -> adding header
         meta[paddhead->headkey] = paddhead->headvalue;
         break;
