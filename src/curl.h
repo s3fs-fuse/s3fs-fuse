@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
@@ -423,36 +424,6 @@ class S3fsMultiCurl
     bool Clear(void) { return ClearEx(true); }
     bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
     int Request(void);
-};
-
-//----------------------------------------------
-// class AdditionalHeader
-//----------------------------------------------
-typedef std::list<int> charcnt_list_t;
-typedef std::map<std::string, std::string> headerpair_t;
-typedef std::map<std::string, headerpair_t> addheader_t;
-
-class AdditionalHeader
-{
-  private:
-    static AdditionalHeader singleton;
-    bool                    is_enable;
-    charcnt_list_t          charcntlist;
-    addheader_t             addheader;
-
-  public:
-    // Reference singleton
-    static AdditionalHeader* get(void) { return &singleton; }
-
-    AdditionalHeader();
-    ~AdditionalHeader();
-
-    bool Load(const char* file);
-    void Unload(void);
-
-    bool AddHeader(headers_t& meta, const char* path) const;
-    struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
-    bool Dump(void) const;
 };
 
 //----------------------------------------------
