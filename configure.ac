@@ -228,6 +228,9 @@ dnl ----------------------------------------------
 dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
+dnl clock_gettime function(osx)
+AC_CHECK_FUNCS([clock_gettime])
+
 dnl ----------------------------------------------
 dnl check symbols/macros/enums
 dnl ----------------------------------------------

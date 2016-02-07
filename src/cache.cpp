@@ -21,6 +21,9 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef HAVE_CLOCK_GETTIME
+#include <sys/time.h>
+#endif
 #include <unistd.h>
 #include <stdint.h>
 #include <pthread.h>
@@ -43,6 +46,23 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
+#if defined(CLOCK_MONOTONIC_COARSE)
+#define CLOCK_MONOTONIC_COARSE  6
+#endif
+
+#ifndef HAVE_CLOCK_GETTIME
+static int clock_gettime(int clk_id, struct timespec* ts)
+{
+  struct timeval now;
+  if(0 != gettimeofday(&now, NULL)){
+    return -1;
+  }
+  ts->tv_sec  = now.tv_sec;
+  ts->tv_nsec = now.tv_usec * 1000;
+  return 0;
+}
+#endif
+
 inline void SetStatCacheTime(struct timespec& ts)
 {
   if(-1 == clock_gettime(CLOCK_MONOTONIC_COARSE, &ts)){
