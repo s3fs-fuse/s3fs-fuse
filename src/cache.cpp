@@ -46,8 +46,11 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
-#if defined(CLOCK_MONOTONIC_COARSE)
-#define CLOCK_MONOTONIC_COARSE  6
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC         CLOCK_REALTIME
+#endif
+#ifndef CLOCK_MONOTONIC_COARSE
+#define CLOCK_MONOTONIC_COARSE  CLOCK_MONOTONIC
 #endif
 
 #ifndef HAVE_CLOCK_GETTIME
