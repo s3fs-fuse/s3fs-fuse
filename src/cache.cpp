@@ -46,6 +46,9 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME          0
+#endif
 #ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC         CLOCK_REALTIME
 #endif
