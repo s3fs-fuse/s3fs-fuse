@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
@@ -423,43 +424,6 @@ class S3fsMultiCurl
     bool Clear(void) { return ClearEx(true); }
     bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
     int Request(void);
-};
-
-//----------------------------------------------
-// class AdditionalHeader
-//----------------------------------------------
-#include <regex.h>
-
-typedef struct add_header{
-  regex_t*      pregex;         // not NULL means using regex, NULL means comparing suffix directly.
-  std::string   basestring;
-  std::string   headkey;
-  std::string   headvalue;
-}ADDHEAD, *PADDHEAD;
-
-typedef std::vector<PADDHEAD>  addheadlist_t;
-
-class AdditionalHeader
-{
-  private:
-    static AdditionalHeader singleton;
-    bool                    is_enable;
-    addheadlist_t           addheadlist;
-
-  protected:
-    AdditionalHeader();
-    ~AdditionalHeader();
-
-  public:
-    // Reference singleton
-    static AdditionalHeader* get(void) { return &singleton; }
-
-    bool Load(const char* file);
-    void Unload(void);
-
-    bool AddHeader(headers_t& meta, const char* path) const;
-    struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
-    bool Dump(void) const;
 };
 
 //----------------------------------------------

@@ -52,6 +52,7 @@
 #include "s3fs_util.h"
 #include "fdcache.h"
 #include "s3fs_auth.h"
+#include "addhead.h"
 
 using namespace std;
 
