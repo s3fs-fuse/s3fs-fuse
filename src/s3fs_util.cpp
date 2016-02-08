@@ -724,6 +724,11 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
         }else{
           if(meta.end() != (iter = meta.find("Content-Type"))){
             string strConType = (*iter).second;
+            // Leave just the mime type, remove any optional parameters (eg charset)
+            string::size_type pos = strConType.find(";");
+  	    if(string::npos != pos){
+            	strConType = strConType.substr(0, pos);
+  	    }
             if(strConType == "application/x-directory"){
               mode |= S_IFDIR;
             }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
