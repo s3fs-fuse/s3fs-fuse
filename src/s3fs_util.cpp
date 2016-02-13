@@ -60,6 +60,20 @@ string get_realpath(const char *path) {
   return realpath;
 }
 
+inline headers_t::const_iterator find_content_type(headers_t& meta)
+{
+  headers_t::const_iterator iter;
+
+  if(meta.end() == (iter = meta.find("Content-Type"))){
+    if(meta.end() == (iter = meta.find("Content-type"))){
+      if(meta.end() == (iter = meta.find("content-type"))){
+        iter = meta.find("content-Type");
+      }
+    }
+  }
+  return iter;
+}
+
 //-------------------------------------------------------------------
 // Class S3ObjList
 //-------------------------------------------------------------------
@@ -722,13 +736,13 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
         if(forcedir){
           mode |= S_IFDIR;
         }else{
-          if(meta.end() != (iter = meta.find("Content-Type"))){
+          if(meta.end() != (iter = find_content_type(meta))){
             string strConType = (*iter).second;
             // Leave just the mime type, remove any optional parameters (eg charset)
             string::size_type pos = strConType.find(";");
-  	    if(string::npos != pos){
-            	strConType = strConType.substr(0, pos);
-  	    }
+            if(string::npos != pos){
+              strConType = strConType.substr(0, pos);
+            }
             if(strConType == "application/x-directory"){
               mode |= S_IFDIR;
             }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
@@ -850,7 +864,7 @@ bool is_need_check_obj_detail(headers_t& meta)
   }
   // if there is not Content-Type, or Content-Type is "x-directory",
   // checking is no more.
-  if(meta.end() == (iter = meta.find("Content-Type"))){
+  if(meta.end() == (iter = find_content_type(meta))){
     return false;
   }
   if("application/x-directory" == (*iter).second){
