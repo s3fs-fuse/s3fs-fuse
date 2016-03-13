@@ -328,9 +328,9 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
   return false;
 }
 
-bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
+bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir, bool no_truncate)
 {
-  if(CacheSize< 1){
+  if(!no_truncate && CacheSize< 1){
     return true;
   }
   S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
@@ -361,6 +361,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir)
   ent->hit_count  = 0;
   ent->isforce    = forcedir;
   ent->noobjcache = false;
+  ent->notruncate = (no_truncate ? 1L : 0L);
   ent->meta.clear();
   SetStatCacheTime(ent->cache_date);    // Set time.
   //copy only some keys
@@ -420,6 +421,7 @@ bool StatCache::AddNoObjectCache(string& key)
   ent->hit_count  = 0;
   ent->isforce    = false;
   ent->noobjcache = true;
+  ent->notruncate = 0L;
   ent->meta.clear();
   SetStatCacheTime(ent->cache_date);    // Set time.
   // add
@@ -428,6 +430,27 @@ bool StatCache::AddNoObjectCache(string& key)
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
+}
+
+void StatCache::ChangeNoTruncateFlag(std::string key, bool no_truncate)
+{
+  pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  stat_cache_t::iterator iter = stat_cache.find(key);
+
+  if(stat_cache.end() != iter){
+    stat_cache_entry* ent = iter->second;
+    if(ent){
+      if(no_truncate){
+        ++(ent->notruncate);
+      }else{
+        if(0L < ent->notruncate){
+          --(ent->notruncate);
+        }
+      }
+    }
+  }
+  pthread_mutex_unlock(&StatCache::stat_cache_lock);
 }
 
 bool StatCache::TruncateCache(void)
@@ -442,7 +465,7 @@ bool StatCache::TruncateCache(void)
   if(IsExpireTime){
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
       stat_cache_entry* entry = iter->second;
-      if(!entry || IsExpireStatCacheTime(entry->cache_date, ExpireTime)){
+      if(!entry || (0L < entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
         stat_cache.erase(iter++);
       }else{
         ++iter;
@@ -460,6 +483,15 @@ bool StatCache::TruncateCache(void)
   size_t            erase_count= stat_cache.size() - CacheSize + 1;
   statiterlist_t    erase_iters;
   for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ++iter){
+    // check no truncate
+    stat_cache_entry* ent = iter->second;
+    if(ent && 0L < ent->notruncate){
+      // skip for no truncate entry
+      if(0 < erase_count){
+        --erase_count;     // decrement
+      }
+    }
+    // iter is not have notruncate flag
     erase_iters.push_back(iter);
     sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
     if(erase_count < erase_iters.size()){

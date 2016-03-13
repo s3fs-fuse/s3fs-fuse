@@ -134,7 +134,7 @@ static s3fs_log_level set_s3fs_log_level(s3fs_log_level level);
 static s3fs_log_level bumpup_s3fs_log_level(void);
 static bool is_special_name_folder_object(const char* path);
 static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, int* pDirType = NULL);
-static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL);
+static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL, bool add_no_truncate_cache = false);
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
@@ -389,7 +389,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
 // 2) "dir/"
 // 3) "dir_$folder$"
 //
-static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce)
+static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce, bool add_no_truncate_cache)
 {
   int          result = -1;
   struct stat  tmpstbuf;
@@ -426,6 +426,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     (*pisforce) = false;
   }
   if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
+    StatCache::getStatCacheData()->ChangeNoTruncateFlag(strpath, add_no_truncate_cache);
     return 0;
   }
   if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
@@ -507,9 +508,16 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   }
 
   // Set into cache
-  if(0 != StatCache::getStatCacheData()->GetCacheSize()){
+  //
+  // [NOTE]
+  // When add_no_truncate_cache is true, the stats is always cached.
+  // This cached stats is only removed by DelStat().
+  // This is necessary for the case to access the attribute of opened file.
+  // (ex. getxattr() is called while writing to the opened file.)
+  //
+  if(add_no_truncate_cache || 0 != StatCache::getStatCacheData()->GetCacheSize()){
     // add into stat cache
-    if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir)){
+    if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir, add_no_truncate_cache)){
       S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
       return -ENOENT;
     }
@@ -953,8 +961,9 @@ static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
 
   FdEntity*   ent;
   headers_t   meta;
-  get_object_attribute(path, NULL, &meta);
+  get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
   if(NULL == (ent = FdManager::get()->Open(path, &meta, 0, -1, false, true))){
+    StatCache::getStatCacheData()->DelStat(path);
     return -EIO;
   }
   fi->fh = ent->GetFd();
@@ -2039,8 +2048,9 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
 
   FdEntity*   ent;
   headers_t   meta;
-  get_object_attribute(path, NULL, &meta);
+  get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
   if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(st.st_size), st.st_mtime, false, true))){
+    StatCache::getStatCacheData()->DelStat(path);
     return -EIO;
   }
   
@@ -2048,6 +2058,7 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
     if(0 != (result = ent->RowFlush(path, true))){
       S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
       FdManager::get()->Close(ent);
+      StatCache::getStatCacheData()->DelStat(path);
       return result;
     }
   }
@@ -2180,6 +2191,11 @@ static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi)
 static int s3fs_release(const char* path, struct fuse_file_info* fi)
 {
   S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+
+  // [NOTE]
+  // All opened file's stats is cached with no truncate flag.
+  // Thus we unset it here.
+  StatCache::getStatCacheData()->ChangeNoTruncateFlag(string(path), false);
 
   // [NOTICE]
   // At first, we remove stats cache.
