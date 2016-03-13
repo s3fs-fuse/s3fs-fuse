@@ -60,15 +60,15 @@ class StatCache
     bool          IsCacheNoObject;
 
   private:
+    StatCache();
+    ~StatCache();
+
     void Clear(void);
     bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
     // Truncate stat cache
     bool TruncateCache(void);
 
   public:
-    StatCache();
-    ~StatCache();
-
     // Reference singleton
     static StatCache* getStatCacheData(void) {
       return &singleton;

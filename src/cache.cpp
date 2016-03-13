@@ -243,16 +243,24 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
         return false;
       }
       // hit without checking etag
+      string stretag;
       if(petag){
-        string stretag = ent->meta["ETag"];
-        if('\0' != petag[0] && 0 != strcmp(petag, stretag.c_str())){
-          is_delete_cache = true;
+        // find & check ETag
+        for(headers_t::iterator iter = ent->meta.begin(); iter != ent->meta.end(); ++iter){
+          string tag = lower(iter->first);
+          if(tag == "etag"){
+            stretag = iter->second;
+            if('\0' != petag[0] && 0 != strcmp(petag, stretag.c_str())){
+              is_delete_cache = true;
+            }
+            break;
+          }
         }
       }
       if(is_delete_cache){
         // not hit by different ETag
         S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%jd.%09ld][hit count=%lu][ETag(%s)!=(%s)]",
-          strpath.c_str(), (intmax_t)(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count, petag ? petag : "null", ent->meta["ETag"].c_str());
+          strpath.c_str(), (intmax_t)(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count, petag ? petag : "null", stretag.c_str());
       }else{
         // hit 
         S3FS_PRN_DBG("stat cache hit [path=%s][time=%jd.%09ld][hit count=%lu]",
@@ -380,9 +388,19 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir, bool n
       ent->meta[tag] = value;		// key is lower case for "x-amz"
     }
   }
+
   // add
   pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
+  if(stat_cache.end() != iter){
+    if(iter->second){
+      delete iter->second;
+    }
+    stat_cache.erase(iter);
+  }
   stat_cache[key] = ent;
+
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
@@ -424,9 +442,19 @@ bool StatCache::AddNoObjectCache(string& key)
   ent->notruncate = 0L;
   ent->meta.clear();
   SetStatCacheTime(ent->cache_date);    // Set time.
+
   // add
   pthread_mutex_lock(&StatCache::stat_cache_lock);
+
+  stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
+  if(stat_cache.end() != iter){
+    if(iter->second){
+      delete iter->second;
+    }
+    stat_cache.erase(iter);
+  }
   stat_cache[key] = ent;
+
   pthread_mutex_unlock(&StatCache::stat_cache_lock);
 
   return true;
