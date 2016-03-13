@@ -33,8 +33,9 @@ struct stat_cache_entry {
   headers_t         meta;
   bool              isforce;
   bool              noobjcache;  // Flag: cache is no object for no listing.
+  unsigned long     notruncate;  // 0<:   not remove automatically at checking truncate
 
-  stat_cache_entry() : hit_count(0), isforce(false), noobjcache(false) {
+  stat_cache_entry() : hit_count(0), isforce(false), noobjcache(false), notruncate(0L) {
     memset(&stbuf, 0, sizeof(struct stat));
     cache_date.tv_sec  = 0;
     cache_date.tv_nsec = 0;
@@ -112,7 +113,10 @@ class StatCache
     bool AddNoObjectCache(std::string& key);
 
     // Add stat cache
-    bool AddStat(std::string& key, headers_t& meta, bool forcedir = false);
+    bool AddStat(std::string& key, headers_t& meta, bool forcedir = false, bool no_truncate = false);
+
+    // Change no truncate flag
+    void ChangeNoTruncateFlag(std::string key, bool no_truncate);
 
     // Delete stat cache
     bool DelStat(const char* key);
