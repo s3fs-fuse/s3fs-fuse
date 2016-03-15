@@ -367,6 +367,13 @@ function test_rm_rf_dir {
    fi
 }
 
+function test_write_after_seek_ahead {
+   describe "Test writes succeed after a seek ahead"
+   dd if=/dev/zero of=testfile seek=1 count=1 bs=1024
+   rm testfile
+}
+
+
 function add_all_tests {
     add_tests test_append_file 
     add_tests test_truncate_file 
@@ -387,6 +394,7 @@ function add_all_tests {
     add_tests test_symlink
     add_tests test_extended_attributes
     add_tests test_rm_rf_dir
+    add_tests test_write_after_seek_ahead
 }
 
 init_suite
