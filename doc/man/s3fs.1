@@ -92,8 +92,8 @@ If you specify only "kmsid"("k"), you need to set AWSSSEKMSID environment which 
 You must be careful about that you can not use the KMS id which is not same EC2 region.
 .TP
 \fB\-o\fR load_sse_c - specify SSE-C keys
-Specify the custom-provided encription keys file path for decrypting at duwnloading.
-If you use the custom-provided encription key at uploading, you specify with "use_sse=custom".
+Specify the custom-provided encryption keys file path for decrypting at downloading.
+If you use the custom-provided encryption key at uploading, you specify with "use_sse=custom".
 The file has many lines, one line means one custom key.
 So that you can keep all SSE-C keys in file, that is SSE-C key history.
 AWSSSECKEYS environment is as same as this file contents.
