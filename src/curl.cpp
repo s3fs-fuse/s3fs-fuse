@@ -1762,7 +1762,7 @@ int S3fsCurl::RequestPerform(void)
         // Service response codes which are >= 400 && < 500
         switch(LastResponseCode){
           case 400:
-            S3FS_PRN_INFO3("HTTP response code 400 was returned, returing EIO.");
+            S3FS_PRN_INFO3("HTTP response code 400 was returned, returning EIO.");
             S3FS_PRN_DBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -EIO;
 
