@@ -728,29 +728,6 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
   if(-1 != fd){
     // already opened, needs to increment refcnt.
     Dup();
-
-    // check only file size(do not need to save cfs and time.
-    if(0 <= size && pagelist.Size() != static_cast<size_t>(size)){
-      // truncate temporary file size
-      if(-1 == ftruncate(fd, static_cast<size_t>(size))){
-        S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
-        return -EIO;
-      }
-      // resize page list
-      if(!pagelist.Resize(static_cast<size_t>(size), false)){
-        S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
-        return -EIO;
-      }
-    }
-    // set original headers and set size.
-    size_t new_size = (0 <= size ? static_cast<size_t>(size) : 0);
-    if(pmeta){
-      orgmeta  = *pmeta;
-      new_size = static_cast<size_t>(get_size(orgmeta));
-    }
-    if(new_size < size_orgmeta){
-      size_orgmeta = new_size;
-    }
     return 0;
   }
 
@@ -1080,12 +1057,8 @@ int FdEntity::Load(off_t start, size_t size)
         }
       }else{
         // single request
-        if(0 < need_load_size){
-          S3fsCurl s3fscurl;
-          result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
-        }else{
-          result = 0;
-        }
+        S3fsCurl s3fscurl;
+        result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
       }
       if(0 != result){
         break;
@@ -1524,17 +1497,6 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     return -EBADF;
   }
   AutoLock auto_lock(&fdent_lock);
-
-  // check file size
-  if(pagelist.Size() < static_cast<size_t>(start)){
-    // grow file size
-    if(-1 == ftruncate(fd, static_cast<size_t>(start))){
-      S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
-      return -EIO;
-    }
-    // add new area
-    pagelist.SetPageLoadedStatus(static_cast<off_t>(pagelist.Size()), static_cast<size_t>(start) - pagelist.Size(), false);
-  }
 
   int     result;
   ssize_t wsize;
