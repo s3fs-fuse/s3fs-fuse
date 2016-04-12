@@ -728,6 +728,29 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
   if(-1 != fd){
     // already opened, needs to increment refcnt.
     Dup();
+
+    // check only file size(do not need to save cfs and time.
+    if(0 <= size && pagelist.Size() != static_cast<size_t>(size)){
+      // truncate temporary file size
+      if(-1 == ftruncate(fd, static_cast<size_t>(size))){
+        S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
+        return -EIO;
+      }
+      // resize page list
+      if(!pagelist.Resize(static_cast<size_t>(size), false)){
+        S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
+        return -EIO;
+      }
+    }
+    // set original headers and set size.
+    size_t new_size = (0 <= size ? static_cast<size_t>(size) : size_orgmeta);
+    if(pmeta){
+      orgmeta  = *pmeta;
+      new_size = static_cast<size_t>(get_size(orgmeta));
+    }
+    if(new_size < size_orgmeta){
+      size_orgmeta = new_size;
+    }
     return 0;
   }
 
@@ -1057,8 +1080,12 @@ int FdEntity::Load(off_t start, size_t size)
         }
       }else{
         // single request
-        S3fsCurl s3fscurl;
-        result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+        if(0 < need_load_size){
+          S3fsCurl s3fscurl;
+          result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+        }else{
+          result = 0;
+        }
       }
       if(0 != result){
         break;
@@ -1379,6 +1406,12 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       S3FS_PRN_ERR("lseek error(%d)", errno);
       return -errno;
     }
+    // backup upload file size
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    if(-1 == fstat(fd, &st)){
+      S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
+    }
 
     if(pagelist.Size() >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
       // Additional time is needed for large files
@@ -1400,6 +1433,9 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       S3FS_PRN_ERR("lseek error(%d)", errno);
       return -errno;
     }
+
+    // reset uploaded file size
+    size_orgmeta = static_cast<size_t>(st.st_size);
 
   }else{
     // upload rest data
@@ -1497,6 +1533,17 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     return -EBADF;
   }
   AutoLock auto_lock(&fdent_lock);
+
+  // check file size
+  if(pagelist.Size() < static_cast<size_t>(start)){
+    // grow file size
+    if(-1 == ftruncate(fd, static_cast<size_t>(start))){
+      S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
+      return -EIO;
+    }
+    // add new area
+    pagelist.SetPageLoadedStatus(static_cast<off_t>(pagelist.Size()), static_cast<size_t>(start) - pagelist.Size(), false);
+  }
 
   int     result;
   ssize_t wsize;
