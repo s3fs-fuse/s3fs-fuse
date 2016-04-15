@@ -1,0 +1,17 @@
+# docker run -d --name s3fs --cap-add MKNOD --cap-add SYS_ADMIN --device=/dev/fuse --security-opt seccomp=seccomp.json -v /home/docker/:/tmp/ s3fs:latest sqldata /mnt -o passwd_file=/tmp/passwd.txt -o url=https://sos.exo.io -o sigv2 -o nomultipart  -f
+
+{
+    "defaultAction": "SCMP_ACT_ERRNO",
+    "architectures": [
+        "SCMP_ARCH_X86_64",
+        "SCMP_ARCH_X86",
+        "SCMP_ARCH_X32"
+    ],
+    "syscalls": [
+        {
+            "name": "mount",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        }
+    ]
+}
