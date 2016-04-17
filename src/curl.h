@@ -205,6 +205,7 @@ class S3fsCurl
     static int              max_parallel_cnt;
     static off_t            multipart_size;
     static bool             is_sigv4;
+    static bool             is_ua;             // User-Agent
 
     // variables
     CURL*                hCurl;
@@ -266,6 +267,7 @@ class S3fsCurl
     static bool LoadEnvSseCKeys(void);
     static bool LoadEnvSseKmsid(void);
     static bool PushbackSseKeys(std::string& onekey);
+    static bool AddUserAgent(CURL* hCurl);
 
     static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
 
@@ -336,6 +338,8 @@ class S3fsCurl
     static off_t GetMultipartSize(void) { return S3fsCurl::multipart_size; }
     static bool SetSignatureV4(bool isset) { bool bresult = S3fsCurl::is_sigv4; S3fsCurl::is_sigv4 = isset; return bresult; }
     static bool IsSignatureV4(void) { return S3fsCurl::is_sigv4; }
+    static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
+    static bool IsUserAgentFlag(void) { return S3fsCurl::is_ua; }
 
     // methods
     bool CreateCurlHandle(bool force = false);

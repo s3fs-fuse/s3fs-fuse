@@ -271,6 +271,7 @@ mimes_t          S3fsCurl::mimeTypes;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 bool             S3fsCurl::is_sigv4            = true;           // default
+bool             S3fsCurl::is_ua               = true;           // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -1344,6 +1345,30 @@ bool S3fsCurl::CheckIAMCredentialUpdate(void)
   return true;
 }
 
+bool S3fsCurl::AddUserAgent(CURL* hCurl)
+{
+  if(!hCurl){
+    return false;
+  }
+  if(S3fsCurl::IsUserAgentFlag()){
+    static string strua;
+    static bool   init = false;
+
+    if(!init){
+      strua =  "s3fs/";
+      strua += VERSION;
+      strua += " (commit hash ";
+      strua += COMMIT_HASH_VAL;
+      strua += "; ";
+      strua += s3fs_crypt_lib_name();
+      strua += ")";
+      init = true;
+    }
+    curl_easy_setopt(hCurl, CURLOPT_USERAGENT, strua.c_str());
+  }
+  return true;
+}
+
 int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
 {
   if(!hcurl){
@@ -1722,6 +1747,8 @@ bool S3fsCurl::RemakeHandle(void)
       S3FS_PRN_ERR("request type is unknown(%d)", type);
       return false;
   }
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
+
   return true;
 }
 
@@ -2133,6 +2160,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   type = REQTYPE_DELETE;
 
@@ -2167,6 +2195,7 @@ int S3fsCurl::GetIAMCredentials(void)
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   int result = RequestPerform();
 
@@ -2275,6 +2304,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
   // responseHeaders
   curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
   curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
+  S3fsCurl::AddUserAgent(hCurl);                   // put User-Agent
 
   type = REQTYPE_HEAD;
 
@@ -2421,6 +2451,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);                                // put User-Agent
 
   type = REQTYPE_PUTHEAD;
 
@@ -2544,6 +2575,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   }else{
     curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);             // Content-Length: 0
   }
+  S3fsCurl::AddUserAgent(hCurl);                                // put User-Agent
 
   type = REQTYPE_PUT;
 
@@ -2609,6 +2641,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, S3fsCurl::DownloadWriteCallback);
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)this);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   // set info for callback func.
   // (use only fd, startpos and size, other member is not used.)
@@ -2689,6 +2722,7 @@ int S3fsCurl::CheckBucket(void)
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   type = REQTYPE_CHKBUCKET;
 
@@ -2742,6 +2776,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   type = REQTYPE_LISTBUCKET;
 
@@ -2856,6 +2891,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
   type = REQTYPE_PREMULTIPOST;
 
@@ -2968,6 +3004,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining));
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+  S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
   type = REQTYPE_COMPLETEMULTIPOST;
 
@@ -3018,6 +3055,7 @@ int S3fsCurl::MultipartListRequest(string& body)
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   type = REQTYPE_MULTILIST;
 
@@ -3070,6 +3108,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   type = REQTYPE_ABORTMULTIUPLOAD;
 
@@ -3164,6 +3203,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
   type = REQTYPE_UPLOADMULTIPOST;
 
@@ -3262,6 +3302,7 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+  S3fsCurl::AddUserAgent(hCurl);                                // put User-Agent
 
   type = REQTYPE_COPYMULTIPOST;
 
