@@ -4599,6 +4599,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       pathrequeststyle = true;
       return 0;
     }
+    if(0 == STR2NCMP(arg, "noua")){
+      S3fsCurl::SetUserAgentFlag(false);
+      return 0;
+    }
     //
     // debug option for s3fs
     //

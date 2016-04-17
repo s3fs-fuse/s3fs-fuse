@@ -216,6 +216,10 @@ If this option is specified with nocopapi, the s3fs ignores it.
 \fB\-o\fR use_path_request_style (use legacy API calling style)
 Enble compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .TP
+\fB\-o\fR noua (suppress User-Agent header)
+Usually s3fs outputs of the User-Agent in "s3fs/<version> (commit hash <hash>; <using ssl library name>)" format.
+If this option is specified, s3fs suppresses the output of the User-Agent.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit(critical), err(error), warn(warning), info(information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
