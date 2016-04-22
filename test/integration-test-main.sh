@@ -55,7 +55,7 @@ function test_truncate_empty_file {
     if [ $t_size -ne $size ]
     then
         echo "error: expected ${TEST_TEXT_FILE} to be $t_size length, got $size"
-        exit 1
+        return 1
     fi
     rm_test_file
 }
