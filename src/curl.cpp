@@ -221,6 +221,88 @@ const char* BodyData::str(void) const
 }
 
 //-------------------------------------------------------------------
+// Class CurlHandlerPool
+//-------------------------------------------------------------------
+
+bool CurlHandlerPool::Init()
+{
+  if (0 != pthread_mutex_init(&mLock, NULL)) {
+    S3FS_PRN_ERR("Init curl handlers lock failed");
+    return false;
+  }
+
+  mHandlers = new CURL*[mMaxHandlers](); // this will init the array to 0
+  for (int i = 0; i < mMaxHandlers; ++i, ++mIndex) {
+    mHandlers[i] = curl_easy_init();
+    if (!mHandlers[i]) {
+      S3FS_PRN_ERR("Init curl handlers pool failed");
+      Destroy();
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool CurlHandlerPool::Destroy()
+{
+  assert(mIndex >= -1 && mIndex < mMaxHandlers);
+
+  for (int i = 0; i <= mIndex; ++i) {
+    curl_easy_cleanup(mHandlers[i]);
+  }
+  delete[] mHandlers;
+
+  if (0 != pthread_mutex_destroy(&mLock)) {
+    S3FS_PRN_ERR("Destroy curl handlers lock failed");
+    return false;
+  }
+
+  return true;
+}
+
+CURL* CurlHandlerPool::GetHandler()
+{
+  CURL* h = NULL;
+
+  assert(mIndex >= -1 && mIndex < mMaxHandlers);
+
+  pthread_mutex_lock(&mLock);
+  if (mIndex >= 0) {
+    S3FS_PRN_DBG("Get handler from pool: %d", mIndex);
+    h = mHandlers[mIndex--];
+  }
+  pthread_mutex_unlock(&mLock);
+
+  if (!h) {
+    S3FS_PRN_INFO("Pool empty: create new handler");
+    h = curl_easy_init();
+  }
+
+  return h;
+}
+
+void CurlHandlerPool::ReturnHandler(CURL* h)
+{
+  bool needCleanup = true;
+
+  assert(mIndex >= -1 && mIndex < mMaxHandlers);
+
+  pthread_mutex_lock(&mLock);
+  if (mIndex < mMaxHandlers - 1) {
+    mHandlers[++mIndex] = h;
+    needCleanup = false;
+    S3FS_PRN_DBG("Return handler to pool: %d", mIndex);
+  }
+  pthread_mutex_unlock(&mLock);
+
+  if (needCleanup) {
+    S3FS_PRN_INFO("Pool full: destroy the handler");
+    curl_easy_cleanup(h);
+  }
+}
+
+//-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
 #define MULTIPART_SIZE              10485760          // 10MB
@@ -243,6 +325,8 @@ const char* BodyData::str(void) const
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 pthread_mutex_t  S3fsCurl::curl_share_lock[SHARE_MUTEX_MAX];
 bool             S3fsCurl::is_initglobal_done  = false;
+CurlHandlerPool* S3fsCurl::sCurlPool           = NULL;
+int              S3fsCurl::sCurlPoolSize       = 32;
 CURLSH*          S3fsCurl::hCurlShare          = NULL;
 bool             S3fsCurl::is_cert_check       = true; // default
 bool             S3fsCurl::is_dns_cache        = true; // default
@@ -293,6 +377,10 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
   if(!S3fsCurl::InitGlobalCurl()){
     return false;
   }
+  sCurlPool = new CurlHandlerPool(sCurlPoolSize);
+  if (!sCurlPool->Init()) {
+    return false;
+  }
   if(!S3fsCurl::InitShareCurl()){
     return false;
   }
@@ -310,6 +398,9 @@ bool S3fsCurl::DestroyS3fsCurl(void)
     result = false;
   }
   if(!S3fsCurl::DestroyShareCurl()){
+    result = false;
+  }
+  if (!sCurlPool->Destroy()) {
     result = false;
   }
   if(!S3fsCurl::DestroyGlobalCurl()){
@@ -1478,7 +1569,7 @@ bool S3fsCurl::CreateCurlHandle(bool force)
     S3FS_PRN_INFO3("already has handle, so destroied it.");
   }
 
-  if(NULL == (hCurl = curl_easy_init())){
+  if(NULL == (hCurl = sCurlPool->GetHandler())){
     S3FS_PRN_ERR("Failed to create handle.");
     return false;
   }
@@ -1508,7 +1599,7 @@ bool S3fsCurl::DestroyCurlHandle(void)
 
   S3fsCurl::curl_times.erase(hCurl);
   S3fsCurl::curl_progress.erase(hCurl);
-  curl_easy_cleanup(hCurl);
+  sCurlPool->ReturnHandler(hCurl);
   hCurl = NULL;
   ClearInternalData();
 

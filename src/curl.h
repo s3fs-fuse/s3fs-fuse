@@ -21,6 +21,8 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
+#include <cassert>
+
 //----------------------------------------------
 // Symbols
 //----------------------------------------------
@@ -122,6 +124,35 @@ typedef std::map<CURL*, progress_t> curlprogress_t;
 class S3fsMultiCurl;
 
 //----------------------------------------------
+// class CurlHandlerPool
+//----------------------------------------------
+
+class CurlHandlerPool
+{
+public:
+  CurlHandlerPool(int maxHandlers)
+    : mMaxHandlers(maxHandlers)
+    , mHandlers(NULL)
+    , mIndex(-1)
+  {
+    assert(maxHandlers > 0);
+  }
+
+  bool Init();
+  bool Destroy();
+
+  CURL* GetHandler();
+  void ReturnHandler(CURL* h);
+
+private:
+  int mMaxHandlers;
+
+  pthread_mutex_t mLock;
+  CURL** mHandlers;
+  int mIndex;
+};
+
+//----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
 typedef std::map<std::string, std::string> iamcredmap_t;
@@ -177,6 +208,8 @@ class S3fsCurl
     static pthread_mutex_t  curl_handles_lock;
     static pthread_mutex_t  curl_share_lock[SHARE_MUTEX_MAX];
     static bool             is_initglobal_done;
+    static CurlHandlerPool* sCurlPool;
+    static int              sCurlPoolSize;
     static CURLSH*          hCurlShare;
     static bool             is_cert_check;
     static bool             is_dns_cache;
