@@ -2595,7 +2595,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
 {
   S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
 
-  if(!tpath || -1 == fd || 0 > start || 0 >= size){
+  if(!tpath || -1 == fd || 0 > start || 0 > size){
     return -1;
   }
 
@@ -2611,7 +2611,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
   requestHeaders  = NULL;
   responseHeaders.clear();
 
-  if(-1 != start && -1 != size){
+  if(-1 != start && 0 < size){
     string range = "bytes=";
     range       += str(start);
     range       += "-";

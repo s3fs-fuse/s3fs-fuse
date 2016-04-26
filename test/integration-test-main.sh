@@ -41,6 +41,24 @@ function test_truncate_file {
     rm_test_file
 }
 
+function test_truncate_empty_file {
+    echo "Testing truncate empty file ..."
+    # Write an empty test file
+    touch ${TEST_TEXT_FILE}
+
+    # Truncate the file to 1024 length
+    t_size=1024
+    truncate ${TEST_TEXT_FILE} -s $t_size
+
+    # Verify file is zero length
+    size=$(stat -c %s ${TEST_TEXT_FILE})
+    if [ $t_size -ne $size ]
+    then
+        echo "error: expected ${TEST_TEXT_FILE} to be $t_size length, got $size"
+        return 1
+    fi
+    rm_test_file
+}
 
 function test_mv_file {
     describe "Testing mv file function ..."
@@ -377,6 +395,7 @@ function test_write_after_seek_ahead {
 function add_all_tests {
     add_tests test_append_file 
     add_tests test_truncate_file 
+    add_tests test_truncate_empty_file
     add_tests test_mv_file
     add_tests test_mv_directory
     add_tests test_redirects
