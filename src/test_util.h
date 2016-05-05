@@ -33,6 +33,7 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
 {
   if(x == NULL && y == NULL){
     return;
+  // cppcheck-suppress nullPointerRedundantCheck
   } else if((x == NULL || y == NULL) || strcmp(x, y) != 0){
     std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
     std::exit(1);

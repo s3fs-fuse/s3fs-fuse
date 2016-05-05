@@ -1570,12 +1570,11 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
+    hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE)
 {
-  type = REQTYPE_UNSET;
 }
 
 S3fsCurl::~S3fsCurl()
@@ -2974,7 +2973,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     }
 
   }else{
-    insertV4Headers("GET", "/", query, "");
+    insertV4Headers("GET", "/", query ? query : "", "");
   }
 
   // setopt

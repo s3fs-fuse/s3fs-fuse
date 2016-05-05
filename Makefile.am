@@ -30,10 +30,12 @@ release : dist ../utils/release.sh
 
 cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
+            --inline-suppr \
+            --std=c++03 \
             -U CURLE_PEER_FAILED_VERIFICATION \
+            -U P_tmpdir \
             --enable=all \
             --suppress=missingIncludeSystem \
-            --suppress=unsignedLessThanZero \
             --suppress=unusedFunction \
             --suppress=variableScope \
             src/ test/

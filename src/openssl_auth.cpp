@@ -185,7 +185,7 @@ bool s3fs_destroy_crypt_mutex(void)
 //-------------------------------------------------------------------
 static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen, bool is_sha256)
 {
-  if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
+  if(!key || !data || !digest || !digestlen){
     return false;
   }
   (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
