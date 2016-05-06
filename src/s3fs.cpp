@@ -4433,6 +4433,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
         return -1;
       }
+      return 0;
     }
     if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
       long sslvh = static_cast<long>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
