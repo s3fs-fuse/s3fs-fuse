@@ -113,6 +113,7 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
+static bool load_iamrole          = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
 static mode_t s3fs_umask          = 0;
@@ -3351,6 +3352,19 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     return NULL;
   }
 
+  // check loading IAM role name
+  if(load_iamrole){
+    // load IAM role name from http://169.254.169.254/latest/meta-data/iam/info
+    //
+    S3fsCurl s3fscurl;
+    if(!s3fscurl.LoadIAMRoleFromMetaData()){
+      S3FS_PRN_CRIT("could not load IAM role name from meta data.");
+      s3fs_exit_fuseloop(EXIT_FAILURE);
+      return NULL;
+    }
+    S3FS_PRN_INFO("loaded IAM role name = %s", S3fsCurl::GetIAMRole());
+  }
+
   if (create_bucket){
     do_create_bucket();
   }
@@ -4447,10 +4461,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       passwd_file = strchr(arg, '=') + sizeof(char);
       return 0;
     }
-    if(0 == STR2NCMP(arg, "iam_role=")){
-      const char* role = strchr(arg, '=') + sizeof(char);
-      S3fsCurl::SetIAMRole(role);
-      return 0;
+    if(0 == STR2NCMP(arg, "iam_role")){
+      if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
+        // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
+        //
+        load_iamrole = true;
+        return 0;
+
+      }else if(0 == STR2NCMP(arg, "iam_role=")){
+        const char* role = strchr(arg, '=') + sizeof(char);
+        S3fsCurl::SetIAMRole(role);
+        load_iamrole = false;
+        return 0;
+      }
     }
     if(0 == STR2NCMP(arg, "public_bucket=")){
       off_t pubbucket = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));
