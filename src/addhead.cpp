@@ -193,6 +193,10 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
   size_t pathlength = strlen(path);
 
   // loop
+  //
+  // [NOTE]
+  // Because to allow duplicate key, and then scanning the entire table.
+  //
   for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
     const PADDHEAD paddhead = *iter;
     if(!paddhead){
@@ -205,7 +209,6 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
       if(0 == regexec(paddhead->pregex, path, 1, &match, 0)){
         // match -> adding header
         meta[paddhead->headkey] = paddhead->headvalue;
-        break;
       }
     }else{
       // directly comparing
@@ -213,7 +216,6 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
         if(0 == paddhead->basestring.length() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
           // match -> adding header
           meta[paddhead->headkey] = paddhead->headvalue;
-          break;
         }
       }
     }
