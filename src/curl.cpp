@@ -315,6 +315,9 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define IAMCRED_ACCESSTOKEN         "Token"
 #define IAMCRED_EXPIRATION          "Expiration"
 #define IAMCRED_KEYCOUNT            4
+#define	IAM_DEFAULT_ROLE_URL        "http://169.254.169.254/latest/meta-data/iam/info"
+#define IAMDEFROLE_PROFARN          "InstanceProfileArn"
+#define IAMDEFROLE_PROFARN_PART     ":instance-profile/"
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -1436,6 +1439,66 @@ bool S3fsCurl::CheckIAMCredentialUpdate(void)
   return true;
 }
 
+bool S3fsCurl::ParseIAMRoleFromMetaDataResponse(const char* response, string& rolename)
+{
+  if(!response){
+    return false;
+  }
+  // [NOTE]
+  // expected following strings.
+  // 
+  // {
+  //   "Code" : "Success",
+  //   "LastUpdated" : "2016-01-01T00:00:00Z",
+  //   "InstanceProfileArn" : "arn:aws:iam::111111111111:instance-profile/myrolename",
+  //   "InstanceProfileId" : "AAAAAAAAAAAAAAAAAAAAA"
+  // }
+  //
+  istringstream ssrole(response);
+  string        oneline;
+  while(getline(ssrole, oneline, '\n')){
+    string::size_type pos;
+    if(string::npos != (pos = oneline.find(IAMDEFROLE_PROFARN))){
+      if(string::npos == (pos = oneline.find(':', pos + strlen(IAMDEFROLE_PROFARN)))){
+        continue;
+      }
+      if(string::npos == (pos = oneline.find('\"', pos))){
+        continue;
+      }
+
+      // value
+      oneline = oneline.substr(pos + sizeof(char));
+      if(string::npos == (pos = oneline.find('\"'))){
+        continue;
+      }
+      oneline = oneline.substr(0, pos);
+
+      // role name
+      if(string::npos == (pos = oneline.find(IAMDEFROLE_PROFARN_PART))){
+        continue;
+      }
+      rolename = oneline.substr(pos + strlen(IAMDEFROLE_PROFARN_PART));
+
+      return !rolename.empty();
+    }
+  }
+  return false;
+}
+
+bool S3fsCurl::SetIAMRoleFromMetaData(const char* response)
+{
+  S3FS_PRN_INFO3("IAM role name response = \"%s\"", response);
+
+  string rolename;
+
+  if(!S3fsCurl::ParseIAMRoleFromMetaDataResponse(response, rolename)){
+    return false;
+  }
+
+  SetIAMRole(rolename.c_str());
+  return true;
+}
+
 bool S3fsCurl::AddUserAgent(CURL* hCurl)
 {
   if(!hCurl){
@@ -1523,8 +1586,8 @@ bool S3fsCurl::ResetHandle(void)
   curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
   // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
 
-  if(type != REQTYPE_IAMCRED){
-    // REQTYPE_IAMCRED is always HTTP
+  if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
+    // REQTYPE_IAMCRED and REQTYPE_IAMROLE are always HTTP
     if(0 == S3fsCurl::ssl_verify_hostname){
       curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
     }
@@ -1575,11 +1638,11 @@ bool S3fsCurl::CreateCurlHandle(bool force)
   }
 
   // [NOTE]
-  // If type is REQTYPE_IAMCRED, do not clear type.
+  // If type is REQTYPE_IAMCRED or REQTYPE_IAMROLE, do not clear type.
   // Because that type only uses HTTP protocol, then the special
   // logic in ResetHandle function.
   //
-  if(type != REQTYPE_IAMCRED){
+  if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
     type = REQTYPE_UNSET;
   }
 
@@ -1832,6 +1895,12 @@ bool S3fsCurl::RemakeHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
       curl_easy_setopt(hCurl, CURLOPT_CUSTOMREQUEST, "DELETE");
       curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
+      break;
+
+    case REQTYPE_IAMROLE:
+      curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+      curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
       break;
 
     default:
@@ -2298,6 +2367,44 @@ int S3fsCurl::GetIAMCredentials(void)
   bodydata = NULL;
 
   return result;
+}
+
+//
+// Get IAM role name automatically.
+//
+bool S3fsCurl::LoadIAMRoleFromMetaData(void)
+{
+  S3FS_PRN_INFO3("Get IAM Role name");
+
+  // at first set type for handle
+  type = REQTYPE_IAMROLE;
+
+  if(!CreateCurlHandle(true)){
+    return false;
+  }
+
+  // url
+  url             = IAM_DEFAULT_ROLE_URL;
+  requestHeaders  = NULL;
+  responseHeaders.clear();
+  bodydata        = new BodyData();
+
+  curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
+  curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
+
+  int result = RequestPerform();
+
+  // analizing response
+  if(0 == result && !S3fsCurl::SetIAMRoleFromMetaData(bodydata->str())){
+    S3FS_PRN_ERR("Something error occurred, could not get IAM role name.");
+    result = -EIO;
+  }
+  delete bodydata;
+  bodydata = NULL;
+
+  return (0 == result);
 }
 
 bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, string& ssevalue, bool is_only_c, bool is_copy)

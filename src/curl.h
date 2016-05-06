@@ -201,7 +201,8 @@ class S3fsCurl
       REQTYPE_COPYMULTIPOST,
       REQTYPE_MULTILIST,
       REQTYPE_IAMCRED,
-      REQTYPE_ABORTMULTIUPLOAD
+      REQTYPE_ABORTMULTIUPLOAD,
+      REQTYPE_IAMROLE
     };
 
     // class variables
@@ -297,6 +298,8 @@ class S3fsCurl
 
     static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
     static bool SetIAMCredentials(const char* response);
+    static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
+    static bool SetIAMRoleFromMetaData(const char* response);
     static bool LoadEnvSseCKeys(void);
     static bool LoadEnvSseKmsid(void);
     static bool PushbackSseKeys(std::string& onekey);
@@ -378,6 +381,7 @@ class S3fsCurl
     bool CreateCurlHandle(bool force = false);
     bool DestroyCurlHandle(void);
 
+    bool LoadIAMRoleFromMetaData(void);
     bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
     bool GetResponseCode(long& responseCode);
     int RequestPerform(void);
