@@ -104,7 +104,9 @@ inline int CompareStatCacheTime(struct timespec& ts1, struct timespec& ts2)
 
 inline bool IsExpireStatCacheTime(const struct timespec& ts, const time_t& expire)
 {
-  return ((ts.tv_sec + expire) < time(NULL));
+  struct timespec nowts;
+  SetStatCacheTime(nowts);
+  return ((ts.tv_sec + expire) < nowts.tv_sec);
 }
 
 //
