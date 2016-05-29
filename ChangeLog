@@ -1,6 +1,110 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.80 -- May 29, 2016
+#213 - Parse ETag from copy multipart correctly
+#215 - Fix mem leak in openssl_auth.cpp:s3fs_sha256hexsum
+#217 - Override install, so that the make install does not install
+rename_before_close under /test
+#219 - Address Coverity errors
+#220 - Test removing a non-empty directory
+#221 - Compare idiomatically
+#222 - Annotate constructors as explicit
+#224 - Configure cppcheck
+#229 - Convert rename_before_close to a shell script
+#231 - Rewrite AutoLock
+#232 - Always hold stat_cache_lock when using stat_cache
+#233 - Remove IntToStr
+#234 - Update README
+#235 - Plug leak during complete multipart upload
+#237 - Refactor tests into individual functions
+#238 - Enable all cppcheck rules
+#239 - Update stale Google Code reference in --help
+#240 - Enable Content-MD5 during multipart upload part
+#243 - Run cppcheck during Travis builds
+#245 - Elide duplicate lookups of std::map via iterators
+#246 - Unlock during early return in TruncateCache
+#247 - Base64 cleanup
+#248 - Enable integration tests for Travis
+#249 - Silence wget
+#250 - s3fs can print version with short commit hash - #228
+#251 - Skip xattr tests if utilities are missing
+#252 - This fixes an issue with caching when the creation of a subdirectory …
+#253 - Added chacking cache dir perms at starting.
+#256 - Add no atomic rename to limitations
+#257 - Update README.md: Bugfix password file permissions errors
+#258 - Update README.md to better explain mount upon boot
+#260 - Wrap help text at 80 characters
+#261 - Correct help timeouts
+#263 - Allow integration testing against Amazon S3
+#265 - Fix integration tests
+#266 - Cleanup from PR #265
+#267 - Added the _netdev option to the fstab example.
+#268 - Use 127.0.0.1 not localhost in s3proxy wait loop
+#271 - Add support for standard_ia storage class
+#274 - Modified man page for storage_class option(#271)
+#275 - Changed and cleaned the logic for debug message.
+#278 - Supported for SSE KMS(#270)
+#280 - Supported a object which is larger than free disk space
+#285 - Add test for symlink
+#288 - Fixed a bug about head request(copy) for SSE - issue#286
+#289 - Print source file in log messages
+#291 - File opened with O_TRUNC is not flushed - Issue #290
+#293 - Fix a small spelling issue.
+#295 - File opened with O_TRUNC is not flushed - changed #291
+#300 - Update integration-test-main.sh
+#302 - Fix syslog level used by S3FS_PRN_EXIT()
+#304 - Fixed a bug about mtime - #299
+#306 - Fix read concurrency to work in parallel count
+#307 - Fix pthread portability problem
+#308 - Changed ensure free disk space as additional change for #306
+#309 - Check pthread prtability in configure as additional change for #307
+#310 - Update integration-test-main.sh as additional change for #300
+#311 - Change error log to debug log in s3fs_read()
+#313 - fix gitignore
+#319 - Clean up mount point on errors in s3fs_init()
+#321 - delete stat cache entry in s3fs_fsync so st_size is refreshed - #320
+#323 - Add goofys to references
+#328 - Fix v4 signature with use_path_request_style
+#329 - Correct multiple issues with GET and v4 signing
+#330 - Pass by const reference where possible
+#331 - Address various clang warnings
+#334 - Bucket host should include port and not path
+#336 - update REAME.md for fstab
+#338 - Fixed a bug about IAMCRED type could not be retried.
+#339 - Updated README.md for fstab example.
+#341 - Fix the memory leak issue in fdcache.
+#346 - Fix empty directory check against AWS S3
+#348 - Integration test summary, continue on error
+#350 - Changed cache out logic for stat - #340
+#351 - Check cache dirctory path and attributes - #347
+#352 - Remove stat file cache dir if specified del_cache - #337
+#354 - Supported regex type for additional header format - #343
+#355 - Fixed codes about clock_gettime for osx
+#356 - Fixed codes about clock_gettime for osx(2)
+#357 - Fixed codes about clock_gettime for osx(3)
+#359 - Remove optional parameter from Content-Type header - #358
+#360 - Fix clock_gettime autotools detection on Linux
+#364 - Checked content-type by no case-sensitivity - #363
+#371 - Always set stats cache for opened file
+#372 - Fixed a bug about etag comparison in stats cache, etc.
+#376 - Test for writing after an lseek past end of file
+#379 - Fixed a bug about writing sparsed file - #375
+#385 - fix typo in curl.cpp: s/returing/returning/
+#391 - Update s3fs.1
+#394 - Revert "Fixed a bug about writing sparsed file - #375"
+#395 - Fixed writing sparsed file - #375,#379,#394
+#397 - Supported User-Agent header - #383
+#403 - Fix a bug of truncating empty file
+#404 - Add curl handler pool to reuse connections
+#409 - Fixed 'load_sse_c' option not working - #388
+#410 - Allow duplicate key in ahbe_conf - #386
+#411 - loading IAM role name automatically(iam_role option) - #387
+#415 - Fixed a bug about stat_cache_expire - #382
+#420 - Skip early credential checks when iam_role=auto
+#422 - Fixes for iam_role=auto
+#424 - Added travis CI badge in README.md
+
 Version 1.79 -- Jul 19, 2015
 issue #60 - Emit user-friendly log messages on failed CheckBucket requests
 issue #62 - Remove stray chars from source files
