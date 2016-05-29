@@ -315,9 +315,6 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define IAMCRED_ACCESSTOKEN         "Token"
 #define IAMCRED_EXPIRATION          "Expiration"
 #define IAMCRED_KEYCOUNT            4
-#define	IAM_DEFAULT_ROLE_URL        "http://169.254.169.254/latest/meta-data/iam/info"
-#define IAMDEFROLE_PROFARN          "InstanceProfileArn"
-#define IAMDEFROLE_PROFARN_PART     ":instance-profile/"
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -1447,40 +1444,13 @@ bool S3fsCurl::ParseIAMRoleFromMetaDataResponse(const char* response, string& ro
   // [NOTE]
   // expected following strings.
   // 
-  // {
-  //   "Code" : "Success",
-  //   "LastUpdated" : "2016-01-01T00:00:00Z",
-  //   "InstanceProfileArn" : "arn:aws:iam::111111111111:instance-profile/myrolename",
-  //   "InstanceProfileId" : "AAAAAAAAAAAAAAAAAAAAA"
-  // }
+  // myrolename
   //
   istringstream ssrole(response);
   string        oneline;
-  while(getline(ssrole, oneline, '\n')){
-    string::size_type pos;
-    if(string::npos != (pos = oneline.find(IAMDEFROLE_PROFARN))){
-      if(string::npos == (pos = oneline.find(':', pos + strlen(IAMDEFROLE_PROFARN)))){
-        continue;
-      }
-      if(string::npos == (pos = oneline.find('\"', pos))){
-        continue;
-      }
-
-      // value
-      oneline = oneline.substr(pos + sizeof(char));
-      if(string::npos == (pos = oneline.find('\"'))){
-        continue;
-      }
-      oneline = oneline.substr(0, pos);
-
-      // role name
-      if(string::npos == (pos = oneline.find(IAMDEFROLE_PROFARN_PART))){
-        continue;
-      }
-      rolename = oneline.substr(pos + strlen(IAMDEFROLE_PROFARN_PART));
-
-      return !rolename.empty();
-    }
+  if (getline(ssrole, oneline, '\n')){
+    rolename = oneline;
+    return !rolename.empty();
   }
   return false;
 }
@@ -2384,7 +2354,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData(void)
   }
 
   // url
-  url             = IAM_DEFAULT_ROLE_URL;
+  url             = IAM_CRED_URL;
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();

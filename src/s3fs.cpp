@@ -3354,7 +3354,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 
   // check loading IAM role name
   if(load_iamrole){
-    // load IAM role name from http://169.254.169.254/latest/meta-data/iam/info
+    // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
     //
     S3fsCurl s3fscurl;
     if(!s3fscurl.LoadIAMRoleFromMetaData()){
