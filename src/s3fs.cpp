@@ -4050,6 +4050,11 @@ static int get_access_keys(void)
      return EXIT_SUCCESS;
   }
 
+  // access key loading is deferred
+  if(load_iamrole){
+     return EXIT_SUCCESS;
+  }
+
   // 1 - keys specified on the command line
   if(S3fsCurl::IsSetAccessKeyId()){
      return EXIT_SUCCESS;
@@ -4815,7 +4820,7 @@ int main(int argc, char* argv[])
     S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
     exit(EXIT_FAILURE);
   }
-  if(!S3fsCurl::IsPublicBucket()){
+  if(!S3fsCurl::IsPublicBucket() && !load_iamrole){
     if(EXIT_SUCCESS != get_access_keys()){
       exit(EXIT_FAILURE);
     }
