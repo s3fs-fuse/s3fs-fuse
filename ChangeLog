@@ -4,8 +4,7 @@
 Version 1.80 -- May 29, 2016
 #213 - Parse ETag from copy multipart correctly
 #215 - Fix mem leak in openssl_auth.cpp:s3fs_sha256hexsum
-#217 - Override install, so that the make install does not install
-rename_before_close under /test
+#217 - Override install, so that the make install does not install rename_before_close under /test
 #219 - Address Coverity errors
 #220 - Test removing a non-empty directory
 #221 - Compare idiomatically
