@@ -875,11 +875,32 @@ static int do_create_bucket(void)
 {
   S3FS_PRN_INFO2("/");
 
+  FILE* ptmpfp;
+  int   tmpfd;
+  if(endpoint == "us-east-1"){
+    ptmpfp = NULL;
+    tmpfd = -1;
+  }else{
+    if(NULL == (ptmpfp = tmpfile()) ||
+       -1 == (tmpfd = fileno(ptmpfp)) ||
+       0 >= fprintf(ptmpfp, "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n"
+        "  <LocationConstraint>%s</LocationConstraint>\n"
+        "</CreateBucketConfiguration>", endpoint.c_str()) ||
+       0 != fflush(ptmpfp) ||
+       -1 == fseek(ptmpfp, 0L, SEEK_SET)){
+      S3FS_PRN_ERR("failed to create temporary file. err(%d)", errno);
+      if(ptmpfp){
+        fclose(ptmpfp);
+      }
+      return (0 == errno ? -EIO : -errno);
+    }
+  }
+
   headers_t meta;
 
   S3fsCurl s3fscurl(true);
-  long     res = s3fscurl.PutRequest("/", meta, -1);
-  if(res < 0){    // fd=-1 means for creating zero byte object.
+  long     res = s3fscurl.PutRequest("/", meta, tmpfd);
+  if(res < 0){
     long responseCode = s3fscurl.GetLastResponseCode();
     if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
       S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
@@ -887,8 +908,11 @@ static int do_create_bucket(void)
 
       // retry to check
       s3fscurl.DestroyCurlHandle();
-      res = s3fscurl.PutRequest("/", meta, -1);
+      res = s3fscurl.PutRequest("/", meta, tmpfd);
     }
+  }
+  if(ptmpfp != NULL){
+    fclose(ptmpfp);
   }
   return res;
 }
@@ -3366,7 +3390,11 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   }
 
   if (create_bucket){
-    do_create_bucket();
+    int result = do_create_bucket();
+    if(result != 0){
+      s3fs_exit_fuseloop(result);
+      return NULL;
+    }
   }
 
   // Check Bucket
