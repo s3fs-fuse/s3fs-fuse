@@ -1207,7 +1207,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
         // after this, file length is (offset + size), but file does not use any disk space.
         //
         if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (offset + oneread))){
-          S3FS_PRN_ERR("failed to tatic_cast<size_t>runcate temporary file(%d).", tmpfd);
+          S3FS_PRN_ERR("failed to truncate temporary file(%d).", tmpfd);
           result = -EIO;
           break;
         }
