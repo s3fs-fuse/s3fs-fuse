@@ -1998,13 +1998,13 @@ int S3fsCurl::RequestPerform(void)
         // option and continue
         if(0 == S3fsCurl::curl_ca_bundle.size()){
           if(!S3fsCurl::LocateBundle()){
-            S3FS_PRN_CRIT("could not get CURL_CA_BUNDLE.");
-            exit(EXIT_FAILURE);
+            S3FS_PRN_ERR("could not get CURL_CA_BUNDLE.");
+            return -EIO;
           }
           break; // retry with CAINFO
         }
-        S3FS_PRN_CRIT("curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        exit(EXIT_FAILURE);
+        S3FS_PRN_ERR("curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
+        return -EIO;
         break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -2021,7 +2021,7 @@ int S3fsCurl::RequestPerform(void)
         }else{
           S3FS_PRN_INFO("my_curl_easy_perform: curlCode: %d -- %s", curlCode, curl_easy_strerror(curlCode));
         }
-        exit(EXIT_FAILURE);
+        return -EIO;
         break;
 #endif
 
@@ -2045,8 +2045,8 @@ int S3fsCurl::RequestPerform(void)
 
       // Unknown CURL return code
       default:
-        S3FS_PRN_CRIT("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        exit(EXIT_FAILURE);
+        S3FS_PRN_ERR("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
+        return -EIO;
         break;
     }
     S3FS_PRN_INFO("### retrying...");
