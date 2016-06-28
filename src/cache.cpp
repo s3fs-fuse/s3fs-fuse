@@ -499,9 +499,10 @@ bool StatCache::TruncateCache(void)
         if(entry){
             delete entry;
         }
-        stat_cache.erase(iter);
+        stat_cache.erase(iter++);
+      }else{
+        ++iter;
       }
-      ++iter;
     }
   }
 
