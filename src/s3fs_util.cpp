@@ -545,6 +545,14 @@ int is_uid_inculde_group(uid_t uid, gid_t gid)
 //-------------------------------------------------------------------
 // safe variant of dirname
 // dirname clobbers path so let it operate on a tmp copy
+string mydirname(const char* path)
+{
+  if(!path || '\0' == path[0]){
+    return string("");
+  }
+  return mydirname(string(path));
+}
+
 string mydirname(string path)
 {
   return string(dirname((char*)path.c_str()));
@@ -552,6 +560,14 @@ string mydirname(string path)
 
 // safe variant of basename
 // basename clobbers path so let it operate on a tmp copy
+string mybasename(const char* path)
+{
+  if(!path || '\0' == path[0]){
+    return string("");
+  }
+  return mybasename(string(path));
+}
+
 string mybasename(string path)
 {
   return string(basename((char*)path.c_str()));
