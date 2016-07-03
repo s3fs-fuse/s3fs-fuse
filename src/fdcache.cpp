@@ -632,7 +632,7 @@ int FdEntity::FillFile(int fd, unsigned char byte, size_t size, off_t start)
 // FdEntity methods
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath)
-        : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)), cachepath(SAFESTRPTR(cpath)),
+        : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)), cachepath(SAFESTRPTR(cpath)), mirrorpath(""),
           fd(-1), pfile(NULL), is_modify(false), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0)
 {
   try{
@@ -671,15 +671,24 @@ void FdEntity::Clear(void)
         S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
       }
     }
-    fclose(pfile);
-    pfile = NULL;
-    fd    = -1;
+    if(pfile){
+      fclose(pfile);
+      pfile = NULL;
+    }
+    fd = -1;
+
+    if(!mirrorpath.empty()){
+      if(-1 == unlink(mirrorpath.c_str())){
+        S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
+      }
+      mirrorpath.erase();
+    }
   }
   pagelist.Init(0, false);
-  refcnt    = 0;
-  path      = "";
-  cachepath = "";
-  is_modify = false;
+  refcnt        = 0;
+  path          = "";
+  cachepath     = "";
+  is_modify     = false;
 }
 
 void FdEntity::Close(void)
@@ -699,9 +708,18 @@ void FdEntity::Close(void)
           S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
         }
       }
-      fclose(pfile);
-      pfile = NULL;
-      fd    = -1;
+      if(pfile){
+        fclose(pfile);
+        pfile = NULL;
+      }
+      fd = -1;
+
+      if(!mirrorpath.empty()){
+        if(-1 == unlink(mirrorpath.c_str())){
+          S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
+        }
+        mirrorpath.erase();
+      }
     }
   }
 }
@@ -715,6 +733,48 @@ int FdEntity::Dup(void)
     refcnt++;
   }
   return fd;
+}
+
+//
+// Open mirror file which is linked cache file.
+//
+int FdEntity::OpenMirrorFile(void)
+{
+  if(cachepath.empty()){
+    S3FS_PRN_ERR("cache path is empty, why come here");
+    return -EIO;
+  }
+
+  // make tmporary directory
+  string bupdir;
+  if(!FdManager::MakeCachePath(NULL, bupdir, true, true)){
+    S3FS_PRN_ERR("could not make bup cache directory path or create it.");
+    return -EIO;
+  }
+
+  // make mirror file path
+  char szfile[NAME_MAX + 1];
+  if(NULL == tmpnam(szfile)){
+    S3FS_PRN_ERR("could not get temporary file name.");
+    return -EIO;
+  }
+  char* ppos = strrchr(szfile, '/');
+  ++ppos;
+  mirrorpath = bupdir + "/" + ppos;
+
+  // link mirror file to cache file
+  if(-1 == link(cachepath.c_str(), mirrorpath.c_str())){
+    S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
+    return -errno;
+  }
+
+  // open mirror file
+  int mirrorfd;
+  if(-1 == (mirrorfd = open(mirrorpath.c_str(), O_RDWR))){
+    S3FS_PRN_ERR("could not open mirror file(%s) by errno(%d).", mirrorpath.c_str(), errno);
+    return -errno;
+  }
+  return mirrorfd;
 }
 
 // [NOTE]
@@ -763,8 +823,9 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
     // open cache and cache stat file, load page info.
     CacheFileStat cfstat(path.c_str());
 
-    if(pagelist.Serialize(cfstat, false) && -1 != (fd = open(cachepath.c_str(), O_RDWR))){
-      // success to open cache file
+    // try to open cache file
+    if(-1 != (fd = open(cachepath.c_str(), O_RDWR)) && pagelist.Serialize(cfstat, false)){
+      // succeed to open cache file and to load stats data
       struct stat st;
       memset(&st, 0, sizeof(struct stat));
       if(-1 == fstat(fd, &st)){
@@ -788,8 +849,9 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
           is_truncate = true;
         }
       }
+
     }else{
-      // could not load stat file or open file
+      // could not open cache file or could not load stats data, so initialize it.
       if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
         S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
         return (0 == errno ? -EIO : -errno);
@@ -803,6 +865,16 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time)
         is_truncate = true;
       }
     }
+
+    // open mirror file
+    int mirrorfd;
+    if(0 >= (mirrorfd = OpenMirrorFile())){
+      S3FS_PRN_ERR("failed to open mirror file linked cache file(%s).", cachepath.c_str());
+      return (0 == mirrorfd ? -EIO : mirrorfd);
+    }
+    // switch fd
+    close(fd);
+    fd = mirrorfd;
 
     // make file pointer(for being same tmpfile)
     if(NULL == (pfile = fdopen(fd, "wb"))){
@@ -1135,6 +1207,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
     FdManager::DeleteCacheFile(path.c_str());
     // cache file path does not use no more.
     cachepath.erase();
+    mirrorpath.erase();
   }
 
   // Change entity key in manager mapping
@@ -1713,13 +1786,23 @@ int FdManager::DeleteCacheFile(const char* path)
   return result;
 }
 
-bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_create_dir)
+bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_create_dir, bool is_mirror_path)
 {
   if(0 == FdManager::cache_dir.size()){
     cache_path = "";
     return true;
   }
-  string resolved_path(FdManager::cache_dir + "/" + bucket);
+
+  string resolved_path(FdManager::cache_dir);
+  if(!is_mirror_path){
+    resolved_path += "/";
+    resolved_path += bucket;
+  }else{
+    resolved_path += "/.";
+    resolved_path += bucket;
+    resolved_path += ".mirror";
+  }
+
   if(is_create_dir){
     int result;
     if(0 != (result = mkdirp(resolved_path + mydirname(path), 0777))){

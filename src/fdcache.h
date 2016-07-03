@@ -117,6 +117,7 @@ class FdEntity
     std::string     path;           // object path
     std::string     cachepath;      // local cache file path
                                     // (if this is empty, does not load/save pagelist.)
+    std::string     mirrorpath;     // mirror file path to local cache file path
     int             fd;             // file descriptor(tmp file or cache file)
     FILE*           pfile;          // file pointer(tmp file or cache file)
     bool            is_modify;      // if file is changed, this flag is true
@@ -132,6 +133,7 @@ class FdEntity
     static int FillFile(int fd, unsigned char byte, size_t size, off_t start);
 
     void Clear(void);
+    int OpenMirrorFile(void);
     bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
     //bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
     bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
@@ -202,7 +204,7 @@ class FdManager
     static bool SetCacheDir(const char* dir);
     static bool IsCacheDir(void) { return (0 < FdManager::cache_dir.size()); }
     static const char* GetCacheDir(void) { return FdManager::cache_dir.c_str(); }
-    static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true);
+    static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true, bool is_mirror_path = false);
     static bool CheckCacheTopDir(void);
     static bool MakeRandomTempPath(const char* path, std::string& tmppath);
 
