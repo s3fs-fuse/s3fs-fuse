@@ -106,7 +106,9 @@ void free_mvnodes(MVNODE *head);
 std::string get_username(uid_t uid);
 int is_uid_inculde_group(uid_t uid, gid_t gid);
 
+std::string mydirname(const char* path);
 std::string mydirname(std::string path);
+std::string mybasename(const char* path);
 std::string mybasename(std::string path);
 int mkdirp(const std::string& path, mode_t mode);
 bool check_exist_dir_permission(const char* dirpath);
