@@ -4195,6 +4195,33 @@ static int set_moutpoint_attribute(struct stat& mpst)
   return false;
 }
 
+//
+// Set bucket and mount_prefix based on passed bucket name.
+//
+static int set_bucket(const char* arg)
+{
+  char *bucket_name = (char*)arg;
+  if(strstr(arg, ":")){
+    bucket = strtok(bucket_name, ":");
+    char* pmount_prefix = strtok(NULL, ":");
+    if(pmount_prefix){
+      if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
+        S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
+        return -1;
+      }
+      mount_prefix = pmount_prefix;
+      // remove trailing slash
+      if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
+        mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
+      }
+    }
+  }else{
+    bucket = arg;
+  }
+  return 0;
+}
+
+
 // This is repeatedly called by the fuse option parser
 // if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
@@ -4203,28 +4230,16 @@ static int set_moutpoint_attribute(struct stat& mpst)
 //  or the mountpoint. The bucket name will always come before the mountpoint
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
+  int ret;
   if(key == FUSE_OPT_KEY_NONOPT){
     // the first NONOPT option is the bucket name
     if(bucket.size() == 0){
-      // extract remote mount path
-      char *bucket_name = (char*)arg;
-      if(strstr(arg, ":")){
-        bucket = strtok(bucket_name, ":");
-        char* pmount_prefix = strtok(NULL, ":");
-        if(pmount_prefix){
-          if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
-            S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
-            return -1;
-          }
-          mount_prefix = pmount_prefix;
-          // remove trailing slash
-          if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
-            mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
-          }
-        }
-      }else{
-        bucket = arg;
+      if ((ret = set_bucket(arg))){
+        return ret;
       }
+      return 0;
+    }
+    else if (!strcmp(arg, "s3fs")) {
       return 0;
     }
 
@@ -4517,6 +4532,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }else{
         S3FS_PRN_EXIT("poorly formed argument to option: public_bucket.");
         return -1;
+      }
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "bucket=")){
+      std::string bname = strchr(arg, '=') + sizeof(char);
+      if ((ret = set_bucket(bname.c_str()))){
+        return ret;
       }
       return 0;
     }
