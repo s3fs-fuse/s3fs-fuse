@@ -88,7 +88,7 @@ Note: You may also want to create the global credential file first
 
 ```
 echo MYIDENTITY:MYCREDENTIAL > /etc/passwd-s3fs
-chmod 600 /path/to/passwd
+chmod 600 /etc/passwd-s3fs
 ```
 
 Note2: You may also need to make sure `netfs` service is start on boot
