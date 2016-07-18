@@ -33,7 +33,7 @@ sudo apt-get install automake autotools-dev g++ git libcurl4-gnutls-dev libfuse-
 On CentOS 7:
 
 ```
-sudo yum install automake fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
+sudo yum install automake fuse fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
 ```
 
 Compile from master via the following commands:
