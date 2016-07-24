@@ -178,6 +178,7 @@ static int check_passwd_file_perms(void);
 static int read_passwd_file(void);
 static int get_access_keys(void);
 static int set_moutpoint_attribute(struct stat& mpst);
+static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 
 // fuse interface functions

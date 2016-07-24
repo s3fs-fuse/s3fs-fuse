@@ -5,6 +5,8 @@ S3FS \- FUSE-based file system backed by Amazon S3
 .SS mounting
 .TP
 \fBs3fs bucket[:/path] mountpoint \fP [options]
+.TP
+\fBs3fs mountpoint \fP [options(must specify bucket= option)]
 .SS unmounting
 .TP
 \fBumount mountpoint
@@ -47,6 +49,9 @@ FUSE singlethreaded option (disables multi-threaded operation)
 .TP
 All s3fs options must given in the form where "opt" is:
  <option_name>=<option_value>
+.TP
+\fB\-o\fR bucket
+if it is not specified bucket name(and path) in command line, must specify this option after \-o option for bucket name.
 .TP
 \fB\-o\fR default_acl (default="private")
 the default canned acl to apply to all written S3 objects, e.g., "public-read".
