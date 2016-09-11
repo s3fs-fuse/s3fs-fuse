@@ -207,8 +207,13 @@ function test_chown {
     # if they're the same, we have a problem.
     if [ $(stat --format=%u:%g $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
     then
-      echo "Could not modify $TEST_TEXT_FILE ownership"
-      return 1
+      if [ $ORIGINAL_PERMISSIONS == "1000:1000" ]
+      then
+        echo "Could not be strict check because original file permission 1000:1000"
+      else
+        echo "Could not modify $TEST_TEXT_FILE ownership($ORIGINAL_PERMISSIONS to 1000:1000)"
+        return 1
+      fi
     fi
 
     # clean up

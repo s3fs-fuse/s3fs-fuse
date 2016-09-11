@@ -1561,6 +1561,17 @@ static int s3fs_chmod(const char* path, mode_t mode)
       return -EIO;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
+
+    // check opened file handle.
+    //
+    // If we have already opened file handle, should set mode to it.
+    // And new mode is set when the file handle is closed.
+    //
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path))){
+      ent->SetMode(mode);      // Set new mode to opened fd.
+      FdManager::get()->Close(ent);
+    }
   }
   S3FS_MALLOCTRIM(0);
 
