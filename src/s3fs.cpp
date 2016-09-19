@@ -121,6 +121,7 @@ static bool is_s3fs_uid           = false;// default does not set.
 static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
+static bool is_use_xattr          = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
 static bool is_specified_endpoint = false;
@@ -4694,6 +4695,21 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       S3fsCurl::SetUserAgentFlag(false);
       return 0;
     }
+    if(0 == strcmp(arg, "use_xattr")){
+      is_use_xattr = true;
+      return 0;
+    }else if(0 == STR2NCMP(arg, "use_xattr=")){
+      const char* strflag = strchr(arg, '=') + sizeof(char);
+      if(0 == strcmp(strflag, "1")){
+        is_use_xattr = true;
+      }else if(0 == strcmp(strflag, "0")){
+        is_use_xattr = false;
+      }else{
+        S3FS_PRN_EXIT("option use_xattr has unknown parameter(%s).", strflag);
+        return -1;
+      }
+      return 0;
+    }
     //
     // debug option for s3fs
     //
@@ -4970,10 +4986,12 @@ int main(int argc, char* argv[])
   s3fs_oper.access    = s3fs_access;
   s3fs_oper.create    = s3fs_create;
   // extended attributes
-  s3fs_oper.setxattr    = s3fs_setxattr;
-  s3fs_oper.getxattr    = s3fs_getxattr;
-  s3fs_oper.listxattr   = s3fs_listxattr;
-  s3fs_oper.removexattr = s3fs_removexattr;
+  if(is_use_xattr){
+    s3fs_oper.setxattr    = s3fs_setxattr;
+    s3fs_oper.getxattr    = s3fs_getxattr;
+    s3fs_oper.listxattr   = s3fs_listxattr;
+    s3fs_oper.removexattr = s3fs_removexattr;
+  }
 
   if(!s3fs_init_global_ssl()){
     S3FS_PRN_EXIT("could not initialize for ssl libraries.");
