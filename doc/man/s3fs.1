@@ -205,6 +205,12 @@ Because s3fs always checks MD5 when uploading large object, this option does not
 \fB\-o\fR iam_role ( default is no IAM role )
 This option requires the IAM role name or "auto". If you specify "auto", s3fs will automatically use the IAM role names that are set to an instance. If you specify this option without any argument, it is the same as that you have specified the "auto".
 .TP
+\fB\-o\fR use_xattr ( default is not handling the extended attribute )
+Enable to handle the extended attribute(xattrs).
+If you set this option, you can use the extended attribute.
+For example, encfs and ecryptfs need to support the extended attribute.
+Notice: if s3fs handles the extended attribute, s3fs can not work to copy command with preserve=mode.
+.TP
 \fB\-o\fR noxmlns - disable registing xml name space.
 disable registing xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
 This option should not be specified now, because s3fs looks up xmlns automatically after v1.66.

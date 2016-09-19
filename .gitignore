@@ -10,6 +10,7 @@
 /stamp-h1
 /config.h
 /config.h.in
+/config.h.in~
 /configure
 /depcomp
 /test-driver
