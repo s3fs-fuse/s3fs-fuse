@@ -34,7 +34,6 @@
 #include <pwd.h>
 #include <grp.h>
 #include <getopt.h>
-#include <sys/xattr.h>
 #include <signal.h>
 
 #include <fstream>

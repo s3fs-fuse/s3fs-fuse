@@ -29,6 +29,10 @@ AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CXX
 AC_PROG_CC
 
+AC_CHECK_HEADERS([sys/xattr.h])
+AC_CHECK_HEADERS([attr/xattr.h])
+AC_CHECK_HEADERS([sys/extattr.h])
+
 CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64"
 
 dnl ----------------------------------------------
