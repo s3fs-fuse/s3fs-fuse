@@ -24,6 +24,17 @@
 #include "../config.h"
 
 //
+// Extended attribute
+//
+#ifdef HAVE_SYS_EXTATTR_H
+#include <sys/extattr.h>
+#elif HAVE_ATTR_XATTR_H
+#include <attr/xattr.h>
+#elif HAVE_SYS_XATTR_H
+#include <sys/xattr.h>
+#endif
+
+//
 // Macro
 //
 #define SAFESTRPTR(strptr) (strptr ? strptr : "")
