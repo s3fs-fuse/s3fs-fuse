@@ -868,7 +868,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
 
   // check buf if it has space words.
   string strTmp = trim(string(buf));
-  ressize       = strTmp.length();
+  ressize       = static_cast<ssize_t>(strTmp.length());
   strcpy(buf, strTmp.c_str());
 
   FdManager::get()->Close(ent);
@@ -1179,7 +1179,7 @@ static int s3fs_symlink(const char* from, const char* to)
   }
   // write(without space words)
   string  strFrom   = trim(string(from));
-  ssize_t from_size = strFrom.size();
+  ssize_t from_size = static_cast<ssize_t>(strFrom.length());
   if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
     S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
     FdManager::get()->Close(ent);
