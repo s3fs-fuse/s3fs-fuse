@@ -868,7 +868,6 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
 
   // check buf if it has space words.
   string strTmp = trim(string(buf));
-  ressize       = static_cast<ssize_t>(strTmp.length());
   strcpy(buf, strTmp.c_str());
 
   FdManager::get()->Close(ent);
