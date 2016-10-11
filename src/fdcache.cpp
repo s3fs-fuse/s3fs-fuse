@@ -1966,7 +1966,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
   // search in mapping by key(path)
   fdent_map_t::iterator iter = fent.find(string(path));
 
-  if(fent.end() == iter && !FdManager::IsCacheDir()){
+  if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
     // If the cache directory is not specified, s3fs opens a temporary file
     // when the file is opened.
     // Then if it could not find a entity in map for the file, s3fs should
