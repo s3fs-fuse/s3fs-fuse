@@ -1138,10 +1138,20 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
     return false;
   }
   // check etag(md5);
-  if(NULL == strstr(s3fscurl->headdata->str(), s3fscurl->partdata.etag.c_str())){
+  headers_t::const_iterator iter = s3fscurl->responseHeaders.find("ETag");
+  if (iter == s3fscurl->responseHeaders.end()) {
     return false;
   }
-  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign(s3fscurl->partdata.etag);
+  // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent
+  // SSE_C: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
+  // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:
+  // http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+  if (S3fsCurl::GetSseType() != SSE_C && S3fsCurl::GetSseType() != SSE_KMS) {
+    if ((*iter).second != s3fscurl->partdata.etag) {
+      return false;
+    }
+  }
+  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign((*iter).second.c_str());
   s3fscurl->partdata.uploaded = true;
 
   return true;
@@ -1533,7 +1543,7 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
     hCurl(NULL), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
-    bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
+    bodydata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE)
 {
@@ -1659,10 +1669,6 @@ bool S3fsCurl::ClearInternalData(void)
     delete bodydata;
     bodydata = NULL;
   }
-  if(headdata){
-    delete headdata;
-    headdata = NULL;
-  }
   LastResponseCode     = -1;
   postdata             = NULL;
   postdata_remaining   = 0;
@@ -1724,9 +1730,6 @@ bool S3fsCurl::RemakeHandle(void)
   responseHeaders.clear();
   if(bodydata){
     bodydata->Clear();
-  }
-  if(headdata){
-    headdata->Clear();
   }
   LastResponseCode   = -1;
 
@@ -1829,8 +1832,8 @@ bool S3fsCurl::RemakeHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
       curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
       curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
       curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(partdata.size));
       curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
       curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
@@ -1842,8 +1845,6 @@ bool S3fsCurl::RemakeHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
       curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
       curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
       curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);
       curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
       break;
@@ -3336,7 +3337,6 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   path               = get_realpath(tpath);
   requestHeaders     = NULL;
   bodydata           = new BodyData();
-  headdata           = new BodyData();
   responseHeaders.clear();
 
   if(!S3fsCurl::is_sigv4){
@@ -3365,8 +3365,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);              // HTTP PUT
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(partdata.size)); // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
@@ -3392,18 +3392,25 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
   // request
   if(0 == (result = RequestPerform())){
     // check etag
-    if(NULL != strstr(headdata->str(), partdata.etag.c_str())){
+    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent
+    // SSE_C: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
+    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:
+    // http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+    if (S3fsCurl::GetSseType() != SSE_C && S3fsCurl::GetSseType() != SSE_KMS) {
+      headers_t::const_iterator iter = responseHeaders.find("ETag");
+      if (iter != responseHeaders.end() && (*iter).second == partdata.etag) {
+        partdata.uploaded = true;
+      } else {
+        result = -1;
+      }
+    } else {
       partdata.uploaded = true;
-    }else{
-      result = -1;
     }
   }
 
   // closing
   delete bodydata;
   bodydata = NULL;
-  delete headdata;
-  headdata = NULL;
 
   return result;
 }
@@ -3430,7 +3437,6 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
-  headdata        = new BodyData();
 
   // Make request headers
   string ContentType;
@@ -3466,8 +3472,6 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);                // HTTP PUT
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);               // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
   S3fsCurl::AddUserAgent(hCurl);                                // put User-Agent
@@ -3510,8 +3514,6 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
 
   delete bodydata;
   bodydata = NULL;
-  delete headdata;
-  headdata = NULL;
 
   return result;
 }
