@@ -1501,19 +1501,42 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
   }
   switch(type){
     case CURLINFO_TEXT:
+      // Swap tab indentation with spaces so it stays pretty in syslog
+      int indent;
+      indent = 0;
+      while (*data == '\t' && size > 0) {
+        indent += 4;
+        size--;
+        data++;
+      }
+      S3FS_PRN_CURL("* %*s%.*s", indent, "", (int)size, data);
+      break;
     case CURLINFO_HEADER_IN:
     case CURLINFO_HEADER_OUT:
-      char* buff;
-      if(NULL == (buff = reinterpret_cast<char*>(malloc(size + 2 + 1)))){
-        // could not allocation memory
-        S3FS_PRN_CRIT("could not allocate memory");
-        break;
-      }
-      buff[size + 2] = '\0';
-      sprintf(buff, "%c ", (CURLINFO_TEXT == type ? '*' : CURLINFO_HEADER_IN == type ? '<' : '>'));
-      memcpy(&buff[2], data, size);
-      S3FS_PRN_CURL("%s", buff);      // no blocking
-      free(buff);
+      size_t length, remaining;
+      int newline;
+      char* p;
+
+      // Print each line individually for tidy output
+      remaining = size;
+      p = data;
+      do {
+        char* eol = (char*)memchr(p, '\n', remaining);
+        newline = 0;
+        if (eol == NULL) {
+          eol = (char*)memchr(p, '\r', remaining);
+        } else if (eol > p && *(eol - 1) == '\r') {
+          newline++;
+        }
+        if (eol != NULL) {
+          newline++;
+          eol++;
+        }
+        length = eol - p;
+        S3FS_PRN_CURL("%c %.*s", CURLINFO_HEADER_IN == type ? '<' : '>', (int)length - newline, p);
+        remaining -= length;
+        p = eol;
+      } while (p != NULL && remaining > 0);
       break;
     case CURLINFO_DATA_IN:
     case CURLINFO_DATA_OUT:
