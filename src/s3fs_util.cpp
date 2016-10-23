@@ -75,6 +75,11 @@ inline headers_t::const_iterator find_content_type(headers_t& meta)
   return find_strcase_header(meta, "Content-Type");
 }
 
+inline headers_t::const_iterator find_content_length(headers_t& meta)
+{
+  return find_strcase_header(meta, "Content-Length");
+}
+
 inline headers_t::const_iterator find_last_modified(headers_t& meta)
 {
   return find_strcase_header(meta, "Last-Modified");
@@ -723,7 +728,7 @@ off_t get_size(const char *s)
 
 off_t get_size(headers_t& meta)
 {
-  headers_t::const_iterator iter = find_content_type(meta);
+  headers_t::const_iterator iter = find_content_length(meta);
   if(meta.end() == iter){
     return 0;
   }
