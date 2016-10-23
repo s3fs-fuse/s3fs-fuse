@@ -60,31 +60,6 @@ string get_realpath(const char *path) {
   return realpath;
 }
 
-inline headers_t::const_iterator find_strcase_header(headers_t& meta, const char* pbase)
-{
-  for(headers_t::const_iterator iter = meta.begin(); pbase && iter != meta.end(); ++iter){
-    if(0 == strcasecmp(iter->first.c_str(), pbase)){
-      return iter;
-    }
-  }
-  return meta.end();
-}
-
-inline headers_t::const_iterator find_content_type(headers_t& meta)
-{
-  return find_strcase_header(meta, "Content-Type");
-}
-
-inline headers_t::const_iterator find_content_length(headers_t& meta)
-{
-  return find_strcase_header(meta, "Content-Length");
-}
-
-inline headers_t::const_iterator find_last_modified(headers_t& meta)
-{
-  return find_strcase_header(meta, "Last-Modified");
-}
-
 //-------------------------------------------------------------------
 // Class S3ObjList
 //-------------------------------------------------------------------
@@ -728,7 +703,7 @@ off_t get_size(const char *s)
 
 off_t get_size(headers_t& meta)
 {
-  headers_t::const_iterator iter = find_content_length(meta);
+  headers_t::const_iterator iter = meta.find("Content-Length");
   if(meta.end() == iter){
     return 0;
   }
@@ -763,7 +738,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
         if(forcedir){
           mode |= S_IFDIR;
         }else{
-          if(meta.end() != (iter = find_content_type(meta))){
+          if(meta.end() != (iter = meta.find("Content-Type"))){
             string strConType = (*iter).second;
             // Leave just the mime type, remove any optional parameters (eg charset)
             string::size_type pos = strConType.find(";");
@@ -858,7 +833,7 @@ time_t get_lastmodified(const char* s)
 
 time_t get_lastmodified(headers_t& meta)
 {
-  headers_t::const_iterator iter = find_last_modified(meta);
+  headers_t::const_iterator iter = meta.find("Last-Modified");
   if(meta.end() == iter){
     return 0;
   }
@@ -891,7 +866,7 @@ bool is_need_check_obj_detail(headers_t& meta)
   }
   // if there is not Content-Type, or Content-Type is "x-directory",
   // checking is no more.
-  if(meta.end() == (iter = find_content_type(meta))){
+  if(meta.end() == (iter = meta.find("Content-Type"))){
     return false;
   }
   if("application/x-directory" == (*iter).second){
