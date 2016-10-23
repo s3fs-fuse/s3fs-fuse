@@ -60,18 +60,24 @@ string get_realpath(const char *path) {
   return realpath;
 }
 
-inline headers_t::const_iterator find_content_type(headers_t& meta)
+inline headers_t::const_iterator find_strcase_header(headers_t& meta, const char* pbase)
 {
-  headers_t::const_iterator iter;
-
-  if(meta.end() == (iter = meta.find("Content-Type"))){
-    if(meta.end() == (iter = meta.find("Content-type"))){
-      if(meta.end() == (iter = meta.find("content-type"))){
-        iter = meta.find("content-Type");
-      }
+  for(headers_t::const_iterator iter = meta.begin(); pbase && iter != meta.end(); ++iter){
+    if(0 == strcasecmp(iter->first.c_str(), pbase)){
+      return iter;
     }
   }
-  return iter;
+  return meta.end();
+}
+
+inline headers_t::const_iterator find_content_type(headers_t& meta)
+{
+  return find_strcase_header(meta, "Content-Type");
+}
+
+inline headers_t::const_iterator find_last_modified(headers_t& meta)
+{
+  return find_strcase_header(meta, "Last-Modified");
 }
 
 //-------------------------------------------------------------------
@@ -717,8 +723,8 @@ off_t get_size(const char *s)
 
 off_t get_size(headers_t& meta)
 {
-  headers_t::const_iterator iter;
-  if(meta.end() == (iter = meta.find("Content-Length"))){
+  headers_t::const_iterator iter = find_content_type(meta);
+  if(meta.end() == iter){
     return 0;
   }
   return get_size((*iter).second.c_str());
@@ -847,8 +853,8 @@ time_t get_lastmodified(const char* s)
 
 time_t get_lastmodified(headers_t& meta)
 {
-  headers_t::const_iterator iter;
-  if(meta.end() == (iter = meta.find("Last-Modified"))){
+  headers_t::const_iterator iter = find_last_modified(meta);
+  if(meta.end() == iter){
     return 0;
   }
   return get_lastmodified((*iter).second.c_str());
