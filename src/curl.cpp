@@ -3418,7 +3418,8 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   if(!CreateCurlHandle(true)){
     return -1;
   }
-  string urlargs  = "?partNumber=" + str(part_num) + "&uploadId=" + upload_id;
+  string request_uri = "partNumber=" + str(part_num) + "&uploadId=" + upload_id;
+  string urlargs     = "?" + request_uri;
   string resource;
   string turl;
   MakeUrlResource(get_realpath(to).c_str(), resource, turl);
@@ -3458,7 +3459,7 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
     }
 
   }else{
-    insertV4Headers("PUT", path, "", "");
+    insertV4Headers("PUT", path, request_uri, "");
   }
 
   // setopt
