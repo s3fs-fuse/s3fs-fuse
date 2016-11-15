@@ -412,8 +412,7 @@ function add_all_tests {
     # TODO: broken: https://github.com/s3fs-fuse/s3fs-fuse/issues/145
     #add_tests test_rename_before_close
     add_tests test_multipart_upload
-    # TODO: test disabled until S3Proxy 1.5.0 is released
-    #add_tests test_multipart_copy
+    add_tests test_multipart_copy
     add_tests test_special_characters
     add_tests test_symlink
     add_tests test_extended_attributes
