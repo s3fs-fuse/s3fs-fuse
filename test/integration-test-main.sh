@@ -416,6 +416,7 @@ function add_all_tests {
     add_tests test_special_characters
     add_tests test_symlink
     add_tests test_extended_attributes
+    add_tests test_mtime_file
     add_tests test_rm_rf_dir
     add_tests test_write_after_seek_ahead
 }
