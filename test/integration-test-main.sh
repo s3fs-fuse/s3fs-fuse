@@ -42,7 +42,7 @@ function test_truncate_file {
 }
 
 function test_truncate_empty_file {
-    echo "Testing truncate empty file ..."
+    describe "Testing truncate empty file ..."
     # Write an empty test file
     touch ${TEST_TEXT_FILE}
 
