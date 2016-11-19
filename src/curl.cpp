@@ -1622,7 +1622,7 @@ bool S3fsCurl::CreateCurlHandle(bool force)
       S3FS_PRN_ERR("could not destroy handle.");
       return false;
     }
-    S3FS_PRN_INFO3("already has handle, so destroied it.");
+    S3FS_PRN_INFO3("already has handle, so destroyed it.");
   }
 
   if(NULL == (hCurl = sCurlPool->GetHandler())){
