@@ -664,7 +664,7 @@ void FdEntity::Clear(void)
 {
   AutoLock auto_lock(&fdent_lock);
 
-  if(pfile){
+  if(-1 != fd){
     if(0 != cachepath.size()){
       CacheFileStat cfstat(path.c_str());
       if(!pagelist.Serialize(cfstat, true)){
@@ -1973,7 +1973,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
     // search a entity in all which opened the temporary file.
     //
     for(iter = fent.begin(); iter != fent.end(); ++iter){
-      if((*iter).second && (*iter).second->IsOpen()){
+      if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
         break;      // found opened fd in mapping
       }
     }
@@ -2065,16 +2065,30 @@ bool FdManager::Close(FdEntity* ent)
 {
   S3FS_PRN_DBG("[ent->file=%s][ent->fd=%d]", ent ? ent->GetPath() : "", ent ? ent->GetFd() : -1);
 
+  if(!ent){
+    return true;  // returns success
+  }
+
   AutoLock auto_lock(&FdManager::fd_manager_lock);
 
   for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
     if((*iter).second == ent){
       ent->Close();
       if(!ent->IsOpen()){
-        delete (*iter).second;
-        fent.erase(iter);
-        return true;
+        // remove found entity from map.
+        fent.erase(iter++);
+
+        // check another key name for entity value to be on the safe side
+        for(; iter != fent.end(); ){
+          if((*iter).second == ent){
+            fent.erase(iter++);
+          }else{
+            ++iter;
+          }
+        }
+        delete ent;
       }
+      return true;
     }
   }
   return false;
