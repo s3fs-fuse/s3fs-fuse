@@ -127,6 +127,17 @@ static string get_bucket_host()
   return url_to_host(host);
 }
 
+// compare ETag ignoring quotes
+static bool etag_equals(std::string s1, std::string s2) {
+  if(s1.length() > 1 && s1[0] == '\"' && s1[s1.length() - 1] == '\"'){
+	s1 = s1.substr(1, s1.size() - 2);
+  }
+  if(s2.length() > 1 && s2[0] == '\"' && s2[s2.length() - 1] == '\"'){
+	s2 = s2.substr(1, s2.size() - 2);
+  }
+  return s1 == s2;
+}
+
 #if 0 // noused
 static string tolower_header_name(const char* head)
 {
@@ -1137,11 +1148,15 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return false;
   }
-  // check etag(md5);
-  if(NULL == strstr(s3fscurl->headdata->str(), s3fscurl->partdata.etag.c_str())){
+  headers_t::iterator it = s3fscurl->responseHeaders.find("ETag");
+  if (it == s3fscurl->responseHeaders.end()) {
     return false;
   }
-  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign(s3fscurl->partdata.etag);
+  // check etag(md5);
+  if(S3fsCurl::is_content_md5 && !etag_equals(it->second, s3fscurl->partdata.etag)){
+    return false;
+  }
+  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign(it->second);
   s3fscurl->partdata.uploaded = true;
 
   return true;
@@ -1852,8 +1867,8 @@ bool S3fsCurl::RemakeHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);
       curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
       curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+      curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
       curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(partdata.size));
       curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
       curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
@@ -3124,7 +3139,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id,
     }
     postContent += "<Part>\n";
     postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
-    postContent += "  <ETag>\""     + parts[cnt]   + "\"</ETag>\n";
+    postContent += "  <ETag>" + parts[cnt] + "</ETag>\n";
     postContent += "</Part>\n";
   }  
   postContent += "</CompleteMultipartUpload>\n";
@@ -3330,16 +3345,19 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   }
 
   // make md5 and file pointer
-  unsigned char *md5raw = s3fs_md5hexsum(partdata.fd, partdata.startpos, partdata.size);
-  if(md5raw == NULL){
-    S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
-    return -1;
+  std::string md5base64;
+  if(S3fsCurl::is_content_md5){
+    unsigned char *md5raw = s3fs_md5hexsum(partdata.fd, partdata.startpos, partdata.size);
+    if(md5raw == NULL){
+      S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
+      return -1;
+    }
+    partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
+    char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
+    md5base64 = md5base64p;
+    free(md5base64p);
+    free(md5raw);
   }
-  partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
-  char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
-  std::string md5base64 = md5base64p;
-  free(md5base64p);
-  free(md5raw);
 
   // create handle
   if(!CreateCurlHandle(true)){
@@ -3388,8 +3406,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true);              // HTTP PUT
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)headdata);
-  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders);
+  curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback);
   curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(partdata.size)); // Content-Length
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback);
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
