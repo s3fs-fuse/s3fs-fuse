@@ -5,6 +5,7 @@ cache: apt
 before_install:
  - sudo apt-get update -qq
  - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
+ - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
 script:
  - ./autogen.sh
  - ./configure
