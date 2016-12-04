@@ -27,7 +27,7 @@
 // Struct
 //
 struct s3obj_entry{
-  std::string normalname; // normalized name: if empty, object is nomalized name.
+  std::string normalname; // normalized name: if empty, object is normalized name.
   std::string orgname;    // original name: if empty, object is original name.
   std::string etag;
   bool        is_dir;
@@ -47,7 +47,7 @@ class S3ObjList
     s3obj_t objects;
 
   private:
-    bool insert_nomalized(const char* name, const char* normalized, bool is_dir);
+    bool insert_normalized(const char* name, const char* normalized, bool is_dir);
     const s3obj_entry* GetS3Obj(const char* name) const;
 
     s3obj_t::const_iterator begin(void) const {
@@ -104,7 +104,7 @@ MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const cha
 void free_mvnodes(MVNODE *head);
 
 std::string get_username(uid_t uid);
-int is_uid_inculde_group(uid_t uid, gid_t gid);
+int is_uid_include_group(uid_t uid, gid_t gid);
 
 std::string mydirname(const char* path);
 std::string mydirname(std::string path);

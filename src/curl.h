@@ -159,7 +159,7 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
 typedef std::list<sseckeymap_t>            sseckeylist_t;
 
-// strage class(rrs)
+// storage class(rrs)
 enum storage_class_t {
   STANDARD,
   STANDARD_IA,
@@ -328,7 +328,7 @@ class S3fsCurl
     static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
     static bool CheckIAMCredentialUpdate(void);
 
-    // class methods(valiables)
+    // class methods(variables)
     static std::string LookupMimeType(const std::string& name);
     static bool SetCheckCertificate(bool isCertCheck);
     static bool SetDnsCache(bool isCache);
@@ -407,7 +407,7 @@ class S3fsCurl
     int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
-    // methods(valiables)
+    // methods(variables)
     CURL* GetCurlHandle(void) const { return hCurl; }
     std::string GetPath(void) const { return path; }
     std::string GetBasePath(void) const { return base_path; }

@@ -50,7 +50,7 @@ export S3_URL
 export TEST_SCRIPT_DIR=`pwd`
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
-S3PROXY_VERSION="1.4.0"
+S3PROXY_VERSION="1.5.1"
 S3PROXY_BINARY=${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}
 
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
@@ -157,8 +157,6 @@ function start_s3fs {
     #
     # TODO: Allow all these options to be overriden with env variables
     #
-    # sigv2
-    #     Historically because S3Proxy only supports sigv2.  
     # use_path_request_style
     #     The test env doesn't have virtual hosts
     # createbucket
@@ -181,7 +179,6 @@ function start_s3fs {
             ${VALGRIND_EXEC} ${S3FS} \
             $TEST_BUCKET_1 \
             $TEST_BUCKET_MOUNT_POINT_1 \
-            -o sigv2 \
             -o use_path_request_style \
             -o url=${S3_URL} \
             -o createbucket \
