@@ -99,6 +99,15 @@ function start_s3proxy {
     else
         S3PROXY_CONFIG="s3proxy.conf"
     fi
+    JAVA_BIN=`which java`
+    if [ $? -ne 0 ]; then
+        if [ -f /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java ]; then
+            JAVA_BIN=/usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
+        else
+            # not found java command, so probabry gets error by stdbuf command line.
+            JAVA_BIN=java
+        fi
+    fi
 
     if [ -n "${S3PROXY_BINARY}" ]
     then
@@ -108,7 +117,7 @@ function start_s3proxy {
             chmod +x "${S3PROXY_BINARY}"
         fi
 
-        stdbuf -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG | stdbuf -oL -eL sed -u "s/^/s3proxy: /" &
+        stdbuf -oL -eL ${JAVA_BIN} -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG | stdbuf -oL -eL sed -u "s/^/s3proxy: /" &
 
         # wait for S3Proxy to start
         for i in $(seq 30);
