@@ -4,7 +4,8 @@ dist: trusty
 cache: apt
 before_install:
  - sudo apt-get update -qq
- - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
+ - sudo apt-get install -qq cppcheck libfuse-dev
+ - sudo apt-get install openjdk-7-jdk
 script:
  - ./autogen.sh
  - ./configure
