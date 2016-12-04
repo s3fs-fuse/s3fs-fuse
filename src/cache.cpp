@@ -56,8 +56,13 @@ using namespace std;
 #define CLOCK_MONOTONIC_COARSE  CLOCK_MONOTONIC
 #endif
 
-#ifndef HAVE_CLOCK_GETTIME
-static int clock_gettime(int clk_id, struct timespec* ts)
+#ifdef HAVE_CLOCK_GETTIME
+static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
+{
+  return clock_gettime(clk_id, ts);
+}
+#else
+static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
 {
   struct timeval now;
   if(0 != gettimeofday(&now, NULL)){
@@ -71,7 +76,7 @@ static int clock_gettime(int clk_id, struct timespec* ts)
 
 inline void SetStatCacheTime(struct timespec& ts)
 {
-  if(-1 == clock_gettime(CLOCK_MONOTONIC_COARSE, &ts)){
+  if(-1 == s3fs_clock_gettime(CLOCK_MONOTONIC_COARSE, &ts)){
     ts.tv_sec  = time(NULL);
     ts.tv_nsec = 0;
   }
