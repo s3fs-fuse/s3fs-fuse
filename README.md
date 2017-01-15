@@ -101,7 +101,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 
 * random writes or appends to files require rewriting the entire file
 * metadata operations such as listing directories have poor performance due to network latency
-* [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data
+* [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data([Amazon S3 Data Consistency Model](http://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel))
 * no atomic renames of files or directories
 * no coordination between multiple clients mounting the same bucket
 * no hard links
