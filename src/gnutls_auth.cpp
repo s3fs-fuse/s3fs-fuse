@@ -103,7 +103,7 @@ bool s3fs_destroy_crypt_mutex(void)
 
 bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
+  if(!key || !data || !digest || !digestlen){
     return false;
   }
 
@@ -122,7 +122,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
 
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
+  if(!key || !data || !digest || !digestlen){
     return false;
   }
 
@@ -143,11 +143,11 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 
 bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
+  if(!key || !data || !digest || !digestlen){
     return false;
   }
 
-  if(0 >= (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
+  if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
     return false;
   }
   if(NULL == (*digest = (unsigned char*)malloc(*digestlen + 1))){
@@ -163,11 +163,11 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
 
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  if(!key || 0 >= keylen || !data || 0 >= datalen || !digest || !digestlen){
+  if(!key || !data || !digest || !digestlen){
     return false;
   }
 
-  if(0 >= (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
+  if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
     return false;
   }
   if(NULL == (*digest = (unsigned char*)malloc(*digestlen + 1))){

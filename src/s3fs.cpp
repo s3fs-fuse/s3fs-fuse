@@ -2800,7 +2800,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
   string   strmybpath = mybasename(string((char*)fullpath));
   const char* dirpath = strdirpath.c_str();
   const char* mybname = strmybpath.c_str();
-  const char* basepath= (!path || '\0' == path[0] || '/' != path[0] ? path : &path[1]);
+  const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
   xmlFree(fullpath);
 
   if(!mybname || '\0' == mybname[0]){

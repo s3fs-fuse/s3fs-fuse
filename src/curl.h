@@ -130,7 +130,7 @@ class S3fsMultiCurl;
 class CurlHandlerPool
 {
 public:
-  CurlHandlerPool(int maxHandlers)
+  explicit CurlHandlerPool(int maxHandlers)
     : mMaxHandlers(maxHandlers)
     , mHandlers(NULL)
     , mIndex(-1)
