@@ -5004,11 +5004,6 @@ int main(int argc, char* argv[])
     s3fs_oper.removexattr = s3fs_removexattr;
   }
 
-  if(!s3fs_init_global_ssl()){
-    S3FS_PRN_EXIT("could not initialize for ssl libraries.");
-    exit(EXIT_FAILURE);
-  }
-
   // set signal handler for debugging
   if(!set_s3fs_usr2_handler()){
     S3FS_PRN_EXIT("could not set signal handler for SIGUSR2.");
