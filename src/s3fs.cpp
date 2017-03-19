@@ -4591,6 +4591,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       StatCache::getStatCacheData()->SetExpireTime(expr_time);
       return 0;
     }
+    // [NOTE]
+    // This option is for compatibility old version.
+    if(0 == STR2NCMP(arg, "stat_cache_interval_expire=")){
+      time_t expr_time = static_cast<time_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
+      StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
+      return 0;
+    }
     if(0 == strcmp(arg, "enable_noobj_cache")){
       StatCache::getStatCacheData()->EnableCacheNoObject();
       return 0;

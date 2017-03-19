@@ -55,6 +55,7 @@ class StatCache
     static pthread_mutex_t stat_cache_lock;
     stat_cache_t  stat_cache;
     bool          IsExpireTime;
+    bool          IsExpireIntervalType;         // if this flag is true, cache data is updated at last access time.
     time_t        ExpireTime;
     unsigned long CacheSize;
     bool          IsCacheNoObject;
@@ -78,7 +79,7 @@ class StatCache
     unsigned long GetCacheSize(void) const;
     unsigned long SetCacheSize(unsigned long size);
     time_t GetExpireTime(void) const;
-    time_t SetExpireTime(time_t expire);
+    time_t SetExpireTime(time_t expire, bool is_interval = false);
     time_t UnsetExpireTime(void);
     bool SetCacheNoObject(bool flag);
     bool EnableCacheNoObject(void) {

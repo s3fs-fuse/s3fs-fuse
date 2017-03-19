@@ -138,7 +138,11 @@ time to wait between read/write activity before giving up.
 maximum number of entries in the stat cache
 .TP
 \fB\-o\fR stat_cache_expire (default is no expire)
-specify expire time(seconds) for entries in the stat cache
+specify expire time(seconds) for entries in the stat cache. This expire time indicates the time since stat cached.
+.TP
+\fB\-o\fR stat_cache_interval_expire (default is no expire)
+specify expire time(seconds) for entries in the stat cache. This expire time is based on the time from the last access time of the stat cache.
+This option is exclusive with stat_cache_expire, and is left for compatibility with older versions.
 .TP
 \fB\-o\fR enable_noobj_cache (default is disable)
 enable cache entries for the object which does not exist.

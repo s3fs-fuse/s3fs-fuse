@@ -142,7 +142,7 @@ pthread_mutex_t StatCache::stat_cache_lock;
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : IsExpireTime(false), ExpireTime(0), CacheSize(1000), IsCacheNoObject(false)
+StatCache::StatCache() : IsExpireTime(false), IsExpireIntervalType(false), ExpireTime(0), CacheSize(1000), IsCacheNoObject(false)
 {
   if(this == StatCache::getStatCacheData()){
     stat_cache.clear();
@@ -182,19 +182,21 @@ time_t StatCache::GetExpireTime(void) const
   return (IsExpireTime ? ExpireTime : (-1));
 }
 
-time_t StatCache::SetExpireTime(time_t expire)
+time_t StatCache::SetExpireTime(time_t expire, bool is_interval)
 {
-  time_t old   = ExpireTime;
-  ExpireTime   = expire;
-  IsExpireTime = true;
+  time_t old           = ExpireTime;
+  ExpireTime           = expire;
+  IsExpireTime         = true;
+  IsExpireIntervalType = is_interval;
   return old;
 }
 
 time_t StatCache::UnsetExpireTime(void)
 {
-  time_t old   = IsExpireTime ? ExpireTime : (-1);
-  ExpireTime   = 0;
-  IsExpireTime = false;
+  time_t old           = IsExpireTime ? ExpireTime : (-1);
+  ExpireTime           = 0;
+  IsExpireTime         = false;
+  IsExpireIntervalType = false;
   return old;
 }
 
@@ -283,7 +285,10 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
           (*pisforce) = ent->isforce;
         }
         ent->hit_count++;
-        SetStatCacheTime(ent->cache_date);
+
+        if(IsExpireIntervalType){
+          SetStatCacheTime(ent->cache_date);
+        }
         pthread_mutex_unlock(&StatCache::stat_cache_lock);
         return true;
       }
