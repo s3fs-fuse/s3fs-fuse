@@ -10,6 +10,10 @@ S3FS \- FUSE-based file system backed by Amazon S3
 .SS unmounting
 .TP
 \fBumount mountpoint
+For root.
+.TP
+\fBfusermount -u mountpoint
+For unprivileged user.
 .SS utility mode ( remove interrupted multipart uploading objects )
 .TP
 \fBs3fs \-u bucket
