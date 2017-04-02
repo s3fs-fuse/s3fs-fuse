@@ -1019,6 +1019,7 @@ void show_help (void)
     "\n"
     "   stat_cache_expire (default is no expire)\n"
     "      - specify expire time(seconds) for entries in the stat cache.\n"
+    "        This expire time indicates the time since stat cached.\n"
     "\n"
     "   enable_noobj_cache (default is disable)\n"
     "      - enable cache entries for the object which does not exist.\n"
