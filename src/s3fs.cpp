@@ -4351,10 +4351,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "use_cache=")){
-      if(!FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char))){
-        S3FS_PRN_EXIT("cache directory(%s) is specified, but it does not exist or is not directory.", strchr(arg, '=') + sizeof(char));
-        return -1;
-      }
+      FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char));
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "check_cache_dir_exist")){
+      FdManager::SetCheckCacheDirExist(true);
       return 0;
     }
     if(0 == strcmp(arg, "del_cache")){
@@ -4922,7 +4923,7 @@ int main(int argc, char* argv[])
   }
 
   // check cache dir permission
-  if(!FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
+  if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
     S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
     exit(EXIT_FAILURE);
   }
