@@ -1148,18 +1148,8 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
   if(!s3fscurl){
     return false;
   }
-  headers_t::iterator it = s3fscurl->responseHeaders.find("ETag");
-  if (it == s3fscurl->responseHeaders.end()) {
-    return false;
-  }
-  // check etag(md5);
-  if(S3fsCurl::is_content_md5 && !etag_equals(it->second, s3fscurl->partdata.etag)){
-    return false;
-  }
-  s3fscurl->partdata.etaglist->at(s3fscurl->partdata.etagpos).assign(it->second);
-  s3fscurl->partdata.uploaded = true;
 
-  return true;
+  return s3fscurl->UploadMultipartPostComplete();
 }
 
 S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
@@ -3431,12 +3421,8 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
 
   // request
   if(0 == (result = RequestPerform())){
-    // check etag
-    if(NULL != strstr(headdata->str(), partdata.etag.c_str())){
-      partdata.uploaded = true;
-    }else{
-      result = -1;
-    }
+    // UploadMultipartPostComplete returns true on success -> convert to 0
+    result = !UploadMultipartPostComplete();
   }
 
   // closing
@@ -3557,6 +3543,22 @@ int S3fsCurl::CopyMultipartPostRequest(const char* from, const char* to, int par
   return result;
 }
 
+bool S3fsCurl::UploadMultipartPostComplete()
+{
+  headers_t::iterator it = responseHeaders.find("ETag");
+  if (it == responseHeaders.end()) {
+    return false;
+  }
+  // check etag(md5);
+  if(S3fsCurl::is_content_md5 && !etag_equals(it->second, partdata.etag)){
+    return false;
+  }
+  partdata.etaglist->at(partdata.etagpos).assign(it->second);
+  partdata.uploaded = true;
+
+  return true;
+}
+
 int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy)
 {
   int            result;
@@ -3637,14 +3639,14 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
     partdata.size       = chunk;
     b_partdata_startpos = partdata.startpos;
     b_partdata_size     = partdata.size;
+    partdata.add_etag_list(&list);
 
     // upload part
-    if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
+    if(0 != (result = UploadMultipartPostRequest(tpath, list.size(), upload_id))){
       S3FS_PRN_ERR("failed uploading part(%d)", result);
       close(fd2);
       return result;
     }
-    list.push_back(partdata.etag);
     DestroyCurlHandle();
   }
   close(fd2);
@@ -3675,15 +3677,15 @@ int S3fsCurl::MultipartUploadRequest(const string& upload_id, const char* tpath,
   partdata.size       = size;
   b_partdata_startpos = partdata.startpos;
   b_partdata_size     = partdata.size;
+  partdata.add_etag_list(&list);
 
   // upload part
   int   result;
-  if(0 != (result = UploadMultipartPostRequest(tpath, (list.size() + 1), upload_id))){
+  if(0 != (result = UploadMultipartPostRequest(tpath, list.size(), upload_id))){
     S3FS_PRN_ERR("failed uploading part(%d)", result);
     close(fd2);
     return result;
   }
-  list.push_back(partdata.etag);
   DestroyCurlHandle();
   close(fd2);
 
