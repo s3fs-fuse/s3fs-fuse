@@ -111,6 +111,7 @@ std::string mydirname(std::string path);
 std::string mybasename(const char* path);
 std::string mybasename(std::string path);
 int mkdirp(const std::string& path, mode_t mode);
+std::string get_exist_directory_path(const std::string& path);
 bool check_exist_dir_permission(const char* dirpath);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
