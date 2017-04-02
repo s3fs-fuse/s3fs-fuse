@@ -425,14 +425,25 @@ void free_mvnodes(MVNODE *head)
 //-------------------------------------------------------------------
 // Class AutoLock
 //-------------------------------------------------------------------
-AutoLock::AutoLock(pthread_mutex_t* pmutex) : auto_mutex(pmutex)
+AutoLock::AutoLock(pthread_mutex_t* pmutex, bool no_wait) : auto_mutex(pmutex)
 {
-  pthread_mutex_lock(auto_mutex);
+  if (no_wait) {
+    is_lock_acquired = pthread_mutex_trylock(auto_mutex) == 0;
+  } else {
+    is_lock_acquired = pthread_mutex_lock(auto_mutex) == 0;
+  }
+}
+
+bool AutoLock::isLockAcquired() const
+{
+  return is_lock_acquired;
 }
 
 AutoLock::~AutoLock()
 {
-  pthread_mutex_unlock(auto_mutex);
+  if (is_lock_acquired) {
+    pthread_mutex_unlock(auto_mutex);
+  }
 }
 
 //-------------------------------------------------------------------

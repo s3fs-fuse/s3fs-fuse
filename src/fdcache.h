@@ -144,9 +144,9 @@ class FdEntity
 
     void Close(void);
     bool IsOpen(void) const { return (-1 != fd); }
-    int Open(headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1);
+    int Open(headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
     bool OpenAndLoadAll(headers_t* pmeta = NULL, size_t* size = NULL, bool force_load = false);
-    int Dup(void);
+    int Dup(bool no_fd_lock_wait = false);
 
     const char* GetPath(void) const { return path.c_str(); }
     void SetPath(const std::string &newpath) { path = newpath; }
@@ -172,6 +172,8 @@ class FdEntity
 
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
+
+    void CleanupCache();
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
 
@@ -183,6 +185,7 @@ class FdManager
   private:
     static FdManager       singleton;
     static pthread_mutex_t fd_manager_lock;
+    static pthread_mutex_t cache_cleanup_lock;
     static bool            is_lock_init;
     static std::string     cache_dir;
     static size_t          free_disk_space; // limit free disk space
@@ -191,6 +194,7 @@ class FdManager
 
   private:
     static fsblkcnt_t GetFreeDiskSpace(const char* path);
+    void CleanupCacheDirInternal(const std::string &path = "");
 
   public:
     FdManager();
@@ -214,11 +218,12 @@ class FdManager
     static bool IsSafeDiskSpace(const char* path, size_t size);
 
     FdEntity* GetFdEntity(const char* path, int existfd = -1);
-    FdEntity* Open(const char* path, headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true);
+    FdEntity* Open(const char* path, headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
     FdEntity* ExistOpen(const char* path, int existfd = -1, bool ignore_existfd = false);
     void Rename(const std::string &from, const std::string &to);
     bool Close(FdEntity* ent);
     bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
+    void CleanupCacheDir();
 };
 
 #endif // FD_CACHE_H_
