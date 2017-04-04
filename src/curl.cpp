@@ -4136,6 +4136,10 @@ string get_sorted_header_keys(const struct curl_slist* list)
     string strkey = list->data;
     size_t pos;
     if(string::npos != (pos = strkey.find(':', 0))){
+      if (trim(strkey.substr(pos + 1)).empty()) {
+        // skip empty-value headers (as they are discarded by libcurl)
+        continue;
+      }
       strkey = strkey.substr(0, pos);
     }
     if(0 < sorted_headers.length()){
@@ -4162,6 +4166,10 @@ string get_canonical_headers(const struct curl_slist* list)
     if(string::npos != (pos = strhead.find(':', 0))){
       string strkey = trim(lower(strhead.substr(0, pos)));
       string strval = trim(strhead.substr(pos + 1));
+      if (strval.empty()) {
+        // skip empty-value headers (as they are discarded by libcurl)
+        continue;
+      }
       strhead       = strkey + string(":") + strval;
     }else{
       strhead       = trim(lower(strhead));
@@ -4187,6 +4195,10 @@ string get_canonical_headers(const struct curl_slist* list, bool only_amz)
     if(string::npos != (pos = strhead.find(':', 0))){
       string strkey = trim(lower(strhead.substr(0, pos)));
       string strval = trim(strhead.substr(pos + 1));
+      if (strval.empty()) {
+        // skip empty-value headers (as they are discarded by libcurl)
+        continue;
+      }
       strhead       = strkey + string(":") + strval;
     }else{
       strhead       = trim(lower(strhead));
