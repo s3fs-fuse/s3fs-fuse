@@ -582,6 +582,28 @@ int mkdirp(const string& path, mode_t mode)
   return 0;
 }
 
+// get existed directory path
+string get_exist_directory_path(const string& path)
+{
+  string       existed("/");    // "/" is existed.
+  string       base;
+  string       component;
+  stringstream ss(path);
+  while (getline(ss, component, '/')) {
+    if(base != "/"){
+      base += "/";
+    }
+    base += component;
+    struct stat st;
+    if(0 == stat(base.c_str(), &st) && S_ISDIR(st.st_mode)){
+      existed = base;
+    }else{
+      break;
+    }
+  }
+  return existed;
+}
+
 bool check_exist_dir_permission(const char* dirpath)
 {
   if(!dirpath || '\0' == dirpath[0]){
@@ -927,6 +949,11 @@ void show_help (void)
     "   use_cache (default=\"\" which means disabled)\n"
     "      - local folder to use for local file cache\n"
     "\n"
+    "   check_cache_dir_exist (default is disable)\n"
+    "      - if use_cache is set, check if the cache directory exists.\n"
+    "        if this option is not specified, it will be created at runtime\n"
+    "        when the cache directory does not exist.\n"
+    "\n"
     "   del_cache (delete local file cache)\n"
     "      - delete local file cache when s3fs starts and exits.\n"
     "\n"
@@ -1019,6 +1046,7 @@ void show_help (void)
     "\n"
     "   stat_cache_expire (default is no expire)\n"
     "      - specify expire time(seconds) for entries in the stat cache.\n"
+    "        This expire time indicates the time since stat cached.\n"
     "\n"
     "   enable_noobj_cache (default is disable)\n"
     "      - enable cache entries for the object which does not exist.\n"

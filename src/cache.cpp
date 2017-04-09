@@ -505,7 +505,7 @@ bool StatCache::TruncateCache(void)
   if(IsExpireTime){
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
       stat_cache_entry* entry = iter->second;
-      if(!entry || (0L < entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
+      if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
         if(entry){
             delete entry;
         }

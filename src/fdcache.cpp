@@ -1711,6 +1711,7 @@ FdManager       FdManager::singleton;
 pthread_mutex_t FdManager::fd_manager_lock;
 bool            FdManager::is_lock_init(false);
 string          FdManager::cache_dir("");
+bool            FdManager::check_cache_dir_exist(false);
 size_t          FdManager::free_disk_space = 0;
 
 //------------------------------------------------
@@ -1721,16 +1722,6 @@ bool FdManager::SetCacheDir(const char* dir)
   if(!dir || '\0' == dir[0]){
     cache_dir = "";
   }else{
-    // check the directory
-    struct stat st;
-    if(0 != stat(dir, &st)){
-      S3FS_PRN_ERR("could not access to cache directory(%s) by errno(%d).", cache_dir.c_str(), errno);
-      return false;
-    }
-    if(!S_ISDIR(st.st_mode)){
-      S3FS_PRN_ERR("the cache directory(%s) is not directory.", cache_dir.c_str());
-      return false;
-    }
     cache_dir = dir;
   }
   return true;
@@ -1838,6 +1829,34 @@ bool FdManager::MakeRandomTempPath(const char* path, string& tmppath)
   return true;
 }
 
+bool FdManager::SetCheckCacheDirExist(bool is_check)
+{
+  bool old = FdManager::check_cache_dir_exist;
+  FdManager::check_cache_dir_exist = is_check;
+  return old;
+}
+
+bool FdManager::CheckCacheDirExist(void)
+{
+  if(!FdManager::check_cache_dir_exist){
+    return true;
+  }
+  if(0 == FdManager::cache_dir.size()){
+    return true;
+  }
+  // check the directory
+  struct stat st;
+  if(0 != stat(cache_dir.c_str(), &st)){
+    S3FS_PRN_ERR("could not access to cache directory(%s) by errno(%d).", cache_dir.c_str(), errno);
+    return false;
+  }
+  if(!S_ISDIR(st.st_mode)){
+    S3FS_PRN_ERR("the cache directory(%s) is not directory.", cache_dir.c_str());
+    return false;
+  }
+  return true;
+}
+
 size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
 {
   size_t old = FdManager::free_disk_space;
@@ -1863,6 +1882,10 @@ fsblkcnt_t FdManager::GetFreeDiskSpace(const char* path)
   string         ctoppath;
   if(0 < FdManager::cache_dir.size()){
     ctoppath = FdManager::cache_dir + "/";
+    ctoppath = get_exist_directory_path(ctoppath);	// existed directory
+    if(ctoppath != "/"){
+      ctoppath += "/";
+    }
   }else{
     ctoppath = TMPFILE_DIR_0PATH "/";
   }

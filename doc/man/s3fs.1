@@ -10,6 +10,10 @@ S3FS \- FUSE-based file system backed by Amazon S3
 .SS unmounting
 .TP
 \fBumount mountpoint
+For root.
+.TP
+\fBfusermount -u mountpoint
+For unprivileged user.
 .SS utility mode ( remove interrupted multipart uploading objects )
 .TP
 \fBs3fs \-u bucket
@@ -63,6 +67,10 @@ number of times to retry a failed S3 transaction.
 .TP
 \fB\-o\fR use_cache (default="" which means disabled)
 local folder to use for local file cache.
+.TP
+\fB\-o\fR check_cache_dir_exist (default is disable)
+If use_cache is set, check if the cache directory exists.
+If this option is not specified, it will be created at runtime when the cache directory does not exist.
 .TP
 \fB\-o\fR del_cache - delete local file cache
 delete local file cache when s3fs starts and exits.
