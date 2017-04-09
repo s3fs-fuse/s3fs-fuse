@@ -3432,8 +3432,13 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
   // request
   if(0 == (result = RequestPerform())){
     // check etag
-    if(NULL != strstr(headdata->str(), partdata.etag.c_str())){
-      partdata.uploaded = true;
+    headers_t::iterator it = responseHeaders.find("ETag");
+    if (it != responseHeaders.end()) {
+      if(S3fsCurl::is_content_md5 && !etag_equals(it->second, partdata.etag)){
+        result = -1;
+      }else{
+        partdata.uploaded = true;
+      }
     }else{
       result = -1;
     }
