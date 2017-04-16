@@ -319,6 +319,7 @@ class S3fsCurl
 
     int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
     int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
+    bool UploadMultipartPostComplete();
 
   public:
     // class methods
