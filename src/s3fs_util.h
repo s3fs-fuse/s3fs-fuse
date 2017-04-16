@@ -88,9 +88,11 @@ class AutoLock
 {
   private:
     pthread_mutex_t* auto_mutex;
+    bool is_lock_acquired;
 
   public:
-    explicit AutoLock(pthread_mutex_t* pmutex);
+    explicit AutoLock(pthread_mutex_t* pmutex, bool no_wait = false);
+    bool isLockAcquired() const;
     ~AutoLock();
 };
 
