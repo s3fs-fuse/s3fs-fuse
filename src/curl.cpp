@@ -1616,6 +1616,9 @@ bool S3fsCurl::ResetHandle(void)
       curl_easy_setopt(hCurl, CURLOPT_DEBUGFUNCTION, S3fsCurl::CurlDebugFunc);
     }
   }
+  if(!cipher_suites.empty()) {
+    curl_easy_setopt(hCurl, CURLOPT_SSL_CIPHER_LIST, cipher_suites.c_str());
+  }
 
   S3fsCurl::curl_times[hCurl]    = time(0);
   S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);

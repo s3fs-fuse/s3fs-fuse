@@ -93,6 +93,7 @@ std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
 std::string bucket                = "";
 std::string endpoint              = "us-east-1";
+std::string cipher_suites         = "";
 s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
 
@@ -4720,6 +4721,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         S3FS_PRN_EXIT("option use_xattr has unknown parameter(%s).", strflag);
         return -1;
       }
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "cipher_suites=")){
+      cipher_suites = strchr(arg, '=') + sizeof(char);
       return 0;
     }
     //

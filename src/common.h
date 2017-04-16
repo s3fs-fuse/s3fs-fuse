@@ -158,6 +158,7 @@ extern std::string    host;
 extern std::string    bucket;
 extern std::string    mount_prefix;
 extern std::string    endpoint;
+extern std::string    cipher_suites;
 extern s3fs_log_level debug_level;
 extern const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX];
 
