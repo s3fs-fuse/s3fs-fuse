@@ -441,7 +441,6 @@ class S3fsMultiCurl
   private:
     static int    max_multireq;
 
-    CURLM*        hMulti;
     s3fscurlmap_t cMap_all;  // all of curl requests
     s3fscurlmap_t cMap_req;  // curl requests are sent
 
@@ -452,6 +451,8 @@ class S3fsMultiCurl
     bool ClearEx(bool is_all);
     int MultiPerform(void);
     int MultiRead(void);
+
+    static void* RequestPerformWrapper(void* arg);
 
   public:
     S3fsMultiCurl();
