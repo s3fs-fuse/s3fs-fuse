@@ -2611,7 +2611,9 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   }
 
   // "x-amz-acl", storage class, sse
-  requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(!S3fsCurl::default_acl.empty()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
@@ -2731,7 +2733,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
   }
   // "x-amz-acl", storage class, sse
-  requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(!S3fsCurl::default_acl.empty()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
@@ -3045,7 +3049,9 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }
   }
   // "x-amz-acl", storage class, sse
-  requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(!S3fsCurl::default_acl.empty()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
