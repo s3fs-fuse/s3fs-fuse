@@ -279,7 +279,7 @@ static bool is_special_name_folder_object(const char* path)
   headers_t header;
 
   if(string::npos == strpath.find("_$folder$", 0)){
-    if('/' == strpath[strpath.length() - 1]){
+    if('/' == strpath.back()){
       strpath = strpath.substr(0, strpath.length() - 1);
     }
     strpath += "_$folder$";
@@ -314,7 +314,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
 
   // Normalize new path.
   newpath = path;
-  if('/' != newpath[newpath.length() - 1]){
+  if('/' != newpath.back()){
     string::size_type Pos;
     if(string::npos != (Pos = newpath.find("_$folder$", 0))){
       newpath = newpath.substr(0, Pos);
@@ -336,7 +336,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
       nowpath  = "";
     }else{
       nowpath = path;
-      if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
+      if(0 < nowpath.length() && '/' == nowpath.back()){
         // "dir/" type
         (*pType) = DIRTYPE_NEW;
       }else{
@@ -444,7 +444,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
   // overcheck
   if(overcheck && 0 != result){
-    if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
+    if('/' != strpath.back() && string::npos == strpath.find("_$folder$", 0)){
       // path is "object", check "object/" for overcheck
       strpath    += "/";
       result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
@@ -454,7 +454,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
       // not found "object/", check "_$folder$"
       strpath = path;
       if(string::npos == strpath.find("_$folder$", 0)){
-        if('/' == strpath[strpath.length() - 1]){
+        if('/' == strpath.back()){
           strpath = strpath.substr(0, strpath.length() - 1);
         }
         strpath    += "_$folder$";
@@ -466,7 +466,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
       // not found "object/" and "object_$folder$", check no dir object.
       strpath = path;
       if(string::npos == strpath.find("_$folder$", 0)){
-        if('/' == strpath[strpath.length() - 1]){
+        if('/' == strpath.back()){
           strpath = strpath.substr(0, strpath.length() - 1);
         }
         if(-ENOTEMPTY == directory_empty(strpath.c_str())){
@@ -482,7 +482,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }
   }else{
     // found "path" object.
-    if('/' != strpath[strpath.length() - 1]){
+    if('/' != strpath.back()){
       // check a case of that "object" does not have attribute and "object" is possible to be directory.
       if(is_need_check_obj_detail(*pheader)){
         if(-ENOTEMPTY == directory_empty(strpath.c_str())){
@@ -1011,7 +1011,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
     return -1;
   }
   string tpath = path;
-  if('/' != tpath[tpath.length() - 1]){
+  if('/' != tpath.back()){
     tpath += "/";
   }
 
@@ -1106,7 +1106,7 @@ static int s3fs_rmdir(const char* path)
   }
 
   strpath = path;
-  if('/' != strpath[strpath.length() - 1]){
+  if('/' != strpath.back()){
     strpath += "/";
   }
   S3fsCurl s3fscurl;
@@ -1119,7 +1119,7 @@ static int s3fs_rmdir(const char* path)
   // A case, there is only "dir", the first removing object is "dir/".
   // Then "dir/" is not exists, but curl_delete returns 0.
   // So need to check "dir" and should be removed it.
-  if('/' == strpath[strpath.length() - 1]){
+  if('/' == strpath.back()){
     strpath = strpath.substr(0, strpath.length() - 1);
   }
   if(0 == get_object_attribute(strpath.c_str(), &stbuf, NULL, false)){
@@ -2362,7 +2362,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
       string etag     = head.GetETag((*iter).c_str());
 
       string fillpath = disppath;
-      if('/' == disppath[disppath.length() - 1]){
+      if('/' == disppath.back()){
         fillpath = fillpath.substr(0, fillpath.length() -1);
       }
       fillerlist.push_back(fillpath);
@@ -2482,7 +2482,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
   query_prefix += "&prefix=";
   s3_realpath = get_realpath(path);
-  if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+  if(0 == s3_realpath.length() || '/' != s3_realpath.back()){
     // last word must be "/"
     query_prefix += urlEncode(s3_realpath.substr(1) + "/");
   }else{
@@ -2537,7 +2537,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
           truncated = false;
         }else{
           next_marker = s3_realpath.substr(1);
-          if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+          if(0 == s3_realpath.length() || '/' != s3_realpath.back()){
             next_marker += "/";
           }
           next_marker += lastname;
@@ -2835,7 +2835,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
         if(strlen(dirpath) > strlen(basepath)){
           withdirname = &dirpath[strlen(basepath)];
         }
-        if(0 < withdirname.length() && '/' != withdirname[withdirname.length() - 1]){
+        if(0 < withdirname.length() && '/' != withdirname.back()){
           withdirname += "/";
         }
         withdirname += mybname;
