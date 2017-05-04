@@ -88,6 +88,7 @@ typedef std::list<UNCOMP_MP_INFO> uncomp_mp_list_t;
 bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
+bool complement_stat              = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "http://s3.amazonaws.com";
@@ -4667,6 +4668,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == strcmp(arg, "norenameapi")){
       norenameapi = true;
+      return 0;
+    }
+    if(0 == strcmp(arg, "complement_stat")){
+      complement_stat = true;
       return 0;
     }
     if(0 == strcmp(arg, "enable_content_md5")){

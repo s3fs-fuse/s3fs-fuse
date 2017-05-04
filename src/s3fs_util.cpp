@@ -784,7 +784,19 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
               if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
                 mode |= S_IFDIR;
               }else{
-                mode |= S_IFREG;
+                if(complement_stat){
+                  // If complement lack stat mode, when the object has '/' charactor at end of name
+                  // and content type is text/plain and the object's size is 0 or 1, it should be
+                  // directory.
+                  off_t size = get_size(meta);
+                  if(strConType == "text/plain" && (0 == size || 1 == size)){
+                    mode |= S_IFDIR;
+                  }else{
+                    mode |= S_IFREG;
+                  }
+                }else{
+                  mode |= S_IFREG;
+                }
               }
             }else{
               mode |= S_IFREG;
@@ -793,6 +805,11 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
             mode |= S_IFREG;
           }
         }
+      }
+      // If complement lack stat mode, when it's mode is not set any permission,
+      // the object is added minimal mode only for read permission.
+      if(complement_stat && 0 == (mode & (S_IRWXU | S_IRWXG | S_IRWXO))){
+        mode |= (S_IRUSR | (0 == (mode & S_IFDIR) ? 0 : S_IXUSR));
       }
     }else{
       if(!checkdir){
@@ -1196,6 +1213,13 @@ void show_help (void)
     "        A list of available cipher suites, depending on your TLS engine,\n"
     "        can be found on the CURL library documentation:\n"
     "        https://curl.haxx.se/docs/ssl-ciphers.html\n"
+    "\n"
+    "   complement_stat (complement lack of file/directory mode)\n"
+    "        s3fs complements lack of information about file/directory mode\n"
+    "        if a file or a directory object does not have x-amz-meta-mode\n"
+    "        header. As default, s3fs does not complements stat information\n"
+    "        for a object, then the object will not be able to be allowed to\n"
+    "        list/modify.\n"
     "\n"
     "FUSE/mount Options:\n"
     "\n"

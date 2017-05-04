@@ -152,6 +152,7 @@ typedef std::map<std::string, PXATTRVAL> xattrs_t;
 extern bool           foreground;
 extern bool           nomultipart;
 extern bool           pathrequeststyle;
+extern bool           complement_stat;
 extern std::string    program_name;
 extern std::string    service_path;
 extern std::string    host;
