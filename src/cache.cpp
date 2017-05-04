@@ -229,7 +229,7 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
   stat_cache_t::iterator iter = stat_cache.end();
-  if(overcheck && '/' != strpath[strpath.length() - 1]){
+  if(overcheck && '/' != strpath.back()){
     strpath += "/";
     iter = stat_cache.find(strpath.c_str());
   }
@@ -318,7 +318,7 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
   stat_cache_t::iterator iter = stat_cache.end();
-  if(overcheck && '/' != strpath[strpath.length() - 1]){
+  if(overcheck && '/' != strpath.back()){
     strpath += "/";
     iter = stat_cache.find(strpath.c_str());
   }
@@ -575,7 +575,7 @@ bool StatCache::DelStat(const char* key)
   }
   if(0 < strlen(key) && 0 != strcmp(key, "/")){
     string strpath = key;
-    if('/' == strpath[strpath.length() - 1]){
+    if('/' == strpath.back()){
       // If there is "path" cache, delete it.
       strpath = strpath.substr(0, strpath.length() - 1);
     }else{

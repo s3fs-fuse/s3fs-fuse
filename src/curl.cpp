@@ -129,10 +129,10 @@ static string get_bucket_host()
 
 // compare ETag ignoring quotes
 static bool etag_equals(std::string s1, std::string s2) {
-  if(s1.length() > 1 && s1[0] == '\"' && s1[s1.length() - 1] == '\"'){
+  if(s1.length() > 1 && s1[0] == '\"' && s1.back() == '\"'){
 	s1 = s1.substr(1, s1.size() - 2);
   }
-  if(s2.length() > 1 && s2[0] == '\"' && s2[s2.length() - 1] == '\"'){
+  if(s2.length() > 1 && s2[0] == '\"' && s2.back() == '\"'){
 	s2 = s2.substr(1, s2.size() - 2);
   }
   return s1 == s2;
