@@ -421,7 +421,8 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   }
 
   // Check cache.
-  strpath = path;
+  pisforce = (NULL != pisforce ? pisforce : &forcedir);
+  strpath  = path;
   if(overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
     strpath = strpath.substr(0, Pos);
     strpath += "/";
@@ -443,57 +444,50 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
   s3fscurl.DestroyCurlHandle();
 
-  // overcheck
-  if(overcheck && 0 != result){
-    if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
-      // path is "object", check "object/" for overcheck
-      strpath    += "/";
-      result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-      s3fscurl.DestroyCurlHandle();
-    }
-    if(0 != result){
-      // not found "object/", check "_$folder$"
-      strpath = path;
-      if(string::npos == strpath.find("_$folder$", 0)){
-        if('/' == strpath[strpath.length() - 1]){
-          strpath = strpath.substr(0, strpath.length() - 1);
-        }
-        strpath    += "_$folder$";
+  // if not found target path object, do over checking
+  if(0 != result){
+    if(overcheck){
+      if('/' != strpath[strpath.length() - 1]){
+        // now path is "object", do check "object/" for over checking
+        strpath    += "/";
         result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
         s3fscurl.DestroyCurlHandle();
       }
-    }
-    if(0 != result){
-      // not found "object/" and "object_$folder$", check no dir object.
-      strpath = path;
-      if(string::npos == strpath.find("_$folder$", 0)){
-        if('/' == strpath[strpath.length() - 1]){
-          strpath = strpath.substr(0, strpath.length() - 1);
-        }
-        if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-          // found "no dir object".
-          strpath += "/";
-          forcedir = true;
-          if(pisforce){
-            (*pisforce) = true;
+      if(0 != result){
+        // now path is "object/", do check "object_$folder$" for over checking
+        strpath     = strpath.substr(0, strpath.length() - 1);
+        strpath    += "_$folder$";
+        result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
+        s3fscurl.DestroyCurlHandle();
+
+        if(0 != result){
+          // cut "_$folder$" for over checking "no dir object" after here
+          if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+            strpath  = strpath.substr(0, Pos);
           }
-          result = 0;
         }
       }
     }
+    if(0 != result && string::npos == strpath.find("_$folder$", 0)){
+      // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
+      if('/' == strpath[strpath.length() - 1]){
+        strpath = strpath.substr(0, strpath.length() - 1);
+      }
+      if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+        // found "no dir object".
+        strpath  += "/";
+        *pisforce = true;
+        result    = 0;
+      }
+    }
   }else{
-    // found "path" object.
-    if('/' != strpath[strpath.length() - 1]){
+    if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
       // check a case of that "object" does not have attribute and "object" is possible to be directory.
-      if(is_need_check_obj_detail(*pheader)){
-        if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-          strpath += "/";
-          forcedir = true;
-          if(pisforce){
-            (*pisforce) = true;
-          }
-          result = 0;
-        }
+      if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+        // found "no dir object".
+        strpath  += "/";
+        *pisforce = true;
+        result    = 0;
       }
     }
   }
