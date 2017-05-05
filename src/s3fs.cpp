@@ -127,6 +127,7 @@ static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
 static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
+static bool support_compat_dir    = true;// default supports compatibility directory type
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -272,6 +273,12 @@ static s3fs_log_level bumpup_s3fs_log_level(void)
 
 static bool is_special_name_folder_object(const char* path)
 {
+  if(!support_compat_dir){
+    // s3fs does not support compatibility directory type("_$folder$" etc) now,
+    // thus always returns false.
+    return false;
+  }
+
   if(!path || '\0' == path[0]){
     return false;
   }
@@ -327,7 +334,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
   if(0 == (result = get_object_attribute(newpath.c_str(), NULL, pmeta, false, &isforce))){
     // Found "dir/" cache --> Check for "_$folder$", "no dir object"
     nowcache = newpath;
-    if(is_special_name_folder_object(newpath.c_str())){
+    if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
       // "_$folder$" type.
       (*pType) = DIRTYPE_FOLDER;
       nowpath = newpath.substr(0, newpath.length() - 1) + "_$folder$"; // cut and add
@@ -345,8 +352,8 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
         (*pType) = DIRTYPE_OLD;
       }
     }
-  }else{
-    // Check "dir"
+  }else if(support_compat_dir){
+    // Check "dir" when support_compat_dir is enabled
     nowpath = newpath.substr(0, newpath.length() - 1);
     if(0 == (result = get_object_attribute(nowpath.c_str(), NULL, pmeta, false, &isforce))){
       // Found "dir" cache --> this case is only "dir" type.
@@ -361,6 +368,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
       }
     }else{
       // Not found cache --> check for "_$folder$" and "no dir object".
+      // (come here is that support_compat_dir is enabled)
       nowcache = "";  // This case is no cache.
       nowpath += "_$folder$";
       if(is_special_name_folder_object(nowpath.c_str())){
@@ -424,7 +432,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   pisforce    = (NULL != pisforce ? pisforce : &forcedir);
   (*pisforce) = false;
   strpath     = path;
-  if(overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
+  if(support_compat_dir && overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
     strpath = strpath.substr(0, Pos);
     strpath += "/";
   }
@@ -445,13 +453,14 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   // if not found target path object, do over checking
   if(0 != result){
     if(overcheck){
-      if('/' != strpath[strpath.length() - 1]){
+      // when support_compat_dir is disabled, strpath maybe have "_$folder$".
+      if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
         // now path is "object", do check "object/" for over checking
         strpath    += "/";
         result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
         s3fscurl.DestroyCurlHandle();
       }
-      if(0 != result){
+      if(support_compat_dir && 0 != result){
         // now path is "object/", do check "object_$folder$" for over checking
         strpath     = strpath.substr(0, strpath.length() - 1);
         strpath    += "_$folder$";
@@ -466,7 +475,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }
       }
     }
-    if(0 != result && string::npos == strpath.find("_$folder$", 0)){
+    if(support_compat_dir && 0 != result && string::npos == strpath.find("_$folder$", 0)){
       // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
       if('/' == strpath[strpath.length() - 1]){
         strpath = strpath.substr(0, strpath.length() - 1);
@@ -479,7 +488,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
       }
     }
   }else{
-    if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
+    if(support_compat_dir && '/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
       // check a case of that "object" does not have attribute and "object" is possible to be directory.
       if(-ENOTEMPTY == directory_empty(strpath.c_str())){
         // found "no dir object".
@@ -4664,6 +4673,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == strcmp(arg, "complement_stat")){
       complement_stat = true;
+      return 0;
+    }
+    if(0 == strcmp(arg, "notsup_compat_dir")){
+      support_compat_dir = false;
       return 0;
     }
     if(0 == strcmp(arg, "enable_content_md5")){
