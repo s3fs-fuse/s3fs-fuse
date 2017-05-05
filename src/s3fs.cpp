@@ -4222,6 +4222,10 @@ static int set_bucket(const char* arg)
 {
   char *bucket_name = (char*)arg;
   if(strstr(arg, ":")){
+    if(strstr(arg, "://")){
+      S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+      return -1;
+    }
     bucket = strtok(bucket_name, ":");
     char* pmount_prefix = strtok(NULL, ":");
     if(pmount_prefix){
