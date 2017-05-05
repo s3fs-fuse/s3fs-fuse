@@ -421,14 +421,12 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
   }
 
   // Check cache.
-  pisforce = (NULL != pisforce ? pisforce : &forcedir);
-  strpath  = path;
+  pisforce    = (NULL != pisforce ? pisforce : &forcedir);
+  (*pisforce) = false;
+  strpath     = path;
   if(overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
     strpath = strpath.substr(0, Pos);
     strpath += "/";
-  }
-  if(pisforce){
-    (*pisforce) = false;
   }
   if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
     StatCache::getStatCacheData()->ChangeNoTruncateFlag(strpath, add_no_truncate_cache);
