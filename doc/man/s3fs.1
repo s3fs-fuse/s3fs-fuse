@@ -252,6 +252,17 @@ https://curl.haxx.se/docs/ssl-ciphers.html
 s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
 As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.
 .TP
+\fB\-o\fR notsup_compat_dir (not support compatibility directory types)
+As a default, s3fs supports objects of the directory type as much as possible and recognizes them as directories.
+Objects that can be recognized as directory objects are "dir/", "dir", "dir_$folder$", and there is a file object that does not have a directory object but contains that directory path.
+s3fs needs redundant communication to support all these directory types.
+The object as the directory created by s3fs is "dir/".
+By restricting s3fs to recognize only "dir/" as a directory, communication traffic can be reduced.
+This option is used to give this restriction to s3fs.
+However, if there is a directory object other than "dir/" in the bucket, specifying this option is not recommended.
+s3fs may not be able to recognize the object correctly if an object created by s3fs exists in the bucket.
+Please use this option when the directory in the bucket is only "dir/" object.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit(critical), err(error), warn(warning), info(information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
