@@ -1,7 +1,7 @@
 /*
  * s3fs - FUSE-based file system backed by Amazon S3
  *
- * Copyright 2014 Andrew Gaul <andrew@gaul.org>
+ * Copyright(C) 2014 Andrew Gaul <andrew@gaul.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
