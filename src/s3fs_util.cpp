@@ -1,7 +1,7 @@
 /*
  * s3fs - FUSE-based file system backed by Amazon S3
  *
- * Copyright 2007-2013 Takeshi Nakatani <ggtakec.com>
+ * Copyright(C) 2007 Takeshi Nakatani <ggtakec.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
