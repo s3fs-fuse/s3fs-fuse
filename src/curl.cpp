@@ -2590,12 +2590,12 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-copy-source"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key == "x-amz-server-side-encryption"){
+    }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
       // Only copy mode.
       if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
       }
-    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
+    }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
       // Only copy mode.
       if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
@@ -2742,9 +2742,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
       // not set value, but after set it.
     }else if(key.substr(0, 10) == "x-amz-meta"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key == "x-amz-server-side-encryption"){
+    }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
       // skip this header, because this header is specified after logic.
-    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
+    }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
       // skip this header, because this header is specified after logic.
     }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
       // skip this header, because this header is specified after logic.
@@ -3045,12 +3045,12 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
       // not set value, but after set it.
     }else if(key.substr(0, 10) == "x-amz-meta"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key == "x-amz-server-side-encryption"){
+    }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
       // Only copy mode.
       if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
       }
-    }else if(key == "x-amz-server-side-encryption-customer-algorithm"){
+    }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
       // Only copy mode.
       if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
@@ -3392,6 +3392,14 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   headdata           = new BodyData();
   responseHeaders.clear();
 
+  // SSE
+  if(SSE_C == S3fsCurl::GetSseType()){
+    string ssevalue("");
+    if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+      S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+    }
+  }
+
   if(!S3fsCurl::is_sigv4){
     string date    = get_date_rfc850();
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", date.c_str());
@@ -3572,9 +3580,18 @@ bool S3fsCurl::UploadMultipartPostComplete()
   if (it == responseHeaders.end()) {
     return false;
   }
+
   // check etag(md5);
-  if(S3fsCurl::is_content_md5 && !etag_equals(it->second, partdata.etag)){
-    return false;
+  //
+  // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent  
+  // SSE_C: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html  
+  // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
+  // http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html 
+  //
+  if(S3fsCurl::is_content_md5 && SSE_C != S3fsCurl::GetSseType() && SSE_KMS != S3fsCurl::GetSseType()){
+    if(!etag_equals(it->second, partdata.etag)){
+      return false;
+    }
   }
   partdata.etaglist->at(partdata.etagpos).assign(it->second);
   partdata.uploaded = true;
