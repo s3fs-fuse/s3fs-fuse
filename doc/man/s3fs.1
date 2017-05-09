@@ -58,9 +58,9 @@ All s3fs options must given in the form where "opt" is:
 if it is not specified bucket name(and path) in command line, must specify this option after \-o option for bucket name.
 .TP
 \fB\-o\fR default_acl (default="private")
-the default canned acl to apply to all written S3 objects, e.g., "public-read".
-Any created files will have this canned acl.
-Any updated files will also have this canned acl applied!
+the default canned acl to apply to all written s3 objects, e.g., "private", "public-read".
+empty string means do not send header.
+see http://aws.amazon.com/documentation/s3/ for the full list of canned acls.
 .TP
 \fB\-o\fR retries (default="2")
 number of times to retry a failed S3 transaction.
