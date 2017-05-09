@@ -91,7 +91,7 @@ bool pathrequeststyle             = false;
 bool complement_stat              = false;
 std::string program_name;
 std::string service_path          = "/";
-std::string host                  = "http://s3.amazonaws.com";
+std::string host                  = "https://s3.amazonaws.com";
 std::string bucket                = "";
 std::string endpoint              = "us-east-1";
 std::string cipher_suites         = "";
