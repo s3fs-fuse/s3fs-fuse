@@ -3419,6 +3419,8 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   }
 
   // Check Bucket
+//TEST
+/*****************
   // If the network is up, check for valid credentials and if the bucket
   // exists. skip check if mounting a public bucket
   if(!S3fsCurl::IsPublicBucket()){
@@ -3428,6 +3430,16 @@ static void* s3fs_init(struct fuse_conn_info* conn)
       return NULL;
     }
   }
+***************/
+
+  {
+    int result;
+    if(EXIT_SUCCESS != (result = s3fs_check_service())){
+      s3fs_exit_fuseloop(result);
+      return NULL;
+    }
+  }
+//TEST
 
   // Investigate system capabilities
   #ifndef __APPLE__
@@ -4569,6 +4581,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       off_t pubbucket = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));
       if(1 == pubbucket){
         S3fsCurl::SetPublicBucket(true);
+//TEST
+        // [NOTE]
+        // if bucket is public(without credential), s3 do not allow copy api.
+        // so s3fs sets nocopyapi mode.
+        //
+        nocopyapi = true;
+//TEST
       }else if(0 == pubbucket){
         S3fsCurl::SetPublicBucket(false);
       }else{
