@@ -89,6 +89,7 @@ bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool complement_stat              = false;
+bool is_changed_default_host      = false; // for checking default http protocol
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "https://s3.amazonaws.com";
@@ -175,7 +176,7 @@ static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTR
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_utility_mode(void);
-static int s3fs_check_service(void);
+static int s3fs_check_service(bool need_try_http = true);
 static int check_for_aws_format(void);
 static int check_passwd_file_perms(void);
 static int read_passwd_file(void);
@@ -3751,7 +3752,7 @@ static bool check_region_error(const char* pbody, string& expectregion)
   return true;
 }
 
-static int s3fs_check_service(void)
+static int s3fs_check_service(bool need_try_http)
 {
   S3FS_PRN_INFO("check services.");
 
@@ -3763,6 +3764,7 @@ static int s3fs_check_service(void)
 
   S3fsCurl s3fscurl;
   int      res;
+  string   bup_endpoint = endpoint;
   if(0 > (res = s3fscurl.CheckBucket())){
     // get response code
     long responseCode = s3fscurl.GetLastResponseCode();
@@ -3806,26 +3808,41 @@ static int s3fs_check_service(void)
     // check errors(after retrying)
     if(0 > res && responseCode != 200 && responseCode != 301){
       if(responseCode == 400){
-        S3FS_PRN_CRIT("Bad Request - result of checking service.");
-        return EXIT_FAILURE;
-      }
-      if(responseCode == 403){
-        S3FS_PRN_CRIT("invalid credentials - result of checking service.");
-        return EXIT_FAILURE;
-      }
-      if(responseCode == 404){
-        S3FS_PRN_CRIT("bucket not found - result of checking service.");
-        return EXIT_FAILURE;
-      }
-      // unable to connect
-      if(responseCode == CURLE_OPERATION_TIMEDOUT){
-        S3FS_PRN_CRIT("unable to connect bucket and timeout - result of checking service.");
-        return EXIT_FAILURE;
+        S3FS_PRN_CRIT("Bad Request(host=%s) - result of checking service.", host.c_str());
+
+      }else if(responseCode == 403){
+        S3FS_PRN_CRIT("invalid credentials(host=%s) - result of checking service.", host.c_str());
+
+      }else if(responseCode == 404){
+        S3FS_PRN_CRIT("bucket not found(host=%s) - result of checking service.", host.c_str());
+
+      }else if(responseCode == CURLE_OPERATION_TIMEDOUT){
+        // unable to connect
+        S3FS_PRN_CRIT("unable to connect bucket and timeout(host=%s) - result of checking service.", host.c_str());
+      }else{
+        // another error
+        S3FS_PRN_CRIT("unable to connect(host=%s) - result of checking service.", host.c_str());
       }
 
-      // another error
-      S3FS_PRN_CRIT("unable to connect - result of checking service.");
-      return EXIT_FAILURE;
+      // [NOTE]
+      // If using default host(https://s3.amazonaws.com), try to change https to http protocol
+      // (old version default protocol) and try to connect.
+      //
+      if(need_try_http && !is_changed_default_host){
+        // host is set second default value(http)
+        S3FS_PRN_CRIT("Retry checking the bucket with HTTP(http://s3.amazonaws.com), not HTTPS(https://s3.amazonaws.com).");
+        host     = "http://s3.amazonaws.com";
+        endpoint = bup_endpoint;
+
+        // check http protocol
+        int result = s3fs_check_service(false);
+        if(EXIT_SUCCESS == result){
+          S3FS_PRN_CRIT("Switch to HTTP protocol instead of HTTPS. You should use the host or url option and specify the HTTP protocol endpoint.");
+        }
+        return result;
+      }else{
+        return EXIT_FAILURE;
+      }
     }
   }
 
@@ -4569,6 +4586,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "host=")){
       host = strchr(arg, '=') + sizeof(char);
+      is_changed_default_host = true;
       return 0;
     }
     if(0 == STR2NCMP(arg, "servicepath=")){
@@ -4689,6 +4707,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "url=")){
       host = strchr(arg, '=') + sizeof(char);
+      is_changed_default_host = true;
       // strip the trailing '/', if any, off the end of the host
       // string
       size_t found, length;
