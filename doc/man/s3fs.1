@@ -187,8 +187,12 @@ sets MB to ensure disk free space. This option means the threshold of free space
 s3fs makes file for downloading, and uploading and caching files.
 If the disk free space is smaller than this value, s3fs do not use diskspace as possible in exchange for the performance.
 .TP
-\fB\-o\fR url (default="http://s3.amazonaws.com")
-sets the url to use to access Amazon S3. If you want to use HTTPS, then you can set url=https://s3.amazonaws.com
+\fB\-o\fR url (default="https://s3.amazonaws.com")
+sets the url to use to access Amazon S3. If you want to use HTTP, then you can set "url=http://s3.amazonaws.com".
+If you start s3fs without specifying the url option, s3fs will check the bucket using https://s3.amazonaws.com.
+And when bucket check fails, s3fs retries the bucket check using http://s3.amazonaws.com.
+This is the function left behind for backward compatibility.
+If you do not use https, please specify the URL with the url option.
 .TP
 \fB\-o\fR endpoint (default="us-east-1")
 sets the endpoint to use.
