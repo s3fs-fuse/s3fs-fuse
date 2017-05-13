@@ -1,7 +1,7 @@
 ﻿ChangeLog for S3FS
 ------------------
 
-Version 1.81 -- May 14, 2017
+Version 1.81 -- May 13, 2017
 #426 - Updated to correct ChangeLog
 #431 - fix typo s/controll/control/
 #432 - Include location constraint when creating bucket
