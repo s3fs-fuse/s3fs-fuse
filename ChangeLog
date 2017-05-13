@@ -1,6 +1,66 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.81 -- May 13, 2017
+#426 - Updated to correct ChangeLog
+#431 - fix typo s/controll/control/
+#432 - Include location constraint when creating bucket
+#433 - Correct search and replace typo
+#440 - Handled all curl error without exiting process - #437
+#443 - Fix for leaks during stat cache entry expiry / truncation (#340)
+#444 - Add mirror file logic for removing cache file
+#447 - added fuse package for mounting via /etc/fstab, fixes #417
+#449 - Accept mount options compatible with mtab
+#451 - Correct path in README
+#454 - Changed for accepting mount options compatible with mtab - #449
+#466 - Fixed a bug about could not copy file mode from org file
+#471 - Added use_xattr option for #467 and #460
+#477 - OS-specific correspondence of the extended attribute header
+#483 - Trim symbolic link original path in file
+#487 - Split header debugging onto multiple lines for easier reading
+#488 - Fixed searching Content-Length without case sensitive - #480
+#489 - Changed headers_t map using nocase compare function - #488
+#494 - Fix typo s/destroied/destroyed/
+#495 - Fix invalid V4 signature on multipart copy requests
+#498 - Upgrade to S3Proxy 1.5.1
+#502 - Fixed issue#435 branch codes for remaining bugs(2)
+#503 - Add missing call to mtime test
+#504 - Use describe helper function
+#505 - Correct typos
+#509 - Use server-provided ETag during complete upload
+#511 - Fixed a bug about uploading NULL to some part of the file contents
+#512 - Changed clock_gettime func to s3fs_clock_gettime for homebrew - #468
+#513 - Added issue and PR templates.
+#517 - Update s3fs.1 - removed duplicated word
+#520 - Added links for eventual consistency in README.md - #515
+#539 - Upgrade to S3Proxy 1.5.2
+#540 - Address cppcheck 1.77 warnings
+#545 - Changed base cached time of stat_cache_expire option - #523
+#546 - Fixed double initialization of SSL library at foreground
+#550 - Add umount instruction for unplivileged user
+#551 - Updated stat_cache_expire option description - #545
+#552 - switch S3fsMultiCurl to use foreground threads
+#553 - add TLS cipher suites customization
+#554 - cleanup cache directory when running out of disk space
+#555 - don't sign empty headers (as they are discarded
+#556 - fix multipart upload handling without cache
+#557 - Added check_cache_dir_exist option(refixed #347) - #538
+#558 - Fixed a bug in logic about truncating stat cache
+#560 - Fixed about multipart uploading at no free space related to #509
+#567 - Do not send ACL unless overridden
+#576 - Added option for complementing lack of stat mode
+#578 - Refactored the get_object_attribute function
+#579 - Added notsup_compat_dir option
+#580 - Enhanced bucket/path parameter check
+#582 - Check errors returned in 200 OK responses for put header request
+#583 - Updated limit object size in s3fs man page
+#585 - Fixed failure to upload/copy with SSE_C and SSE_KMS
+#587 - Changed copyright year format for debian pkg
+#588 - Default transport to HTTPS
+#590 - Updated man page for default_acl option - #567
+#593 - Backward compatible for changing default transport to HTTPS
+#594 - Check bucket at public bucket and add nocopyapi option automatically
+
 Version 1.80 -- May 29, 2016
 #213 - Parse ETag from copy multipart correctly
 #215 - Fix mem leak in openssl_auth.cpp:s3fs_sha256hexsum
@@ -103,6 +163,7 @@ Version 1.80 -- May 29, 2016
 #420 - Skip early credential checks when iam_role=auto
 #422 - Fixes for iam_role=auto
 #424 - Added travis CI badge in README.md
+#425 - Updated ChangeLog and configure.ac for release 1.80
 
 Version 1.79 -- Jul 19, 2015
 issue #60 - Emit user-friendly log messages on failed CheckBucket requests
