@@ -1,6 +1,9 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.82 -- May 13, 2017
+#597 - Not fallback to HTTP - #596
+
 Version 1.81 -- May 13, 2017
 #426 - Updated to correct ChangeLog
 #431 - fix typo s/controll/control/
@@ -60,6 +63,7 @@ Version 1.81 -- May 13, 2017
 #590 - Updated man page for default_acl option - #567
 #593 - Backward compatible for changing default transport to HTTPS
 #594 - Check bucket at public bucket and add nocopyapi option automatically
+#595 - Updated ChangeLog and configure.ac for release 1.81
 
 Version 1.80 -- May 29, 2016
 #213 - Parse ETag from copy multipart correctly
