@@ -135,6 +135,7 @@ If you specify this option for set "Content-Encoding" HTTP header, please take c
 .TP
 \fB\-o\fR public_bucket (default="" which means disabled)
 anonymously mount a public bucket when set to 1, ignores the $HOME/.passwd-s3fs and /etc/passwd-s3fs files.
+S3 does not allow copy object api for anonymous users, then s3fs sets nocopyapi option automatically when public_bucket=1 option is specified.
 .TP
 \fB\-o\fR connect_timeout (default="300" seconds)
 time to wait for connection before giving up.
