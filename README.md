@@ -22,7 +22,7 @@ Features
 Installation
 ------------
 
-Ensure you have all the dependencies:
+* On Linux, ensure you have all the dependencies:
 
 On Ubuntu 14.04:
 
@@ -36,7 +36,7 @@ On CentOS 7:
 sudo yum install automake fuse fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
 ```
 
-Compile from master via the following commands:
+Then compile from master via the following commands:
 
 ```
 git clone https://github.com/s3fs-fuse/s3fs-fuse.git
@@ -45,6 +45,13 @@ cd s3fs-fuse
 ./configure
 make
 sudo make install
+```
+
+* On Mac OS X, install via [Homebrew](http://brew.sh/):
+
+```ShellSession
+$ brew tap homebrew/fuse
+$ brew install s3fs
 ```
 
 Examples
