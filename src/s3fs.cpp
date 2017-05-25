@@ -1705,15 +1705,6 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
     return result;
   }
 
-  struct passwd* pwdata= getpwuid(uid);
-  struct group* grdata = getgrgid(gid);
-  if(pwdata){
-    uid = pwdata->pw_uid;
-  }
-  if(grdata){
-    gid = grdata->gr_gid;
-  }
-
   if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
     // Should rebuild directory object(except new type)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -1769,6 +1760,13 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
     return result;
   }
 
+  if((uid_t)(-1) == uid){
+    uid = stbuf.st_uid;
+  }
+  if((gid_t)(-1) == gid){
+    gid = stbuf.st_gid;
+  }
+
   // Get attributes
   if(S_ISDIR(stbuf.st_mode)){
     result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
@@ -1779,15 +1777,6 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
   }
   if(0 != result){
     return result;
-  }
-
-  struct passwd* pwdata= getpwuid(uid);
-  struct group* grdata = getgrgid(gid);
-  if(pwdata){
-    uid = pwdata->pw_uid;
-  }
-  if(grdata){
-    gid = grdata->gr_gid;
   }
 
   if(S_ISDIR(stbuf.st_mode)){
