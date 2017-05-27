@@ -510,8 +510,17 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     return -ENOMEM;
   }
   // get group information
-  if(0 != (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-    S3FS_PRN_ERR("could not get group information.");
+  while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
+    free(pbuf);
+    maxlen *= 2;
+    if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
+      S3FS_PRN_CRIT("failed to allocate memory.");
+      return -ENOMEM;
+    }
+  }
+
+  if(0 != result){
+    S3FS_PRN_ERR("could not get group information(%d).", result);
     free(pbuf);
     return -result;
   }
