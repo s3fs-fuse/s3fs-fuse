@@ -59,7 +59,7 @@ using namespace std;
 #ifdef HAVE_CLOCK_GETTIME
 static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
 {
-  return clock_gettime(clk_id, ts);
+  return clock_gettime(static_cast<clockid_t>(clk_id), ts);
 }
 #else
 static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
