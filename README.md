@@ -27,7 +27,7 @@ Installation
 On Ubuntu 14.04:
 
 ```
-sudo apt-get install automake fuse autotools-dev g++ git libcurl4-gnutls-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
+sudo apt-get install automake autotools-dev fuse g++ git libcurl4-gnutls-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
 ```
 
 On CentOS 7:
