@@ -297,9 +297,12 @@ function test_special_characters {
     describe "Testing special characters ..."
 
     ls 'special' 2>&1 | grep -q 'No such file or directory'
-    ls 'special?' 2>&1 | grep -q 'No such file or directory'
-    ls 'special*' 2>&1 | grep -q 'No such file or directory'
-    ls 'special~' 2>&1 | grep -q 'No such file or directory'
+
+    for i in $(seq 11 127); do
+        chr=$(printf "\\x$(printf "%x" ${i})")
+        ls "special${chr}" 2>&1 | grep -q 'No such file or directory'
+    done
+
     ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
 }
 
