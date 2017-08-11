@@ -24,6 +24,21 @@ function mk_test_file {
         echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
         exit 1
     fi
+
+    # wait & check
+    BASE_TEXT_LENGTH=`echo $TEXT | wc -c | awk '{print $1}'`
+    TRY_COUNT=10
+    while true; do
+        MK_TEXT_LENGTH=`wc -c $TEST_TEXT_FILE | awk '{print $1}'`
+        if [ $BASE_TEXT_LENGTH -eq $MK_TEXT_LENGTH ]; then
+            break
+        fi
+        TRY_COUNT=`expr $TRY_COUNT - 1`
+        if [ $TRY_COUNT -le 0 ]; then
+            echo "Could not create file ${TEST_TEXT_FILE}, that file size is something wrong"
+        fi
+        sleep 1
+    done
 }
 
 function rm_test_file {
@@ -65,9 +80,9 @@ function cd_run_dir {
         echo "TEST_BUCKET_MOUNT_POINT variable not set"
         exit 1
     fi
-    RUN_DIR=$(mktemp --directory ${TEST_BUCKET_MOUNT_POINT_1}/testrun-XXXXXX)
+    RUN_DIR=$(mktemp -d ${TEST_BUCKET_MOUNT_POINT_1}/testrun-XXXXXX)
     cd ${RUN_DIR}
-}    
+}
 
 function clean_run_dir {
     if [  -d ${RUN_DIR} ]; then

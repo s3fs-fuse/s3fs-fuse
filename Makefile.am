@@ -34,6 +34,7 @@ cppcheck:
             --std=c++03 \
             -U CURLE_PEER_FAILED_VERIFICATION \
             -U P_tmpdir \
+            -U ENOATTR \
             --enable=all \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
