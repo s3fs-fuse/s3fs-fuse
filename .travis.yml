@@ -1,17 +1,45 @@
 language: cpp
-sudo: required
-dist: trusty
-cache: apt
-before_install:
- - sudo apt-get update -qq
- - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
- - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
-script:
- - ./autogen.sh
- - ./configure
- - make
- - make cppcheck
- - make check -C src
- - modprobe fuse
- - make check -C test
- - cat test/test-suite.log
+
+matrix:
+  include:
+    - os: linux
+      sudo: required
+      dist: trusty
+      cache: apt
+      before_install:
+        - sudo apt-get update -qq
+        - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
+        - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
+      script:
+        - ./autogen.sh
+        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include'
+        - make
+        - make cppcheck
+        - make check -C src
+        - modprobe fuse
+        - make check -C test
+        - cat test/test-suite.log
+
+    - os: osx
+      osx_image: xcode8.3
+      before_install:
+        - curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
+        - rvm get head
+        - brew update
+        - brew install truncate
+        - brew tap caskroom/cask
+        - brew cask install osxfuse
+        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
+        - brew install gnu-sed
+        - sudo ln -s /usr/local/opt/gnu-sed/bin/gsed /usr/local/bin/sed
+        - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
+        - brew install cppcheck
+      script:
+        - ./autogen.sh
+        - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure
+        - make
+        - make cppcheck
+        - make check -C src
+        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
+        - make check -C test
+        - cat test/test-suite.log

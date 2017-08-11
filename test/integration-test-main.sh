@@ -6,7 +6,11 @@ source test-utils.sh
 
 function test_append_file {
     describe "Testing append to file ..."
+
     # Write a small test file
+    if [ `uname` = "Darwin" ]; then
+       cat /dev/null > ${TEST_TEXT_FILE}
+    fi
     for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
     do
        echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
@@ -51,7 +55,11 @@ function test_truncate_empty_file {
     truncate ${TEST_TEXT_FILE} -s $t_size
 
     # Verify file is zero length
-    size=$(stat -c %s ${TEST_TEXT_FILE})
+    if [ `uname` = "Darwin" ]; then
+        size=$(stat -f "%z" ${TEST_TEXT_FILE})
+    else
+        size=$(stat -c %s ${TEST_TEXT_FILE})
+    fi
     if [ $t_size -ne $size ]
     then
         echo "error: expected ${TEST_TEXT_FILE} to be $t_size length, got $size"
@@ -77,6 +85,9 @@ function test_mv_file {
     # create the test file again
     mk_test_file
 
+    # save file length
+    ALT_TEXT_LENGTH=`wc -c $TEST_TEXT_FILE | awk '{print $1}'`
+
     #rename the test file
     mv $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
     if [ ! -e $ALT_TEST_TEXT_FILE ]
@@ -86,7 +97,6 @@ function test_mv_file {
     fi
 
     # Check the contents of the alt file
-    ALT_TEXT_LENGTH=`echo $TEST_TEXT | wc -c | awk '{print $1}'`
     ALT_FILE_LENGTH=`wc -c $ALT_TEST_TEXT_FILE | awk '{print $1}'`
     if [ "$ALT_FILE_LENGTH" -ne "$ALT_TEXT_LENGTH" ]
     then
@@ -179,12 +189,21 @@ function test_chmod {
     # create the test file again
     mk_test_file
 
-    ORIGINAL_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
+    if [ `uname` = "Darwin" ]; then
+        ORIGINAL_PERMISSIONS=$(stat -f "%p" $TEST_TEXT_FILE)
+    else
+        ORIGINAL_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
+    fi
 
     chmod 777 $TEST_TEXT_FILE;
 
     # if they're the same, we have a problem.
-    if [ $(stat --format=%a $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
+    if [ `uname` = "Darwin" ]; then
+        CHANGED_PERMISSIONS=$(stat -f "%p" $TEST_TEXT_FILE)
+    else
+        CHANGED_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
+    fi
+    if [ $CHANGED_PERMISSIONS == $ORIGINAL_PERMISSIONS ]
     then
       echo "Could not modify $TEST_TEXT_FILE permissions"
       return 1
@@ -200,12 +219,21 @@ function test_chown {
     # create the test file again
     mk_test_file
 
-    ORIGINAL_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
+    if [ `uname` = "Darwin" ]; then
+        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" $TEST_TEXT_FILE)
+    else
+        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
+    fi
 
     chown 1000:1000 $TEST_TEXT_FILE;
 
     # if they're the same, we have a problem.
-    if [ $(stat --format=%u:%g $TEST_TEXT_FILE) == $ORIGINAL_PERMISSIONS ]
+    if [ `uname` = "Darwin" ]; then
+        CHANGED_PERMISSIONS=$(stat -f "%u:%g" $TEST_TEXT_FILE)
+    else
+        CHANGED_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
+    fi
+    if [ $CHANGED_PERMISSIONS == $ORIGINAL_PERMISSIONS ]
     then
       if [ $ORIGINAL_PERMISSIONS == "1000:1000" ]
       then
@@ -262,6 +290,10 @@ function test_rename_before_close {
 
 function test_multipart_upload {
     describe "Testing multi-part upload ..."
+
+    if [ `uname` = "Darwin" ]; then
+       cat /dev/null > $BIG_FILE
+    fi
     dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
 
@@ -278,6 +310,10 @@ function test_multipart_upload {
 
 function test_multipart_copy {
     describe "Testing multi-part copy ..."
+
+    if [ `uname` = "Darwin" ]; then
+       cat /dev/null > $BIG_FILE
+    fi
     dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     mv "${BIG_FILE}" "${BIG_FILE}-copy"
@@ -364,8 +400,13 @@ function test_mtime_file {
 
     #copy the test file with preserve mode
     cp -p $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
-    testmtime=`stat -c %Y $TEST_TEXT_FILE`
-    altmtime=`stat -c %Y $ALT_TEST_TEXT_FILE`
+    if [ `uname` = "Darwin" ]; then
+        testmtime=`stat -f "%m" $TEST_TEXT_FILE`
+        altmtime=`stat -f "%m" $ALT_TEST_TEXT_FILE`
+    else
+        testmtime=`stat -c %Y $TEST_TEXT_FILE`
+        altmtime=`stat -c %Y $ALT_TEST_TEXT_FILE`
+    fi
     if [ "$testmtime" -ne "$altmtime" ]
     then
        echo "File times do not match:  $testmtime != $altmtime"
