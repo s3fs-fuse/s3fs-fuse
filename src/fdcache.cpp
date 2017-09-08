@@ -1908,7 +1908,7 @@ size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
   return old;
 }
 
-fsblkcnt_t FdManager::GetFreeDiskSpace(const char* path)
+uint64_t FdManager::GetFreeDiskSpace(const char* path)
 {
   struct statvfs vfsbuf;
   string         ctoppath;
@@ -1930,12 +1930,12 @@ fsblkcnt_t FdManager::GetFreeDiskSpace(const char* path)
     S3FS_PRN_ERR("could not get vfs stat by errno(%d)", errno);
     return 0;
   }
-  return (vfsbuf.f_bavail * vfsbuf.f_bsize);
+  return (vfsbuf.f_bavail * vfsbuf.f_frsize);
 }
 
 bool FdManager::IsSafeDiskSpace(const char* path, size_t size)
 {
-  fsblkcnt_t fsize = FdManager::GetFreeDiskSpace(path);
+  uint64_t fsize = FdManager::GetFreeDiskSpace(path);
   return ((size + FdManager::GetEnsureFreeDiskSpace()) <= fsize);
 }
 
