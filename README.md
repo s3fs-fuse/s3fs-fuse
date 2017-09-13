@@ -50,7 +50,7 @@ sudo make install
 * On Mac OS X, install via [Homebrew](http://brew.sh/):
 
 ```ShellSession
-$ brew tap homebrew/fuse
+$ brew cask install osxfuse
 $ brew install s3fs
 ```
 
