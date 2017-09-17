@@ -363,6 +363,7 @@ curltime_t       S3fsCurl::curl_times;
 curlprogress_t   S3fsCurl::curl_progress;
 string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
+string           S3fsCurl::userAgent;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 bool             S3fsCurl::is_sigv4            = true;           // default
@@ -612,6 +613,19 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
     }
   }
   return true;
+}
+
+void S3fsCurl::InitUserAgent(void)
+{
+  if(S3fsCurl::userAgent.empty()){
+    S3fsCurl::userAgent =  "s3fs/";
+    S3fsCurl::userAgent += VERSION;
+    S3fsCurl::userAgent += " (commit hash ";
+    S3fsCurl::userAgent += COMMIT_HASH_VAL;
+    S3fsCurl::userAgent += "; ";
+    S3fsCurl::userAgent += s3fs_crypt_lib_name();
+    S3fsCurl::userAgent += ")";
+  }
 }
 
 //
@@ -1480,20 +1494,7 @@ bool S3fsCurl::AddUserAgent(CURL* hCurl)
     return false;
   }
   if(S3fsCurl::IsUserAgentFlag()){
-    static string strua;
-    static bool   init = false;
-
-    if(!init){
-      strua =  "s3fs/";
-      strua += VERSION;
-      strua += " (commit hash ";
-      strua += COMMIT_HASH_VAL;
-      strua += "; ";
-      strua += s3fs_crypt_lib_name();
-      strua += ")";
-      init = true;
-    }
-    curl_easy_setopt(hCurl, CURLOPT_USERAGENT, strua.c_str());
+    curl_easy_setopt(hCurl, CURLOPT_USERAGENT, S3fsCurl::userAgent.c_str());
   }
   return true;
 }

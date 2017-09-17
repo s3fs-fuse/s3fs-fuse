@@ -4935,6 +4935,9 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
+  // set user agent
+  S3fsCurl::InitUserAgent();
+
   // There's room for more command line error checking
 
   // Check to see if the bucket name contains periods and https (SSL) is
