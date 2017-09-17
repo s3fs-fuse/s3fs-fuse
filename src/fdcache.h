@@ -194,7 +194,7 @@ class FdManager
     fdent_map_t            fent;
 
   private:
-    static fsblkcnt_t GetFreeDiskSpace(const char* path);
+    static uint64_t GetFreeDiskSpace(const char* path);
     void CleanupCacheDirInternal(const std::string &path = "");
 
   public:
