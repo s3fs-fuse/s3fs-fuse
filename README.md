@@ -57,15 +57,11 @@ $ brew install s3fs
 Examples
 --------
 
-Enter your S3 identity and credential in a file `/path/to/passwd`:
+Enter your S3 identity and credential in a file `/path/to/passwd` and set
+owner-only permissions:
 
 ```
 echo MYIDENTITY:MYCREDENTIAL > /path/to/passwd
-```
-
-Make sure the file has proper permissions (if you get 'permissions' error when mounting) `/path/to/passwd`:
-
-```
 chmod 600 /path/to/passwd
 ```
 
@@ -85,9 +81,11 @@ You can also mount on boot by entering the following line to `/etc/fstab`:
 
 ```
 s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other 0 0
+```
 
 or
 
+```
 mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 ```
 
