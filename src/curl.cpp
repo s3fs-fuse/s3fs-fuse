@@ -3030,9 +3030,6 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
   string query_string = "uploads";
-  if(S3fsCurl::is_sigv4){
-    query_string += "=";
-  }
   turl          += "?" + query_string;
   resource      += "?" + query_string;
   url            = prepare_url(turl.c_str());
@@ -3106,7 +3103,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
-    insertV4Headers("POST", path, query_string, "");
+    insertV4Headers("POST", path, query_string + "=", "");  // NOTICE : appends "=" to query_string
   }
 
   // setopt
