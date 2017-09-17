@@ -71,6 +71,13 @@ Run s3fs with an existing bucket `mybucket` and directory `/path/to/mountpoint`:
 s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd
 ```
 
+If you use s3fs with a non-Amazon S3 implementation, specify the URL and
+path-style requests:
+
+```
+s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -o url=http://url.to.s3/ -o use_path_request_style
+```
+
 If you encounter any errors, enable debug output:
 
 ```
