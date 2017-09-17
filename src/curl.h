@@ -236,6 +236,7 @@ class S3fsCurl
     static curlprogress_t   curl_progress;
     static std::string      curl_ca_bundle;
     static mimes_t          mimeTypes;
+    static std::string      userAgent;
     static int              max_parallel_cnt;
     static off_t            multipart_size;
     static bool             is_sigv4;
@@ -377,6 +378,7 @@ class S3fsCurl
     static bool IsSignatureV4(void) { return S3fsCurl::is_sigv4; }
     static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
     static bool IsUserAgentFlag(void) { return S3fsCurl::is_ua; }
+    static void InitUserAgent(void);
 
     // methods
     bool CreateCurlHandle(bool force = false);
