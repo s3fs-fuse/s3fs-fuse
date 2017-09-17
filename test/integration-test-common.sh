@@ -41,7 +41,7 @@ set -o errexit
 S3FS=../src/s3fs
 
 # Allow these defaulted values to be overridden
-: ${S3_URL:="http://127.0.0.1:8080"}
+: ${S3_URL:="https://127.0.0.1:8080"}
 : ${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}
 : ${TEST_BUCKET_1:="s3fs-integration-test"}
 
@@ -182,6 +182,8 @@ function start_s3fs {
             $TEST_BUCKET_MOUNT_POINT_1 \
             -o use_path_request_style \
             -o url=${S3_URL} \
+            -o no_check_certificate \
+            -o ssl_verify_hostname=0 \
             -o createbucket \
             ${AUTH_OPT} \
             -o dbglevel=${DBGLEVEL:=info} \
