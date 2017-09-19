@@ -108,7 +108,8 @@ function start_s3proxy {
             chmod +x "${S3PROXY_BINARY}"
         fi
 
-        stdbuf -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG | stdbuf -oL -eL sed -u "s/^/s3proxy: /" &
+        stdbuf -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
+        S3PROXY_PID=$!
 
         # wait for S3Proxy to start
         for i in $(seq 30);
@@ -121,17 +122,13 @@ function start_s3proxy {
             fi
             sleep 1
         done
-
-        S3PROXY_PID=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep :8080 | awk '{ print $2 }')
     fi
 }
 
 function stop_s3proxy {
-    S3PROXY_PID=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep :8080 | awk '{ print $2 }') 
     if [ -n "${S3PROXY_PID}" ]
     then
         kill $S3PROXY_PID
-        wait $S3PROXY_PID
     fi
 }
 
