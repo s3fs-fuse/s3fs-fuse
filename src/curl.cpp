@@ -2325,7 +2325,13 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 
   type = REQTYPE_DELETE;
 
-  return RequestPerform();
+  int result = RequestPerform();
+
+  if (result == -ENOENT && LastResponseCode == 404) {
+    return 0;
+  }
+
+  return result;
 }
 
 //
