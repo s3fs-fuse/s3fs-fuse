@@ -138,6 +138,7 @@ static s3fs_log_level set_s3fs_log_level(s3fs_log_level level);
 static s3fs_log_level bumpup_s3fs_log_level(void);
 static bool is_special_name_folder_object(const char* path);
 static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, int* pDirType = NULL);
+static int remove_old_type_dir(const string& path, int dirtype);
 static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL, bool add_no_truncate_cache = false);
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
@@ -389,6 +390,21 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
     }
   }
   return result;
+}
+
+static int remove_old_type_dir(const string& path, int dirtype)
+{
+  if(IS_RMTYPEDIR(dirtype)){
+    S3fsCurl s3fscurl;
+    int      result = s3fscurl.DeleteRequest(path.c_str());
+    if(0 != result && -ENOENT != result){
+      return result;
+    }
+    // succeed removing or not found the directory
+  }else{
+    // nothing to do
+  }
+  return 0;
 }
 
 //
@@ -1547,11 +1563,8 @@ static int s3fs_chmod(const char* path, mode_t mode)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1623,13 +1636,10 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
   if(S_ISDIR(stbuf.st_mode)){
     // Should rebuild all directory object
     // Need to remove old dir("dir" etc) and make new dir("dir/")
-    
+
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1710,11 +1720,8 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1784,11 +1791,8 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1866,11 +1870,8 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1934,11 +1935,8 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -3066,11 +3064,8 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -3314,12 +3309,8 @@ static int s3fs_removexattr(const char* path, const char* name)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
 
     // At first, remove directory old object
-    if(IS_RMTYPEDIR(nDirType)){
-      S3fsCurl s3fscurl;
-      if(0 != (result = s3fscurl.DeleteRequest(strpath.c_str()))){
-        free_xattrs(xattrs);
-        return result;
-      }
+    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+      return result;
     }
     StatCache::getStatCacheData()->DelStat(nowcache);
 
