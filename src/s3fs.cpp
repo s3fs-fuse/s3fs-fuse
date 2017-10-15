@@ -3364,7 +3364,7 @@ static void s3fs_exit_fuseloop(int exit_status) {
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-  S3FS_PRN_CRIT("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
+  S3FS_PRN_INFO("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
 
   // cache(remove cache dirs at first)
   if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
