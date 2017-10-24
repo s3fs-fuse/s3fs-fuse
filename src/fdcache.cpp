@@ -1017,9 +1017,9 @@ int FdEntity::SetMtime(time_t time)
   if(-1 == time){
     return 0;
   }
-  if(-1 != fd){
-    AutoLock auto_lock(&fdent_lock);
 
+  AutoLock auto_lock(&fdent_lock);
+  if(-1 != fd){
     struct timeval tv[2];
     tv[0].tv_sec = time;
     tv[0].tv_usec= 0L;
@@ -1046,6 +1046,7 @@ int FdEntity::SetMtime(time_t time)
 
 bool FdEntity::UpdateMtime(void)
 {
+  AutoLock auto_lock(&fdent_lock);
   struct stat st;
   if(!GetStats(st)){
     return false;
@@ -1067,18 +1068,21 @@ bool FdEntity::GetSize(size_t& size)
 
 bool FdEntity::SetMode(mode_t mode)
 {
+  AutoLock auto_lock(&fdent_lock);
   orgmeta["x-amz-meta-mode"] = str(mode);
   return true;
 }
 
 bool FdEntity::SetUId(uid_t uid)
 {
+  AutoLock auto_lock(&fdent_lock);
   orgmeta["x-amz-meta-uid"] = str(uid);
   return true;
 }
 
 bool FdEntity::SetGId(gid_t gid)
 {
+  AutoLock auto_lock(&fdent_lock);
   orgmeta["x-amz-meta-gid"] = str(gid);
   return true;
 }
@@ -1088,6 +1092,7 @@ bool FdEntity::SetContentType(const char* path)
   if(!path){
     return false;
   }
+  AutoLock auto_lock(&fdent_lock);
   orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(string(path));
   return true;
 }
