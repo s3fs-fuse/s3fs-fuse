@@ -267,6 +267,8 @@ class S3fsCurl
     int                  b_ssekey_pos;         // backup for retrying
     std::string          b_ssevalue;           // backup for retrying
     sse_type_t           b_ssetype;            // backup for retrying
+    std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
+    std::string          query_string;         // request query string
 
   public:
     // constructor/destructor
@@ -312,7 +314,9 @@ class S3fsCurl
     bool ResetHandle(void);
     bool RemakeHandle(void);
     bool ClearInternalData(void);
-    void insertV4Headers(const std::string &op, const std::string &path, const std::string &query_string, const std::string &payload_hash);
+    void insertV4Headers();
+    void insertV2Headers();
+    void insertAuthHeaders();
     std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
     std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
     bool GetUploadId(std::string& upload_id);
@@ -481,6 +485,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value);
 std::string get_sorted_header_keys(const struct curl_slist* list);
 std::string get_canonical_headers(const struct curl_slist* list, bool only_amz = false);
+std::string get_header_value(const struct curl_slist* list, const std::string &key);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
