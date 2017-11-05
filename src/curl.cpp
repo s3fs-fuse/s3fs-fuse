@@ -706,12 +706,15 @@ bool S3fsCurl::LocateBundle(void)
       S3fsCurl::curl_ca_bundle.assign(CURL_CA_BUNDLE); 
       return true;
     }
+  }else{
+    // Already set ca bundle variable
+    return true;
   }
 
   // not set via environment variable, look in likely locations
 
   ///////////////////////////////////////////
-  // from curl's (7.21.2) acinclude.m4 file
+  // following comment from curl's (7.21.2) acinclude.m4 file
   ///////////////////////////////////////////
   // dnl CURL_CHECK_CA_BUNDLE
   // dnl -------------------------------------------------
@@ -724,13 +727,36 @@ bool S3fsCurl::LocateBundle(void)
   // dnl /usr/local/share/certs/ca-root.crt FreeBSD
   // dnl /etc/ssl/cert.pem OpenBSD
   // dnl /etc/ssl/certs/ (ca path) SUSE
+  ///////////////////////////////////////////
+  // Within CURL the above path should have been checked
+  // according to the OS. Thus, although we do not need
+  // to check files here, we will only examine some files.
+  //
   ifstream BF("/etc/pki/tls/certs/ca-bundle.crt"); 
   if(BF.good()){
-     BF.close();
-     S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
+    BF.close();
+    S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
   }else{
-    S3FS_PRN_ERR("%s: /etc/pki/tls/certs/ca-bundle.crt is not readable", program_name.c_str());
-    return false;
+    BF.open("/etc/ssl/certs/ca-certificates.crt");
+    if(BF.good()){
+      BF.close();
+      S3fsCurl::curl_ca_bundle.assign("/etc/ssl/certs/ca-certificates.crt");
+    }else{
+      BF.open("/usr/share/ssl/certs/ca-bundle.crt");
+      if(BF.good()){
+        BF.close();
+        S3fsCurl::curl_ca_bundle.assign("/usr/share/ssl/certs/ca-bundle.crt");
+      }else{
+        BF.open("/usr/local/share/certs/ca-root.crt");
+        if(BF.good()){
+          BF.close();
+          S3fsCurl::curl_ca_bundle.assign("/usr/share/ssl/certs/ca-bundle.crt");
+        }else{
+          S3FS_PRN_ERR("%s: /.../ca-bundle.crt is not readable", program_name.c_str());
+          return false;
+        }
+      }
+    }
   }
   return true;
 }
