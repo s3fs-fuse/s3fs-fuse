@@ -23,8 +23,6 @@ matrix:
     - os: osx
       osx_image: xcode8.3
       before_install:
-        - curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
-        - rvm get head
         - brew update
         - brew install truncate
         - brew tap caskroom/cask
