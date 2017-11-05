@@ -122,6 +122,7 @@ static bool is_s3fs_uid           = false;// default does not set.
 static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
+static bool is_ecs                = false;
 static bool is_use_xattr          = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
@@ -4508,7 +4509,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       passwd_file = strchr(arg, '=') + sizeof(char);
       return 0;
     }
+    if(0 == strcmp(arg, "ecs")){
+      S3fsCurl::SetIsECS(true);
+      is_ecs = true;
+      return 0;
+    }
     if(0 == STR2NCMP(arg, "iam_role")){
+      if (is_ecs) {
+        S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs");
+        return -1;
+      }
       if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
         // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
         //

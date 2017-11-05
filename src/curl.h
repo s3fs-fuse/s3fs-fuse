@@ -230,6 +230,7 @@ class S3fsCurl
     static std::string      AWSSecretAccessKey;
     static std::string      AWSAccessToken;
     static time_t           AWSAccessTokenExpire;
+    static bool             is_ecs;
     static std::string      IAM_role;
     static long             ssl_verify_hostname;
     static curltime_t       curl_times;
@@ -370,6 +371,7 @@ class S3fsCurl
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
     static int SetMaxParallelCount(int value);
     static int GetMaxParallelCount(void) { return S3fsCurl::max_parallel_cnt; }
+    static bool SetIsECS(bool flag);
     static std::string SetIAMRole(const char* role);
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
     static bool SetMultipartSize(off_t size);

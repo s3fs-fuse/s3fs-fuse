@@ -320,7 +320,9 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
 #define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timing
-#define	IAM_CRED_URL                "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+#define IAM_BASE_URL                "http://169.254.169.254" 
+#define	IAM_CRED_URL                "/latest/meta-data/iam/security-credentials/"
+#define ECS_IAM_ENV_VAR             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
 #define IAMCRED_ACCESSKEYID         "AccessKeyId"
 #define IAMCRED_SECRETACCESSKEY     "SecretAccessKey"
 #define IAMCRED_ACCESSTOKEN         "Token"
@@ -357,6 +359,7 @@ string           S3fsCurl::AWSAccessKeyId;
 string           S3fsCurl::AWSSecretAccessKey;
 string           S3fsCurl::AWSAccessToken;
 time_t           S3fsCurl::AWSAccessTokenExpire= 0;
+bool             S3fsCurl::is_ecs              = false;
 string           S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 curltime_t       S3fsCurl::curl_times;
@@ -1130,6 +1133,13 @@ long S3fsCurl::SetSslVerifyHostname(long value)
   }
   long old = S3fsCurl::ssl_verify_hostname;
   S3fsCurl::ssl_verify_hostname = value;
+  return old;
+}
+
+bool S3fsCurl::SetIsECS(bool flag)
+{
+  bool old = S3fsCurl::is_ecs;
+  S3fsCurl::is_ecs = flag;
   return old;
 }
 
@@ -2348,7 +2358,13 @@ int S3fsCurl::GetIAMCredentials(void)
   }
 
   // url
-  url             = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+  if (is_ecs) {
+    url = string(IAM_BASE_URL) + std::getenv(ECS_IAM_ENV_VAR);
+  }
+  else {
+    url = string(IAM_BASE_URL) + string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+  }
+  
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
@@ -2385,7 +2401,12 @@ bool S3fsCurl::LoadIAMRoleFromMetaData(void)
   }
 
   // url
-  url             = IAM_CRED_URL;
+  //if (is_ecs) {
+  //  url = string(IAM_BASE_URL) + std::getenv(ECS_IAM_ENV_VAR);
+  //}
+  //else {
+    url = string(IAM_BASE_URL) + string(IAM_CRED_URL);
+  //}
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
