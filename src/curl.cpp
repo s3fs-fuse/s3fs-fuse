@@ -2401,12 +2401,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData(void)
   }
 
   // url
-  //if (is_ecs) {
-  //  url = string(IAM_BASE_URL) + std::getenv(ECS_IAM_ENV_VAR);
-  //}
-  //else {
-    url = string(IAM_BASE_URL) + string(IAM_CRED_URL);
-  //}
+  url             = string(IAM_BASE_URL) + string(IAM_CRED_URL);
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
