@@ -320,14 +320,16 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
 #define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timing
-#define IAM_BASE_URL                "http://169.254.169.254" 
-#define	IAM_CRED_URL                "/latest/meta-data/iam/security-credentials/"
+#define IAM_CRED_URL_ECS            "http://169.254.170.2" 
+#define	IAM_CRED_URL                "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 #define ECS_IAM_ENV_VAR             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
 #define IAMCRED_ACCESSKEYID         "AccessKeyId"
 #define IAMCRED_SECRETACCESSKEY     "SecretAccessKey"
 #define IAMCRED_ACCESSTOKEN         "Token"
 #define IAMCRED_EXPIRATION          "Expiration"
+#define IAMCRED_ROLEARN             "RoleArn"
 #define IAMCRED_KEYCOUNT            4
+#define IAMCRED_KEYCOUNT_ECS        5
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -1401,7 +1403,9 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
     string::size_type pos;
     string            key;
     string            val;
-    if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
+    if(string::npos != (pos = oneline.find(IAMCRED_ROLEARN))){
+      key = IAMCRED_ROLEARN;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
       key = IAMCRED_ACCESSKEYID;
     }else if(string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
       key = IAMCRED_SECRETACCESSKEY;
@@ -1410,6 +1414,7 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
     }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
       key = IAMCRED_EXPIRATION;
     }else{
+      S3FS_PRN_INFO3("Unknown key");
       continue;
     }
     if(string::npos == (pos = oneline.find(':', pos + key.length()))){
@@ -1423,6 +1428,7 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
       continue;
     }
     val = oneline.substr(0, pos);
+    S3FS_PRN_INFO3("keyval: %s - %s", key, val);
     keyval[key] = val;
   }
   return true;
@@ -1437,9 +1443,13 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   if(!ParseIAMCredentialResponse(response, keyval)){
     return false;
   }
-  if(IAMCRED_KEYCOUNT != keyval.size()){
+  S3FS_PRN_INFO3("Parsed");
+
+  if(S3fsCurl::is_ecs ? IAMCRED_KEYCOUNT_ECS : IAMCRED_KEYCOUNT != keyval.size()){
     return false;
   }
+
+  S3FS_PRN_INFO3("keyval size OK");
 
   S3fsCurl::AWSAccessKeyId       = keyval[string(IAMCRED_ACCESSKEYID)];
   S3fsCurl::AWSSecretAccessKey   = keyval[string(IAMCRED_SECRETACCESSKEY)];
@@ -1451,7 +1461,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
 bool S3fsCurl::CheckIAMCredentialUpdate(void)
 {
-  if(0 == S3fsCurl::IAM_role.size()){
+  if(0 == S3fsCurl::IAM_role.size() && !S3fsCurl::is_ecs){
     return true;
   }
   if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
@@ -2344,12 +2354,15 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 //
 int S3fsCurl::GetIAMCredentials(void)
 {
-  S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
+  if (!S3fsCurl::is_ecs) {
+    S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
 
-  if(0 == S3fsCurl::IAM_role.size()){
-    S3FS_PRN_ERR("IAM role name is empty.");
-    return -EIO;
+    if(0 == S3fsCurl::IAM_role.size()) {
+      S3FS_PRN_ERR("IAM role name is empty.");
+      return -EIO;
+    }
   }
+
   // at first set type for handle
   type = REQTYPE_IAMCRED;
 
@@ -2359,12 +2372,12 @@ int S3fsCurl::GetIAMCredentials(void)
 
   // url
   if (is_ecs) {
-    url = string(IAM_BASE_URL) + std::getenv(ECS_IAM_ENV_VAR);
+    url = string(IAM_CRED_URL_ECS) + std::getenv(ECS_IAM_ENV_VAR);
   }
   else {
-    url = string(IAM_BASE_URL) + string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+    url = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
   }
-  
+
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
@@ -2401,7 +2414,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData(void)
   }
 
   // url
-  url             = string(IAM_BASE_URL) + string(IAM_CRED_URL);
+  url             = string(IAM_CRED_URL);
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
