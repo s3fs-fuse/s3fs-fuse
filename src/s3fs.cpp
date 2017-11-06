@@ -4074,7 +4074,7 @@ static int get_access_keys(void)
   }
 
   // access key loading is deferred
-  if(load_iamrole){
+  if(load_iamrole || is_ecs){
      return EXIT_SUCCESS;
   }
 
