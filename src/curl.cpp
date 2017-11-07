@@ -1398,48 +1398,6 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   if(!response){
     return false;
   }
-  istringstream sscred(response);
-  string        oneline;
-  keyval.clear();
-  while(getline(sscred, oneline, '\n')){
-    string::size_type pos;
-    string            key;
-    string            val;
-    if(string::npos != (pos = oneline.find(IAMCRED_ROLEARN))){
-      key = IAMCRED_ROLEARN;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
-      key = IAMCRED_ACCESSKEYID;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
-      key = IAMCRED_SECRETACCESSKEY;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSTOKEN))){
-      key = IAMCRED_ACCESSTOKEN;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
-      key = IAMCRED_EXPIRATION;
-    }else{
-      continue;
-    }
-    if(string::npos == (pos = oneline.find(':', pos + key.length()))){
-      continue;
-    }
-    if(string::npos == (pos = oneline.find('\"', pos))){
-      continue;
-    }
-    oneline = oneline.substr(pos + sizeof(char));
-    if(string::npos == (pos = oneline.find('\"'))){
-      continue;
-    }
-    val = oneline.substr(0, pos);
-    
-    keyval[key] = val;
-  }
-  return true;
-}
-
-bool S3fsCurl::ParseIAMCredentialResponseV2(const char* response, iamcredmap_t& keyval)
-{
-  if(!response){
-    return false;
-  }
 
   Json::Value root;
   Json::Reader reader;
@@ -1466,7 +1424,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
   iamcredmap_t keyval;
 
-  if(!ParseIAMCredentialResponseV2(response, keyval)){
+  if(!ParseIAMCredentialResponse(response, keyval)){
     return false;
   }
   S3FS_PRN_INFO3("Parsed");
