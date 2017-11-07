@@ -41,6 +41,8 @@
 #include <algorithm>
 #include <list>
 #include <vector>
+#include <json/json.h>
+#include <json/reader.h>
 
 #include "common.h"
 #include "curl.h"
@@ -1414,7 +1416,6 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
     }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
       key = IAMCRED_EXPIRATION;
     }else{
-      S3FS_PRN_INFO3("Unknown key");
       continue;
     }
     if(string::npos == (pos = oneline.find(':', pos + key.length()))){
@@ -1428,9 +1429,34 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
       continue;
     }
     val = oneline.substr(0, pos);
-    S3FS_PRN_INFO3("keyval: %s - %s", key, val);
+    
     keyval[key] = val;
   }
+  return true;
+}
+
+bool S3fsCurl::ParseIAMCredentialResponseV2(const char* response, iamcredmap_t& keyval)
+{
+  if(!response){
+    return false;
+  }
+
+  Json::Value root;
+  Json::Reader reader;
+
+  if (!reader.parse(response, root)) {
+    return false;
+  }
+
+  keyval[string(IAMCRED_ACCESSKEYID)] = root.get(IAMCRED_ACCESSKEYID, "").asString();
+  keyval[string(IAMCRED_SECRETACCESSKEY)] = root.get(IAMCRED_SECRETACCESSKEY, "").asString();
+  keyval[string(IAMCRED_ACCESSTOKEN)] = root.get(IAMCRED_ACCESSTOKEN, "").asString();
+  keyval[string(IAMCRED_EXPIRATION)] = root.get(IAMCRED_EXPIRATION, "").asString();
+
+  if (S3fsCurl::is_ecs) {
+    keyval[string(IAMCRED_ROLEARN)] = root.get(IAMCRED_ROLEARN, "").asString();
+  }
+
   return true;
 }
 
@@ -1440,7 +1466,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
   iamcredmap_t keyval;
 
-  if(!ParseIAMCredentialResponse(response, keyval)){
+  if(!ParseIAMCredentialResponseV2(response, keyval)){
     return false;
   }
   S3FS_PRN_INFO3("Parsed");

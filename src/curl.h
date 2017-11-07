@@ -299,6 +299,7 @@ class S3fsCurl
     static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
     static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
+    static bool ParseIAMCredentialResponseV2(const char* response, iamcredmap_t& keyval);
     static bool SetIAMCredentials(const char* response);
     static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
     static bool SetIAMRoleFromMetaData(const char* response);
