@@ -2335,6 +2335,7 @@ void S3fsCurl::insertV4Headers()
   requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", contentSHA256.c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-request-payer", "requester");
 
   if(!S3fsCurl::IsPublicBucket()){
     string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST ? "=" : ""), strdate, contentSHA256, date8601);
