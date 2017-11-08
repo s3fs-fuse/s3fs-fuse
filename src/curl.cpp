@@ -1413,11 +1413,15 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   keyval[string(IAMCRED_ACCESSTOKEN)] = root.get(IAMCRED_ACCESSTOKEN, "").asString();
   keyval[string(IAMCRED_EXPIRATION)] = root.get(IAMCRED_EXPIRATION, "").asString();
 	
-	S3FS_PRN_INFO3("Not enough keys %s", string(keyval[string(IAMCRED_ACCESSKEYID)]));
+	S3FS_PRN_INFO3("IAMCRED_ACCESSKEYID %s", keyval[string(IAMCRED_ACCESSKEYID)].c_str());
+	S3FS_PRN_INFO3("IAMCRED_SECRETACCESSKEY %s", keyval[string(IAMCRED_SECRETACCESSKEY)].c_str());
+	S3FS_PRN_INFO3("IAMCRED_ACCESSTOKEN %s", keyval[string(IAMCRED_ACCESSTOKEN)].c_str());
+	S3FS_PRN_INFO3("IAMCRED_EXPIRATION %s", keyval[string(IAMCRED_EXPIRATION)].c_str());
 
   if (S3fsCurl::is_ecs) {
 	  S3FS_PRN_INFO3("Setting IAMCRED_ROLEARN");
     keyval[string(IAMCRED_ROLEARN)] = root.get(IAMCRED_ROLEARN, "").asString();
+	  S3FS_PRN_INFO3("IAMCRED_ROLEARN %s", keyval[string(IAMCRED_ROLEARN)].c_str());
   }
 
   return true;
