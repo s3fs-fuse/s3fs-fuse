@@ -331,8 +331,7 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define IAMCRED_EXPIRATION          "Expiration"
 #define IAMCRED_ROLEARN             "RoleArn"
 #define IAMCRED_KEYCOUNT            4
-#define 
-5
+#define IAMCRED_KEYCOUNT_ECS	    5
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
