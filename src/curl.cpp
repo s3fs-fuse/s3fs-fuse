@@ -2119,7 +2119,7 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
   string Signature;
   string StringToSign;
 
-  if(0 < S3fsCurl::IAM_role.size()){
+  if(0 < S3fsCurl::IAM_role.size() || S3fsCurl::is_ecs){
     if(!S3fsCurl::CheckIAMCredentialUpdate()){
       S3FS_PRN_ERR("Something error occurred in checking IAM credential.");
       return Signature;  // returns empty string, then it occurs error.
@@ -2161,7 +2161,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   string Signature, StringCQ, StringToSign;
   string uriencode;
 
-  if(0 < S3fsCurl::IAM_role.size()){
+  if(0 < S3fsCurl::IAM_role.size()  || S3fsCurl::is_ecs){
     if(!S3fsCurl::CheckIAMCredentialUpdate()){
       S3FS_PRN_ERR("Something error occurred in checking IAM credential.");
       return Signature;  // returns empty string, then it occurs error.
@@ -2291,18 +2291,12 @@ void S3fsCurl::insertV4Headers(const string &op, const string &path, const strin
   requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", contentSHA256.c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
-
+	
   if(!S3fsCurl::IsPublicBucket()){
     string Signature = CalcSignature(op, realpath, query_string, strdate, contentSHA256, date8601);
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
         "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
-	  
-    if (S3fsCurl::is_ecs) {
-	    S3FS_PRN_INFO3("Adding x-amz-security-token header");
-	    
-	    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());	    
-    }
   }
 }
 
