@@ -331,7 +331,8 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define IAMCRED_EXPIRATION          "Expiration"
 #define IAMCRED_ROLEARN             "RoleArn"
 #define IAMCRED_KEYCOUNT            4
-#define IAMCRED_KEYCOUNT_ECS        5
+#define 
+5
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -1438,7 +1439,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   }
   S3FS_PRN_INFO3("Parsed");
 
-  if(S3fsCurl::is_ecs ? IAMCRED_KEYCOUNT_ECS : IAMCRED_KEYCOUNT != keyval.size()){
+  if((S3fsCurl::is_ecs ? IAMCRED_KEYCOUNT_ECS : IAMCRED_KEYCOUNT) != keyval.size()){
 	  S3FS_PRN_INFO3("Not enough keys");
     return false;
   }
