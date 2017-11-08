@@ -1396,6 +1396,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval)
 {
   if(!response){
+	  S3FS_PRN_INFO3("No response");
     return false;
   }
 
@@ -1403,6 +1404,7 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   Json::Reader reader;
 
   if (!reader.parse(response, root)) {
+	  S3FS_PRN_INFO3("Failed to parse");
     return false;
   }
 
@@ -1410,8 +1412,11 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   keyval[string(IAMCRED_SECRETACCESSKEY)] = root.get(IAMCRED_SECRETACCESSKEY, "").asString();
   keyval[string(IAMCRED_ACCESSTOKEN)] = root.get(IAMCRED_ACCESSTOKEN, "").asString();
   keyval[string(IAMCRED_EXPIRATION)] = root.get(IAMCRED_EXPIRATION, "").asString();
+	
+	S3FS_PRN_INFO3("Not enough keys %s", string(keyval[string(IAMCRED_ACCESSKEYID)]));
 
   if (S3fsCurl::is_ecs) {
+	  S3FS_PRN_INFO3("Setting IAMCRED_ROLEARN");
     keyval[string(IAMCRED_ROLEARN)] = root.get(IAMCRED_ROLEARN, "").asString();
   }
 
@@ -1430,6 +1435,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   S3FS_PRN_INFO3("Parsed");
 
   if(S3fsCurl::is_ecs ? IAMCRED_KEYCOUNT_ECS : IAMCRED_KEYCOUNT != keyval.size()){
+	  S3FS_PRN_INFO3("Not enough keys");
     return false;
   }
 
