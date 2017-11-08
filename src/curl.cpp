@@ -2297,6 +2297,12 @@ void S3fsCurl::insertV4Headers(const string &op, const string &path, const strin
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
         "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
+	  
+    if (S3fsCurl::is_ecs) {
+	    S3FS_PRN_INFO3("Adding x-amz-security-token header");
+	    
+	    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());	    
+    }
   }
 }
 
