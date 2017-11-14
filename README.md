@@ -96,6 +96,14 @@ or
 mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 ```
 
+When using fstab to mount a non-Amazon S3 implementation, the URL and
+path-style options also must be provided.
+
+```
+s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=http://url.to.s3/ 0 0
+
+```
+
 Note: You may also want to create the global credential file first
 
 ```
