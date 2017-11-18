@@ -159,10 +159,11 @@ static string tolower_header_name(const char* head)
 //-------------------------------------------------------------------
 // Class BodyData
 //-------------------------------------------------------------------
-#define BODYDATA_RESIZE_APPEND_MIN  (1 * 1024)         // 1KB
-#define BODYDATA_RESIZE_APPEND_MID  (1 * 1024 * 1024)  // 1MB
-#define BODYDATA_RESIZE_APPEND_MAX  (10 * 1024 * 1024) // 10MB
-#define	AJUST_BLOCK(bytes, block)   (((bytes / block) + ((bytes % block) ? 1 : 0)) * block)
+static const int BODYDATA_RESIZE_APPEND_MIN = 1024;
+static const int BODYDATA_RESIZE_APPEND_MID = 1024 * 1024;
+static const int BODYDATA_RESIZE_APPEND_MAX = 10 * 1024 * 1024;
+
+static size_t adjust_block(size_t bytes, size_t block) { return ((bytes / block) + ((bytes % block) ? 1 : 0)) * block; }
 
 bool BodyData::Resize(size_t addbytes)
 {
@@ -171,7 +172,7 @@ bool BodyData::Resize(size_t addbytes)
   }
 
   // New size
-  size_t need_size = AJUST_BLOCK((lastpos + addbytes + 1) - bufsize, sizeof(off_t));
+  size_t need_size = adjust_block((lastpos + addbytes + 1) - bufsize, sizeof(off_t));
 
   if(BODYDATA_RESIZE_APPEND_MAX < bufsize){
     need_size = (BODYDATA_RESIZE_APPEND_MAX < need_size ? need_size : BODYDATA_RESIZE_APPEND_MAX);
@@ -318,20 +319,20 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
-#define MULTIPART_SIZE              10485760          // 10MB
-#define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
+static const int MULTIPART_SIZE = 10 * 1024 * 1024;
+static const int MAX_MULTI_COPY_SOURCE_SIZE = 500 * 1024 * 1024;
 
-#define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timing
-#define IAM_CRED_URL_ECS            "http://169.254.170.2" 
-#define	IAM_CRED_URL                "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
-#define ECS_IAM_ENV_VAR             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
-#define IAMCRED_ACCESSKEYID         "AccessKeyId"
-#define IAMCRED_SECRETACCESSKEY     "SecretAccessKey"
-#define IAMCRED_ACCESSTOKEN         "Token"
-#define IAMCRED_EXPIRATION          "Expiration"
-#define IAMCRED_ROLEARN             "RoleArn"
-#define IAMCRED_KEYCOUNT            4
-#define IAMCRED_KEYCOUNT_ECS	    5
+static const int IAM_EXPIRE_MERGIN = 20 * 60;  // update timing
+static const std::string IAM_CRED_URL_ECS = "http://169.254.170.2";
+static const std::string IAM_CRED_URL = "http://169.254.169.254/latest/meta-data/iam/security-credentials/";
+static const std::string ECS_IAM_ENV_VAR = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+static const std::string IAMCRED_ACCESSKEYID = "AccessKeyId";
+static const std::string IAMCRED_SECRETACCESSKEY = "SecretAccessKey";
+static const std::string IAMCRED_ACCESSTOKEN = "Token";
+static const std::string IAMCRED_EXPIRATION = "Expiration";
+static const std::string IAMCRED_ROLEARN = "RoleArn";
+static const int IAMCRED_KEYCOUNT = 4;
+static const int IAMCRED_KEYCOUNT_ECS = 5;
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -2431,7 +2432,7 @@ int S3fsCurl::GetIAMCredentials(void)
 
   // url
   if (is_ecs) {
-    url = string(IAM_CRED_URL_ECS) + std::getenv(ECS_IAM_ENV_VAR);
+    url = string(IAM_CRED_URL_ECS) + std::getenv(ECS_IAM_ENV_VAR.c_str());
   }
   else {
     url = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
@@ -3699,7 +3700,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-#define MAX_MULTI_HEADREQ   20   // default: max request count in readdir curl_multi.
+static const int MAX_MULTI_HEADREQ = 20;  // default: max request count in readdir curl_multi.
 
 //-------------------------------------------------------------------
 // Class method for S3fsMultiCurl 

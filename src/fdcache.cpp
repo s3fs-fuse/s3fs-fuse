@@ -52,7 +52,7 @@ using namespace std;
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-#define MAX_MULTIPART_CNT   10000                   // S3 multipart max count
+static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
 
 //
 // For cache directory top path

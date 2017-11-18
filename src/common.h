@@ -37,7 +37,7 @@
 //
 // Macro
 //
-#define SAFESTRPTR(strptr) (strptr ? strptr : "")
+static inline const char *SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //
 // Debug level

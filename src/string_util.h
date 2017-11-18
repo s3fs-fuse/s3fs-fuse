@@ -30,8 +30,9 @@
 #include <string>
 #include <sstream>
 
-#define SPACES                " \t\r\n"
-#define STR2NCMP(str1, str2)  strncmp(str1, str2, strlen(str2))
+static const std::string SPACES = " \t\r\n";
+
+static inline int STR2NCMP(const char *str1, const char *str2) { return strncmp(str1, str2, strlen(str2)); }
 
 template<typename T> std::string str(T value) {
   std::stringstream s;
