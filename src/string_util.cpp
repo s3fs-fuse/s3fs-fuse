@@ -32,6 +32,21 @@
 
 using namespace std;
 
+template <class T> std::string str(T value) {
+  std::stringstream s;
+  s << value;
+  return s.str();
+}
+
+template std::string str(short value);
+template std::string str(unsigned short value);
+template std::string str(int value);
+template std::string str(unsigned int value);
+template std::string str(long value);
+template std::string str(unsigned long value);
+template std::string str(long long value);
+template std::string str(unsigned long long value);
+
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
 off_t s3fs_strtoofft(const char* str, bool is_base_16)
