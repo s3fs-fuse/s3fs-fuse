@@ -27,13 +27,14 @@ Installation
 On Ubuntu 14.04:
 
 ```
-sudo apt-get install automake autotools-dev fuse g++ git libcurl4-gnutls-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
+sudo apt-get install automake autotools-dev fuse g++ git libcurl4-gnutls-dev libfuse-dev libjsoncpp-dev libssl-dev libxml2-dev make pkg-config
 ```
 
 On CentOS 7:
 
 ```
-sudo yum install automake fuse fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
+sudo yum install epel-release
+sudo yum install automake fuse fuse-devel gcc-c++ git jsoncpp-devel libcurl-devel libxml2-devel make openssl-devel
 ```
 
 Then compile from master via the following commands:
