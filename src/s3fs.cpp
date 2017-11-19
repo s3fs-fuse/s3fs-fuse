@@ -3929,7 +3929,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
     kv[string(aws_secretkey)]   = secret;
     resmap[bucket]              = kv;
   }
-  return (0 < resmap.size() ? 1 : 0);
+  return (resmap.empty() ? 0 : 1);
 }
 
 //
@@ -3942,7 +3942,7 @@ static int check_for_aws_format(const kvmap_t& kvmap)
   string str1(aws_accesskeyid);
   string str2(aws_secretkey);
 
-  if(0 == kvmap.size()){
+  if(kvmap.empty()){
     return 0;
   }
   if(kvmap.end() == kvmap.find(str1) && kvmap.end() == kvmap.find(str2)){
