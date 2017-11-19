@@ -186,11 +186,9 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
-#define MD5_DIGEST_LENGTH     16
-
 size_t get_md5_digest_length(void)
 {
-  return MD5_DIGEST_LENGTH;
+  return 16;
 }
 
 #ifdef	USE_GNUTLS_NETTLE
@@ -298,11 +296,9 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 //-------------------------------------------------------------------
 // Utility Function for SHA256
 //-------------------------------------------------------------------
-#define SHA256_DIGEST_LENGTH     32
-
 size_t get_sha256_digest_length(void)
 {
-  return SHA256_DIGEST_LENGTH;
+  return 32;
 }
 
 #ifdef	USE_GNUTLS_NETTLE

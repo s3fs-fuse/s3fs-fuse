@@ -58,14 +58,16 @@ using namespace std;
 //-------------------------------------------------------------------
 // Define
 //-------------------------------------------------------------------
-#define	DIRTYPE_UNKNOWN    -1
-#define	DIRTYPE_NEW         0
-#define	DIRTYPE_OLD         1
-#define	DIRTYPE_FOLDER      2
-#define	DIRTYPE_NOOBJ       3
+enum dirtype {
+  DIRTYPE_UNKNOWN = -1,
+  DIRTYPE_NEW = 0,
+  DIRTYPE_OLD = 1,
+  DIRTYPE_FOLDER = 2,
+  DIRTYPE_NOOBJ = 3,
+};
 
-#define	IS_REPLACEDIR(type) (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type)
-#define	IS_RMTYPEDIR(type)  (DIRTYPE_OLD == type || DIRTYPE_FOLDER == type)
+static bool IS_REPLACEDIR(dirtype type) { return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type; }
+static bool IS_RMTYPEDIR(dirtype type) { return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type; }
 
 #if !defined(ENOATTR)
 #define ENOATTR				ENODATA
@@ -138,8 +140,8 @@ static bool set_s3fs_usr2_handler(void);
 static s3fs_log_level set_s3fs_log_level(s3fs_log_level level);
 static s3fs_log_level bumpup_s3fs_log_level(void);
 static bool is_special_name_folder_object(const char* path);
-static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, int* pDirType = NULL);
-static int remove_old_type_dir(const string& path, int dirtype);
+static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, dirtype* pDirType = NULL);
+static int remove_old_type_dir(const string& path, dirtype type);
 static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL, bool add_no_truncate_cache = false);
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
@@ -315,12 +317,12 @@ static bool is_special_name_folder_object(const char* path)
 // pmeta:     headers map
 // pDirType:  directory object type
 //
-static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta, int* pDirType)
+static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta, dirtype* pDirType)
 {
-  int  TypeTmp;
+  dirtype TypeTmp;
   int  result  = -1;
   bool isforce = false;
-  int* pType   = pDirType ? pDirType : &TypeTmp;
+  dirtype* pType = pDirType ? pDirType : &TypeTmp;
 
   // Normalize new path.
   newpath = path;
@@ -393,9 +395,9 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
   return result;
 }
 
-static int remove_old_type_dir(const string& path, int dirtype)
+static int remove_old_type_dir(const string& path, dirtype type)
 {
-  if(IS_RMTYPEDIR(dirtype)){
+  if(IS_RMTYPEDIR(type)){
     S3fsCurl s3fscurl;
     int      result = s3fscurl.DeleteRequest(path.c_str());
     if(0 != result && -ENOENT != result){
@@ -1355,7 +1357,7 @@ static int rename_directory(const char* from, const char* to)
   string basepath = strfrom + "/";
   string newpath;                       // should be from name(not used)
   string nowcache;                      // now cache path(not used)
-  int DirType;
+  dirtype DirType;
   bool normdir; 
   MVNODE* mn_head = NULL;
   MVNODE* mn_tail = NULL;
@@ -1533,7 +1535,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
   string nowcache;
   headers_t meta;
   struct stat stbuf;
-  int nDirType = DIRTYPE_UNKNOWN;
+  dirtype nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
 
@@ -1607,7 +1609,7 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
   string      newpath;
   string      nowcache;
   struct stat stbuf;
-  int         nDirType = DIRTYPE_UNKNOWN;
+  dirtype     nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
 
@@ -1684,7 +1686,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
   string nowcache;
   headers_t meta;
   struct stat stbuf;
-  int nDirType = DIRTYPE_UNKNOWN;
+  dirtype nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -1753,7 +1755,7 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
   string      newpath;
   string      nowcache;
   struct stat stbuf;
-  int         nDirType = DIRTYPE_UNKNOWN;
+  dirtype     nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -1838,7 +1840,7 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
   string nowcache;
   headers_t meta;
   struct stat stbuf;
-  int nDirType = DIRTYPE_UNKNOWN;
+  dirtype nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO("[path=%s][mtime=%jd]", path, (intmax_t)(ts[1].tv_sec));
 
@@ -1902,7 +1904,7 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
   string      newpath;
   string      nowcache;
   struct stat stbuf;
-  int         nDirType = DIRTYPE_UNKNOWN;
+  dirtype     nDirType = DIRTYPE_UNKNOWN;
 
   S3FS_PRN_INFO1("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
 
@@ -3031,7 +3033,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
   string      nowcache;
   headers_t   meta;
   struct stat stbuf;
-  int         nDirType = DIRTYPE_UNKNOWN;
+  dirtype     nDirType = DIRTYPE_UNKNOWN;
 
   if(0 == strcmp(path, "/")){
     S3FS_PRN_ERR("Could not change mode for mount point.");
@@ -3250,7 +3252,7 @@ static int s3fs_removexattr(const char* path, const char* name)
   headers_t   meta;
   xattrs_t    xattrs;
   struct stat stbuf;
-  int         nDirType = DIRTYPE_UNKNOWN;
+  dirtype     nDirType = DIRTYPE_UNKNOWN;
 
   if(0 == strcmp(path, "/")){
     S3FS_PRN_ERR("Could not change mode for mount point.");

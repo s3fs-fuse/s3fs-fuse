@@ -26,7 +26,7 @@
 //----------------------------------------------
 // Symbols
 //----------------------------------------------
-#define MIN_MULTIPART_SIZE          5242880           // 5MB
+static const int MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
 
 //----------------------------------------------
 // class BodyData
@@ -175,9 +175,11 @@ enum sse_type_t {
 };
 
 // share
-#define	SHARE_MUTEX_DNS         0
-#define	SHARE_MUTEX_SSL_SESSION 1
-#define	SHARE_MUTEX_MAX         2
+enum {
+  SHARE_MUTEX_DNS = 0,
+  SHARE_MUTEX_SSL_SESSION = 1,
+  SHARE_MUTEX_MAX = 2,
+};
 
 // Class for lapping curl
 //

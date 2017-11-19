@@ -21,7 +21,8 @@
 #define S3FS_S3_H_
 
 #define FUSE_USE_VERSION      26
-#define FIVE_GB               5368709120LL
+
+static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
 
 #include <fuse.h>
 
