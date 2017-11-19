@@ -332,8 +332,8 @@ static const std::string IAMCRED_SECRETACCESSKEY = "SecretAccessKey";
 static const std::string IAMCRED_ACCESSTOKEN = "Token";
 static const std::string IAMCRED_EXPIRATION = "Expiration";
 static const std::string IAMCRED_ROLEARN = "RoleArn";
-static const int IAMCRED_KEYCOUNT = 4;
-static const int IAMCRED_KEYCOUNT_ECS = 5;
+static const size_t IAMCRED_KEYCOUNT = 4;
+static const size_t IAMCRED_KEYCOUNT_ECS = 5;
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
