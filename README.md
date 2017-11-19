@@ -71,17 +71,10 @@ Run s3fs with an existing bucket `mybucket` and directory `/path/to/mountpoint`:
 s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd
 ```
 
-If you use s3fs with a non-Amazon S3 implementation, specify the URL and
-path-style requests:
-
-```
-s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -o url=http://url.to.s3/ -o use_path_request_style
-```
-
 If you encounter any errors, enable debug output:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -d -d -f -o f2 -o curldbg
+s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -dbglevel=info -f -o curldbg
 ```
 
 You can also mount on boot by entering the following line to `/etc/fstab`:
@@ -94,6 +87,17 @@ or
 
 ```
 mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
+```
+
+If you use s3fs with a non-Amazon S3 implementation, specify the URL and path-style requests:
+
+```
+s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -o url=http://url.to.s3/ -o use_path_request_style
+```
+
+or(fstab)
+```
+s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=http://url.to.s3/ 0 0
 ```
 
 Note: You may also want to create the global credential file first
@@ -138,3 +142,4 @@ License
 Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>
 
 Licensed under the GNU GPL version 2
+
