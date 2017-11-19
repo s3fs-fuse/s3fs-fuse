@@ -28,17 +28,12 @@
 #include <sys/types.h>
 
 #include <string>
-#include <sstream>
 
 static const std::string SPACES = " \t\r\n";
 
 static inline int STR2NCMP(const char *str1, const char *str2) { return strncmp(str1, str2, strlen(str2)); }
 
-template<typename T> std::string str(T value) {
-  std::stringstream s;
-  s << value;
-  return s.str();
-}
+template <class T> std::string str(T value);
 
 off_t s3fs_strtoofft(const char* str, bool is_base_16 = false);
 

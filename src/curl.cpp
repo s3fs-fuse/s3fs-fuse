@@ -36,6 +36,7 @@
 #include <libxml/tree.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <map>
 #include <algorithm>
@@ -4141,8 +4142,8 @@ string prepare_url(const char* url)
   string uri;
   string host;
   string path;
-  string url_str = str(url);
-  string token =  str("/" + bucket);
+  string url_str = string(url);
+  string token = string("/") + bucket;
   int bucket_pos = url_str.find(token);
   int bucket_length = token.size();
   int uri_length = 0;
@@ -4170,7 +4171,7 @@ string prepare_url(const char* url)
 
   S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 
-  return str(url_str);
+  return url_str;
 }
 
 /*
