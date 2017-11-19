@@ -27,5 +27,6 @@
 /test/.deps/
 /test/Makefile
 /test/Makefile.in
+/test/s3proxy-*
 /test/*.log
 /default_commit_hash
