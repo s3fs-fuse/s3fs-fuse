@@ -82,7 +82,10 @@ typedef struct incomplete_multipart_info{
   string date;
 }UNCOMP_MP_INFO;
 
-typedef std::list<UNCOMP_MP_INFO> uncomp_mp_list_t;
+typedef std::list<UNCOMP_MP_INFO>          uncomp_mp_list_t;
+typedef std::list<std::string>             readline_t;
+typedef std::map<std::string, std::string> kvmap_t;
+typedef std::map<std::string, kvmap_t>     bucketkvmap_t;
 
 //-------------------------------------------------------------------
 // Global variables
@@ -132,6 +135,11 @@ static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 
+static const std::string allbucket_fields_type = "";         // special key for mapping(This name is absolutely not used as a bucket name)
+static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
+static const std::string aws_accesskeyid       = "AWSAccessKeyId";
+static const std::string aws_secretkey         = "AWSSecretKey";
+
 //-------------------------------------------------------------------
 // Static functions : prototype
 //-------------------------------------------------------------------
@@ -180,7 +188,8 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_utility_mode(void);
 static int s3fs_check_service(void);
-static int check_for_aws_format(void);
+static int parse_passwd_file(bucketkvmap_t& resmap);
+static int check_for_aws_format(const kvmap_t& kvmap);
 static int check_passwd_file_perms(void);
 static int read_passwd_file(void);
 static int get_access_keys(void);
@@ -3818,77 +3827,136 @@ static int s3fs_check_service(void)
   return EXIT_SUCCESS;
 }
 
+//
+// Read and Parse passwd file
+//
+// The line of the password file is one of the following formats:
+//   (1) "accesskey:secretkey"         : AWS format for default(all) access key/secret key
+//   (2) "bucket:accesskey:secretkey"  : AWS format for bucket's access key/secret key
+//   (3) "key=value"                   : Content-dependent KeyValue contents
+//
+// This function sets result into bucketkvmap_t, it bucket name and key&value mapping.
+// If bucket name is empty(1 or 3 format), bucket name for mapping is set "\t" or "".
+//
+// Return:  1 - OK(could parse and set mapping etc.)
+//          0 - NG(could not read any value)
+//         -1 - Should shutdown immediately
+//
+static int parse_passwd_file(bucketkvmap_t& resmap)
+{
+  string line;
+  size_t first_pos;
+  size_t last_pos;
+  readline_t linelist;
+  readline_t::iterator iter;
+
+  // open passwd file
+  ifstream PF(passwd_file.c_str());
+  if(!PF.good()){
+    S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
+    return -1;
+  }
+
+  // read each line
+  while(getline(PF, line)){
+    line = trim(line);
+    if(0 == line.size()){
+      continue;
+    }
+    if('#' == line[0]){
+      continue;
+    }
+    if(string::npos != line.find_first_of(" \t")){
+      S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
+      return -1;
+    }
+    if(0 == line.find_first_of("[")){
+      S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
+      return -1;
+    }
+    linelist.push_back(line);
+  }
+
+  // read '=' type
+  kvmap_t kv;
+  for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+    first_pos = iter->find_first_of("=");
+    if(first_pos == string::npos){
+      continue;
+    }
+    // formatted by "key=val"
+    string key = trim(iter->substr(0, first_pos));
+    string val = trim(iter->substr(first_pos + 1, string::npos));
+    if(key.empty()){
+      continue;
+    }
+    if(kv.end() != kv.find(key)){
+      S3FS_PRN_WARN("same key name(%s) found in passwd file, skip this.", key.c_str());
+      continue;
+    }
+    kv[key] = val;
+  }
+  // set special key name
+  resmap[string(keyval_fields_type)] = kv;
+
+  // read ':' type
+  for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+    first_pos = iter->find_first_of(":");
+    last_pos  = iter->find_last_of(":");
+    if(first_pos == string::npos){
+      continue;
+    }
+    string bucket;
+    string accesskey;
+    string secret;
+    if(first_pos != last_pos){
+      // formatted by "bucket:accesskey:secretkey"
+      bucket    = trim(iter->substr(0, first_pos));
+      accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
+      secret    = trim(iter->substr(last_pos + 1, string::npos));
+    }else{
+      // formatted by "accesskey:secretkey"
+      bucket    = allbucket_fields_type;
+      accesskey = trim(iter->substr(0, first_pos));
+      secret    = trim(iter->substr(first_pos + 1, string::npos));
+    }
+    if(resmap.end() != resmap.find(bucket)){
+      S3FS_PRN_EXIT("same bucket(%s) passwd setting found in passwd file.", ("" == bucket ? "default" : bucket.c_str()));
+      return -1;
+    }
+    kv.clear();
+    kv[string(aws_accesskeyid)] = accesskey;
+    kv[string(aws_secretkey)]   = secret;
+    resmap[bucket]              = kv;
+  }
+  return (resmap.empty() ? 0 : 1);
+}
+
+//
 // Return:  1 - OK(could read and set accesskey etc.)
 //          0 - NG(could not read)
 //         -1 - Should shutdown immediately
-static int check_for_aws_format(void)
+//
+static int check_for_aws_format(const kvmap_t& kvmap)
 {
-  size_t first_pos = string::npos;
-  string line;
-  bool   got_access_key_id_line = 0;
-  bool   got_secret_key_line = 0;
-  string str1 ("AWSAccessKeyId=");
-  string str2 ("AWSSecretKey=");
-  size_t found;
-  string AccessKeyId;
-  string SecretAccesskey;
+  string str1(aws_accesskeyid);
+  string str2(aws_secretkey);
 
-
-  ifstream PF(passwd_file.c_str());
-  if(PF.good()){
-    while (getline(PF, line)){
-      if(line[0]=='#'){
-        continue;
-      }
-      if(line.size() == 0){
-        continue;
-      }
-      if('\r' == line[line.size() - 1]){
-        line = line.substr(0, line.size() - 1);
-        if(line.size() == 0){
-          continue;
-        }
-      }
-
-      first_pos = line.find_first_of(" \t");
-      if(first_pos != string::npos){
-        S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
-        return -1;
-      }
-
-      first_pos = line.find_first_of("[");
-      if(first_pos != string::npos && first_pos == 0){
-        S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
-        return -1;
-      }
-
-      found = line.find(str1);
-      if(found != string::npos){
-         first_pos = line.find_first_of("=");
-         AccessKeyId = line.substr(first_pos + 1, string::npos);
-         got_access_key_id_line = 1;
-         continue;
-      }
-
-      found = line.find(str2);
-      if(found != string::npos){
-         first_pos = line.find_first_of("=");
-         SecretAccesskey = line.substr(first_pos + 1, string::npos);
-         got_secret_key_line = 1;
-         continue;
-      }
-    }
-  }
-
-  if(got_access_key_id_line && got_secret_key_line){
-    if(!S3fsCurl::SetAccessKey(AccessKeyId.c_str(), SecretAccesskey.c_str())){
-      S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-      return 0;
-    }
-    return 1;
-  }else{
+  if(kvmap.empty()){
     return 0;
   }
+  if(kvmap.end() == kvmap.find(str1) && kvmap.end() == kvmap.find(str2)){
+    return 0;
+  }
+  if(kvmap.end() == kvmap.find(str1) || kvmap.end() == kvmap.find(str2)){
+    S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
+    return -1;
+  }
+  if(!S3fsCurl::SetAccessKey(kvmap.at(str1).c_str(), kvmap.at(str2).c_str())){
+    S3FS_PRN_EXIT("failed to set access key/secret key.");
+    return -1;
+  }
+  return 1;
 }
 
 //
@@ -3961,12 +4029,9 @@ static int check_passwd_file_perms(void)
 //
 static int read_passwd_file(void)
 {
-  string line;
-  string field1, field2, field3;
-  size_t first_pos = string::npos;
-  size_t last_pos = string::npos;
-  bool default_found = 0;
-  int aws_format;
+  bucketkvmap_t bucketmap;
+  kvmap_t       keyval;
+  int           result;
 
   // if you got here, the password file
   // exists and is readable by the
@@ -3975,80 +4040,44 @@ static int read_passwd_file(void)
     return EXIT_FAILURE;
   }
 
-  aws_format = check_for_aws_format();
-  if(1 == aws_format){
-     return EXIT_SUCCESS;
-  }else if(-1 == aws_format){
+  //
+  // parse passwd file
+  //
+  result = parse_passwd_file(bucketmap);
+  if(-1 == result){
      return EXIT_FAILURE;
   }
 
-  ifstream PF(passwd_file.c_str());
-  if(PF.good()){
-    while (getline(PF, line)){
-      if(line[0]=='#'){
-        continue;
-      }
-      if(line.size() == 0){
-        continue;
-      }
-      if('\r' == line[line.size() - 1]){
-        line = line.substr(0, line.size() - 1);
-        if(line.size() == 0){
-          continue;
-        }
-      }
-
-      first_pos = line.find_first_of(" \t");
-      if(first_pos != string::npos){
-        S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
-        return EXIT_FAILURE;
-      }
-
-      first_pos = line.find_first_of("[");
-      if(first_pos != string::npos && first_pos == 0){
-        S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
-        return EXIT_FAILURE;
-      }
-
-      first_pos = line.find_first_of(":");
-      if(first_pos == string::npos){
-        S3FS_PRN_EXIT("invalid line in passwd file, no \":\" separator found.");
-        return EXIT_FAILURE;
-      }
-      last_pos = line.find_last_of(":");
-
-      if(first_pos != last_pos){
-        // bucket specified
-        field1 = line.substr(0,first_pos);
-        field2 = line.substr(first_pos + 1, last_pos - first_pos - 1);
-        field3 = line.substr(last_pos + 1, string::npos);
-      }else{
-        // no bucket specified - original style - found default key
-        if(default_found == 1){
-          S3FS_PRN_EXIT("more than one default key pair found in passwd file.");
-          return EXIT_FAILURE;
-        }
-        default_found = 1;
-        field1.assign("");
-        field2 = line.substr(0,first_pos);
-        field3 = line.substr(first_pos + 1, string::npos);
-        if(!S3fsCurl::SetAccessKey(field2.c_str(), field3.c_str())){
-          S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-          return EXIT_FAILURE;
-        }
-      }
-
-      // does the bucket we are mounting match this passwd file entry?
-      // if so, use that key pair, otherwise use the default key, if found,
-      // will be used
-      if(field1.size() != 0 && field1 == bucket){
-        if(!S3fsCurl::SetAccessKey(field2.c_str(), field3.c_str())){
-          S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-          return EXIT_FAILURE;
-        }
-        break;
-      }
+  //
+  // check key=value type format.
+  //
+  if(bucketmap.end() != bucketmap.find(keyval_fields_type)){
+    // aws format
+    result = check_for_aws_format(bucketmap[keyval_fields_type]);
+    if(-1 == result){
+       return EXIT_FAILURE;
+    }else if(1 == result){
+       // success to set
+       return EXIT_SUCCESS;
     }
+  }
+
+  string bucket_key = allbucket_fields_type;
+  if(0 < bucket.size() && bucketmap.end() != bucketmap.find(bucket)){
+    bucket_key = bucket;
+  }
+  if(bucketmap.end() == bucketmap.find(bucket_key)){
+    S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
+    return EXIT_FAILURE;
+  }
+  keyval = bucketmap[bucket_key];
+  if(keyval.end() == keyval.find(string(aws_accesskeyid)) || keyval.end() == keyval.find(string(aws_secretkey))){
+    S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
+    return EXIT_FAILURE;
+  }
+  if(!S3fsCurl::SetAccessKey(keyval.at(string(aws_accesskeyid)).c_str(), keyval.at(string(aws_secretkey)).c_str())){
+    S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
+    return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
