@@ -41,6 +41,8 @@
 #include <algorithm>
 #include <list>
 #include <vector>
+#include <json/json.h>
+#include <json/reader.h>
 
 #include "common.h"
 #include "curl.h"
@@ -320,12 +322,16 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 #define MAX_MULTI_COPY_SOURCE_SIZE  524288000         // 500MB
 
 #define	IAM_EXPIRE_MERGIN           (20 * 60)         // update timing
+#define IAM_CRED_URL_ECS            "http://169.254.170.2" 
 #define	IAM_CRED_URL                "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+#define ECS_IAM_ENV_VAR             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
 #define IAMCRED_ACCESSKEYID         "AccessKeyId"
 #define IAMCRED_SECRETACCESSKEY     "SecretAccessKey"
 #define IAMCRED_ACCESSTOKEN         "Token"
 #define IAMCRED_EXPIRATION          "Expiration"
+#define IAMCRED_ROLEARN             "RoleArn"
 #define IAMCRED_KEYCOUNT            4
+#define IAMCRED_KEYCOUNT_ECS	    5
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -357,6 +363,7 @@ string           S3fsCurl::AWSAccessKeyId;
 string           S3fsCurl::AWSSecretAccessKey;
 string           S3fsCurl::AWSAccessToken;
 time_t           S3fsCurl::AWSAccessTokenExpire= 0;
+bool             S3fsCurl::is_ecs              = false;
 string           S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 curltime_t       S3fsCurl::curl_times;
@@ -1159,6 +1166,13 @@ long S3fsCurl::SetSslVerifyHostname(long value)
   return old;
 }
 
+bool S3fsCurl::SetIsECS(bool flag)
+{
+  bool old = S3fsCurl::is_ecs;
+  S3fsCurl::is_ecs = flag;
+  return old;
+}
+
 string S3fsCurl::SetIAMRole(const char* role)
 {
   string old = S3fsCurl::IAM_role;
@@ -1410,37 +1424,23 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   if(!response){
     return false;
   }
-  istringstream sscred(response);
-  string        oneline;
-  keyval.clear();
-  while(getline(sscred, oneline, '\n')){
-    string::size_type pos;
-    string            key;
-    string            val;
-    if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
-      key = IAMCRED_ACCESSKEYID;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
-      key = IAMCRED_SECRETACCESSKEY;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSTOKEN))){
-      key = IAMCRED_ACCESSTOKEN;
-    }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
-      key = IAMCRED_EXPIRATION;
-    }else{
-      continue;
-    }
-    if(string::npos == (pos = oneline.find(':', pos + key.length()))){
-      continue;
-    }
-    if(string::npos == (pos = oneline.find('\"', pos))){
-      continue;
-    }
-    oneline = oneline.substr(pos + sizeof(char));
-    if(string::npos == (pos = oneline.find('\"'))){
-      continue;
-    }
-    val = oneline.substr(0, pos);
-    keyval[key] = val;
+
+  Json::Value root;
+  Json::Reader reader;
+
+  if (!reader.parse(response, root)) {
+    return false;
   }
+
+  keyval[string(IAMCRED_ACCESSKEYID)] = root.get(IAMCRED_ACCESSKEYID, "").asString();
+  keyval[string(IAMCRED_SECRETACCESSKEY)] = root.get(IAMCRED_SECRETACCESSKEY, "").asString();
+  keyval[string(IAMCRED_ACCESSTOKEN)] = root.get(IAMCRED_ACCESSTOKEN, "").asString();
+  keyval[string(IAMCRED_EXPIRATION)] = root.get(IAMCRED_EXPIRATION, "").asString();
+
+  if (S3fsCurl::is_ecs) {
+    keyval[string(IAMCRED_ROLEARN)] = root.get(IAMCRED_ROLEARN, "").asString();
+  }
+
   return true;
 }
 
@@ -1453,7 +1453,8 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   if(!ParseIAMCredentialResponse(response, keyval)){
     return false;
   }
-  if(IAMCRED_KEYCOUNT != keyval.size()){
+
+  if((S3fsCurl::is_ecs ? IAMCRED_KEYCOUNT_ECS : IAMCRED_KEYCOUNT) != keyval.size()){
     return false;
   }
 
@@ -1467,7 +1468,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
 bool S3fsCurl::CheckIAMCredentialUpdate(void)
 {
-  if(0 == S3fsCurl::IAM_role.size()){
+  if(0 == S3fsCurl::IAM_role.size() && !S3fsCurl::is_ecs){
     return true;
   }
   if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
@@ -2133,7 +2134,7 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
   string Signature;
   string StringToSign;
 
-  if(0 < S3fsCurl::IAM_role.size()){
+  if(0 < S3fsCurl::IAM_role.size() || S3fsCurl::is_ecs){
     if(!S3fsCurl::CheckIAMCredentialUpdate()){
       S3FS_PRN_ERR("Something error occurred in checking IAM credential.");
       return Signature;  // returns empty string, then it occurs error.
@@ -2175,7 +2176,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   string Signature, StringCQ, StringToSign;
   string uriencode;
 
-  if(0 < S3fsCurl::IAM_role.size()){
+  if(0 < S3fsCurl::IAM_role.size()  || S3fsCurl::is_ecs){
     if(!S3fsCurl::CheckIAMCredentialUpdate()){
       S3FS_PRN_ERR("Something error occurred in checking IAM credential.");
       return Signature;  // returns empty string, then it occurs error.
@@ -2335,7 +2336,7 @@ void S3fsCurl::insertV4Headers()
   requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", contentSHA256.c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
-
+	
   if(!S3fsCurl::IsPublicBucket()){
     string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST ? "=" : ""), strdate, contentSHA256, date8601);
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
@@ -2412,12 +2413,15 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 //
 int S3fsCurl::GetIAMCredentials(void)
 {
-  S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
+  if (!S3fsCurl::is_ecs) {
+    S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
 
-  if(0 == S3fsCurl::IAM_role.size()){
-    S3FS_PRN_ERR("IAM role name is empty.");
-    return -EIO;
+    if(0 == S3fsCurl::IAM_role.size()) {
+      S3FS_PRN_ERR("IAM role name is empty.");
+      return -EIO;
+    }
   }
+
   // at first set type for handle
   type = REQTYPE_IAMCRED;
 
@@ -2426,7 +2430,13 @@ int S3fsCurl::GetIAMCredentials(void)
   }
 
   // url
-  url             = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+  if (is_ecs) {
+    url = string(IAM_CRED_URL_ECS) + std::getenv(ECS_IAM_ENV_VAR);
+  }
+  else {
+    url = string(IAM_CRED_URL) + S3fsCurl::IAM_role;
+  }
+
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
@@ -2463,7 +2473,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData(void)
   }
 
   // url
-  url             = IAM_CRED_URL;
+  url             = string(IAM_CRED_URL);
   requestHeaders  = NULL;
   responseHeaders.clear();
   bodydata        = new BodyData();
