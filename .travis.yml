@@ -8,7 +8,7 @@ matrix:
       cache: apt
       before_install:
         - sudo apt-get update -qq
-        - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk libjsoncpp-dev
+        - sudo apt-get install -qq cppcheck libfuse-dev openjdk-7-jdk
         - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
       script:
         - ./autogen.sh
@@ -24,7 +24,7 @@ matrix:
       osx_image: xcode8.3
       before_install:
         - brew update
-        - brew install truncate jsoncpp
+        - brew install truncate
         - brew tap caskroom/cask
         - brew cask install osxfuse
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi

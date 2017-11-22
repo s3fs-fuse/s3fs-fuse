@@ -42,8 +42,6 @@
 #include <algorithm>
 #include <list>
 #include <vector>
-#include <json/json.h>
-#include <json/reader.h>
 
 #include "common.h"
 #include "curl.h"
@@ -1426,23 +1424,39 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
   if(!response){
     return false;
   }
-
-  Json::Value root;
-  Json::Reader reader;
-
-  if (!reader.parse(response, root)) {
-    return false;
+  istringstream sscred(response);
+  string        oneline;
+  keyval.clear();
+  while(getline(sscred, oneline, '\n')){
+    string::size_type pos;
+    string            key;
+    string            val;
+    if(string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
+      key = IAMCRED_ACCESSKEYID;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
+      key = IAMCRED_SECRETACCESSKEY;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_ACCESSTOKEN))){
+      key = IAMCRED_ACCESSTOKEN;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_EXPIRATION))){
+      key = IAMCRED_EXPIRATION;
+    }else if(string::npos != (pos = oneline.find(IAMCRED_ROLEARN))){
+      key = IAMCRED_ROLEARN;
+    }else{
+      continue;
+    }
+    if(string::npos == (pos = oneline.find(':', pos + key.length()))){
+      continue;
+    }
+    if(string::npos == (pos = oneline.find('\"', pos))){
+      continue;
+    }
+    oneline = oneline.substr(pos + sizeof(char));
+    if(string::npos == (pos = oneline.find('\"'))){
+      continue;
+    }
+    val = oneline.substr(0, pos);
+    keyval[key] = val;
   }
-
-  keyval[string(IAMCRED_ACCESSKEYID)] = root.get(IAMCRED_ACCESSKEYID, "").asString();
-  keyval[string(IAMCRED_SECRETACCESSKEY)] = root.get(IAMCRED_SECRETACCESSKEY, "").asString();
-  keyval[string(IAMCRED_ACCESSTOKEN)] = root.get(IAMCRED_ACCESSTOKEN, "").asString();
-  keyval[string(IAMCRED_EXPIRATION)] = root.get(IAMCRED_EXPIRATION, "").asString();
-
-  if (S3fsCurl::is_ecs) {
-    keyval[string(IAMCRED_ROLEARN)] = root.get(IAMCRED_ROLEARN, "").asString();
-  }
-
   return true;
 }
 
