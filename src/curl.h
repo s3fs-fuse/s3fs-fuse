@@ -233,6 +233,11 @@ class S3fsCurl
     static std::string      AWSAccessToken;
     static time_t           AWSAccessTokenExpire;
     static bool             is_ecs;
+    static bool             is_ibm_iam_auth;
+    static std::string      IAM_cred_url;
+    static size_t           IAM_field_count;
+    static std::string      IAM_token_field;
+    static std::string      IAM_expiry_field;
     static std::string      IAM_role;
     static long             ssl_verify_hostname;
     static curltime_t       curl_times;
@@ -319,6 +324,7 @@ class S3fsCurl
     bool ClearInternalData(void);
     void insertV4Headers();
     void insertV2Headers();
+    void insertIBMIAMHeaders();
     void insertAuthHeaders();
     std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
     std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
@@ -349,6 +355,7 @@ class S3fsCurl
     static bool SetPublicBucket(bool flag);
     static bool IsPublicBucket(void) { return S3fsCurl::is_public_bucket; }
     static std::string SetDefaultAcl(const char* acl);
+    static std::string GetDefaultAcl();
     static storage_class_t SetStorageClass(storage_class_t storage_class);
     static storage_class_t GetStorageClass() { return S3fsCurl::storage_class; }
     static bool LoadEnvSse(void) { return (S3fsCurl::LoadEnvSseCKeys() && S3fsCurl::LoadEnvSseKmsid()); }
@@ -370,14 +377,22 @@ class S3fsCurl
     static bool SetVerbose(bool flag);
     static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
     static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
-    static bool IsSetAccessKeyId(void){
-                  return (0 < S3fsCurl::IAM_role.size() || (0 < S3fsCurl::AWSAccessKeyId.size() && 0 < S3fsCurl::AWSSecretAccessKey.size()));
+    static bool IsSetAccessKeyID(void){
+                  return (0 < S3fsCurl::AWSAccessKeyId.size());
+                }
+    static bool IsSetAccessKeys(void){
+                  return (0 < S3fsCurl::IAM_role.size() || ((0 < S3fsCurl::AWSAccessKeyId.size() || S3fsCurl::is_ibm_iam_auth) && 0 < S3fsCurl::AWSSecretAccessKey.size()));
                 }
     static long SetSslVerifyHostname(long value);
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
     static int SetMaxParallelCount(int value);
     static int GetMaxParallelCount(void) { return S3fsCurl::max_parallel_cnt; }
     static bool SetIsECS(bool flag);
+    static bool SetIsIBMIAMAuth(bool flag);
+    static size_t SetIAMFieldCount(size_t field_count);
+    static std::string SetIAMCredentialsURL(const char* url);
+    static std::string SetIAMTokenField(const char* token_field);
+    static std::string SetIAMExpiryField(const char* expiry_field);
     static std::string SetIAMRole(const char* role);
     static const char* GetIAMRole(void) { return S3fsCurl::IAM_role.c_str(); }
     static bool SetMultipartSize(off_t size);

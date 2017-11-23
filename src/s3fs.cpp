@@ -128,6 +128,7 @@ static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 static bool is_ecs                = false;
+static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
@@ -4110,7 +4111,7 @@ static int get_access_keys(void)
   }
 
   // 1 - keys specified on the command line
-  if(S3fsCurl::IsSetAccessKeyId()){
+  if(S3fsCurl::IsSetAccessKeys()){
      return EXIT_SUCCESS;
   }
 
@@ -4174,7 +4175,7 @@ static int get_access_keys(void)
        // It is possible that the user's file was there but
        // contained no key pairs i.e. commented out
        // in that case, go look in the final location
-       if(S3fsCurl::IsSetAccessKeyId()){
+       if(S3fsCurl::IsSetAccessKeys()){
           return EXIT_SUCCESS;
        }
      }
@@ -4540,14 +4541,29 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       passwd_file = strchr(arg, '=') + sizeof(char);
       return 0;
     }
+    if(0 == strcmp(arg, "ibm_iam_auth")){
+      S3fsCurl::SetIsIBMIAMAuth(true);
+      S3fsCurl::SetIAMCredentialsURL("https://iam.bluemix.net/oidc/token");
+      S3fsCurl::SetIAMTokenField("access_token");
+      S3fsCurl::SetIAMExpiryField("expiration");
+      S3fsCurl::SetIAMFieldCount(2);
+      is_ibm_iam_auth = true;
+      return 0;
+    }
     if(0 == strcmp(arg, "ecs")){
+      if (is_ibm_iam_auth) {
+        S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
+        return -1;
+      }
       S3fsCurl::SetIsECS(true);
+      S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
+      S3fsCurl::SetIAMFieldCount(5);
       is_ecs = true;
       return 0;
     }
     if(0 == STR2NCMP(arg, "iam_role")){
-      if (is_ecs) {
-        S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs");
+      if (is_ecs || is_ibm_iam_auth) {
+        S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
         return -1;
       }
       if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
@@ -4941,11 +4957,11 @@ int main(int argc, char* argv[])
   }
 
   // error checking of command line arguments for compatibility
-  if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeyId()){
+  if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
     exit(EXIT_FAILURE);
   }
-  if(passwd_file.size() > 0 && S3fsCurl::IsSetAccessKeyId()){
+  if(passwd_file.size() > 0 && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
     exit(EXIT_FAILURE);
   }
@@ -4953,7 +4969,7 @@ int main(int argc, char* argv[])
     if(EXIT_SUCCESS != get_access_keys()){
       exit(EXIT_FAILURE);
     }
-    if(!S3fsCurl::IsSetAccessKeyId()){
+    if(!S3fsCurl::IsSetAccessKeys()){
       S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
       exit(EXIT_FAILURE);
     }
@@ -4965,6 +4981,26 @@ int main(int argc, char* argv[])
   if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
     S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
     exit(EXIT_FAILURE);
+  }
+
+  // check IBM IAM requirements
+  if(is_ibm_iam_auth){
+
+    // check that default ACL is either public-read or private
+    string defaultACL = S3fsCurl::GetDefaultAcl();
+    if(defaultACL == "private"){
+      // IBM's COS default ACL is private
+      // set acl as empty string to avoid sending x-amz-acl header
+      S3fsCurl::SetDefaultAcl("");
+    }else if(defaultACL != "public-read"){
+      S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
+      return -1;
+    }
+
+    if(create_bucket && !S3fsCurl::IsSetAccessKeyID()){
+      S3FS_PRN_EXIT("missing service instance ID for bucket creation");
+      return -1;
+    }
   }
 
   // set user agent

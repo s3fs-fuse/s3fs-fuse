@@ -100,6 +100,12 @@ or(fstab)
 s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=http://url.to.s3/ 0 0
 ```
 
+To use IBM IAM Authentication, use the `-o ibm_iam_auth` option, and specify the Service Instance ID and API Key in your credentials file:
+```
+echo SERVICEINSTANCEID:APIKEY > /path/to/passwd
+```
+The Service Instance ID is only required when using the `-o create_bucket` option.
+
 Note: You may also want to create the global credential file first
 
 ```
