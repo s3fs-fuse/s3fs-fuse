@@ -219,6 +219,9 @@ Because s3fs always checks MD5 when uploading large object, this option does not
 \fB\-o\fR iam_role ( default is no IAM role )
 This option requires the IAM role name or "auto". If you specify "auto", s3fs will automatically use the IAM role names that are set to an instance. If you specify this option without any argument, it is the same as that you have specified the "auto".
 .TP
+\fB\-o\fR ibm_iam_auth ( default is not using IBM IAM authentication )
+This option instructs s3fs to use IBM IAM authentication. In this mode, the AWSAccessKey and AWSSecretKey will be used as IBM's Service-Instance-ID and APIKey, respectively.
+.TP
 \fB\-o\fR use_xattr ( default is not handling the extended attribute )
 Enable to handle the extended attribute(xattrs).
 If you set this option, you can use the extended attribute.
