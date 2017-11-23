@@ -756,20 +756,24 @@ int FdEntity::OpenMirrorFile(void)
     return -EIO;
   }
 
-  // make mirror file path
-  char szfile[NAME_MAX + 1];
-  if(NULL == tmpnam(szfile)){
-    S3FS_PRN_ERR("could not get temporary file name.");
-    return -EIO;
-  }
-  char* ppos = strrchr(szfile, '/');
-  ++ppos;
-  mirrorpath = bupdir + "/" + ppos;
+  // try to link mirror file
+  while(true){
+    // make random(temp) file path
+    // (do not care for threading, because allowed any value returned.)
+    //
+    char         szfile[NAME_MAX + 1];
+    unsigned int seed = static_cast<unsigned int>(time(NULL));
+    sprintf(szfile, "%x.tmp", rand_r(&seed));
+    mirrorpath = bupdir + "/" + szfile;
 
-  // link mirror file to cache file
-  if(-1 == link(cachepath.c_str(), mirrorpath.c_str())){
-    S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
-    return -errno;
+    // link mirror file to cache file
+    if(0 == link(cachepath.c_str(), mirrorpath.c_str())){
+      break;
+    }
+    if(EEXIST != errno){
+      S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
+      return -errno;
+    }
   }
 
   // open mirror file
