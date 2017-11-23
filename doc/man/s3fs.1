@@ -216,6 +216,9 @@ Enable to send "Content-MD5" header when uploading a object without multipart po
 If this option is enabled, it has some influences on a performance of s3fs when uploading small object.
 Because s3fs always checks MD5 when uploading large object, this option does not affect on large object.
 .TP
+\fB\-o\fR ecs ( default is disable )
+This option instructs s3fs to query the ECS container credential metadata address instead of the instance metadata address.
+.TP
 \fB\-o\fR iam_role ( default is no IAM role )
 This option requires the IAM role name or "auto". If you specify "auto", s3fs will automatically use the IAM role names that are set to an instance. If you specify this option without any argument, it is the same as that you have specified the "auto".
 .TP
