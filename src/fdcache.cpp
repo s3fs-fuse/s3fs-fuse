@@ -1155,7 +1155,7 @@ int FdEntity::Load(off_t start, size_t size)
       size_t over_size = (*iter)->bytes - need_load_size;
 
       // download
-      if(static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) < need_load_size && !nomultipart){ // default 20MB
+      if(static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) <= need_load_size && !nomultipart){ // default 20MB
         // parallel request
         // Additional time is needed for large files
         time_t backup = 0;
