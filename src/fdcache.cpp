@@ -1001,10 +1001,10 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, size_t* size, bool force_load)
 
 bool FdEntity::GetStats(struct stat& st)
 {
+  AutoLock auto_lock(&fdent_lock);
   if(-1 == fd){
     return false;
   }
-  AutoLock auto_lock(&fdent_lock);
 
   memset(&st, 0, sizeof(struct stat)); 
   if(-1 == fstat(fd, &st)){
