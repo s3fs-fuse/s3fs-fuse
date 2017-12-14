@@ -74,7 +74,7 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd
 If you encounter any errors, enable debug output:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -dbglevel=info -f -o curldbg
+s3fs mybucket /path/to/mountpoint -o passwd_file=/path/to/passwd -o dbglevel=info -f -o curldbg
 ```
 
 You can also mount on boot by entering the following line to `/etc/fstab`:
