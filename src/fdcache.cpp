@@ -2116,6 +2116,7 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd, bool ignore_existf
 
 void FdManager::Rename(const std::string &from, const std::string &to)
 {
+  AutoLock auto_lock(&FdManager::fd_manager_lock);
   fdent_map_t::iterator iter = fent.find(from);
   if(fent.end() != iter){
     // found
