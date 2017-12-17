@@ -1,8 +1,49 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.83 -- Dec 17, 2017
+#606 - Add Homebrew instructions
+#608 - Fix chown_nocopy losing existing uid/gid if unspecified
+#609 - Group permission checks sometimes fail with large number of groups
+#611 - Fixed clock_gettime build failure on macOS 10.12 Sierra - #600
+#621 - Upgrade to S3Proxy 1.5.3
+#627 - Update README.md
+#630 - Added travis test on osx for #601
+#631 - Merged macosx branch into master branch #601
+#636 - Fix intermittent upload failures on macOS
+#637 - Add blurb about non-Amazon S3 implementations
+#638 - Minor fixes to README
+#639 - Update Homebrew instructions
+#642 - Fixed potential atomic violation in S3fsCurl::AddUserAgent - #633
+#644 - Fixed with unnecessary equal in POST uploads url argment - #643
+#645 - Configure S3Proxy for SSL
+#646 - Simplify S3Proxy PID handling
+#652 - Fix s3fs_init message
+#659 - Do not fail updating directory when removing old-style object(ref #658)
+#660 - Refixed s3fs_init message(ref #652)
+#663 - Lock FdEntity when mutating orgmeta
+#664 - auth headers insertion refactoring
+#668 - Changed .travis.yml for fixing not found gpg2 on osx
+#669 - add IBM IAM authentication support
+#670 - Fixed a bug in S3fsCurl::LocateBundle
+#671 - Add support for ECS metadata endpoint
+#675 - Reduce use of preprocessor
+#676 - Move str definition from header to implementation
+#677 - Add s3proxy to .gitignore
+#679 - README.md Addition
+#681 - Changed functions about reading passwd file
+#684 - Correct signedness warning
+#686 - remove use of jsoncpp
+#688 - Improved use of temporary files - #678
+#690 - Added option ecs description to man page
+#692 - Updated template md files for issue and pr
+#695 - fix condition for parallel download
+#697 - Fixing race condition in FdEntity::GetStats
+#699 - Fix dbglevel usage
+
 Version 1.82 -- May 13, 2017
 #597 - Not fallback to HTTP - #596
+#598 - Updated ChangeLog and configure.ac for release 1.82
 
 Version 1.81 -- May 13, 2017
 #426 - Updated to correct ChangeLog
