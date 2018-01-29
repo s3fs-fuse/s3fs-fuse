@@ -1429,7 +1429,7 @@ int FdEntity::NoCacheCompleteMultipartPost(void)
 
 int FdEntity::RowFlush(const char* tpath, bool force_sync)
 {
-  int result;
+  int result = 0;
 
   S3FS_PRN_INFO3("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd);
 
@@ -1448,10 +1448,12 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   if(0 < restsize){
     if(0 == upload_id.length()){
       // check disk space
-      if(FdManager::IsSafeDiskSpace(NULL, restsize)){
+      if(ReserveDiskSpace(restsize)){
         // enough disk space
         // Load all uninitialized area
-        if(0 != (result = Load())){
+        result = Load();
+        FdManager::get()->FreeReservedDiskSpace(restsize);
+        if(0 != result){
           S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
           return static_cast<ssize_t>(result);
         }
@@ -1554,16 +1556,38 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   return result;
 }
 
+// [NOTICE]
+// Need to lock before calling this method.
+bool FdEntity::ReserveDiskSpace(size_t size)
+{
+  if(FdManager::get()->ReserveDiskSpace(size)){
+    return true;
+  }
+
+  if(!is_modify){
+    // try to clear all cache for this fd.
+    pagelist.Init(pagelist.Size(), false);
+    if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, pagelist.Size())){
+      S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
+      return false;
+    }
+
+    if(FdManager::get()->ReserveDiskSpace(size)){
+      return true;
+    }
+  }
+
+  FdManager::get()->CleanupCacheDir();
+
+  return FdManager::get()->ReserveDiskSpace(size);
+}
+
 ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 {
   S3FS_PRN_DBG("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
 
   if(-1 == fd){
     return -EBADF;
-  }
-  // check if not enough disk space left BEFORE locking fd
-  if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(NULL, size)){
-    FdManager::get()->CleanupCacheDir();
   }
   AutoLock auto_lock(&fdent_lock);
 
@@ -1575,23 +1599,6 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 
   // check disk space
   if(0 < pagelist.GetTotalUnloadedPageSize(start, size)){
-    if(!FdManager::IsSafeDiskSpace(NULL, size)){
-      // [NOTE]
-      // If the area of this entity fd used can be released, try to do it.
-      // But If file data is updated, we can not even release of fd.
-      // Fundamentally, this method will fail as long as the disk capacity
-      // is not ensured.
-      //
-      if(!is_modify){
-        // try to clear all cache for this fd.
-        pagelist.Init(pagelist.Size(), false);
-        if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, pagelist.Size())){
-          S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
-          return -ENOSPC;
-        }
-      }
-    }
-
     // load size(for prefetch)
     size_t load_size = size;
     if(static_cast<size_t>(start + size) < pagelist.Size()){
@@ -1603,9 +1610,25 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
         load_size = static_cast<size_t>(pagelist.Size() - start);
       }
     }
+
+    if(!ReserveDiskSpace(load_size)){
+      S3FS_PRN_WARN("could not reserve disk space for pre-fetch download");
+      load_size = size;
+      if(!ReserveDiskSpace(load_size)){
+        S3FS_PRN_ERR("could not reserve disk space for pre-fetch download");
+        return -ENOSPC;
+      }
+    }
+
     // Loading
-    int result;
-    if(0 < size && 0 != (result = Load(start, load_size))){
+    int result = 0;
+    if(0 < size){
+      result = Load(start, load_size);
+    }
+
+    FdManager::get()->FreeReservedDiskSpace(load_size);
+
+    if(0 != result){
       S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
       return -EIO;
     }
@@ -1642,17 +1665,21 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     pagelist.SetPageLoadedStatus(static_cast<off_t>(pagelist.Size()), static_cast<size_t>(start) - pagelist.Size(), false);
   }
 
-  int     result;
+  int     result = 0;
   ssize_t wsize;
 
   if(0 == upload_id.length()){
     // check disk space
     size_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
-    if(FdManager::IsSafeDiskSpace(NULL, restsize)){
+    if(ReserveDiskSpace(restsize)){
       // enough disk space
 
       // Load uninitialized area which starts from 0 to (start + size) before writing.
-      if(0 < start && 0 != (result = Load(0, static_cast<size_t>(start)))){
+      if(0 < start){
+        result = Load(0, static_cast<size_t>(start));
+      }
+      FdManager::get()->FreeReservedDiskSpace(restsize);
+      if(0 != result){
         S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
         return static_cast<ssize_t>(result);
       }
@@ -1750,6 +1777,7 @@ void FdEntity::CleanupCache()
 FdManager       FdManager::singleton;
 pthread_mutex_t FdManager::fd_manager_lock;
 pthread_mutex_t FdManager::cache_cleanup_lock;
+pthread_mutex_t FdManager::reserved_diskspace_lock;
 bool            FdManager::is_lock_init(false);
 string          FdManager::cache_dir("");
 bool            FdManager::check_cache_dir_exist(false);
@@ -1901,19 +1929,7 @@ bool FdManager::CheckCacheDirExist(void)
 size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
 {
   size_t old = FdManager::free_disk_space;
-  if(0 == size){
-    if(0 == FdManager::free_disk_space){
-      FdManager::free_disk_space = static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount());
-    }
-  }else{
-    if(0 == FdManager::free_disk_space){
-      FdManager::free_disk_space = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
-    }else{
-      if(static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()) <= size){
-        FdManager::free_disk_space = size;
-      }
-    }
-  }
+  FdManager::free_disk_space = size;
   return old;
 }
 
@@ -1957,6 +1973,7 @@ FdManager::FdManager()
     try{
       pthread_mutex_init(&FdManager::fd_manager_lock, NULL);
       pthread_mutex_init(&FdManager::cache_cleanup_lock, NULL);
+      pthread_mutex_init(&FdManager::reserved_diskspace_lock, NULL);
       FdManager::is_lock_init = true;
     }catch(exception& e){
       FdManager::is_lock_init = false;
@@ -1980,6 +1997,7 @@ FdManager::~FdManager()
       try{
         pthread_mutex_destroy(&FdManager::fd_manager_lock);
         pthread_mutex_destroy(&FdManager::cache_cleanup_lock);
+        pthread_mutex_destroy(&FdManager::reserved_diskspace_lock);
       }catch(exception& e){
         S3FS_PRN_CRIT("failed to init mutex");
       }
@@ -2181,17 +2199,22 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 
 void FdManager::CleanupCacheDir()
 {
-  if (!FdManager::IsCacheDir()) {
+  S3FS_PRN_INFO("cache cleanup requested");
+
+  if(!FdManager::IsCacheDir()){
     return;
   }
 
-  AutoLock auto_lock(&FdManager::cache_cleanup_lock, true);
+  AutoLock auto_lock_no_wait(&FdManager::cache_cleanup_lock, true);
 
-  if (!auto_lock.isLockAcquired()) {
-    return;
+  if(auto_lock_no_wait.isLockAcquired()){
+    S3FS_PRN_INFO("cache cleanup started");
+    CleanupCacheDirInternal("");
+    S3FS_PRN_INFO("cache cleanup ended");
+  }else{
+    // wait for other thread to finish cache cleanup
+    AutoLock auto_lock(&FdManager::cache_cleanup_lock);
   }
-
-  CleanupCacheDirInternal("");
 }
 
 void FdManager::CleanupCacheDirInternal(const std::string &path)
@@ -2224,14 +2247,36 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
     }else{
       FdEntity* ent;
       if(NULL == (ent = FdManager::get()->Open(next_path.c_str(), NULL, -1, -1, false, true, true))){
+        S3FS_PRN_DBG("skipping locked file: %s", next_path.c_str());
         continue;
       }
 
-      ent->CleanupCache();
+      if(ent->IsMultiOpened()){
+        S3FS_PRN_DBG("skipping opened file: %s", next_path.c_str());
+      }else{
+        ent->CleanupCache();
+        S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
+      }
       Close(ent);
     }
   }
   closedir(dp);
+}
+
+bool FdManager::ReserveDiskSpace(size_t size)
+{
+  AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+  if(IsSafeDiskSpace(NULL, size)){
+    free_disk_space += size;
+    return true;
+  }
+  return false;
+}
+
+void FdManager::FreeReservedDiskSpace(size_t size)
+{
+  AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+  free_disk_space -= size;
 }
 
 /*
