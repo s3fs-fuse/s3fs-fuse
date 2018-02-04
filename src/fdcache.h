@@ -146,7 +146,7 @@ class FdEntity
     bool IsOpen(void) const { return (-1 != fd); }
     int Open(headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
     bool OpenAndLoadAll(headers_t* pmeta = NULL, size_t* size = NULL, bool force_load = false);
-    int Dup(bool no_fd_lock_wait = false);
+    int Dup();
 
     const char* GetPath(void) const { return path.c_str(); }
     void SetPath(const std::string &newpath) { path = newpath; }

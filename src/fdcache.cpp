@@ -725,15 +725,12 @@ void FdEntity::Close(void)
   }
 }
 
-int FdEntity::Dup(bool no_fd_lock_wait)
+int FdEntity::Dup()
 {
   S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt + 1 : refcnt));
 
   if(-1 != fd){
-    AutoLock auto_lock(&fdent_lock, no_fd_lock_wait);
-    if (!auto_lock.isLockAcquired()) {
-      return -1;
-    }
+    AutoLock auto_lock(&fdent_lock);
     refcnt++;
   }
   return fd;
@@ -756,13 +753,23 @@ int FdEntity::OpenMirrorFile(void)
     return -EIO;
   }
 
+  // create seed generating mirror file name
+  unsigned int seed = static_cast<unsigned int>(time(NULL));
+  int urandom_fd;
+  if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
+    unsigned int rand_data;
+    if(sizeof(rand_data) == read(urandom_fd, &rand_data, sizeof(rand_data))){
+      seed ^= rand_data;
+    }
+    close(urandom_fd);
+  }
+
   // try to link mirror file
   while(true){
     // make random(temp) file path
     // (do not care for threading, because allowed any value returned.)
     //
     char         szfile[NAME_MAX + 1];
-    unsigned int seed = static_cast<unsigned int>(time(NULL));
     sprintf(szfile, "%x.tmp", rand_r(&seed));
     mirrorpath = bupdir + "/" + szfile;
 
@@ -774,6 +781,7 @@ int FdEntity::OpenMirrorFile(void)
       S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
       return -errno;
     }
+    ++seed;
   }
 
   // open mirror file
@@ -785,20 +793,19 @@ int FdEntity::OpenMirrorFile(void)
   return mirrorfd;
 }
 
-// [NOTE]
-// This method does not lock fdent_lock, because FdManager::fd_manager_lock
-// is locked before calling.
-//
 int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_wait)
 {
   S3FS_PRN_DBG("[path=%s][fd=%d][size=%jd][time=%jd]", path.c_str(), fd, (intmax_t)size, (intmax_t)time);
 
+  AutoLock auto_lock(&fdent_lock, no_fd_lock_wait);
+  if (!auto_lock.isLockAcquired()) {
+    // had to wait for fd lock, return
+    return -EIO;
+  }
+
   if(-1 != fd){
     // already opened, needs to increment refcnt.
-    if (fd != Dup(no_fd_lock_wait)) {
-      // had to wait for fd lock, return
-      return -EIO;
-    }
+    Dup();
 
     // check only file size(do not need to save cfs and time.
     if(0 <= size && pagelist.Size() != static_cast<size_t>(size)){
@@ -2027,56 +2034,58 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
   if(!path || '\0' == path[0]){
     return NULL;
   }
-  AutoLock auto_lock(&FdManager::fd_manager_lock);
+  FdEntity* ent;
+  {
+    AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-  // search in mapping by key(path)
-  fdent_map_t::iterator iter = fent.find(string(path));
+    // search in mapping by key(path)
+    fdent_map_t::iterator iter = fent.find(string(path));
 
-  if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
-    // If the cache directory is not specified, s3fs opens a temporary file
-    // when the file is opened.
-    // Then if it could not find a entity in map for the file, s3fs should
-    // search a entity in all which opened the temporary file.
-    //
-    for(iter = fent.begin(); iter != fent.end(); ++iter){
-      if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
-        break;      // found opened fd in mapping
+    if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
+      // If the cache directory is not specified, s3fs opens a temporary file
+      // when the file is opened.
+      // Then if it could not find a entity in map for the file, s3fs should
+      // search a entity in all which opened the temporary file.
+      //
+      for(iter = fent.begin(); iter != fent.end(); ++iter){
+        if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
+          break;      // found opened fd in mapping
+        }
       }
     }
-  }
 
-  FdEntity* ent;
-  if(fent.end() != iter){
-    // found
-    ent = (*iter).second;
+    if(fent.end() != iter){
+      // found
+      ent = (*iter).second;
 
-  }else if(is_create){
-    // not found
-    string cache_path = "";
-    if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
-      S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
+    }else if(is_create){
+      // not found
+      string cache_path = "";
+      if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
+        S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
+        return NULL;
+      }
+      // make new obj
+      ent = new FdEntity(path, cache_path.c_str());
+
+      if(0 < cache_path.size()){
+        // using cache
+        fent[string(path)] = ent;
+      }else{
+        // not using cache, so the key of fdentity is set not really existing path.
+        // (but not strictly unexisting path.)
+        //
+        // [NOTE]
+        // The reason why this process here, please look at the definition of the
+        // comments of NOCACHE_PATH_PREFIX_FORM symbol.
+        //
+        string tmppath("");
+        FdManager::MakeRandomTempPath(path, tmppath);
+        fent[tmppath] = ent;
+      }
+    }else{
       return NULL;
     }
-    // make new obj
-    ent = new FdEntity(path, cache_path.c_str());
-
-    if(0 < cache_path.size()){
-      // using cache
-      fent[string(path)] = ent;
-    }else{
-      // not using cache, so the key of fdentity is set not really existing path.
-      // (but not strictly unexisting path.)
-      //
-      // [NOTE]
-      // The reason why this process here, please look at the definition of the
-      // comments of NOCACHE_PATH_PREFIX_FORM symbol.
-      //
-      string tmppath("");
-      FdManager::MakeRandomTempPath(path, tmppath);
-      fent[tmppath] = ent;
-    }
-  }else{
-    return NULL;
   }
 
   // open
