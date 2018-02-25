@@ -4071,7 +4071,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
   if(!key){
     return list;
   }
-  if(NULL == (new_item = (struct curl_slist*)malloc(sizeof(struct curl_slist)))){
+  if(NULL == (new_item = reinterpret_cast<struct curl_slist*>(malloc(sizeof(struct curl_slist))))){
     return list;
   }
 
