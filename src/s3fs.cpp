@@ -892,7 +892,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   // Read
   ssize_t ressize;
   if(0 > (ressize = ent->Read(buf, 0, readsize))){
-    S3FS_PRN_ERR("could not read file(file=%s, errno=%zd)", path, ressize);
+    S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
     FdManager::get()->Close(ent);
     return static_cast<int>(ressize);
   }
@@ -2138,7 +2138,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
   }
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
-    S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
+    S3FS_PRN_WARN("failed to read file(%s). result=%jd", path, (intmax_t)res);
   }
   FdManager::get()->Close(ent);
 
@@ -2160,7 +2160,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
     S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
   if(0 > (res = ent->Write(buf, offset, size))){
-    S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
+    S3FS_PRN_WARN("failed to write file(%s). result=%jd", path, (intmax_t)res);
   }
   FdManager::get()->Close(ent);
 
@@ -4860,9 +4860,8 @@ int main(int argc, char* argv[])
   LIBXML_TEST_VERSION
 
   // get program name - emulate basename
-  size_t found = string::npos;
   program_name.assign(argv[0]);
-  found = program_name.find_last_of("/");
+  size_t found = program_name.find_last_of("/");
   if(found != string::npos){
     program_name.replace(0, found+1, "");
   }
