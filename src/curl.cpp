@@ -3920,8 +3920,7 @@ int S3fsMultiCurl::MultiPerform(void)
     } else {
       int int_retval = (int)(intptr_t)(retval);
       if (int_retval) {
-        S3FS_PRN_ERR("thread failed - rc(%d)", int_retval);
-        success = false;
+        S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
       }
     }
   }
