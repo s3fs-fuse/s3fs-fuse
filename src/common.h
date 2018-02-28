@@ -79,7 +79,7 @@ enum s3fs_log_level{
          if(foreground){ \
            fprintf(stdout, "%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
-           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s:%s(%d): " fmt "%s", __FILE__, __func__, __LINE__, __VA_ARGS__); \
+           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s%s:%s(%d): " fmt "%s", instance_name.c_str(), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          } \
        }
 
@@ -88,7 +88,7 @@ enum s3fs_log_level{
          if(foreground){ \
            fprintf(stdout, "%s%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), S3FS_LOG_NEST(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
-           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s" fmt "%s", S3FS_LOG_NEST(nest), __VA_ARGS__); \
+           syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s%s" fmt "%s", instance_name.c_str(), S3FS_LOG_NEST(nest), __VA_ARGS__); \
          } \
        }
 
@@ -97,7 +97,7 @@ enum s3fs_log_level{
          fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
        }else{ \
          fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
-         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_CRIT), "s3fs: " fmt "%s", __VA_ARGS__); \
+         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
        }
 
 // Special macro for init message
@@ -105,7 +105,7 @@ enum s3fs_log_level{
        if(foreground){ \
          fprintf(stdout, "%s%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(S3FS_LOG_INFO), S3FS_LOG_NEST(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
        }else{ \
-         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_INFO), "%s" fmt "%s", S3FS_LOG_NEST(0), __VA_ARGS__, ""); \
+         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_INFO), "%s%s" fmt "%s", instance_name.c_str(), S3FS_LOG_NEST(0), __VA_ARGS__, ""); \
        }
 
 // [NOTE]
@@ -168,6 +168,7 @@ extern std::string    bucket;
 extern std::string    mount_prefix;
 extern std::string    endpoint;
 extern std::string    cipher_suites;
+extern std::string    instance_name;
 extern s3fs_log_level debug_level;
 extern const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX];
 
