@@ -1618,12 +1618,15 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
       break;
     case CURLINFO_HEADER_IN:
     case CURLINFO_HEADER_OUT:
+      size_t remaining;
+      char* p;
+
       // Print each line individually for tidy output
-      size_t remaining = size;
-      char*  p         = data;
+      remaining = size;
+      p = data;
       do {
-        char* eol     = (char*)memchr(p, '\n', remaining);
-        int   newline = 0;
+        char* eol = (char*)memchr(p, '\n', remaining);
+        int newline = 0;
         if (eol == NULL) {
           eol = (char*)memchr(p, '\r', remaining);
         } else if (eol > p && *(eol - 1) == '\r') {
