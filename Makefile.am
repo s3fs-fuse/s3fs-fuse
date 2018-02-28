@@ -32,11 +32,12 @@ cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
             --std=c++03 \
+            -D HAVE_ATTR_XATTR_H \
+            -D HAVE_SYS_EXTATTR_H \
+            -D HAVE_MALLOC_TRIM \
             -U CURLE_PEER_FAILED_VERIFICATION \
             -U P_tmpdir \
             -U ENOATTR \
-            --enable=all \
+            --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
-            --suppress=unusedFunction \
-            --suppress=variableScope \
             src/ test/

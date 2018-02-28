@@ -130,8 +130,8 @@ bool AdditionalHeader::Load(const char* file)
       // compile
       regex_t*  preg = new regex_t;
       int       result;
-      char      errbuf[256];
       if(0 != (result = regcomp(preg, key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
+        char    errbuf[256];
         regerror(result, preg, errbuf, sizeof(errbuf));
         S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
         delete preg;

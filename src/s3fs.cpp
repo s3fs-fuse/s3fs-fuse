@@ -2463,7 +2463,6 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
 {
-  int       result; 
   string    s3_realpath;
   string    query_delimiter;;
   string    query_prefix;;
@@ -2472,7 +2471,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   bool      truncated = true;
   S3fsCurl  s3fscurl;
   xmlDocPtr doc;
-  BodyData* body;
 
   S3FS_PRN_INFO1("[path=%s]", path);
 
@@ -2508,11 +2506,12 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     each_query += query_prefix;
 
     // request
+    int result; 
     if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
       S3FS_PRN_ERR("ListBucketRequest returns with error.");
       return result;
     }
-    body = s3fscurl.GetBodyData();
+    BodyData* body = s3fscurl.GetBodyData();
 
     // xmlDocPtr
     if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
@@ -3847,7 +3846,6 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 {
   string line;
   size_t first_pos;
-  size_t last_pos;
   readline_t linelist;
   readline_t::iterator iter;
 
@@ -3902,8 +3900,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 
   // read ':' type
   for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-    first_pos = iter->find_first_of(":");
-    last_pos  = iter->find_last_of(":");
+    first_pos       = iter->find_first_of(":");
+    size_t last_pos = iter->find_last_of(":");
     if(first_pos == string::npos){
       continue;
     }
