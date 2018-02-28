@@ -107,7 +107,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
     return false;
   }
 
-  if(NULL == (*digest = (unsigned char*)malloc(SHA1_DIGEST_SIZE))){
+  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(SHA1_DIGEST_SIZE)))){
     return false;
   }
 
@@ -126,7 +126,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
     return false;
   }
 
-  if(NULL == (*digest = (unsigned char*)malloc(SHA256_DIGEST_SIZE))){
+  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(SHA256_DIGEST_SIZE)))){
     return false;
   }
 
@@ -150,7 +150,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
   if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
     return false;
   }
-  if(NULL == (*digest = (unsigned char*)malloc(*digestlen + 1))){
+  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(*digestlen + 1)))){
     return false;
   }
   if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, *digest)){
@@ -170,7 +170,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
   if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
     return false;
   }
-  if(NULL == (*digest = (unsigned char*)malloc(*digestlen + 1))){
+  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(*digestlen + 1)))){
     return false;
   }
   if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, *digest)){
@@ -221,7 +221,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     md5_update(&ctx_md5, bytes, buf);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_md5_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
     return NULL;
   }
   md5_digest(&ctx_md5, get_md5_digest_length(), result);
@@ -277,7 +277,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     gcry_md_write(ctx_md5, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_md5_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
     return NULL;
   }
   memcpy(result, gcry_md_read(ctx_md5, 0), get_md5_digest_length());
@@ -346,7 +346,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     sha256_update(&ctx_sha256, bytes, buf);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
     return NULL;
   }
   sha256_digest(&ctx_sha256, get_sha256_digest_length(), result);
@@ -423,7 +423,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     gcry_md_write(ctx_sha256, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
     return NULL;
   }
   memcpy(result, gcry_md_read(ctx_sha256, 0), get_sha256_digest_length());

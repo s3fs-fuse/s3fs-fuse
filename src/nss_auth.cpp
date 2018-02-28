@@ -124,7 +124,7 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
   PK11_FreeSymKey(pKey);
   PK11_FreeSlot(Slot);
 
-  if(NULL == (*digest = (unsigned char*)malloc(*digestlen))){
+  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(*digestlen)))){
     return false;
   }
   memcpy(*digest, tmpdigest, *digestlen);
@@ -188,7 +188,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     PK11_DigestOp(md5ctx, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_md5_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
     PK11_DestroyContext(md5ctx, PR_TRUE);
     return NULL;
   }
@@ -269,7 +269,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     PK11_DigestOp(sha256ctx, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
+  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
     PK11_DestroyContext(sha256ctx, PR_TRUE);
     return NULL;
   }

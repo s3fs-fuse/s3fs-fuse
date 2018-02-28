@@ -226,8 +226,8 @@ bool BodyData::Append(void* ptr, size_t bytes)
 
 const char* BodyData::str(void) const
 {
-  static const char* strnull = "";
   if(!text){
+    static const char* strnull = "";
     return strnull;
   }
   return text;
@@ -697,10 +697,8 @@ bool S3fsCurl::LocateBundle(void)
   // See if environment variable CURL_CA_BUNDLE is set
   // if so, check it, if it is a good path, then set the
   // curl_ca_bundle variable to it
-  char *CURL_CA_BUNDLE; 
-
   if(0 == S3fsCurl::curl_ca_bundle.size()){
-    CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
+    char* CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
     if(CURL_CA_BUNDLE != NULL)  {
       // check for existence and readability of the file
       ifstream BF(CURL_CA_BUNDLE);
@@ -1620,8 +1618,7 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
       break;
     case CURLINFO_HEADER_IN:
     case CURLINFO_HEADER_OUT:
-      size_t length, remaining;
-      int newline;
+      size_t remaining;
       char* p;
 
       // Print each line individually for tidy output
@@ -1629,7 +1626,7 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
       p = data;
       do {
         char* eol = (char*)memchr(p, '\n', remaining);
-        newline = 0;
+        int newline = 0;
         if (eol == NULL) {
           eol = (char*)memchr(p, '\r', remaining);
         } else if (eol > p && *(eol - 1) == '\r') {
@@ -1639,7 +1636,7 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
           newline++;
           eol++;
         }
-        length = eol - p;
+        size_t length = eol - p;
         S3FS_PRN_CURL("%c %.*s", CURLINFO_HEADER_IN == type ? '<' : '>', (int)length - newline, p);
         remaining -= length;
         p = eol;
@@ -2867,7 +2864,6 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 {
   struct stat st;
   FILE*       file = NULL;
-  int         fd2;
 
   S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -2876,6 +2872,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   }
   if(-1 != fd){
     // duplicate fd
+    int fd2;
     if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
       S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
       if(-1 != fd2){
@@ -2980,7 +2977,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
 int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, string& ssevalue)
 {
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd]", SAFESTRPTR(tpath), (intmax_t)start, (intmax_t)size);
 
   if(!tpath || -1 == fd || 0 > start || 0 > size){
     return -1;
@@ -3040,7 +3037,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 {
   int result;
 
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd]", SAFESTRPTR(tpath), (intmax_t)start, size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd]", SAFESTRPTR(tpath), (intmax_t)start, (intmax_t)size);
 
   if(!tpath){
     return -1;
@@ -3418,7 +3415,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
 
 int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const string& upload_id)
 {
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), partdata.size, part_num);
+  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), (intmax_t)(partdata.size), part_num);
 
   if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
     return -1;
@@ -3492,7 +3489,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
 {
   int result;
 
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%zd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), partdata.size, part_num);
+  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), (intmax_t)(partdata.size), part_num);
 
   // setup
   if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
@@ -3994,8 +3991,6 @@ int S3fsMultiCurl::MultiRead(void)
 
 int S3fsMultiCurl::Request(void)
 {
-  int result;
-
   S3FS_PRN_INFO3("[count=%zu]", cMap_all.size());
 
   // Make request list.
@@ -4005,6 +4000,7 @@ int S3fsMultiCurl::Request(void)
   //
   while(!cMap_all.empty()){
     // set curl handle to multi handle
+    int                     result;
     int                     cnt;
     s3fscurlmap_t::iterator iter;
     for(cnt = 0, iter = cMap_all.begin(); cnt < S3fsMultiCurl::max_multireq && iter != cMap_all.end(); cMap_all.erase(iter++), cnt++){
@@ -4071,7 +4067,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
   if(!key){
     return list;
   }
-  if(NULL == (new_item = (struct curl_slist*)malloc(sizeof(struct curl_slist)))){
+  if(NULL == (new_item = reinterpret_cast<struct curl_slist*>(malloc(sizeof(struct curl_slist))))){
     return list;
   }
 

@@ -892,7 +892,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   // Read
   ssize_t ressize;
   if(0 > (ressize = ent->Read(buf, 0, readsize))){
-    S3FS_PRN_ERR("could not read file(file=%s, errno=%zd)", path, ressize);
+    S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
     FdManager::get()->Close(ent);
     return static_cast<int>(ressize);
   }
@@ -2138,7 +2138,7 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
   }
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
-    S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
+    S3FS_PRN_WARN("failed to read file(%s). result=%jd", path, (intmax_t)res);
   }
   FdManager::get()->Close(ent);
 
@@ -2160,7 +2160,7 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
     S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
   if(0 > (res = ent->Write(buf, offset, size))){
-    S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
+    S3FS_PRN_WARN("failed to write file(%s). result=%jd", path, (intmax_t)res);
   }
   FdManager::get()->Close(ent);
 
@@ -2463,7 +2463,6 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
 {
-  int       result; 
   string    s3_realpath;
   string    query_delimiter;;
   string    query_prefix;;
@@ -2472,7 +2471,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   bool      truncated = true;
   S3fsCurl  s3fscurl;
   xmlDocPtr doc;
-  BodyData* body;
 
   S3FS_PRN_INFO1("[path=%s]", path);
 
@@ -2508,11 +2506,12 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     each_query += query_prefix;
 
     // request
+    int result; 
     if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
       S3FS_PRN_ERR("ListBucketRequest returns with error.");
       return result;
     }
-    body = s3fscurl.GetBodyData();
+    BodyData* body = s3fscurl.GetBodyData();
 
     // xmlDocPtr
     if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
@@ -3847,7 +3846,6 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 {
   string line;
   size_t first_pos;
-  size_t last_pos;
   readline_t linelist;
   readline_t::iterator iter;
 
@@ -3902,8 +3900,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 
   // read ':' type
   for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-    first_pos = iter->find_first_of(":");
-    last_pos  = iter->find_last_of(":");
+    first_pos       = iter->find_first_of(":");
+    size_t last_pos = iter->find_last_of(":");
     if(first_pos == string::npos){
       continue;
     }
@@ -4860,9 +4858,8 @@ int main(int argc, char* argv[])
   LIBXML_TEST_VERSION
 
   // get program name - emulate basename
-  size_t found = string::npos;
   program_name.assign(argv[0]);
-  found = program_name.find_last_of("/");
+  size_t found = program_name.find_last_of("/");
   if(found != string::npos){
     program_name.replace(0, found+1, "");
   }

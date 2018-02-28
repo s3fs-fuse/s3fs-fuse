@@ -1571,7 +1571,6 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     pagelist.SetPageLoadedStatus(start, size, false);
   }
 
-  int     result;
   ssize_t rsize;
 
   // check disk space
@@ -1605,6 +1604,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
       }
     }
     // Loading
+    int result;
     if(0 < size && 0 != (result = Load(start, load_size))){
       S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
       return -EIO;
