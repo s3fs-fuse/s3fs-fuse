@@ -2972,15 +2972,19 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
   headers_t::iterator iter;
   if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+#if defined(XATTR_REPLACE)
     if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
       // there is no xattr header but flags is replace, so failure.
       return -ENOATTR;
     }
+#endif
   }else{
+#if defined(XATTR_CREATE)
     if(XATTR_CREATE == (flags & XATTR_CREATE)){
       // found xattr header but flags is only creating, so failure.
       return -EEXIST;
     }
+#endif
     strxattrs = iter->second;
   }
 

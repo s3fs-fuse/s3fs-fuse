@@ -453,6 +453,7 @@ AutoLock::~AutoLock()
 string get_username(uid_t uid)
 {
   static size_t maxlen = 0;	// set once
+  int result;
   char* pbuf;
   struct passwd pwinfo;
   struct passwd* ppwinfo = NULL;
@@ -461,9 +462,17 @@ string get_username(uid_t uid)
   if(0 == maxlen){
     long res = sysconf(_SC_GETPW_R_SIZE_MAX);
     if(0 > res){
-      S3FS_PRN_WARN("could not get max pw length.");
-      maxlen = 0;
-      return string("");
+      // SUSv4tc1 says the following about _SC_GETGR_R_SIZE_MAX and
+      // _SC_GETPW_R_SIZE_MAX:
+      // Note that sysconf(_SC_GETGR_R_SIZE_MAX) may return -1 if
+      // there is no hard limit on the size of the buffer needed to
+      // store all the groups returned.
+      if (errno != 0){
+        S3FS_PRN_WARN("could not get max pw length.");
+        maxlen = 0;
+        return string("");
+      }
+      res = 1024; // default initial length
     }
     maxlen = res;
   }
@@ -471,12 +480,22 @@ string get_username(uid_t uid)
     S3FS_PRN_CRIT("failed to allocate memory.");
     return string("");
   }
-  // get group information
-  if(0 != getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo)){
-    S3FS_PRN_WARN("could not get pw information.");
+  // get pw information
+  while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
+    free(pbuf);
+    maxlen *= 2;
+    if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
+      S3FS_PRN_CRIT("failed to allocate memory.");
+      return string("");
+    }
+  }
+
+  if(0 != result){
+    S3FS_PRN_ERR("could not get pw information(%d).", result);
     free(pbuf);
     return string("");
   }
+
   // check pw
   if(NULL == ppwinfo){
     free(pbuf);
@@ -498,10 +517,18 @@ int is_uid_include_group(uid_t uid, gid_t gid)
   // make buffer
   if(0 == maxlen){
     long res = sysconf(_SC_GETGR_R_SIZE_MAX);
-    if(0 > res){
-      S3FS_PRN_ERR("could not get max name length.");
-      maxlen = 0;
-      return -ERANGE;
+    if(0 > res) {
+      // SUSv4tc1 says the following about _SC_GETGR_R_SIZE_MAX and
+      // _SC_GETPW_R_SIZE_MAX:
+      // Note that sysconf(_SC_GETGR_R_SIZE_MAX) may return -1 if
+      // there is no hard limit on the size of the buffer needed to
+      // store all the groups returned.
+      if (errno != 0) {
+        S3FS_PRN_ERR("could not get max name length.");
+        maxlen = 0;
+        return -ERANGE;
+      }
+      res = 1024; // default initial length
     }
     maxlen = res;
   }
