@@ -1125,7 +1125,7 @@ void show_help (void)
     "   multipart_size (default=\"10\")\n"
     "      - part size, in MB, for each multipart request.\n"
     "\n"
-    "   ensure_diskfree (default same multipart_size value)\n"
+    "   ensure_diskfree (default 0)\n"
     "      - sets MB to ensure disk free space. s3fs makes file for\n"
     "        downloading, uploading and caching files. If the disk free\n"
     "        space is smaller than this value, s3fs do not use diskspace\n"

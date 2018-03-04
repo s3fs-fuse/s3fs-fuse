@@ -4671,8 +4671,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
         return -1;
       }
-      // update ensure free disk space if it is not set.
-      FdManager::InitEnsureFreeDiskSpace();
       return 0;
     }
     if(0 == STR2NCMP(arg, "ensure_diskfree=")){
@@ -5034,8 +5032,7 @@ int main(int argc, char* argv[])
   }
 
   // check free disk space
-  FdManager::InitEnsureFreeDiskSpace();
-  if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize())){
+  if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
     S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
     exit(EXIT_FAILURE);
   }

@@ -144,6 +144,7 @@ class FdEntity
 
     void Close(void);
     bool IsOpen(void) const { return (-1 != fd); }
+    bool IsMultiOpened(void) const { return refcnt > 1; }
     int Open(headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
     bool OpenAndLoadAll(headers_t* pmeta = NULL, size_t* size = NULL, bool force_load = false);
     int Dup(bool no_fd_lock_wait = false);
@@ -173,6 +174,7 @@ class FdEntity
     ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
     ssize_t Write(const char* bytes, off_t start, size_t size);
 
+    bool ReserveDiskSpace(size_t size);
     void CleanupCache();
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
@@ -186,6 +188,7 @@ class FdManager
     static FdManager       singleton;
     static pthread_mutex_t fd_manager_lock;
     static pthread_mutex_t cache_cleanup_lock;
+    static pthread_mutex_t reserved_diskspace_lock;
     static bool            is_lock_init;
     static std::string     cache_dir;
     static bool            check_cache_dir_exist;
@@ -217,8 +220,9 @@ class FdManager
 
     static size_t GetEnsureFreeDiskSpace(void) { return FdManager::free_disk_space; }
     static size_t SetEnsureFreeDiskSpace(size_t size);
-    static size_t InitEnsureFreeDiskSpace(void) { return SetEnsureFreeDiskSpace(0); }
     static bool IsSafeDiskSpace(const char* path, size_t size);
+    static void FreeReservedDiskSpace(size_t size);
+    bool ReserveDiskSpace(size_t size);
 
     FdEntity* GetFdEntity(const char* path, int existfd = -1);
     FdEntity* Open(const char* path, headers_t* pmeta = NULL, ssize_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
