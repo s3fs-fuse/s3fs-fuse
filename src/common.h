@@ -21,6 +21,7 @@
 #ifndef S3FS_COMMON_H_
 #define S3FS_COMMON_H_
 
+#include <stdlib.h>
 #include "../config.h"
 
 //
