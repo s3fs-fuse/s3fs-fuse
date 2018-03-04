@@ -256,6 +256,10 @@ Customize TLS cipher suite list. Expects a colon separated list of cipher suite 
 A list of available cipher suites, depending on your TLS engine, can be found on the CURL library documentation:
 https://curl.haxx.se/docs/ssl-ciphers.html
 .TP
+\fB\-o\fR instance_name
+The instance name of the current s3fs mountpoint.
+This name will be added to logging messages and user agent headers sent by s3fs.
+.TP
 \fB\-o\fR complement_stat (complement lack of file/directory mode)
 s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
 As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.

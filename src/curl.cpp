@@ -631,6 +631,7 @@ void S3fsCurl::InitUserAgent(void)
     S3fsCurl::userAgent += "; ";
     S3fsCurl::userAgent += s3fs_crypt_lib_name();
     S3fsCurl::userAgent += ")";
+    S3fsCurl::userAgent += instance_name;
   }
 }
 

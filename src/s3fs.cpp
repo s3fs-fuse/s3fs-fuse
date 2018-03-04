@@ -100,6 +100,7 @@ std::string host                  = "https://s3.amazonaws.com";
 std::string bucket                = "";
 std::string endpoint              = "us-east-1";
 std::string cipher_suites         = "";
+std::string instance_name         = "";
 s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
 
@@ -4771,6 +4772,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "cipher_suites=")){
       cipher_suites = strchr(arg, '=') + sizeof(char);
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "instance_name=")){
+      instance_name = strchr(arg, '=') + sizeof(char);
+      instance_name = "[" + instance_name + "]";
       return 0;
     }
     //
