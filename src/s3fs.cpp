@@ -3925,7 +3925,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
       secret    = trim(iter->substr(first_pos + 1, string::npos));
     }
     if(resmap.end() != resmap.find(bucket)){
-      S3FS_PRN_EXIT("same bucket(%s) passwd setting found in passwd file.", ("" == bucket ? "default" : bucket.c_str()));
+      S3FS_PRN_EXIT("there are mutliple entries for the same bucket(%s) in the passwd file.", ("" == bucket ? "default" : bucket.c_str()));
       return -1;
     }
     kv.clear();
