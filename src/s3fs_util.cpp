@@ -621,7 +621,7 @@ int mkdirp(const string& path, mode_t mode)
         return EPERM;
       }
     }else{
-      if(0 != mkdir(base.c_str(), mode)){
+      if(0 != mkdir(base.c_str(), mode) && errno != EEXIST){
         return errno;
      }
     }
