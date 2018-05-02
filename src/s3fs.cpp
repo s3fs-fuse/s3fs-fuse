@@ -2724,7 +2724,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
 {
   xmlXPathObjectPtr  marker_xp;
   string xmlnsurl;
-  string exp_string = "//";
+  string exp_string;
 
   if(!doc){
     return NULL;
@@ -2733,8 +2733,11 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
 
   if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
     xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
-    exp_string += "s3:";
+    exp_string = "/s3:ListBucketResult/s3:";
+  } else {
+    exp_string = "/ListBucketResult/";
   }
+  
   exp_string += exp;
 
   if(NULL == (marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx))){
