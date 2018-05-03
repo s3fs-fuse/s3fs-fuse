@@ -4739,6 +4739,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
          found  = host.find_last_of('/');
          length = host.length();
       }
+      // Check url for http / https protocol string
+      if((host.find("https://") != 0) && (host.find("http://") != 0)) {
+         S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
+         return -1;
+      }
       return 0;
     }
     if(0 == strcmp(arg, "sigv2")){
