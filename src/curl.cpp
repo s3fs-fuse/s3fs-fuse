@@ -304,6 +304,7 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
   pthread_mutex_lock(&mLock);
   if (mIndex < mMaxHandlers - 1) {
     mHandlers[++mIndex] = h;
+    curl_easy_reset(h);
     needCleanup = false;
     S3FS_PRN_DBG("Return handler to pool: %d", mIndex);
   }
