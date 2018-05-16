@@ -22,6 +22,24 @@ Features
 Installation
 ------------
 
+Some platforms provide pre-built binaries:
+
+* On Ubuntu 16.04 or newer:
+
+```
+sudo apt-get install s3fs
+```
+
+* On Mac OS X, install via [Homebrew](http://brew.sh/):
+
+```ShellSession
+$ brew cask install osxfuse
+$ brew install s3fs
+```
+
+Compilation
+-----------
+
 * On Linux, ensure you have all the dependencies:
 
 On Ubuntu 14.04:
@@ -45,13 +63,6 @@ cd s3fs-fuse
 ./configure
 make
 sudo make install
-```
-
-* On Mac OS X, install via [Homebrew](http://brew.sh/):
-
-```ShellSession
-$ brew cask install osxfuse
-$ brew install s3fs
 ```
 
 Examples
