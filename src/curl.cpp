@@ -416,10 +416,10 @@ bool S3fsCurl::DestroyS3fsCurl(void)
   if(!S3fsCurl::DestroyCryptMutex()){
     result = false;
   }
-  if(!S3fsCurl::DestroyShareCurl()){
+  if(!sCurlPool->Destroy()){
     result = false;
   }
-  if (!sCurlPool->Destroy()) {
+  if(!S3fsCurl::DestroyShareCurl()){
     result = false;
   }
   if(!S3fsCurl::DestroyGlobalCurl()){
