@@ -439,6 +439,7 @@ class S3fsCurl
     std::string GetBasePath(void) const { return base_path; }
     std::string GetSpacialSavedPath(void) const { return saved_path; }
     std::string GetUrl(void) const { return url; }
+    std::string GetOp(void) const { return op; }
     headers_t* GetResponseHeaders(void) { return &responseHeaders; }
     BodyData* GetBodyData(void) const { return bodydata; }
     BodyData* GetHeadData(void) const { return headdata; }

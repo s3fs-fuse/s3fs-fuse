@@ -3899,11 +3899,14 @@ int S3fsMultiCurl::MultiPerform(void)
 {
   std::vector<pthread_t>   threads;
   bool                     success = true;
+  bool                     isMultiHead = false;
 
   for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); ++iter) {
     pthread_t   thread;
     S3fsCurl*   s3fscurl = (*iter).second;
     int         rc;
+
+    isMultiHead |= s3fscurl->GetOp() == "HEAD";
 
     rc = pthread_create(&thread, NULL, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(s3fscurl));
     if (rc != 0) {
@@ -3925,7 +3928,7 @@ int S3fsMultiCurl::MultiPerform(void)
       S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
     } else {
       int int_retval = (int)(intptr_t)(retval);
-      if (int_retval) {
+      if (int_retval && !(int_retval == ENOENT && isMultiHead)) {
         S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
       }
     }
@@ -3954,7 +3957,10 @@ int S3fsMultiCurl::MultiRead(void)
         isRetry = true;
       }else if(404 == responseCode){
         // not found
-        S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+        // HEAD requests on readdir_multi_head can return 404
+        if(s3fscurl->GetOp() != "HEAD"){
+          S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+        }
       }else if(500 == responseCode){
         // case of all other result, do retry.(11/13/2013)
         // because it was found that s3fs got 500 error from S3, but could success
