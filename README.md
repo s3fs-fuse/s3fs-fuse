@@ -22,9 +22,9 @@ Features
 Installation
 ------------
 
-Some platforms provide pre-built binaries:
+Some systems provide pre-built packages:
 
-* On Ubuntu 16.04 or newer:
+* On Debian 9 and Ubuntu 16.04 or newer:
 
 ```
 sudo apt-get install s3fs
