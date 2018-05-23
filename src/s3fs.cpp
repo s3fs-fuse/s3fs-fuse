@@ -2573,7 +2573,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
     return -1;
   }
   if(xmlXPathNodeSetIsEmpty(contents_xp->nodesetval)){
-    S3FS_PRN_WARN("contents_xp->nodesetval is empty.");
+    S3FS_PRN_DBG("contents_xp->nodesetval is empty.");
     S3FS_XMLXPATHFREEOBJECT(contents_xp);
     return 0;
   }
