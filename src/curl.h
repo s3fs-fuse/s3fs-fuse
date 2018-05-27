@@ -405,7 +405,7 @@ class S3fsCurl
 
     // methods
     bool CreateCurlHandle(bool force = false);
-    bool DestroyCurlHandle(void);
+    bool DestroyCurlHandle(bool force = false);
 
     bool LoadIAMRoleFromMetaData(void);
     bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
