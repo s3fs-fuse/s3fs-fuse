@@ -3383,20 +3383,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     S3FS_PRN_DBG("Could not initialize cache directory.");
   }
 
-  // ssl init
-  if(!s3fs_init_global_ssl()){
-    S3FS_PRN_CRIT("could not initialize for ssl libraries.");
-    s3fs_exit_fuseloop(EXIT_FAILURE);
-    return NULL;
-  }
-
-  // init curl
-  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
-    S3FS_PRN_CRIT("Could not initiate curl library.");
-    s3fs_exit_fuseloop(EXIT_FAILURE);
-    return NULL;
-  }
-
   // check loading IAM role name
   if(load_iamrole){
     // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
@@ -3441,16 +3427,10 @@ static void s3fs_destroy(void*)
 {
   S3FS_PRN_INFO("destroy");
 
-  // Destroy curl
-  if(!S3fsCurl::DestroyS3fsCurl()){
-    S3FS_PRN_WARN("Could not release curl library.");
-  }
   // cache(remove at last)
   if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
     S3FS_PRN_WARN("Could not remove cache directory.");
   }
-  // ssl
-  s3fs_destroy_global_ssl();
 }
 
 static int s3fs_access(const char* path, int mask)
@@ -3653,20 +3633,6 @@ static int s3fs_utility_mode(void)
   if(!utility_mode){
     return EXIT_FAILURE;
   }
-
-  // ssl init
-  if(!s3fs_init_global_ssl()){
-    S3FS_PRN_EXIT("could not initialize for ssl libraries.");
-    return EXIT_FAILURE;
-  }
-
-  // init curl
-  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
-    S3FS_PRN_EXIT("Could not initiate curl library.");
-    s3fs_destroy_global_ssl();
-    return EXIT_FAILURE;
-  }
-
   printf("Utility Mode\n");
 
   S3fsCurl s3fscurl;
@@ -3823,6 +3789,7 @@ static int s3fs_check_service(void)
       return EXIT_FAILURE;
     }
   }
+  s3fscurl.DestroyCurlHandle();
 
   // make sure remote mountpath exists and is a directory
   if(mount_prefix.size() > 0){
@@ -4919,6 +4886,19 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
+  // ssl init
+  if(!s3fs_init_global_ssl()){
+    S3FS_PRN_EXIT("could not initialize for ssl libraries.");
+    exit(EXIT_FAILURE);
+  }
+
+  // init curl
+  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
+    S3FS_PRN_EXIT("Could not initiate curl library.");
+    s3fs_destroy_global_ssl();
+    exit(EXIT_FAILURE);
+  }
+
   // clear this structure
   memset(&s3fs_oper, 0, sizeof(s3fs_oper));
 
@@ -4927,6 +4907,8 @@ int main(int argc, char* argv[])
   // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -4936,6 +4918,8 @@ int main(int argc, char* argv[])
   // as well as to make sure that big read requests that are splitted by the kernel
   // are always read in-order
   if (!fuse_read_mode_set && 0 != fuse_opt_add_arg(&custom_args, "-osync_read")){
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -4944,10 +4928,14 @@ int main(int argc, char* argv[])
   //
   if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
     S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
   if(!S3fsCurl::FinalCheckSse()){
     S3FS_PRN_EXIT("something wrong about SSE options.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -4955,12 +4943,16 @@ int main(int argc, char* argv[])
   if(bucket.size() == 0){
     S3FS_PRN_EXIT("missing BUCKET argument.");
     show_usage();
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
   // bucket names cannot contain upper case characters in virtual-hosted style
   if((!pathrequeststyle) && (lower(bucket) != bucket)){
     S3FS_PRN_EXIT("BUCKET %s, name not compatible with virtual-hosted style.", bucket.c_str());
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -4968,6 +4960,8 @@ int main(int argc, char* argv[])
   found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
   if(found != string::npos){
     S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -4979,6 +4973,8 @@ int main(int argc, char* argv[])
     if(mountpoint.size() == 0){
       S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
       show_usage();
+      S3fsCurl::DestroyS3fsCurl();
+      s3fs_destroy_global_ssl();
       exit(EXIT_FAILURE);
     }
   }
@@ -4986,18 +4982,26 @@ int main(int argc, char* argv[])
   // error checking of command line arguments for compatibility
   if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
   if(passwd_file.size() > 0 && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
   if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
     if(EXIT_SUCCESS != get_access_keys()){
+      S3fsCurl::DestroyS3fsCurl();
+      s3fs_destroy_global_ssl();
       exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::IsSetAccessKeys()){
       S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
+      S3fsCurl::DestroyS3fsCurl();
+      s3fs_destroy_global_ssl();
       exit(EXIT_FAILURE);
     }
     // More error checking on the access key pair can be done
@@ -5007,6 +5011,8 @@ int main(int argc, char* argv[])
   // check cache dir permission
   if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
     S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -5021,12 +5027,16 @@ int main(int argc, char* argv[])
       S3fsCurl::SetDefaultAcl("");
     }else if(defaultACL != "public-read"){
       S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
-      return -1;
+      S3fsCurl::DestroyS3fsCurl();
+      s3fs_destroy_global_ssl();
+      exit(EXIT_FAILURE);
     }
 
     if(create_bucket && !S3fsCurl::IsSetAccessKeyID()){
       S3FS_PRN_EXIT("missing service instance ID for bucket creation");
-      return -1;
+      S3fsCurl::DestroyS3fsCurl();
+      s3fs_destroy_global_ssl();
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -5060,12 +5070,18 @@ int main(int argc, char* argv[])
   */
 
   if(utility_mode){
-    exit(s3fs_utility_mode());
+    int exitcode = s3fs_utility_mode();
+
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
+    exit(exitcode);
   }
 
   // check free disk space
   if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
     S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -5112,6 +5128,8 @@ int main(int argc, char* argv[])
   // set signal handler for debugging
   if(!set_s3fs_usr2_handler()){
     S3FS_PRN_EXIT("could not set signal handler for SIGUSR2.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
 
@@ -5119,6 +5137,10 @@ int main(int argc, char* argv[])
   fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
   fuse_opt_free_args(&custom_args);
 
+  // Destroy curl
+  if(!S3fsCurl::DestroyS3fsCurl()){
+    S3FS_PRN_WARN("Could not release curl library.");
+  }
   s3fs_destroy_global_ssl();
 
   // cleanup xml2

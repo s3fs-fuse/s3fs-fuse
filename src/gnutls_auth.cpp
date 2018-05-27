@@ -272,12 +272,14 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     }else if(-1 == bytes){
       // error
       S3FS_PRN_ERR("file read error(%d)", errno);
+      gcry_md_close(ctx_md5);
       return NULL;
     }
     gcry_md_write(ctx_md5, buf, bytes);
     memset(buf, 0, 512);
   }
   if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
+    gcry_md_close(ctx_md5);
     return NULL;
   }
   memcpy(result, gcry_md_read(ctx_md5, 0), get_md5_digest_length());
@@ -418,12 +420,14 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     }else if(-1 == bytes){
       // error
       S3FS_PRN_ERR("file read error(%d)", errno);
+      gcry_md_close(ctx_sha256);
       return NULL;
     }
     gcry_md_write(ctx_sha256, buf, bytes);
     memset(buf, 0, 512);
   }
   if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
+    gcry_md_close(ctx_sha256);
     return NULL;
   }
   memcpy(result, gcry_md_read(ctx_sha256, 0), get_sha256_digest_length());

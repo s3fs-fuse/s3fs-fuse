@@ -396,14 +396,14 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
   if(!S3fsCurl::InitGlobalCurl()){
     return false;
   }
-  sCurlPool = new CurlHandlerPool(sCurlPoolSize);
-  if (!sCurlPool->Init()) {
-    return false;
-  }
   if(!S3fsCurl::InitShareCurl()){
     return false;
   }
   if(!S3fsCurl::InitCryptMutex()){
+    return false;
+  }
+  sCurlPool = new CurlHandlerPool(sCurlPoolSize);
+  if (!sCurlPool->Init()) {
     return false;
   }
   return true;
@@ -419,6 +419,8 @@ bool S3fsCurl::DestroyS3fsCurl(void)
   if(!sCurlPool->Destroy()){
     result = false;
   }
+  delete sCurlPool;
+  sCurlPool = NULL;
   if(!S3fsCurl::DestroyShareCurl()){
     result = false;
   }
@@ -1726,7 +1728,7 @@ bool S3fsCurl::CreateCurlHandle(bool force)
       S3FS_PRN_WARN("already create handle.");
       return false;
     }
-    if(!DestroyCurlHandle()){
+    if(!DestroyCurlHandle(true)){
       S3FS_PRN_ERR("could not destroy handle.");
       return false;
     }
@@ -1754,30 +1756,33 @@ bool S3fsCurl::CreateCurlHandle(bool force)
   return true;
 }
 
-bool S3fsCurl::DestroyCurlHandle(void)
+bool S3fsCurl::DestroyCurlHandle(bool force)
 {
-  if(!hCurl){
-    return false;
-  }
-  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
-
-  S3fsCurl::curl_times.erase(hCurl);
-  S3fsCurl::curl_progress.erase(hCurl);
-  if(retry_count == 0){
-    sCurlPool->ReturnHandler(hCurl);
-  }
-  hCurl = NULL;
   ClearInternalData();
 
-  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+  if(hCurl){
+    pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+
+    S3fsCurl::curl_times.erase(hCurl);
+    S3fsCurl::curl_progress.erase(hCurl);
+    if(retry_count == 0 || force){
+      sCurlPool->ReturnHandler(hCurl);
+    }else{
+      curl_easy_cleanup(hCurl);
+    }
+    hCurl = NULL;
+
+    pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
+  }else{
+    return false;
+  }
   return true;
 }
 
 bool S3fsCurl::ClearInternalData(void)
 {
-  if(hCurl){
-    return false;
-  }
+  // Always clear internal data
+  //
   type        = REQTYPE_UNSET;
   path        = "";
   base_path   = "";
@@ -2718,10 +2723,10 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     // If has SSE-C keys, try to get with all SSE-C keys.
     for(int pos = 0; static_cast<size_t>(pos) < S3fsCurl::sseckeys.size(); pos++){
       if(!DestroyCurlHandle()){
-        return result;
+        break;
       }
       if(!PreHeadRequest(tpath, NULL, NULL, pos)){
-        return result;
+        break;
       }
       if(0 == (result = RequestPerform())){
         break;
