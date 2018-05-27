@@ -149,7 +149,6 @@ References
 
 * [goofys](https://github.com/kahing/goofys) - similar to s3fs but has better performance and less POSIX compatibility
 * [s3backer](https://github.com/archiecobbs/s3backer) - mount an S3 bucket as a single file
-* [s3fs-python](https://fedorahosted.org/s3fs/) - an older and less complete implementation written in Python
 * [S3Proxy](https://github.com/gaul/s3proxy) - combine with s3fs to mount EMC Atmos, Microsoft Azure, and OpenStack Swift buckets
 * [s3ql](https://bitbucket.org/nikratio/s3ql/) - similar to s3fs but uses its own object format
 * [YAS3FS](https://github.com/danilop/yas3fs) - similar to s3fs but uses SNS to allow multiple clients to mount a bucket
