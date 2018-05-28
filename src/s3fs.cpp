@@ -120,7 +120,6 @@ static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
-static bool fuse_read_mode_set    = false;
 static bool load_iamrole          = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
@@ -4323,10 +4322,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       allow_other = true;
       return 1; // continue for fuse option
     }
-    if(0 == strcmp(arg, "sync_read") || 0 == strcmp(arg, "async_read")){
-      fuse_read_mode_set = true;
-      return 1; // continue for fuse option
-    }
     if(0 == STR2NCMP(arg, "mp_umask=")){
       mp_umask = strtol(strchr(arg, '=') + sizeof(char), NULL, 0);
       mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
@@ -4907,17 +4902,6 @@ int main(int argc, char* argv[])
   // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // s3fs read is sync (fdent_lock is locked while reading)
-  // FUSE is async read by default
-  // switch FUSE to sync read to avoid hitting FUSE's max_background limit
-  // as well as to make sure that big read requests that are splitted by the kernel
-  // are always read in-order
-  if (!fuse_read_mode_set && 0 != fuse_opt_add_arg(&custom_args, "-osync_read")){
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
