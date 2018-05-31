@@ -4523,6 +4523,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       is_ibm_iam_auth = true;
       return 0;
     }
+    if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
+      std::string endpoint_url = "";
+      std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
+      // Check url for http / https protocol string
+      if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
+         S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
+         return -1;
+      }
+      endpoint_url = iam_endpoint + "/oidc/token";
+      S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
+    }
     if(0 == strcmp(arg, "ecs")){
       if (is_ibm_iam_auth) {
         S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
