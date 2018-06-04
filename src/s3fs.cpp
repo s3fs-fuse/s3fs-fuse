@@ -4533,6 +4533,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }
       endpoint_url = iam_endpoint + "/oidc/token";
       S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
+      return 0;
     }
     if(0 == strcmp(arg, "ecs")){
       if (is_ibm_iam_auth) {
