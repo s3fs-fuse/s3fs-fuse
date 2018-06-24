@@ -74,6 +74,11 @@ bool s3fs_init_global_ssl(void)
   if(GNUTLS_E_SUCCESS != gnutls_global_init()){
     return false;
   }
+#ifndef USE_GNUTLS_NETTLE
+  if(NULL == gcry_check_version(NULL)){
+    return false;
+  }
+#endif	// USE_GNUTLS_NETTLE
   return true;
 }
 
