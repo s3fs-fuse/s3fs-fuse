@@ -1633,10 +1633,10 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
         int newline = 0;
         if (eol == NULL) {
           eol = (char*)memchr(p, '\r', remaining);
-        } else if (eol > p && *(eol - 1) == '\r') {
-          newline++;
-        }
-        if (eol != NULL) {
+        } else {
+          if (eol > p && *(eol - 1) == '\r') {
+            newline++;
+          }
           newline++;
           eol++;
         }
