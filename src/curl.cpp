@@ -2071,11 +2071,11 @@ int S3fsCurl::RequestPerform(void)
         // Service response codes which are >= 400 && < 500
         switch(LastResponseCode){
           case 400:
-            S3FS_PRN_ERR("HTTP response code %ld, Returning EIO, Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
+            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
             return -EIO;
 
           case 403:
-            S3FS_PRN_ERR("HTTP response code %ld, Returning EPERM, Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
+            S3FS_PRN_ERR("HTTP response code %ld, returning EPERM. Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
             return -EPERM;
 
           case 404:
@@ -2084,7 +2084,7 @@ int S3fsCurl::RequestPerform(void)
             return -ENOENT;
 
           default:
-            S3FS_PRN_ERR("HTTP response code %ld, Returning EIO, Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
+            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
             return -EIO;
         }
         break;
