@@ -2494,7 +2494,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     // For dir with children, expect "dir/" and "dir/child"
     query_maxkey += "max-keys=2";
   }else{
-    query_maxkey += "max-keys=1000";
+    query_maxkey += "max-keys=15000";
   }
 
   while(truncated){
