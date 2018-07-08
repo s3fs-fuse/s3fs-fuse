@@ -1,6 +1,37 @@
 ﻿ChangeLog for S3FS
 ------------------
 
+Version 1.84 -- Jul 8, 2018
+#704 - Update README.md with details about .passwd-s3fs
+#710 - add disk space reservation
+#712 - Added Cygwin build options
+#714 - reduce lock contention on file open
+#724 - don't fail multirequest on single thread error
+#726 - add an instance_name option for logging
+#727 - Fixed Travis CI error about cppcheck - #713
+#729 - FreeBSD build fixes
+#733 - More useful error message for dupe entries in passwd file
+#739 - cleanup curl handle state on retries
+#745 - don't fail mkdir when directory exists
+#753 - fix xpath selector in bucket listing
+#754 - Validate the URL format for http/https
+#755 - Added reset curl handle when returning to handle pool
+#756 - Optimize defaults
+#761 - Simplify installation for Ubuntu 16.04
+#762 - Upgrade to S3Proxy 1.6.0
+#763 - cleanup curl handles before curl share
+#764 - Remove false multihead warnings
+#765 - Add Debian installation instructions
+#766 - Remove s3fs-python
+#768 - Fixed memory leak
+#769 - Revert "enable FUSE read_sync by default"
+#774 - Option for IAM authentication endpoint
+#780 - gnutls_auth: initialize libgcrypt
+#781 - Fixed an error by cppcheck on OSX
+#786 - Log messages for 5xx and 4xx HTTP response code
+#789 - Instructions for SUSE and openSUSE prebuilt packages
+#793 - Added list_object_max_keys option based on #783 PR
+
 Version 1.83 -- Dec 17, 2017
 #606 - Add Homebrew instructions
 #608 - Fix chown_nocopy losing existing uid/gid if unspecified
