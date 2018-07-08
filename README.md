@@ -26,16 +26,22 @@ Some systems provide pre-built packages:
 
 * On Debian 9 and Ubuntu 16.04 or newer:
 
-```
-sudo apt-get install s3fs
-```
+  ```
+  sudo apt-get install s3fs
+  ```
+
+* On SUSE 12 or newer and openSUSE 42.1 or newer:
+
+  ```
+  sudo zypper in s3fs
+  ```
 
 * On Mac OS X, install via [Homebrew](http://brew.sh/):
 
-```ShellSession
-$ brew cask install osxfuse
-$ brew install s3fs
-```
+  ```ShellSession
+  $ brew cask install osxfuse
+  $ brew install s3fs
+  ```
 
 Compilation
 -----------
