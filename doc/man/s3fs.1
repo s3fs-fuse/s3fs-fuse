@@ -62,7 +62,7 @@ the default canned acl to apply to all written s3 objects, e.g., "private", "pub
 empty string means do not send header.
 see http://aws.amazon.com/documentation/s3/ for the full list of canned acls.
 .TP
-\fB\-o\fR retries (default="2")
+\fB\-o\fR retries (default="5")
 number of times to retry a failed S3 transaction.
 .TP
 \fB\-o\fR use_cache (default="" which means disabled)
@@ -143,7 +143,10 @@ time to wait for connection before giving up.
 \fB\-o\fR readwrite_timeout (default="60" seconds)
 time to wait between read/write activity before giving up.
 .TP
-\fB\-o\fR max_stat_cache_size (default="1000" entries (about 4MB))
+\fB\-o\fR list_object_max_keys (default="1000")
+specify the maximum number of keys returned by S3 list object API. The default is 1000. you can set this value to 1000 or more.
+.TP
+\fB\-o\fR max_stat_cache_size (default="100,000" entries (about 40MB))
 maximum number of entries in the stat cache
 .TP
 \fB\-o\fR stat_cache_expire (default is no expire)

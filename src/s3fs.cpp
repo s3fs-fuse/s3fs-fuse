@@ -136,6 +136,7 @@ static int64_t singlepart_copy_limit = FIVE_GB;
 static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
+static int max_keys_list_object   = 1000;// default is 1000
 
 static const std::string allbucket_fields_type = "";         // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
@@ -2494,7 +2495,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     // For dir with children, expect "dir/" and "dir/child"
     query_maxkey += "max-keys=2";
   }else{
-    query_maxkey += "max-keys=1000";
+    query_maxkey += "max-keys=" + str(max_keys_list_object);
   }
 
   while(truncated){
@@ -4608,6 +4609,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "readwrite_timeout=")){
       time_t rwtimeout = static_cast<time_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       S3fsCurl::SetReadwriteTimeout(rwtimeout);
+      return 0;
+    }
+    if(0 == strcmp(arg, "list_object_max_keys")){
+      int max_keys = static_cast<int>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
+      if(max_keys < 1000){
+        S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
+        return -1;
+      }
+      max_keys_list_object = max_keys;
       return 0;
     }
     if(0 == STR2NCMP(arg, "max_stat_cache_size=")){
