@@ -4975,6 +4975,20 @@ int main(int argc, char* argv[])
     }
   }
 
+  // Mount point should be different from cache folder.
+  char *mount_path = realpath(mountpoint.c_str(), NULL);
+  char *cache_path = realpath(FdManager::GetCacheDir(), NULL);
+  if(0 == STR2NCMP(mount_path, cache_path)){
+  S3FS_PRN_EXIT("mountpoint should be different from cache folder.");
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
+    free(mount_path);
+    free(cache_path);
+    exit(EXIT_FAILURE);
+  }
+  free(mount_path);
+  free(cache_path);
+
   // error checking of command line arguments for compatibility
   if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
