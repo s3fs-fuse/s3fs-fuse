@@ -153,6 +153,7 @@ class FdEntity
     void SetPath(const std::string &newpath) { path = newpath; }
     int GetFd(void) const { return fd; }
 
+    const char* GetCachePath(void) const { return cachepath.c_str(); }
     bool GetStats(struct stat& st);
     int SetMtime(time_t time);
     bool UpdateMtime(void);

@@ -2141,19 +2141,45 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd, bool ignore_existf
   return ent;
 }
 
-void FdManager::Rename(const std::string &from, const std::string &to)
+void FdManager::Rename(const string& from, const string& to)
 {
   AutoLock auto_lock(&FdManager::fd_manager_lock);
-  fdent_map_t::iterator iter = fent.find(from);
-  if(fent.end() != iter){
+  fdent_map_t::iterator iter;
+  if (0 < FdManager::cache_dir.size()) {
+    iter = fent.find(from);
+    if (fent.end() == iter)
+    	return;
+    string to_cache;
+    FdManager::MakeCachePath(to.c_str(), to_cache, false);
+    if(rename(iter->second->GetCachePath(), to_cache.c_str()) < 0)
+    {
+      S3FS_PRN_WARN("[form=%s][to=%s] ERROR", 
+      	            iter->second->GetCachePath(), to_cache.c_str());
+    }
+
     // found
     S3FS_PRN_DBG("[from=%s][to=%s]", from.c_str(), to.c_str());
     FdEntity* ent = (*iter).second;
     fent.erase(iter);
     ent->SetPath(to);
     fent[to] = ent;
+    
+  } else {
+    fdent_map_t::iterator from_it = fent.end();
+    for (iter = fent.begin(); iter != fent.end(); iter++) {
+      if (0 == strcmp((*iter).second->GetPath(), to.c_str())) {
+	fent.erase(iter);
+      } else if (0 == strcmp((*iter).second->GetPath(), from.c_str())) {
+        from_it = iter;
+      }
+    }
+    if (fent.end() != from_it) {
+      from_it->second->SetPath(to);
+    }
   }
+
 }
+
 
 bool FdManager::Close(FdEntity* ent)
 {
