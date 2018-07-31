@@ -2599,6 +2599,12 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
     xmlNodeSetPtr key_nodes = key->nodesetval;
     char* name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
+    //utf-8 support
+    string name_decode=urlDecode(name);
+    name = new char[name_decode.size() + 1];
+    std::copy(name_decode.begin(), name_decode.end(), name);
+    name[name_decode.size()] = '\0';
+
     if(!name){
       S3FS_PRN_WARN("name is something wrong. but continue.");
 
