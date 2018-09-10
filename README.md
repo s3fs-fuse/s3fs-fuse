@@ -79,11 +79,11 @@ The default location for the s3fs password file can be created:
 * using a .passwd-s3fs file in the users home directory (i.e. ~/.passwd-s3fs)
 * using the system-wide /etc/passwd-s3fs file
 
-Enter your S3 identity and credential in a file `~/.passwd-s3fs` and set
+Enter your credentials in a file `~/.passwd-s3fs` and set
 owner-only permissions:
 
 ```
-echo MYIDENTITY:MYCREDENTIAL >  ~/.passwd-s3fs
+echo ACCESS_KEY_ID:SECRET_ACCESS_KEY >  ~/.passwd-s3fs
 chmod 600  ~/.passwd-s3fs
 ```
 
@@ -131,7 +131,7 @@ The Service Instance ID is only required when using the `-o create_bucket` optio
 Note: You may also want to create the global credential file first
 
 ```
-echo MYIDENTITY:MYCREDENTIAL > /etc/passwd-s3fs
+echo ACCESS_KEY_ID:SECRET_ACCESS_KEY > /etc/passwd-s3fs
 chmod 600 /etc/passwd-s3fs
 ```
 
