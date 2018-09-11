@@ -3420,6 +3420,10 @@ static void* s3fs_init(struct fuse_conn_info* conn)
   }
   #endif
 
+  if((unsigned int)conn->capable & FUSE_CAP_BIG_WRITES){
+     conn->want |= FUSE_CAP_BIG_WRITES;
+  }
+
   return NULL;
 }
 
