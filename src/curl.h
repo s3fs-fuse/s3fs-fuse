@@ -163,6 +163,7 @@ typedef std::list<sseckeymap_t>            sseckeylist_t;
 enum storage_class_t {
   STANDARD,
   STANDARD_IA,
+  ONEZONE_IA,
   REDUCED_REDUNDANCY
 };
 
