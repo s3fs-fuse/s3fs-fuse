@@ -36,6 +36,17 @@ Some systems provide pre-built packages:
   sudo zypper in s3fs
   ```
 
+* On Fedora 27 and newer:
+  ```
+  sudo yum install s3fs-fuse
+  ```
+
+* On RHEL 7 and CentOS 7 trough EPEL 7 repositories:
+  ```
+  sudo yum install epel-release
+  sudo yum install s3fs-fuse
+  ```
+
 * On Mac OS X, install via [Homebrew](http://brew.sh/):
 
   ```ShellSession
@@ -52,12 +63,6 @@ On Ubuntu 14.04:
 
 ```
 sudo apt-get install automake autotools-dev fuse g++ git libcurl4-openssl-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
-```
-
-On CentOS 7:
-
-```
-sudo yum install automake fuse fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
 ```
 
 Then compile from master via the following commands:
