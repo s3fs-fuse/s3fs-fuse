@@ -1024,7 +1024,7 @@ void show_help (void)
     "\n"
     "   storage_class (default=\"standard\")\n"
     "      - store object with specified storage class.  Possible values:\n"
-    "        standard, standard_ia, and reduced_redundancy.\n"
+    "        standard, standard_ia, onezone_ia and reduced_redundancy.\n"
     "\n"
     "   use_sse (default is disable)\n"
     "      - Specify three type Amazon's Server-Site Encryption: SSE-S3,\n"

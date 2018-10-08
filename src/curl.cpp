@@ -2816,6 +2816,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
+  } else if(ONEZONE_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
   }
   // SSE
   if(!is_copy){
@@ -2945,6 +2947,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
+  } else if(ONEZONE_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
   }
   // SSE
   string ssevalue("");
@@ -3212,6 +3216,8 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
   } else if(STANDARD_IA == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
+  } else if(ONEZONE_IA == GetStorageClass()){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
   }
   // SSE
   if(!is_copy){
