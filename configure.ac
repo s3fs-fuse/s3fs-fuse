@@ -36,7 +36,7 @@ AC_CHECK_HEADERS([sys/extattr.h])
 CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64"
 
 dnl ----------------------------------------------
-dnl For OSX
+dnl For macOS
 dnl ----------------------------------------------
 case "$target" in
    *-cygwin* )
@@ -237,7 +237,7 @@ dnl ----------------------------------------------
 dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
-dnl clock_gettime function(osx)
+dnl clock_gettime function(macos)
 AC_SEARCH_LIBS([clock_gettime],[rt posix4]) 
 AC_CHECK_FUNCS([clock_gettime])
 
