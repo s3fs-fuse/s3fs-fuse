@@ -19,8 +19,8 @@ Features
 * user-specified regions, including Amazon GovCloud
 * authenticate via v2 or v4 signatures
 
-Installation
-------------
+Installation from pre-built packages
+------------------------------------
 
 Some systems provide pre-built packages:
 
@@ -54,27 +54,35 @@ Some systems provide pre-built packages:
   $ brew install s3fs
   ```
 
-Compilation
------------
+Compilation and installation from sources
+-----------------------------------------
 
-* On Linux, ensure you have all the dependencies:
+These are generic instructions to compile from the master branch, and should work on almost any GNU/Linux, Mac OS, BSD or similar.
 
-On Ubuntu 14.04:
+If you want specific instructions for some distributions, check the [wiki](https://github.com/s3fs-fuse/s3fs-fuse/wiki/Installation-Notes).
 
-```
-sudo apt-get install automake autotools-dev fuse g++ git libcurl4-openssl-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
-```
+Keep in mind using the pre-built packages when available.
 
-Then compile from master via the following commands:
+1. Ensure your system satisfies build and runtime dependencies for:
 
-```
-git clone https://github.com/s3fs-fuse/s3fs-fuse.git
-cd s3fs-fuse
-./autogen.sh
-./configure
-make
-sudo make install
-```
+   * fuse >= 2.8.4
+   * automake
+   * gcc-c++
+   * make
+   * libcurl
+   * libxml2
+   * openssl
+
+2. Then compile from master via the following commands:
+
+   ```
+   git clone https://github.com/s3fs-fuse/s3fs-fuse.git
+   cd s3fs-fuse
+   ./autogen.sh
+   ./configure
+   make
+   sudo make install
+   ```
 
 Examples
 --------
