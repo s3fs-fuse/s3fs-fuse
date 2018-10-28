@@ -1,6 +1,6 @@
 ### Additional Information
 _The following information is very important in order to help us to help you. Omission of the following details may delay your support request or receive no attention at all._
-_Keep in mind that the commands we provide to retrieve information are oriented to GNU/Linux Distributions, so you could need to use others if you use s3fs on MacOS or BSD_
+_Keep in mind that the commands we provide to retrieve information are oriented to GNU/Linux Distributions, so you could need to use others if you use s3fs on macOS or BSD_
 
 #### Version of s3fs being used (s3fs --version)
 _example: 1.00_
