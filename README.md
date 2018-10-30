@@ -41,7 +41,7 @@ Some systems provide pre-built packages:
   sudo yum install s3fs-fuse
   ```
 
-* On RHEL 7 and CentOS 7 trough EPEL 7 repositories:
+* On RHEL/CentOS 7 and newer through EPEL repositories:
   ```
   sudo yum install epel-release
   sudo yum install s3fs-fuse
