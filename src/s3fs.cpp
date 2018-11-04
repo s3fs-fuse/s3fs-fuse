@@ -103,6 +103,7 @@ std::string cipher_suites         = "";
 std::string instance_name         = "";
 s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
+std::string aws_profile           = "default";
 
 //-------------------------------------------------------------------
 // Static variables
@@ -194,6 +195,7 @@ static int s3fs_check_service(void);
 static int parse_passwd_file(bucketkvmap_t& resmap);
 static int check_for_aws_format(const kvmap_t& kvmap);
 static int check_passwd_file_perms(void);
+static int read_aws_credentials_file(const std::string &filename);
 static int read_passwd_file(void);
 static int get_access_keys(void);
 static int set_mountpoint_attribute(struct stat& mpst);
@@ -3990,6 +3992,61 @@ static int check_passwd_file_perms(void)
   return EXIT_SUCCESS;
 }
 
+static int read_aws_credentials_file(const std::string &filename)
+{
+  // open passwd file
+  ifstream PF(filename.c_str());
+  if(!PF.good()){
+    return -1;
+  }
+
+  string profile;
+  string accesskey;
+  string secret;
+
+  // read each line
+  string line;
+  while(getline(PF, line)){
+    line = trim(line);
+    if(0 == line.size()){
+      continue;
+    }
+    if('#' == line[0]){
+      continue;
+    }
+
+    if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
+      if(profile == aws_profile){
+        break;
+      }
+      profile = line.substr(1, line.size() - 2);
+      accesskey.clear();
+      secret.clear();
+    }
+
+    size_t pos = line.find_first_of('=');
+    if(pos == string::npos){
+      continue;
+    }
+    string key   = trim(line.substr(0, pos));
+    string value = trim(line.substr(pos + 1, string::npos));
+    if(key == "aws_access_key_id"){
+      accesskey = value;
+    }else if(key == "aws_secret_access_key"){
+      secret = value;
+    }
+  }
+
+  if(profile != aws_profile){
+    return EXIT_FAILURE;
+  }
+  if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
+    S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
+    return EXIT_FAILURE;
+  }
+  return EXIT_SUCCESS;
+}
+
 //
 // read_passwd_file
 //
@@ -4071,6 +4128,7 @@ static int read_passwd_file(void)
 // keys:
 //
 // 1 - from the command line  (security risk)
+// 1a - from ${HOME}/.aws/credentials
 // 2 - from a password file specified on the command line
 // 3 - from environment variables
 // 4 - from the users ~/.passwd-s3fs
@@ -4091,6 +4149,15 @@ static int get_access_keys(void)
   // 1 - keys specified on the command line
   if(S3fsCurl::IsSetAccessKeys()){
      return EXIT_SUCCESS;
+  }
+
+  // 1a - check ${HOME}/.aws/credentials
+  std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
+  if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }else if(aws_profile != "default"){
+    S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
+    return EXIT_FAILURE;
   }
 
   // 2 - was specified on the command line
@@ -4570,6 +4637,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         load_iamrole = false;
         return 0;
       }
+    }
+    if(0 == STR2NCMP(arg, "profile=")){
+      aws_profile = strchr(arg, '=') + sizeof(char);
+      return 0;
     }
     if(0 == STR2NCMP(arg, "public_bucket=")){
       off_t pubbucket = s3fs_strtoofft(strchr(arg, '=') + sizeof(char));

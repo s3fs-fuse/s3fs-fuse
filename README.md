@@ -87,6 +87,10 @@ Keep in mind using the pre-built packages when available.
 Examples
 --------
 
+s3fs supports the standard
+[AWS credentials file](https://docs.aws.amazon.com/cli/latest/userguide/cli-config-files.html)
+stored in `${HOME}/.aws/credentials`.  Alternatively, s3fs supports a custom passwd file.
+
 The default location for the s3fs password file can be created:
 
 * using a .passwd-s3fs file in the users home directory (i.e. ~/.passwd-s3fs)
