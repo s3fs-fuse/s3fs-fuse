@@ -20,6 +20,8 @@ For unprivileged user.
 .SH DESCRIPTION
 s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
 .SH AUTHENTICATION
+s3fs supports the standard AWS credentials (filehttps://docs.aws.amazon.com/cli/latest/userguide/cli-config-files.html) stored in `${HOME}/.aws/credentials`.
+Alternatively, s3fs supports a custom passwd file.
 The s3fs password file has this format (use this format if you have only one set of credentials):
 .RS 4
 \fBaccessKeyId\fP:\fBsecretAccessKey\fP
@@ -132,6 +134,10 @@ This option specifies the configuration file path which file is the additional H
  -----------
  A sample configuration file is uploaded in "test" directory.
 If you specify this option for set "Content-Encoding" HTTP header, please take care for RFC 2616.
+.TP
+\fB\-o\fR profile (default="default")
+Choose a profile from ${HOME}/.aws/credentials to authenticate against S3.
+Note that this format matches the AWS CLI format and differs from the s3fs passwd format.
 .TP
 \fB\-o\fR public_bucket (default="" which means disabled)
 anonymously mount a public bucket when set to 1, ignores the $HOME/.passwd-s3fs and /etc/passwd-s3fs files.
