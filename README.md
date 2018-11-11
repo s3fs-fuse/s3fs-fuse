@@ -93,27 +93,27 @@ stored in `${HOME}/.aws/credentials`.  Alternatively, s3fs supports a custom pas
 
 The default location for the s3fs password file can be created:
 
-* using a .passwd-s3fs file in the users home directory (i.e. ~/.passwd-s3fs)
+* using a .passwd-s3fs file in the users home directory (i.e. ${HOME}/.passwd-s3fs)
 * using the system-wide /etc/passwd-s3fs file
 
-Enter your credentials in a file `~/.passwd-s3fs` and set
+Enter your credentials in a file `${HOME}/.passwd-s3fs` and set
 owner-only permissions:
 
 ```
-echo ACCESS_KEY_ID:SECRET_ACCESS_KEY >  ~/.passwd-s3fs
-chmod 600  ~/.passwd-s3fs
+echo ACCESS_KEY_ID:SECRET_ACCESS_KEY > ${HOME}/.passwd-s3fs
+chmod 600 ${HOME}/.passwd-s3fs
 ```
 
 Run s3fs with an existing bucket `mybucket` and directory `/path/to/mountpoint`:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=~/.passwd-s3fs
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs
 ```
 
 If you encounter any errors, enable debug output:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=~/.passwd-s3fs -o dbglevel=info -f -o curldbg
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o dbglevel=info -f -o curldbg
 ```
 
 You can also mount on boot by entering the following line to `/etc/fstab`:
@@ -131,7 +131,7 @@ mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 If you use s3fs with a non-Amazon S3 implementation, specify the URL and path-style requests:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=~/.passwd-s3fs -o url=http://url.to.s3/ -o use_path_request_style
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=http://url.to.s3/ -o use_path_request_style
 ```
 
 or(fstab)
