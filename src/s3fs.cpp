@@ -4617,7 +4617,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       S3fsCurl::SetReadwriteTimeout(rwtimeout);
       return 0;
     }
-    if(0 == strcmp(arg, "list_object_max_keys")){
+    if(0 == STR2NCMP(arg, "list_object_max_keys=")){
       int max_keys = static_cast<int>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       if(max_keys < 1000){
         S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
