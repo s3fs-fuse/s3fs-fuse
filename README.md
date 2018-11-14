@@ -179,6 +179,7 @@ References
 Frequently Asked Questions
 --------------------------
 * [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ)
+* [s3fs on StackOverflow](https://stackoverflow.com/questions/tagged/s3fs)
 
 License
 -------
