@@ -50,6 +50,7 @@
 #include "s3fs_util.h"
 #include "s3fs_auth.h"
 #include "addhead.h"
+#include "psemaphore.h"
 
 using namespace std;
 
@@ -1321,56 +1322,49 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   }
   s3fscurl.DestroyCurlHandle();
 
+  // Initialize S3fsMultiCurl
+  S3fsMultiCurl curlmulti;
+  curlmulti.SetSuccessCallback(S3fsCurl::UploadMultipartPostCallback);
+  curlmulti.SetRetryCallback(S3fsCurl::UploadMultipartPostRetryCallback);
+
   // cycle through open fd, pulling off 10MB chunks at a time
   for(remaining_bytes = st.st_size; 0 < remaining_bytes; ){
-    S3fsMultiCurl curlmulti;
-    int           para_cnt;
-    off_t         chunk;
+    off_t chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
 
-    // Initialize S3fsMultiCurl
-    curlmulti.SetSuccessCallback(S3fsCurl::UploadMultipartPostCallback);
-    curlmulti.SetRetryCallback(S3fsCurl::UploadMultipartPostRetryCallback);
+    // s3fscurl sub object
+    S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
+    s3fscurl_para->partdata.fd         = fd2;
+    s3fscurl_para->partdata.startpos   = st.st_size - remaining_bytes;
+    s3fscurl_para->partdata.size       = chunk;
+    s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
+    s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
+    s3fscurl_para->partdata.add_etag_list(&list);
 
-    // Loop for setup parallel upload(multipart) request.
-    for(para_cnt = 0; para_cnt < S3fsCurl::max_parallel_cnt && 0 < remaining_bytes; para_cnt++, remaining_bytes -= chunk){
-      // chunk size
-      chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
-
-      // s3fscurl sub object
-      S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
-      s3fscurl_para->partdata.fd         = fd2;
-      s3fscurl_para->partdata.startpos   = st.st_size - remaining_bytes;
-      s3fscurl_para->partdata.size       = chunk;
-      s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
-      s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
-      s3fscurl_para->partdata.add_etag_list(&list);
-
-      // initiate upload part for parallel
-      if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
-        S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-        close(fd2);
-        delete s3fscurl_para;
-        return result;
-      }
-
-      // set into parallel object
-      if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
-        S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-        close(fd2);
-        delete s3fscurl_para;
-        return -1;
-      }
+    // initiate upload part for parallel
+    if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
+      S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+      close(fd2);
+      delete s3fscurl_para;
+      return result;
     }
 
-    // Multi request
-    if(0 != (result = curlmulti.Request())){
-      S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
-      break;
+    // set into parallel object
+    if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+      S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
+      close(fd2);
+      delete s3fscurl_para;
+      return -1;
     }
 
-    // reinit for loop.
-    curlmulti.Clear();
+    remaining_bytes -= chunk;
   }
+
+  // Multi request
+  if(0 != (result = curlmulti.Request())){
+    S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+    return result;
+  }
+
   close(fd2);
 
   if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
@@ -1666,7 +1660,8 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
-    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE), op(""), query_string("")
+    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE), op(""), query_string(""),
+    sem(NULL)
 {
 }
 
@@ -3908,11 +3903,39 @@ int S3fsMultiCurl::MultiPerform(void)
   std::vector<pthread_t>   threads;
   bool                     success = true;
   bool                     isMultiHead = false;
+  Semaphore                sem(S3fsCurl::max_parallel_cnt);
 
   for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); ++iter) {
     pthread_t   thread;
     S3fsCurl*   s3fscurl = (*iter).second;
     int         rc;
+    s3fscurl->sem = &sem;
+
+    sem.wait();
+
+#ifndef __APPLE__
+    // macOS does not support pthread_tryjoin_np so we do not eagerly reap threads
+    for (std::vector<pthread_t>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
+      void*   retval;
+      int     rc;
+
+      rc = pthread_tryjoin_np(*iter, &retval);
+      if (rc == 0) {
+        iter = threads.erase(iter);
+        int int_retval = (int)(intptr_t)(retval);
+        if (int_retval && !(int_retval == ENOENT && isMultiHead)) {
+          S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
+        }
+        break;
+      } else if (rc == EBUSY) {
+        continue;
+      } else {
+        iter = threads.erase(iter);
+        success = false;
+        S3FS_PRN_ERR("failed pthread_tryjoin_np - rc(%d)", rc);
+      }
+    }
+#endif
 
     isMultiHead |= s3fscurl->GetOp() == "HEAD";
 
@@ -3925,6 +3948,17 @@ int S3fsMultiCurl::MultiPerform(void)
 
     threads.push_back(thread);
   }
+
+  for(int i = 0; i < S3fsCurl::max_parallel_cnt; ++i){
+    sem.wait();
+  }
+
+#ifdef __APPLE__
+  // macOS cannot destroy a semaphore with posts less than the initializer
+  for(int i = 0; i < S3fsCurl::max_parallel_cnt; ++i){
+    sem.post();
+  }
+#endif
 
   for (std::vector<pthread_t>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
     void*   retval;
@@ -4052,7 +4086,10 @@ int S3fsMultiCurl::Request(void)
 
 // thread function for performing an S3fsCurl request
 void* S3fsMultiCurl::RequestPerformWrapper(void* arg) {
-  return (void*)(intptr_t)(static_cast<S3fsCurl*>(arg)->RequestPerform());
+  S3fsCurl* s3fscurl = static_cast<S3fsCurl*>(arg);
+  void *result = (void*)(intptr_t)(s3fscurl->RequestPerform());
+  s3fscurl->sem->post();
+  return result;
 }
 
 //-------------------------------------------------------------------
