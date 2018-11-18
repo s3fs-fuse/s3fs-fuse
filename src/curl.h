@@ -23,6 +23,8 @@
 
 #include <cassert>
 
+#include "psemaphore.h"
+
 //----------------------------------------------
 // Symbols
 //----------------------------------------------
@@ -278,6 +280,7 @@ class S3fsCurl
     sse_type_t           b_ssetype;            // backup for retrying
     std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
     std::string          query_string;         // request query string
+    Semaphore            *sem;
 
   public:
     // constructor/destructor
