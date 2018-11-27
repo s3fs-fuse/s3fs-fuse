@@ -3,6 +3,7 @@ language: cpp
 matrix:
   include:
     - os: linux
+    - os: linux-ppc64le
       sudo: required
       dist: trusty
       cache: apt
