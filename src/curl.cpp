@@ -3923,7 +3923,7 @@ int S3fsMultiCurl::MultiPerform(void)
       if (rc == 0) {
         iter = threads.erase(iter);
         int int_retval = (int)(intptr_t)(retval);
-        if (int_retval && !(int_retval == ENOENT && isMultiHead)) {
+        if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
           S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
         }
         break;
@@ -3970,7 +3970,7 @@ int S3fsMultiCurl::MultiPerform(void)
       S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
     } else {
       int int_retval = (int)(intptr_t)(retval);
-      if (int_retval && !(int_retval == ENOENT && isMultiHead)) {
+      if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
         S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
       }
     }
