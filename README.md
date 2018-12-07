@@ -57,7 +57,7 @@ Some systems provide pre-built packages:
 Compilation and installation from sources
 -----------------------------------------
 
-These are generic instructions to compile from the master branch, and should work on almost any GNU/Linux, Mac OS, BSD or similar.
+These are generic instructions to compile from the master branch, and should work on almost any GNU/Linux, macOS, BSD, or similar.
 
 If you want specific instructions for some distributions, check the [wiki](https://github.com/s3fs-fuse/s3fs-fuse/wiki/Installation-Notes).
 
