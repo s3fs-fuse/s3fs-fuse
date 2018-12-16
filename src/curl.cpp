@@ -103,21 +103,21 @@ static string url_to_host(const std::string &url)
 
   static const string http = "http://";
   static const string https = "https://";
-  std::string host;
+  std::string hostname;
 
   if (url.compare(0, http.size(), http) == 0) {
-    host = url.substr(http.size());
+    hostname = url.substr(http.size());
   } else if (url.compare(0, https.size(), https) == 0) {
-    host = url.substr(https.size());
+    hostname = url.substr(https.size());
   } else {
     assert(!"url does not begin with http:// or https://");
   }
 
   size_t idx;
-  if ((idx = host.find('/')) != string::npos) {
-    return host.substr(0, idx);
+  if ((idx = hostname.find('/')) != string::npos) {
+    return hostname.substr(0, idx);
   } else {
-    return host;
+    return hostname;
   }
 }
 
@@ -3904,24 +3904,23 @@ int S3fsMultiCurl::MultiPerform(void)
   bool                     success = true;
   bool                     isMultiHead = false;
   Semaphore                sem(S3fsCurl::max_parallel_cnt);
+  int                      rc;
 
   for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); ++iter) {
     pthread_t   thread;
     S3fsCurl*   s3fscurl = (*iter).second;
-    int         rc;
     s3fscurl->sem = &sem;
 
     sem.wait();
 
 #ifndef __APPLE__
     // macOS does not support pthread_tryjoin_np so we do not eagerly reap threads
-    for (std::vector<pthread_t>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
+    for (std::vector<pthread_t>::iterator titer = threads.begin(); titer != threads.end(); ++titer) {
       void*   retval;
-      int     rc;
 
-      rc = pthread_tryjoin_np(*iter, &retval);
+      rc = pthread_tryjoin_np(*titer, &retval);
       if (rc == 0) {
-        iter = threads.erase(iter);
+        titer = threads.erase(titer);
         int int_retval = (int)(intptr_t)(retval);
         if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
           S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
@@ -3930,7 +3929,7 @@ int S3fsMultiCurl::MultiPerform(void)
       } else if (rc == EBUSY) {
         continue;
       } else {
-        iter = threads.erase(iter);
+        titer = threads.erase(titer);
         success = false;
         S3FS_PRN_ERR("failed pthread_tryjoin_np - rc(%d)", rc);
       }
@@ -3960,11 +3959,10 @@ int S3fsMultiCurl::MultiPerform(void)
   }
 #endif
 
-  for (std::vector<pthread_t>::iterator iter = threads.begin(); iter != threads.end(); ++iter) {
+  for (std::vector<pthread_t>::iterator titer = threads.begin(); titer != threads.end(); ++titer) {
     void*   retval;
-    int     rc;
 
-    rc = pthread_join(*iter, &retval);
+    rc = pthread_join(*titer, &retval);
     if (rc) {
       success = false;
       S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
@@ -4308,7 +4306,7 @@ string prepare_url(const char* url)
   S3FS_PRN_INFO3("URL is %s", url);
 
   string uri;
-  string host;
+  string hostname;
   string path;
   string url_str = string(url);
   string token = string("/") + bucket;
@@ -4324,10 +4322,10 @@ string prepare_url(const char* url)
   uri  = url_str.substr(0, uri_length);
 
   if(!pathrequeststyle){
-    host = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    hostname = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
     path = url_str.substr((bucket_pos + bucket_length));
   }else{
-    host = url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    hostname = url_str.substr(uri_length, bucket_pos - uri_length).c_str();
     string part = url_str.substr((bucket_pos + bucket_length));
     if('/' != part[0]){
       part = "/" + part;
@@ -4335,7 +4333,7 @@ string prepare_url(const char* url)
     path = "/" + bucket + part;
   }
 
-  url_str = uri + host + path;
+  url_str = uri + hostname + path;
 
   S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 

@@ -158,6 +158,7 @@ typedef std::map<std::string, PXATTRVAL> xattrs_t;
 //
 // Global variables
 //
+// TODO: namespace these
 extern bool           foreground;
 extern bool           nomultipart;
 extern bool           pathrequeststyle;

@@ -2915,7 +2915,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
   // get from "{" to "}"
   string restxattrs;
   {
-    size_t startpos = string::npos;
+    size_t startpos;
     size_t endpos   = string::npos;
     if(string::npos != (startpos = jsonxattrs.find_first_of("{"))){
       endpos = jsonxattrs.find_last_of("}");
@@ -3223,9 +3223,9 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
   // calculate total name length
   size_t total = 0;
-  for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    if(0 < iter->first.length()){
-      total += iter->first.length() + 1;
+  for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+    if(0 < xiter->first.length()){
+      total += xiter->first.length() + 1;
     }
   }
 
@@ -3246,9 +3246,9 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
   // copy to list
   char* setpos = list;
-  for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    if(0 < iter->first.length()){
-      strcpy(setpos, iter->first.c_str());
+  for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+    if(0 < xiter->first.length()){
+      strcpy(setpos, xiter->first.c_str());
       setpos = &setpos[strlen(setpos) + 1];
     }
   }
@@ -3887,28 +3887,28 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
     if(first_pos == string::npos){
       continue;
     }
-    string bucket;
+    string bucketname;
     string accesskey;
     string secret;
     if(first_pos != last_pos){
       // formatted by "bucket:accesskey:secretkey"
-      bucket    = trim(iter->substr(0, first_pos));
+      bucketname    = trim(iter->substr(0, first_pos));
       accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
       secret    = trim(iter->substr(last_pos + 1, string::npos));
     }else{
       // formatted by "accesskey:secretkey"
-      bucket    = allbucket_fields_type;
+      bucketname    = allbucket_fields_type;
       accesskey = trim(iter->substr(0, first_pos));
       secret    = trim(iter->substr(first_pos + 1, string::npos));
     }
-    if(resmap.end() != resmap.find(bucket)){
-      S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", ("" == bucket ? "default" : bucket.c_str()));
+    if(resmap.end() != resmap.find(bucketname)){
+      S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", ("" == bucketname ? "default" : bucketname.c_str()));
       return -1;
     }
     kv.clear();
     kv[string(aws_accesskeyid)] = accesskey;
     kv[string(aws_secretkey)]   = secret;
-    resmap[bucket]              = kv;
+    resmap[bucketname]          = kv;
   }
   return (resmap.empty() ? 0 : 1);
 }
