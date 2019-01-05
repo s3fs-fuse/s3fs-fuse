@@ -972,23 +972,23 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
 
     if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), &keylength))) {
       raw_key = string(p_key, keylength);
-	  base64_key = onekey;
-	  free(p_key);
-	} else {
-	  S3FS_PRN_ERR("Failed to convert base64 to SSE-C key %s", onekey.c_str());
-	  return false;
-	}
+      base64_key = onekey;
+      free(p_key);
+    } else {
+      S3FS_PRN_ERR("Failed to convert base64 to SSE-C key %s", onekey.c_str());
+      return false;
+    }
   } else {
     char* pbase64_key;
 
     if(NULL != (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))) {
-	  raw_key = onekey;
+      raw_key = onekey;
       base64_key = pbase64_key;
       free(pbase64_key);
-	} else {
-	  S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
-	  return false;
-	}
+    } else {
+      S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
+      return false;
+    }
   }
 
   // make MD5
