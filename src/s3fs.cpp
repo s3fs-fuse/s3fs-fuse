@@ -4319,7 +4319,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
 
-    // the second NONPOT option is the mountpoint(not utility mode)
+    // the second NONOPT option is the mountpoint(not utility mode)
     if(0 == mountpoint.size() && 0 == utility_mode){
       // save the mountpoint and do some basic error checking
       mountpoint = arg;
@@ -4359,9 +4359,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
 
     // Unknown option
     if(0 == utility_mode){
-      S3FS_PRN_EXIT("specified unknown third optioni(%s).", arg);
+      S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
     }else{
-      S3FS_PRN_EXIT("specified unknown second optioni(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
+      S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
     }
     return -1;
 
