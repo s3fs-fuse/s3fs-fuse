@@ -4128,9 +4128,10 @@ static int read_passwd_file(void)
 // keys:
 //
 // 1 - from the command line  (security risk)
-// 1a - from ${HOME}/.aws/credentials
 // 2 - from a password file specified on the command line
 // 3 - from environment variables
+// 3a - from the AWS_CREDENTIAL_FILE environment variable
+// 3b - from ${HOME}/.aws/credentials
 // 4 - from the users ~/.passwd-s3fs
 // 5 - from /etc/passwd-s3fs
 //
@@ -4149,15 +4150,6 @@ static int get_access_keys(void)
   // 1 - keys specified on the command line
   if(S3fsCurl::IsSetAccessKeys()){
      return EXIT_SUCCESS;
-  }
-
-  // 1a - check ${HOME}/.aws/credentials
-  std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
-  if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }else if(aws_profile != "default"){
-    S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
-    return EXIT_FAILURE;
   }
 
   // 2 - was specified on the command line
@@ -4203,6 +4195,15 @@ static int get_access_keys(void)
         return EXIT_FAILURE;
       }
     }
+  }
+
+  // 3b - check ${HOME}/.aws/credentials
+  std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
+  if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }else if(aws_profile != "default"){
+    S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
+    return EXIT_FAILURE;
   }
 
   // 4 - from the default location in the users home directory
