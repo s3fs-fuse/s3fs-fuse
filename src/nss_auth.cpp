@@ -96,7 +96,6 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
   PK11SlotInfo* Slot;
   PK11SymKey*   pKey;
   PK11Context*  Context;
-  SECStatus     SecStatus;
   unsigned char tmpdigest[64];
   SECItem       KeySecItem   = {siBuffer, reinterpret_cast<unsigned char*>(const_cast<void*>(key)), static_cast<unsigned int>(keylen)};
   SECItem       NullSecItem  = {siBuffer, NULL, 0};
@@ -115,9 +114,9 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
   }
 
   *digestlen = 0;
-  if(SECSuccess != (SecStatus = PK11_DigestBegin(Context)) ||
-     SECSuccess != (SecStatus = PK11_DigestOp(Context, data, datalen)) ||
-     SECSuccess != (SecStatus = PK11_DigestFinal(Context, tmpdigest, digestlen, sizeof(tmpdigest))) )
+  if(SECSuccess != PK11_DigestBegin(Context) ||
+     SECSuccess != PK11_DigestOp(Context, data, datalen) ||
+     SECSuccess != PK11_DigestFinal(Context, tmpdigest, digestlen, sizeof(tmpdigest)) )
   {
     PK11_DestroyContext(Context, PR_TRUE);
     PK11_FreeSymKey(pKey);
