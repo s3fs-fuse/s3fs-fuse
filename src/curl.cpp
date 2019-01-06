@@ -964,19 +964,38 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
   if('#' == onekey[0]){
     return false;
   }
-  // make base64
-  char* pbase64_key;
-  if(NULL == (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))){
-    S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
-    return false;
+  // make base64 if the key is short enough, otherwise assume it is already so
+  string base64_key;
+  string raw_key;
+  if(onekey.length() > 256 / 8){
+    char* p_key;
+    size_t keylength;
+
+    if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), &keylength))) {
+      raw_key = string(p_key, keylength);
+      base64_key = onekey;
+      free(p_key);
+    } else {
+      S3FS_PRN_ERR("Failed to convert base64 to SSE-C key %s", onekey.c_str());
+      return false;
+    }
+  } else {
+    char* pbase64_key;
+
+    if(NULL != (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))) {
+      raw_key = onekey;
+      base64_key = pbase64_key;
+      free(pbase64_key);
+    } else {
+      S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
+      return false;
+    }
   }
-  string base64_key = pbase64_key;
-  free(pbase64_key);
 
   // make MD5
   string strMd5;
-  if(!make_md5_from_string(onekey.c_str(), strMd5)){
-    S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", onekey.c_str());
+  if(!make_md5_from_string(raw_key.c_str(), strMd5)){
+    S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", raw_key.c_str());
     return false;
   }
   // mapped MD5 = SSE Key
