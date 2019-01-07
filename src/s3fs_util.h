@@ -119,6 +119,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
 time_t get_mtime(const char *s);
 time_t get_mtime(headers_t& meta, bool overcheck = true);
+time_t get_ctime(headers_t& meta);
 off_t get_size(const char *s);
 off_t get_size(headers_t& meta);
 mode_t get_mode(const char *s);
