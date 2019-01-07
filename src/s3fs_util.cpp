@@ -814,7 +814,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
             if(string::npos != pos){
               strConType = strConType.substr(0, pos);
             }
-            if(strConType == "application/x-directory"){
+            if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
               mode |= S_IFDIR;
             }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
               if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
