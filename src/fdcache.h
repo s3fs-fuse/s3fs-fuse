@@ -155,6 +155,7 @@ class FdEntity
 
     bool GetStats(struct stat& st);
     int SetMtime(time_t time);
+    bool UpdateCtime(void);
     bool UpdateMtime(void);
     bool GetSize(size_t& size);
     bool SetMode(mode_t mode);

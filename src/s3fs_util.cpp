@@ -753,16 +753,26 @@ time_t get_mtime(const char *s)
   return static_cast<time_t>(s3fs_strtoofft(s));
 }
 
-time_t get_mtime(headers_t& meta, bool overcheck)
+static time_t get_time(headers_t& meta, bool overcheck, const char *header)
 {
   headers_t::const_iterator iter;
-  if(meta.end() == (iter = meta.find("x-amz-meta-mtime"))){
+  if(meta.end() == (iter = meta.find(header))){
     if(overcheck){
       return get_lastmodified(meta);
     }
     return 0;
   }
   return get_mtime((*iter).second.c_str());
+}
+
+time_t get_mtime(headers_t& meta, bool overcheck)
+{
+  return get_time(meta, overcheck, "x-amz-meta-mtime");
+}
+
+time_t get_ctime(headers_t& meta, bool overcheck)
+{
+  return get_time(meta, overcheck, "x-amz-meta-ctime");
 }
 
 off_t get_size(const char *s)

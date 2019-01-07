@@ -169,3 +169,19 @@ function run_suite {
        return 0
    fi
 }
+
+function get_ctime() {
+    if [ `uname` = "Darwin" ]; then
+        stat -f "%c" "$1"
+    else
+        stat -c %Z "$1"
+    fi
+}
+
+function get_mtime() {
+    if [ `uname` = "Darwin" ]; then
+        stat -f "%m" "$1"
+    else
+        stat -c %Y "$1"
+    fi
+}
