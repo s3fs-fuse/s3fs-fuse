@@ -181,6 +181,7 @@ function start_s3fs {
             -o url=${S3_URL} \
             -o no_check_certificate \
             -o ssl_verify_hostname=0 \
+            -o use_xattr=1 \
             -o createbucket \
             ${AUTH_OPT} \
             -o dbglevel=${DBGLEVEL:=info} \
