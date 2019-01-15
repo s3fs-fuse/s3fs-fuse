@@ -5049,6 +5049,13 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
+  if(!pathrequeststyle && STR2NCMP(host.c_str(), "https://") == 0 && bucket.find_first_of('.') != string::npos) {
+    S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
+    exit(EXIT_FAILURE);
+  }
+
   // The second plain argument is the mountpoint
   // if the option was given, we all ready checked for a
   // readable, non-empty directory, this checks determines
