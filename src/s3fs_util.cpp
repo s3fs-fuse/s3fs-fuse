@@ -802,11 +802,13 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
 
   if(meta.end() != (iter = meta.find("x-amz-meta-mode"))){
     mode = get_mode((*iter).second.c_str());
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
+    mode = get_mode((*iter).second.c_str());
+    isS3sync = true;
   }else{
-    if(meta.end() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
-      mode = get_mode((*iter).second.c_str());
-      isS3sync = true;
-    }
+    // If another tool creates an object without permissions, default to owner
+    // read-write and group readable.
+    mode = path[strlen(path) - 1] == '/' ? 0750 : 0640;
   }
   // Checking the bitmask, if the last 3 bits are all zero then process as a regular
   // file type (S_IFDIR or S_IFREG), otherwise return mode unmodified so that S_IFIFO,
@@ -876,12 +878,13 @@ uid_t get_uid(const char *s)
 uid_t get_uid(headers_t& meta)
 {
   headers_t::const_iterator iter;
-  if(meta.end() == (iter = meta.find("x-amz-meta-uid"))){
-    if(meta.end() == (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
-      return 0;
-    }
+  if(meta.end() != (iter = meta.find("x-amz-meta-uid"))){
+    return get_uid((*iter).second.c_str());
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
+    return get_uid((*iter).second.c_str());
+  }else{
+    return geteuid();
   }
-  return get_uid((*iter).second.c_str());
 }
 
 gid_t get_gid(const char *s)
@@ -892,12 +895,13 @@ gid_t get_gid(const char *s)
 gid_t get_gid(headers_t& meta)
 {
   headers_t::const_iterator iter;
-  if(meta.end() == (iter = meta.find("x-amz-meta-gid"))){
-    if(meta.end() == (iter = meta.find("x-amz-meta-group"))){ // for s3sync
-      return 0;
-    }
+  if(meta.end() != (iter = meta.find("x-amz-meta-gid"))){
+    return get_gid((*iter).second.c_str());
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-group"))){ // for s3sync
+    return get_gid((*iter).second.c_str());
+  }else{
+    return getegid();
   }
-  return get_gid((*iter).second.c_str());
 }
 
 blkcnt_t get_blocks(off_t size)
