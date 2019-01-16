@@ -620,6 +620,9 @@ bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst,
   // mtime
   pst->st_mtime = get_mtime(meta);
 
+  // ctime
+  pst->st_ctime = get_ctime(meta);
+
   // size
   pst->st_size = get_size(meta);
 

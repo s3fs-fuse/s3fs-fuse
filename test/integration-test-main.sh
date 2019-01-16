@@ -400,16 +400,66 @@ function test_mtime_file {
 
     #copy the test file with preserve mode
     cp -p $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
-    if [ `uname` = "Darwin" ]; then
-        testmtime=`stat -f "%m" $TEST_TEXT_FILE`
-        altmtime=`stat -f "%m" $ALT_TEST_TEXT_FILE`
-    else
-        testmtime=`stat -c %Y $TEST_TEXT_FILE`
-        altmtime=`stat -c %Y $ALT_TEST_TEXT_FILE`
-    fi
+    testmtime=`get_mtime $TEST_TEXT_FILE`
+    altmtime=`get_mtime $ALT_TEST_TEXT_FILE`
     if [ "$testmtime" -ne "$altmtime" ]
     then
        echo "File times do not match:  $testmtime != $altmtime"
+       return 1
+    fi
+}
+
+function test_update_time() {
+    describe "Testing update time function ..."
+
+    # create the test
+    mk_test_file
+    mtime=`get_ctime $TEST_TEXT_FILE`
+    ctime=`get_mtime $TEST_TEXT_FILE`
+
+    sleep 2
+    chmod +x $TEST_TEXT_FILE
+
+    ctime2=`get_ctime $TEST_TEXT_FILE`
+    mtime2=`get_mtime $TEST_TEXT_FILE`
+    if [ $ctime -eq $ctime2 -o $mtime -ne $mtime2 ]; then
+       echo "Expected updated ctime: $ctime != $ctime2 and same mtime: $mtime == $mtime2"
+       return 1
+    fi
+
+    sleep 2
+    chown $UID:$UID $TEST_TEXT_FILE;
+
+    ctime3=`get_ctime $TEST_TEXT_FILE`
+    mtime3=`get_mtime $TEST_TEXT_FILE`
+    if [ $ctime2 -eq $ctime3 -o $mtime2 -ne $mtime3 ]; then
+       echo "Expected updated ctime: $ctime2 != $ctime3 and same mtime: $mtime2 == $mtime3"
+       return 1
+    fi
+
+    if command -v setfattr >/dev/null 2>&1; then
+        sleep 2
+        setfattr -n key -v value $TEST_TEXT_FILE
+
+        ctime4=`get_ctime $TEST_TEXT_FILE`
+        mtime4=`get_mtime $TEST_TEXT_FILE`
+        if [ $ctime3 -eq $ctime4 -o $mtime3 -ne $mtime4 ]; then
+           echo "Expected updated ctime: $ctime3 != $ctime4 and same mtime: $mtime3 == $mtime4"
+           return 1
+        fi
+    else
+        echo "Skipping extended attribute test"
+        ctime4=`get_ctime $TEST_TEXT_FILE`
+        mtime4=`get_mtime $TEST_TEXT_FILE`
+    fi
+
+    sleep 2
+    echo foo >> $TEST_TEXT_FILE
+
+    ctime5=`get_ctime $TEST_TEXT_FILE`
+    mtime5=`get_mtime $TEST_TEXT_FILE`
+    if [ $ctime4 -eq $ctime5 -o $mtime4 -eq $mtime5 ]; then
+       echo "Expected updated ctime: $ctime4 != $ctime5 and updated mtime: $mtime4 != $mtime5"
        return 1
     fi
 }
@@ -458,6 +508,7 @@ function add_all_tests {
     add_tests test_symlink
     add_tests test_extended_attributes
     add_tests test_mtime_file
+    add_tests test_update_time
     add_tests test_rm_rf_dir
     add_tests test_write_after_seek_ahead
 }

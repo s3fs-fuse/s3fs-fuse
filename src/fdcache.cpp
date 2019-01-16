@@ -1050,9 +1050,21 @@ int FdEntity::SetMtime(time_t time)
       return -errno;
     }
   }
+  orgmeta["x-amz-meta-ctime"] = str(time);
   orgmeta["x-amz-meta-mtime"] = str(time);
 
   return 0;
+}
+
+bool FdEntity::UpdateCtime(void)
+{
+  AutoLock auto_lock(&fdent_lock);
+  struct stat st;
+  if(!GetStats(st)){
+    return false;
+  }
+  orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
+  return true;
 }
 
 bool FdEntity::UpdateMtime(void)
@@ -1062,6 +1074,7 @@ bool FdEntity::UpdateMtime(void)
   if(!GetStats(st)){
     return false;
   }
+  orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
   orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
   return true;
 }

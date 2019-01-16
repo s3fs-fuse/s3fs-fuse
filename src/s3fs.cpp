@@ -963,12 +963,14 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 {
   S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
 
+  time_t now = time(NULL);
   headers_t meta;
   meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
   meta["x-amz-meta-uid"]   = str(uid);
   meta["x-amz-meta-gid"]   = str(gid);
   meta["x-amz-meta-mode"]  = str(mode);
-  meta["x-amz-meta-mtime"] = str(time(NULL));
+  meta["x-amz-meta-ctime"] = str(now);
+  meta["x-amz-meta-mtime"] = str(now);
 
   S3fsCurl s3fscurl(true);
   return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
@@ -1055,6 +1057,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
   meta["x-amz-meta-uid"]   = str(uid);
   meta["x-amz-meta-gid"]   = str(gid);
   meta["x-amz-meta-mode"]  = str(mode);
+  meta["x-amz-meta-ctime"] = str(time);
   meta["x-amz-meta-mtime"] = str(time);
 
   S3fsCurl s3fscurl;
@@ -1199,10 +1202,12 @@ static int s3fs_symlink(const char* from, const char* to)
     return result;
   }
 
+  time_t now = time(NULL);
   headers_t headers;
   headers["Content-Type"]     = string("application/octet-stream"); // Static
   headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
-  headers["x-amz-meta-mtime"] = str(time(NULL));
+  headers["x-amz-meta-ctime"] = str(now);
+  headers["x-amz-meta-mtime"] = str(now);
   headers["x-amz-meta-uid"]   = str(pcxt->uid);
   headers["x-amz-meta-gid"]   = str(pcxt->gid);
 
@@ -1591,6 +1596,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
     }
   }else{
     // normal object or directory object of newer version
+    meta["x-amz-meta-ctime"]         = str(time(NULL));
     meta["x-amz-meta-mode"]          = str(mode);
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
     meta["x-amz-metadata-directive"] = "REPLACE";
@@ -1607,6 +1613,7 @@ static int s3fs_chmod(const char* path, mode_t mode)
     //
     FdEntity* ent;
     if(NULL != (ent = FdManager::get()->ExistOpen(path))){
+      ent->UpdateCtime();
       ent->SetMode(mode);      // Set new mode to opened fd.
       FdManager::get()->Close(ent);
     }
@@ -1747,6 +1754,7 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
       return result;
     }
   }else{
+    meta["x-amz-meta-ctime"]         = str(time(NULL));
     meta["x-amz-meta-uid"]           = str(uid);
     meta["x-amz-meta-gid"]           = str(gid);
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
@@ -2032,9 +2040,11 @@ static int s3fs_truncate(const char* path, off_t size)
     if(NULL == (pcxt = fuse_get_context())){
       return -EIO;
     }
+    time_t now = time(NULL);
     meta["Content-Type"]     = string("application/octet-stream"); // Static
     meta["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
-    meta["x-amz-meta-mtime"] = str(time(NULL));
+    meta["x-amz-meta-ctime"] = str(now);
+    meta["x-amz-meta-mtime"] = str(now);
     meta["x-amz-meta-uid"]   = str(pcxt->uid);
     meta["x-amz-meta-gid"]   = str(pcxt->gid);
 
@@ -3103,6 +3113,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
   }
 
   // set xattr all object
+  meta["x-amz-meta-ctime"]         = str(time(NULL));
   meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
   meta["x-amz-metadata-directive"] = "REPLACE";
 
