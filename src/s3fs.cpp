@@ -1471,6 +1471,7 @@ static int rename_directory(const char* from, const char* to)
   // does a safe copy - copies first and then deletes old
   for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
     if(!mn_cur->is_dir){
+      // TODO: call s3fs_rename instead?
       if(!nocopyapi && !norenameapi){
         result = rename_object(mn_cur->old_path, mn_cur->new_path);
       }else{
@@ -1521,6 +1522,12 @@ static int s3fs_rename(const char* from, const char* to)
   }
   if(0 != (result = get_object_attribute(from, &buf, NULL))){
     return result;
+  }
+
+  // flush pending writes if file is open
+  FdEntity *entity = FdManager::get()->ExistOpen(from);
+  if(entity != NULL){
+    entity->Flush(true);
   }
 
   // files larger than 5GB must be modified via the multipart interface

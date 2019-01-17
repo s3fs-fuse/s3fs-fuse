@@ -500,8 +500,7 @@ function add_all_tests {
     add_tests test_chown
     add_tests test_list
     add_tests test_remove_nonempty_directory
-    # TODO: broken: https://github.com/s3fs-fuse/s3fs-fuse/issues/145
-    #add_tests test_rename_before_close
+    add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
     add_tests test_special_characters
