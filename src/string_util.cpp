@@ -210,15 +210,15 @@ bool takeout_str_dquart(string& str)
   size_t pos;
 
   // '"' for start
-  if(string::npos != (pos = str.find_first_of("\""))){
+  if(string::npos != (pos = str.find_first_of('\"'))){
     str = str.substr(pos + 1);
 
     // '"' for end
-    if(string::npos == (pos = str.find_last_of("\""))){
+    if(string::npos == (pos = str.find_last_of('\"'))){
       return false;
     }
     str = str.substr(0, pos);
-    if(string::npos != str.find_first_of("\"")){
+    if(string::npos != str.find_first_of('\"')){
       return false;
     }
   }
