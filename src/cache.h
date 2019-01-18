@@ -117,7 +117,7 @@ class StatCache
     bool AddStat(std::string& key, headers_t& meta, bool forcedir = false, bool no_truncate = false);
 
     // Change no truncate flag
-    void ChangeNoTruncateFlag(std::string key, bool no_truncate);
+    void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
 
     // Delete stat cache
     bool DelStat(const char* key);
