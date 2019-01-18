@@ -3452,6 +3452,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     return -1;
   }
 
+  requestHeaders = NULL;
+
   // make md5 and file pointer
   if(S3fsCurl::is_content_md5){
     unsigned char *md5raw = s3fs_md5hexsum(partdata.fd, partdata.startpos, partdata.size);
@@ -3481,7 +3483,6 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   turl              += urlargs;
   url                = prepare_url(turl.c_str());
   path               = get_realpath(tpath);
-  requestHeaders     = NULL;
   bodydata           = new BodyData();
   headdata           = new BodyData();
   responseHeaders.clear();
