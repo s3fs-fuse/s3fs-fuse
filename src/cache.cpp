@@ -231,11 +231,11 @@ bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool ove
   stat_cache_t::iterator iter = stat_cache.end();
   if(overcheck && '/' != strpath[strpath.length() - 1]){
     strpath += "/";
-    iter = stat_cache.find(strpath.c_str());
+    iter = stat_cache.find(strpath);
   }
   if(iter == stat_cache.end()){
     strpath = key;
-    iter = stat_cache.find(strpath.c_str());
+    iter = stat_cache.find(strpath);
   }
 
   if(iter != stat_cache.end() && (*iter).second){
@@ -320,11 +320,11 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
   stat_cache_t::iterator iter = stat_cache.end();
   if(overcheck && '/' != strpath[strpath.length() - 1]){
     strpath += "/";
-    iter = stat_cache.find(strpath.c_str());
+    iter = stat_cache.find(strpath);
   }
   if(iter == stat_cache.end()){
     strpath = key;
-    iter = stat_cache.find(strpath.c_str());
+    iter = stat_cache.find(strpath);
   }
 
   if(iter != stat_cache.end() && (*iter).second) {
@@ -582,7 +582,7 @@ bool StatCache::DelStat(const char* key)
       // If there is "path/" cache, delete it.
       strpath += "/";
     }
-    if(stat_cache.end() != (iter = stat_cache.find(strpath.c_str()))){
+    if(stat_cache.end() != (iter = stat_cache.find(strpath))){
       if((*iter).second){
         delete (*iter).second;
       }

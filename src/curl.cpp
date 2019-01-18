@@ -4341,10 +4341,10 @@ string prepare_url(const char* url)
   uri  = url_str.substr(0, uri_length);
 
   if(!pathrequeststyle){
-    hostname = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    hostname = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length);
     path = url_str.substr((bucket_pos + bucket_length));
   }else{
-    hostname = url_str.substr(uri_length, bucket_pos - uri_length).c_str();
+    hostname = url_str.substr(uri_length, bucket_pos - uri_length);
     string part = url_str.substr((bucket_pos + bucket_length));
     if('/' != part[0]){
       part = "/" + part;
