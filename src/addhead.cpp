@@ -123,6 +123,7 @@ bool AdditionalHeader::Load(const char* file)
       // regex
       if(key.size() <= strlen(ADD_HEAD_REGEX)){
         S3FS_PRN_ERR("file format error: %s key(suffix) does not have key string.", key.c_str());
+        delete paddhead;
         continue;
       }
       key = key.substr(strlen(ADD_HEAD_REGEX));
