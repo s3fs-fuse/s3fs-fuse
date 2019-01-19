@@ -249,6 +249,7 @@ class S3fsCurl
     static mimes_t          mimeTypes;
     static std::string      userAgent;
     static int              max_parallel_cnt;
+    static int              max_multireq;
     static off_t            multipart_size;
     static bool             is_sigv4;
     static bool             is_ua;             // User-Agent
@@ -389,8 +390,12 @@ class S3fsCurl
                 }
     static long SetSslVerifyHostname(long value);
     static long GetSslVerifyHostname(void) { return S3fsCurl::ssl_verify_hostname; }
+    // maximum parallel GET and PUT requests
     static int SetMaxParallelCount(int value);
     static int GetMaxParallelCount(void) { return S3fsCurl::max_parallel_cnt; }
+    // maximum parallel HEAD requests
+    static int SetMaxMultiRequest(int max);
+    static int GetMaxMultiRequest(void) { return S3fsCurl::max_multireq; }
     static bool SetIsECS(bool flag);
     static bool SetIsIBMIAMAuth(bool flag);
     static size_t SetIAMFieldCount(size_t field_count);
@@ -470,7 +475,7 @@ typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl); // callback for
 class S3fsMultiCurl
 {
   private:
-    static int    max_multireq;
+    const int maxParallelism;
 
     s3fscurlmap_t cMap_all;  // all of curl requests
     s3fscurlmap_t cMap_req;  // curl requests are sent
@@ -486,11 +491,10 @@ class S3fsMultiCurl
     static void* RequestPerformWrapper(void* arg);
 
   public:
-    S3fsMultiCurl();
+    explicit S3fsMultiCurl(int maxParallelism);
     ~S3fsMultiCurl();
 
-    static int SetMaxMultiRequest(int max);
-    static int GetMaxMultiRequest(void) { return S3fsMultiCurl::max_multireq; }
+    int GetMaxParallelism() { return maxParallelism; }
 
     S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
     S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);

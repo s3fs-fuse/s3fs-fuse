@@ -2358,7 +2358,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
 
 static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
-  S3fsMultiCurl curlmulti;
+  S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
   s3obj_list_t  headlist;
   s3obj_list_t  fillerlist;
   int           result = 0;
@@ -2372,75 +2372,69 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
   curlmulti.SetSuccessCallback(multi_head_callback);
   curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-  // Loop
-  while(!headlist.empty()){
-    s3obj_list_t::iterator iter;
-    long                   cnt;
+  // TODO: deindent
+  s3obj_list_t::iterator iter;
 
-    fillerlist.clear();
-    // Make single head request(with max).
-    for(iter = headlist.begin(), cnt = 0; headlist.end() != iter && cnt < S3fsMultiCurl::GetMaxMultiRequest(); iter = headlist.erase(iter)){
-      string disppath = path + (*iter);
-      string etag     = head.GetETag((*iter).c_str());
+  fillerlist.clear();
+  // Make single head request(with max).
+  for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+    string disppath = path + (*iter);
+    string etag     = head.GetETag((*iter).c_str());
 
-      string fillpath = disppath;
-      if('/' == disppath[disppath.length() - 1]){
-        fillpath = fillpath.substr(0, fillpath.length() -1);
-      }
-      fillerlist.push_back(fillpath);
+    string fillpath = disppath;
+    if('/' == disppath[disppath.length() - 1]){
+      fillpath = fillpath.substr(0, fillpath.length() -1);
+    }
+    fillerlist.push_back(fillpath);
 
-      if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
-        continue;
-      }
-
-      // First check for directory, start checking "not SSE-C".
-      // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
-      S3fsCurl* s3fscurl = new S3fsCurl();
-      if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
-        S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
-        delete s3fscurl;
-        continue;
-      }
-
-      if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
-        S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
-        delete s3fscurl;
-        continue;
-      }
-      cnt++;     // max request count within S3fsMultiCurl::GetMaxMultiRequest()
+    if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
+      continue;
     }
 
-    // Multi request
-    if(0 != (result = curlmulti.Request())){
-      // If result is -EIO, it is something error occurred.
-      // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
-      // So s3fs set result to 0 in order to continue the process.
-      if(-EIO == result){
-        S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
-        result = 0;
-      }else{
-        S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
-        break;
-      }
+    // First check for directory, start checking "not SSE-C".
+    // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
+    S3fsCurl* s3fscurl = new S3fsCurl();
+    if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
+      S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
+      delete s3fscurl;
+      continue;
     }
 
-    // populate fuse buffer
-    // here is best position, because a case is cache size < files in directory
-    //
-    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
-      struct stat st;
-      string bpath = mybasename((*iter));
-      if(StatCache::getStatCacheData()->GetStat((*iter), &st)){
-        filler(buf, bpath.c_str(), &st, 0);
-      }else{
-        S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
-        filler(buf, bpath.c_str(), 0, 0);
-      }
+    if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
+      S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
+      delete s3fscurl;
+      continue;
     }
-
-    // reinit for loop.
-    curlmulti.Clear();
   }
+
+  // Multi request
+  if(0 != (result = curlmulti.Request())){
+    // If result is -EIO, it is something error occurred.
+    // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
+    // So s3fs set result to 0 in order to continue the process.
+    if(-EIO == result){
+      S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
+      result = 0;
+    }else{
+      S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+      return result;
+    }
+  }
+
+  // populate fuse buffer
+  // here is best position, because a case is cache size < files in directory
+  //
+  for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
+    struct stat st;
+    string bpath = mybasename((*iter));
+    if(StatCache::getStatCacheData()->GetStat((*iter), &st)){
+      filler(buf, bpath.c_str(), &st, 0);
+    }else{
+      S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
+      filler(buf, bpath.c_str(), 0, 0);
+    }
+  }
+
   return result;
 }
 
@@ -4445,7 +4439,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "multireq_max=")){
       long maxreq = static_cast<long>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
-      S3fsMultiCurl::SetMaxMultiRequest(maxreq);
+      S3fsCurl::SetMaxMultiRequest(maxreq);
       return 0;
     }
     if(0 == strcmp(arg, "nonempty")){
