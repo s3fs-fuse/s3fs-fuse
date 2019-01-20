@@ -472,7 +472,7 @@ bool StatCache::AddNoObjectCache(string& key)
   return true;
 }
 
-void StatCache::ChangeNoTruncateFlag(std::string key, bool no_truncate)
+void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
 {
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 

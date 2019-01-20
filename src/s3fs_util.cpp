@@ -586,7 +586,7 @@ string mydirname(const char* path)
   return mydirname(string(path));
 }
 
-string mydirname(string path)
+string mydirname(const string& path)
 {
   return string(dirname((char*)path.c_str()));
 }
@@ -601,7 +601,7 @@ string mybasename(const char* path)
   return mybasename(string(path));
 }
 
-string mybasename(string path)
+string mybasename(const string& path)
 {
   return string(basename((char*)path.c_str()));
 }
