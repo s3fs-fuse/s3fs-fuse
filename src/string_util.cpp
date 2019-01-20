@@ -75,7 +75,7 @@ off_t s3fs_strtoofft(const char* str, bool is_base_16)
     }
     // check like isalnum and set data
     result *= (is_base_16 ? 16 : 10);
-    if('0' <= *str || '9' < *str){
+    if('0' <= *str && '9' >= *str){
       result += static_cast<off_t>(*str - '0');
     }else if(is_base_16){
       if('A' <= *str && *str <= 'F'){
