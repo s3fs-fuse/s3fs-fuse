@@ -28,7 +28,6 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <string.h>
-#include <assert.h>
 #include <syslog.h>
 #include <string>
 #include <map>
@@ -148,7 +147,7 @@ StatCache::StatCache() : IsExpireTime(false), IsExpireIntervalType(false), Expir
     stat_cache.clear();
     pthread_mutex_init(&(StatCache::stat_cache_lock), NULL);
   }else{
-    assert(false);
+    abort();
   }
 }
 
@@ -158,7 +157,7 @@ StatCache::~StatCache()
     Clear();
     pthread_mutex_destroy(&(StatCache::stat_cache_lock));
   }else{
-    assert(false);
+    abort();
   }
 }
 

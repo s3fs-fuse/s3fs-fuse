@@ -30,7 +30,6 @@
 #include <syslog.h>
 #include <errno.h>
 #include <string.h>
-#include <assert.h>
 #include <dirent.h>
 #include <curl/curl.h>
 #include <string>
@@ -2000,7 +1999,7 @@ FdManager::FdManager()
       S3FS_PRN_CRIT("failed to init mutex");
     }
   }else{
-    assert(false);
+    abort();
   }
 }
 
@@ -2024,7 +2023,7 @@ FdManager::~FdManager()
       FdManager::is_lock_init = false;
     }
   }else{
-    assert(false);
+    abort();
   }
 }
 

@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-#include <assert.h>
 #include <curl/curl.h>
 #include <sstream>
 #include <fstream>
@@ -56,7 +55,7 @@ AdditionalHeader::AdditionalHeader()
   if(this == AdditionalHeader::get()){
     is_enable = false;
   }else{
-    assert(false);
+    abort();
   }
 }
 
@@ -65,7 +64,7 @@ AdditionalHeader::~AdditionalHeader()
   if(this == AdditionalHeader::get()){
     Unload();
   }else{
-    assert(false);
+    abort();
   }
 }
 
