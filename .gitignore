@@ -1,32 +1,86 @@
+#
+# s3fs - FUSE-based file system backed by Amazon S3
+#
+# Copyright(C) 2007 Randy Rizun <rrizun@gmail.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+#
+# Compiled Object files
+#
+*.slo
+*.lo
 *.o
-/Makefile
-/Makefile.in
-/aclocal.m4
-/autom4te.cache/
-/config.guess
-/config.log
-/config.status
-/config.sub
-/stamp-h1
-/config.h
-/config.h.in
-/config.h.in~
-/configure
-/depcomp
-/test-driver
-/compile
-/doc/Makefile
-/doc/Makefile.in
-/install-sh
-/missing
-/src/.deps/
-/src/Makefile
-/src/Makefile.in
-/src/s3fs
-/src/test_*
-/test/.deps/
-/test/Makefile
-/test/Makefile.in
-/test/s3proxy-*
-/test/*.log
-/default_commit_hash
+*.Po
+*.Plo
+
+#
+# autotools/automake
+#
+aclocal.m4
+autom4te.cache
+autoscan.log
+config.guess
+config.h
+config.h.in
+config.h.in~
+config.log
+config.status
+config.sub
+configure
+configure.scan
+depcomp
+install-sh
+libtool
+ltmain.sh
+m4
+m4/*
+missing
+stamp-h1
+Makefile
+Makefile.in
+test-driver
+compile
+missing
+
+#
+# object directories
+#
+.deps
+.libs
+*/.deps
+*/.deps/*
+*/.libs
+*/.libs/*
+
+#
+# each directories
+#
+*.log
+*.trs
+default_commit_hash
+src/s3fs
+src/test_*
+test/s3proxy-*
+
+#
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: noet sw=4 ts=4 fdm=marker
+# vim<600: noet sw=4 ts=4
+#
