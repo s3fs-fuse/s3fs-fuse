@@ -2072,7 +2072,7 @@ int S3fsCurl::RequestPerform(void)
           S3FS_PRN_ERR("curl_easy_getinfo failed while trying to retrieve HTTP response code");
           return -EIO;
         }
-        if(400 > LastResponseCode){
+        if(LastResponseCode >= 200 && LastResponseCode < 300){
           S3FS_PRN_INFO3("HTTP response code %ld", LastResponseCode);
           return 0;
         }
