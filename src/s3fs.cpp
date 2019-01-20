@@ -5156,7 +5156,7 @@ int main(int argc, char* argv[])
 
   // Check to see if the bucket name contains periods and https (SSL) is
   // being used. This is a known limitation:
-  // http://docs.amazonwebservices.com/AmazonS3/latest/dev/
+  // https://docs.amazonwebservices.com/AmazonS3/latest/dev/
   // The Developers Guide suggests that either use HTTP of for us to write
   // our own certificate verification logic.
   // For now, this will be unsupported unless we get a request for it to

@@ -2,7 +2,7 @@ s3fs
 ====
 
 s3fs allows Linux and macOS to mount an S3 bucket via FUSE.
-s3fs preserves the native object format for files, allowing use of other tools like [s3cmd](http://s3tools.org/s3cmd).  
+s3fs preserves the native object format for files, allowing use of other tools like [s3cmd](https://s3tools.org/s3cmd).
 [![Build Status](https://travis-ci.org/s3fs-fuse/s3fs-fuse.svg?branch=master)](https://travis-ci.org/s3fs-fuse/s3fs-fuse)
 
 Features
@@ -47,7 +47,7 @@ Some systems provide pre-built packages:
   sudo yum install s3fs-fuse
   ```
 
-* On macOS, install via [Homebrew](http://brew.sh/):
+* On macOS, install via [Homebrew](https://brew.sh/):
 
   ```ShellSession
   $ brew cask install osxfuse
@@ -131,12 +131,12 @@ mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 If you use s3fs with a non-Amazon S3 implementation, specify the URL and path-style requests:
 
 ```
-s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=http://url.to.s3/ -o use_path_request_style
+s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=https://url.to.s3/ -o use_path_request_style
 ```
 
 or(fstab)
 ```
-s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=http://url.to.s3/ 0 0
+s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=https://url.to.s3/ 0 0
 ```
 
 To use IBM IAM Authentication, use the `-o ibm_iam_auth` option, and specify the Service Instance ID and API Key in your credentials file:
@@ -162,7 +162,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 
 * random writes or appends to files require rewriting the entire file
 * metadata operations such as listing directories have poor performance due to network latency
-* [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data([Amazon S3 Data Consistency Model](http://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel))
+* [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data([Amazon S3 Data Consistency Model](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel))
 * no atomic renames of files or directories
 * no coordination between multiple clients mounting the same bucket
 * no hard links

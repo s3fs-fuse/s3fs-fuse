@@ -3648,9 +3648,9 @@ bool S3fsCurl::UploadMultipartPostComplete()
   // check etag(md5);
   //
   // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent  
-  // SSE_C: http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html  
+  // SSE_C: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
   // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
-  // http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html 
+  // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
   //
   if(S3fsCurl::is_content_md5 && SSE_C != S3fsCurl::GetSseType() && SSE_KMS != S3fsCurl::GetSseType()){
     if(!etag_equals(it->second, partdata.etag)){
