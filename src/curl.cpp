@@ -2085,7 +2085,9 @@ int S3fsCurl::RequestPerform(void)
         // Service response codes which are >= 300 && < 500
         switch(LastResponseCode){
           case 301:
+          case 307:
             S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", (bodydata ? bodydata->str() : ""));
+            S3FS_PRN_ERR("The options of url and endpoint may be useful for solving, please try to use both options.");
             return -EIO;
 
           case 400:
