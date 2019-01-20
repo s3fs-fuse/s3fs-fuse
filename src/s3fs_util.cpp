@@ -748,9 +748,23 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
-time_t get_mtime(const char *s)
+time_t get_mtime(const char *str)
 {
-  return static_cast<time_t>(s3fs_strtoofft(s));
+  // [NOTE]
+  // In rclone, there are cases where ns is set to x-amz-meta-mtime
+  // with floating point number. s3fs uses x-amz-meta-mtime by
+  // truncating the floating point or less (in seconds or less) to
+  // correspond to this.
+  //
+  string strmtime("");
+  if(str && '\0' != *str){
+    strmtime = str;
+    string::size_type pos = strmtime.find('.', 0);
+    if(string::npos != pos){
+      strmtime = strmtime.substr(0, pos);
+    }
+  }
+  return static_cast<time_t>(s3fs_strtoofft(strmtime.c_str()));
 }
 
 static time_t get_time(headers_t& meta, bool overcheck, const char *header)
