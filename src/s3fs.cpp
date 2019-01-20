@@ -134,7 +134,6 @@ static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
-static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
@@ -3714,7 +3713,7 @@ static int s3fs_utility_mode(void)
 //
 // So this is cheep codes but s3fs should get correct region automatically.
 //
-static bool check_region_error(const char* pbody, string& expectregion)
+static bool check_region_error(const char* pbody, const string& currentep, string& expectregion)
 {
   if(!pbody){
     return false;
@@ -3722,6 +3721,10 @@ static bool check_region_error(const char* pbody, string& expectregion)
   const char* region;
   const char* regionend;
   if(NULL == (region = strcasestr(pbody, "<Message>The authorization header is malformed; the region "))){
+    return false;
+  }
+  // check current endpoint region in body.
+  if(NULL == (region = strcasestr(region, currentep.c_str()))){
     return false;
   }
   if(NULL == (region = strcasestr(region, "expecting \'"))){
@@ -3757,12 +3760,12 @@ static int s3fs_check_service(void)
     long responseCode = s3fscurl.GetLastResponseCode();
 
     // check wrong endpoint, and automatically switch endpoint
-    if(responseCode == 400 && !is_specified_endpoint){
+    if(300 <= responseCode && responseCode < 500){
       // check region error
       BodyData* body = s3fscurl.GetBodyData();
       string    expectregion;
-      if(check_region_error(body->str(), expectregion)){
-        // not specified endpoint, so try to connect to expected region.
+      if(check_region_error(body->str(), endpoint, expectregion)){
+        // current endpoint is wrong, so try to connect to expected region.
         S3FS_PRN_CRIT("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
         endpoint = expectregion;
         if(S3fsCurl::IsSignatureV4()){
@@ -4841,7 +4844,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "endpoint=")){
       endpoint              = strchr(arg, '=') + sizeof(char);
-      is_specified_endpoint = true;
       return 0;
     }
     if(0 == strcmp(arg, "use_path_request_style")){
