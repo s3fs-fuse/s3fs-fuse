@@ -283,7 +283,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     h_map[strtmp] = true;
 
     // check hierarchized directory
-    for(string::size_type pos = strtmp.find_last_of("/"); string::npos != pos; pos = strtmp.find_last_of("/")){
+    for(string::size_type pos = strtmp.find_last_of('/'); string::npos != pos; pos = strtmp.find_last_of('/')){
       strtmp = strtmp.substr(0, pos);
       if(0 == strtmp.length() || "/" == strtmp){
         break;
@@ -822,7 +822,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
           if(meta.end() != (iter = meta.find("Content-Type"))){
             string strConType = (*iter).second;
             // Leave just the mime type, remove any optional parameters (eg charset)
-            string::size_type pos = strConType.find(";");
+            string::size_type pos = strConType.find(';');
             if(string::npos != pos){
               strConType = strConType.substr(0, pos);
             }

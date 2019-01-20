@@ -2903,7 +2903,7 @@ static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTR
   // parse key and value
   size_t pos;
   string tmpval;
-  if(string::npos == (pos = xattrpair.find_first_of(":"))){
+  if(string::npos == (pos = xattrpair.find_first_of(':'))){
     S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
     return false;
   }
@@ -2934,8 +2934,8 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
   {
     size_t startpos;
     size_t endpos   = string::npos;
-    if(string::npos != (startpos = jsonxattrs.find_first_of("{"))){
-      endpos = jsonxattrs.find_last_of("}");
+    if(string::npos != (startpos = jsonxattrs.find_first_of('{'))){
+      endpos = jsonxattrs.find_last_of('}');
     }
     if(startpos == string::npos || endpos == string::npos || endpos <= startpos){
       S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
@@ -2945,7 +2945,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
   }
 
   // parse each key:val
-  for(size_t pair_nextpos = restxattrs.find_first_of(","); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(",")){
+  for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(',')){
     string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
     string    key  = "";
     PXATTRVAL pval = NULL;
@@ -3869,7 +3869,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
       S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
       return -1;
     }
-    if(0 == line.find_first_of("[")){
+    if(0 == line.find_first_of('[')){
       S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
       return -1;
     }
@@ -4960,7 +4960,7 @@ int main(int argc, char* argv[])
 
   // get program name - emulate basename
   program_name.assign(argv[0]);
-  size_t found = program_name.find_last_of("/");
+  size_t found = program_name.find_last_of('/');
   if(found != string::npos){
     program_name.replace(0, found+1, "");
   }
