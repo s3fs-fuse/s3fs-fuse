@@ -110,7 +110,8 @@ static string url_to_host(const std::string &url)
   } else if (url.compare(0, https.size(), https) == 0) {
     hostname = url.substr(https.size());
   } else {
-    assert(!"url does not begin with http:// or https://");
+    S3FS_PRN_EXIT("url does not begin with http:// or https://");
+    abort();
   }
 
   size_t idx;
