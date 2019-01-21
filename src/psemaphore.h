@@ -30,11 +30,19 @@
 class Semaphore
 {
   public:
-    explicit Semaphore(int value) : sem(dispatch_semaphore_create(value)) {}
-    ~Semaphore() { dispatch_release(sem); }
+    explicit Semaphore(int value) : value(value), sem(dispatch_semaphore_create(value)) {}
+    ~Semaphore() {
+      // macOS cannot destroy a semaphore with posts less than the initializer
+      for(int i = 0; i < get_value(); ++i){
+        post();
+      }
+      dispatch_release(sem);
+    }
     void wait() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
     void post() { dispatch_semaphore_signal(sem); }
+    int get_value() const { return value; }
   private:
+    const int value;
     dispatch_semaphore_t sem;
 };
 
@@ -46,7 +54,7 @@ class Semaphore
 class Semaphore
 {
   public:
-    explicit Semaphore(int value) { sem_init(&mutex, 0, value); }
+    explicit Semaphore(int value) : value(value) { sem_init(&mutex, 0, value); }
     ~Semaphore() { sem_destroy(&mutex); }
     void wait()
     {
@@ -56,7 +64,9 @@ class Semaphore
       } while (r == -1 && errno == EINTR);
     }
     void post() { sem_post(&mutex); }
+    int get_value() const { return value; }
   private:
+    const int value;
     sem_t mutex;
 };
 

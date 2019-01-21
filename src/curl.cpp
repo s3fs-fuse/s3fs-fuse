@@ -374,6 +374,7 @@ string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
 string           S3fsCurl::userAgent;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
+int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 bool             S3fsCurl::is_sigv4            = true;           // default
 bool             S3fsCurl::is_ua               = true;           // default
@@ -1259,6 +1260,13 @@ int S3fsCurl::SetMaxParallelCount(int value)
   return old;
 }
 
+int S3fsCurl::SetMaxMultiRequest(int max)
+{
+  int old = S3fsCurl::max_multireq;
+  S3fsCurl::max_multireq = max;
+  return old;
+}
+
 bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
 {
   if(!s3fscurl){
@@ -1343,7 +1351,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   s3fscurl.DestroyCurlHandle();
 
   // Initialize S3fsMultiCurl
-  S3fsMultiCurl curlmulti;
+  S3fsMultiCurl curlmulti(GetMaxParallelCount());
   curlmulti.SetSuccessCallback(S3fsCurl::UploadMultipartPostCallback);
   curlmulti.SetRetryCallback(S3fsCurl::UploadMultipartPostRetryCallback);
 
@@ -1433,7 +1441,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 
   // cycle through open fd, pulling off 10MB chunks at a time
   for(remaining_bytes = size; 0 < remaining_bytes; ){
-    S3fsMultiCurl curlmulti;
+    S3fsMultiCurl curlmulti(GetMaxParallelCount());
     int           para_cnt;
     off_t         chunk;
 
@@ -3848,26 +3856,12 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
 }
 
 //-------------------------------------------------------------------
-// Class S3fsMultiCurl 
-//-------------------------------------------------------------------
-static const int MAX_MULTI_HEADREQ = 20;  // default: max request count in readdir curl_multi.
-
-//-------------------------------------------------------------------
-// Class method for S3fsMultiCurl 
-//-------------------------------------------------------------------
-int S3fsMultiCurl::max_multireq = MAX_MULTI_HEADREQ;
-
-int S3fsMultiCurl::SetMaxMultiRequest(int max)
-{
-  int old = S3fsMultiCurl::max_multireq;
-  S3fsMultiCurl::max_multireq= max;
-  return old;
-}
-
-//-------------------------------------------------------------------
 // method for S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl() : SuccessCallback(NULL), RetryCallback(NULL)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism)
+  : maxParallelism(maxParallelism)
+  , SuccessCallback(NULL)
+  , RetryCallback(NULL)
 {
 }
 
@@ -3930,7 +3924,7 @@ int S3fsMultiCurl::MultiPerform(void)
   std::vector<pthread_t>   threads;
   bool                     success = true;
   bool                     isMultiHead = false;
-  Semaphore                sem(S3fsCurl::max_parallel_cnt);
+  Semaphore                sem(GetMaxParallelism());
   int                      rc;
 
   for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); ++iter) {
@@ -3975,16 +3969,9 @@ int S3fsMultiCurl::MultiPerform(void)
     threads.push_back(thread);
   }
 
-  for(int i = 0; i < S3fsCurl::max_parallel_cnt; ++i){
+  for(int i = 0; i < sem.get_value(); ++i){
     sem.wait();
   }
-
-#ifdef __APPLE__
-  // macOS cannot destroy a semaphore with posts less than the initializer
-  for(int i = 0; i < S3fsCurl::max_parallel_cnt; ++i){
-    sem.post();
-  }
-#endif
 
   for (std::vector<pthread_t>::iterator titer = threads.begin(); titer != threads.end(); ++titer) {
     void*   retval;
@@ -4082,9 +4069,8 @@ int S3fsMultiCurl::Request(void)
   while(!cMap_all.empty()){
     // set curl handle to multi handle
     int                     result;
-    int                     cnt;
     s3fscurlmap_t::iterator iter;
-    for(cnt = 0, iter = cMap_all.begin(); cnt < S3fsMultiCurl::max_multireq && iter != cMap_all.end(); cMap_all.erase(iter++), cnt++){
+    for(iter = cMap_all.begin(); iter != cMap_all.end(); cMap_all.erase(iter++)){
       CURL*     hCurl    = (*iter).first;
       S3fsCurl* s3fscurl = (*iter).second;
 
