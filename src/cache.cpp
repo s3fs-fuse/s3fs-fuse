@@ -167,7 +167,7 @@ StatCache::~StatCache()
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
-unsigned long StatCache::GetCacheSize(void) const
+unsigned long StatCache::GetCacheSize() const
 {
   return CacheSize;
 }
@@ -179,7 +179,7 @@ unsigned long StatCache::SetCacheSize(unsigned long size)
   return old;
 }
 
-time_t StatCache::GetExpireTime(void) const
+time_t StatCache::GetExpireTime() const
 {
   return (IsExpireTime ? ExpireTime : (-1));
 }
@@ -193,7 +193,7 @@ time_t StatCache::SetExpireTime(time_t expire, bool is_interval)
   return old;
 }
 
-time_t StatCache::UnsetExpireTime(void)
+time_t StatCache::UnsetExpireTime()
 {
   time_t old           = IsExpireTime ? ExpireTime : (-1);
   ExpireTime           = 0;
@@ -209,7 +209,7 @@ bool StatCache::SetCacheNoObject(bool flag)
   return old;
 }
 
-void StatCache::Clear(void)
+void StatCache::Clear()
 {
   AutoLock lock(&StatCache::stat_cache_lock);
 
@@ -478,7 +478,7 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
   }
 }
 
-bool StatCache::TruncateCache(void)
+bool StatCache::TruncateCache()
 {
   AutoLock lock(&StatCache::stat_cache_lock);
 

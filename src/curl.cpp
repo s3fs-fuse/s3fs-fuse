@@ -198,7 +198,7 @@ bool BodyData::Resize(size_t addbytes)
   return true;
 }
 
-void BodyData::Clear(void)
+void BodyData::Clear()
 {
   if(text){
     free(text);
@@ -226,7 +226,7 @@ bool BodyData::Append(void* ptr, size_t bytes)
   return true;
 }
 
-const char* BodyData::str(void) const
+const char* BodyData::str() const
 {
   if(!text){
     static const char* strnull = "";
@@ -414,7 +414,7 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
   return true;
 }
 
-bool S3fsCurl::DestroyS3fsCurl(void)
+bool S3fsCurl::DestroyS3fsCurl()
 {
   int result = true;
 
@@ -444,7 +444,7 @@ bool S3fsCurl::DestroyS3fsCurl(void)
   return result;
 }
 
-bool S3fsCurl::InitGlobalCurl(void)
+bool S3fsCurl::InitGlobalCurl()
 {
   if(S3fsCurl::is_initglobal_done){
     return false;
@@ -457,7 +457,7 @@ bool S3fsCurl::InitGlobalCurl(void)
   return true;
 }
 
-bool S3fsCurl::DestroyGlobalCurl(void)
+bool S3fsCurl::DestroyGlobalCurl()
 {
   if(!S3fsCurl::is_initglobal_done){
     return false;
@@ -467,7 +467,7 @@ bool S3fsCurl::DestroyGlobalCurl(void)
   return true;
 }
 
-bool S3fsCurl::InitShareCurl(void)
+bool S3fsCurl::InitShareCurl()
 {
   CURLSHcode nSHCode;
 
@@ -516,7 +516,7 @@ bool S3fsCurl::InitShareCurl(void)
   return true;
 }
 
-bool S3fsCurl::DestroyShareCurl(void)
+bool S3fsCurl::DestroyShareCurl()
 {
   if(!S3fsCurl::hCurlShare){
     if(!S3fsCurl::is_dns_cache && !S3fsCurl::is_ssl_session_cache){
@@ -558,12 +558,12 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
   }
 }
 
-bool S3fsCurl::InitCryptMutex(void)
+bool S3fsCurl::InitCryptMutex()
 {
   return s3fs_init_crypt_mutex();
 }
 
-bool S3fsCurl::DestroyCryptMutex(void)
+bool S3fsCurl::DestroyCryptMutex()
 {
   return s3fs_destroy_crypt_mutex();
 }
@@ -627,7 +627,7 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
   return true;
 }
 
-void S3fsCurl::InitUserAgent(void)
+void S3fsCurl::InitUserAgent()
 {
   if(S3fsCurl::userAgent.empty()){
     S3fsCurl::userAgent =  "s3fs/";
@@ -699,7 +699,7 @@ string S3fsCurl::LookupMimeType(const string& name)
   return result;
 }
 
-bool S3fsCurl::LocateBundle(void)
+bool S3fsCurl::LocateBundle()
 {
   // See if environment variable CURL_CA_BUNDLE is set
   // if so, check it, if it is a good path, then set the
@@ -1063,7 +1063,7 @@ bool S3fsCurl::SetSseKmsid(const char* kmsid)
 // [NOTE]
 // Because SSE is set by some options and environment, 
 // this function check the integrity of the SSE data finally.
-bool S3fsCurl::FinalCheckSse(void)
+bool S3fsCurl::FinalCheckSse()
 {
   if(SSE_DISABLE == S3fsCurl::ssetype){
     S3fsCurl::ssekmsid.erase();
@@ -1091,7 +1091,7 @@ bool S3fsCurl::FinalCheckSse(void)
   return true;
 }
                                                                                                                                                    
-bool S3fsCurl::LoadEnvSseCKeys(void)
+bool S3fsCurl::LoadEnvSseCKeys()
 {
   char* envkeys = getenv("AWSSSECKEYS");
   if(NULL == envkeys){
@@ -1112,7 +1112,7 @@ bool S3fsCurl::LoadEnvSseCKeys(void)
   return true;
 }
 
-bool S3fsCurl::LoadEnvSseKmsid(void)
+bool S3fsCurl::LoadEnvSseKmsid()
 {
   char* envkmsid = getenv("AWSSSEKMSID");
   if(NULL == envkmsid){
@@ -1155,7 +1155,7 @@ bool S3fsCurl::GetSseKeyMd5(int pos, string& md5)
   return false;
 }
 
-int S3fsCurl::GetSseKeyCount(void)
+int S3fsCurl::GetSseKeyCount()
 {
   return S3fsCurl::sseckeys.size();
 }
@@ -1564,7 +1564,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   return true;
 }
 
-bool S3fsCurl::CheckIAMCredentialUpdate(void)
+bool S3fsCurl::CheckIAMCredentialUpdate()
 {
   if(S3fsCurl::IAM_role.empty() && !S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth){
     return true;
@@ -1698,7 +1698,7 @@ S3fsCurl::~S3fsCurl()
   DestroyCurlHandle();
 }
 
-bool S3fsCurl::ResetHandle(void)
+bool S3fsCurl::ResetHandle()
 {
   curl_easy_reset(hCurl);
   curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
@@ -1798,7 +1798,7 @@ bool S3fsCurl::DestroyCurlHandle(bool force)
   return true;
 }
 
-bool S3fsCurl::ClearInternalData(void)
+bool S3fsCurl::ClearInternalData()
 {
   // Always clear internal data
   //
@@ -1861,7 +1861,7 @@ bool S3fsCurl::GetResponseCode(long& responseCode)
 //
 // Reset all options for retrying
 //
-bool S3fsCurl::RemakeHandle(void)
+bool S3fsCurl::RemakeHandle()
 {
   S3FS_PRN_INFO3("Retry request. [type=%d][url=%s][path=%s]", type, url.c_str(), path.c_str());
 
@@ -2056,7 +2056,7 @@ bool S3fsCurl::RemakeHandle(void)
 //
 // returns curl return code
 //
-int S3fsCurl::RequestPerform(void)
+int S3fsCurl::RequestPerform()
 {
   if(IS_S3FS_LOG_DBG()){
     char* ptr_url = NULL;
@@ -2534,7 +2534,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
-int S3fsCurl::GetIAMCredentials(void)
+int S3fsCurl::GetIAMCredentials()
 {
   if (!S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth) {
     S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
@@ -2609,7 +2609,7 @@ int S3fsCurl::GetIAMCredentials(void)
 //
 // Get IAM role name automatically.
 //
-bool S3fsCurl::LoadIAMRoleFromMetaData(void)
+bool S3fsCurl::LoadIAMRoleFromMetaData()
 {
   S3FS_PRN_INFO3("Get IAM Role name");
 
@@ -3100,7 +3100,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
   return result;
 }
 
-int S3fsCurl::CheckBucket(void)
+int S3fsCurl::CheckBucket()
 {
   S3FS_PRN_INFO3("check a bucket.");
 
@@ -3915,7 +3915,7 @@ bool S3fsMultiCurl::SetS3fsCurlObject(S3fsCurl* s3fscurl)
   return true;
 }
 
-int S3fsMultiCurl::MultiPerform(void)
+int S3fsMultiCurl::MultiPerform()
 {
   std::vector<pthread_t>   threads;
   bool                     success = true;
@@ -3987,7 +3987,7 @@ int S3fsMultiCurl::MultiPerform(void)
   return success ? 0 : -EIO;
 }
 
-int S3fsMultiCurl::MultiRead(void)
+int S3fsMultiCurl::MultiRead()
 {
   for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); cMap_req.erase(iter++)) {
     S3fsCurl* s3fscurl = (*iter).second;
@@ -4053,7 +4053,7 @@ int S3fsMultiCurl::MultiRead(void)
   return 0;
 }
 
-int S3fsMultiCurl::Request(void)
+int S3fsMultiCurl::Request()
 {
   S3FS_PRN_INFO3("[count=%zu]", cMap_all.size());
 

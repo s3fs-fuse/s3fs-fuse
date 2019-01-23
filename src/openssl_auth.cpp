@@ -46,7 +46,7 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility Function for version
 //-------------------------------------------------------------------
-const char* s3fs_crypt_lib_name(void)
+const char* s3fs_crypt_lib_name()
 {
   static const char version[] = "OpenSSL";
 
@@ -56,7 +56,7 @@ const char* s3fs_crypt_lib_name(void)
 //-------------------------------------------------------------------
 // Utility Function for global init
 //-------------------------------------------------------------------
-bool s3fs_init_global_ssl(void)
+bool s3fs_init_global_ssl()
 {
   ERR_load_crypto_strings();
   ERR_load_BIO_strings();
@@ -64,7 +64,7 @@ bool s3fs_init_global_ssl(void)
   return true;
 }
 
-bool s3fs_destroy_global_ssl(void)
+bool s3fs_destroy_global_ssl()
 {
   EVP_cleanup();
   ERR_free_strings();
@@ -93,7 +93,7 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
   }
 }
 
-static unsigned long s3fs_crypt_get_threadid(void)
+static unsigned long s3fs_crypt_get_threadid()
 {
   // For FreeBSD etc, some system's pthread_t is structure pointer.
   // Then we use cast like C style(not C++) instead of ifdef.
@@ -131,7 +131,7 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
   }
 }
 
-bool s3fs_init_crypt_mutex(void)
+bool s3fs_init_crypt_mutex()
 {
   if(s3fs_crypt_mutex){
     S3FS_PRN_DBG("s3fs_crypt_mutex is not NULL, destroy it.");
@@ -158,7 +158,7 @@ bool s3fs_init_crypt_mutex(void)
   return true;
 }
 
-bool s3fs_destroy_crypt_mutex(void)
+bool s3fs_destroy_crypt_mutex()
 {
   if(!s3fs_crypt_mutex){
     return true;
@@ -214,7 +214,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
-size_t get_md5_digest_length(void)
+size_t get_md5_digest_length()
 {
   return MD5_DIGEST_LENGTH;
 }
@@ -273,7 +273,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 //-------------------------------------------------------------------
 // Utility Function for SHA256
 //-------------------------------------------------------------------
-size_t get_sha256_digest_length(void)
+size_t get_sha256_digest_length()
 {
   return SHA256_DIGEST_LENGTH;
 }

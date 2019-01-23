@@ -88,7 +88,7 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
   return true;
 }
 
-bool CacheFileStat::CheckCacheFileStatTopDir(void)
+bool CacheFileStat::CheckCacheFileStatTopDir()
 {
   if(!FdManager::IsCacheDir()){
     return true;
@@ -128,7 +128,7 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
 // If remove stat file directory, it should do before removing
 // file cache directory.
 //
-bool CacheFileStat::DeleteCacheFileStatDirectory(void)
+bool CacheFileStat::DeleteCacheFileStatDirectory()
 {
   string top_path = FdManager::GetCacheDir();
 
@@ -174,7 +174,7 @@ bool CacheFileStat::SetPath(const char* tpath, bool is_open)
   return Open();
 }
 
-bool CacheFileStat::Open(void)
+bool CacheFileStat::Open()
 {
   if(path.empty()){
     return false;
@@ -214,7 +214,7 @@ bool CacheFileStat::Open(void)
   return true;
 }
 
-bool CacheFileStat::Release(void)
+bool CacheFileStat::Release()
 {
   if(-1 == fd){
     // already release
@@ -257,7 +257,7 @@ PageList::~PageList()
   Clear();
 }
 
-void PageList::Clear(void)
+void PageList::Clear()
 {
   PageList::FreeList(pages);
 }
@@ -270,7 +270,7 @@ bool PageList::Init(size_t size, bool is_loaded)
   return true;
 }
 
-size_t PageList::Size(void) const
+size_t PageList::Size() const
 {
   if(pages.empty()){
     return 0;
@@ -279,7 +279,7 @@ size_t PageList::Size(void) const
   return static_cast<size_t>((*riter)->next());
 }
 
-bool PageList::Compress(void)
+bool PageList::Compress()
 {
   bool is_first       = true;
   bool is_last_loaded = false;
@@ -600,7 +600,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
   return true;
 }
 
-void PageList::Dump(void)
+void PageList::Dump()
 {
   int cnt = 0;
 
@@ -660,7 +660,7 @@ FdEntity::~FdEntity()
   }
 }
 
-void FdEntity::Clear(void)
+void FdEntity::Clear()
 {
   AutoLock auto_lock(&fdent_lock);
 
@@ -691,7 +691,7 @@ void FdEntity::Clear(void)
   is_modify     = false;
 }
 
-void FdEntity::Close(void)
+void FdEntity::Close()
 {
   S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt - 1 : refcnt));
 
@@ -738,7 +738,7 @@ int FdEntity::Dup()
 //
 // Open mirror file which is linked cache file.
 //
-int FdEntity::OpenMirrorFile(void)
+int FdEntity::OpenMirrorFile()
 {
   if(cachepath.empty()){
     S3FS_PRN_ERR("cache path is empty, why come here");
@@ -1055,7 +1055,7 @@ int FdEntity::SetMtime(time_t time)
   return 0;
 }
 
-bool FdEntity::UpdateCtime(void)
+bool FdEntity::UpdateCtime()
 {
   AutoLock auto_lock(&fdent_lock);
   struct stat st;
@@ -1066,7 +1066,7 @@ bool FdEntity::UpdateCtime(void)
   return true;
 }
 
-bool FdEntity::UpdateMtime(void)
+bool FdEntity::UpdateMtime()
 {
   AutoLock auto_lock(&fdent_lock);
   struct stat st;
@@ -1390,7 +1390,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
 // At no disk space for caching object.
 // This method is starting multipart uploading.
 //
-int FdEntity::NoCachePreMultipartPost(void)
+int FdEntity::NoCachePreMultipartPost()
 {
   // initialize multipart upload values
   upload_id.erase();
@@ -1423,7 +1423,7 @@ int FdEntity::NoCacheMultipartPost(int tgfd, off_t start, size_t size)
 // At no disk space for caching object.
 // This method is finishing multipart uploading.
 //
-int FdEntity::NoCacheCompleteMultipartPost(void)
+int FdEntity::NoCacheCompleteMultipartPost()
 {
   if(upload_id.empty() || etaglist.empty()){
     S3FS_PRN_ERR("There is no upload id or etag list.");
@@ -1824,7 +1824,7 @@ bool FdManager::SetCacheDir(const char* dir)
   return true;
 }
 
-bool FdManager::DeleteCacheDirectory(void)
+bool FdManager::DeleteCacheDirectory()
 {
   if(FdManager::cache_dir.empty()){
     return true;
@@ -1916,7 +1916,7 @@ bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_crea
   return true;
 }
 
-bool FdManager::CheckCacheTopDir(void)
+bool FdManager::CheckCacheTopDir()
 {
   if(FdManager::cache_dir.empty()){
     return true;
@@ -1943,7 +1943,7 @@ bool FdManager::SetCheckCacheDirExist(bool is_check)
   return old;
 }
 
-bool FdManager::CheckCacheDirExist(void)
+bool FdManager::CheckCacheDirExist()
 {
   if(!FdManager::check_cache_dir_exist){
     return true;

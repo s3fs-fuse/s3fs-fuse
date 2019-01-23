@@ -42,7 +42,7 @@ using namespace std;
 //-------------------------------------------------------------------
 // Utility Function for version
 //-------------------------------------------------------------------
-const char* s3fs_crypt_lib_name(void)
+const char* s3fs_crypt_lib_name()
 {
   static const char version[] = "NSS";
 
@@ -52,7 +52,7 @@ const char* s3fs_crypt_lib_name(void)
 //-------------------------------------------------------------------
 // Utility Function for global init
 //-------------------------------------------------------------------
-bool s3fs_init_global_ssl(void)
+bool s3fs_init_global_ssl()
 {
   PR_Init(PR_USER_THREAD, PR_PRIORITY_NORMAL, 0);
 
@@ -63,7 +63,7 @@ bool s3fs_init_global_ssl(void)
   return true;
 }
 
-bool s3fs_destroy_global_ssl(void)
+bool s3fs_destroy_global_ssl()
 {
   NSS_Shutdown();
   PL_ArenaFinish();
@@ -74,12 +74,12 @@ bool s3fs_destroy_global_ssl(void)
 //-------------------------------------------------------------------
 // Utility Function for crypt lock
 //-------------------------------------------------------------------
-bool s3fs_init_crypt_mutex(void)
+bool s3fs_init_crypt_mutex()
 {
   return true;
 }
 
-bool s3fs_destroy_crypt_mutex(void)
+bool s3fs_destroy_crypt_mutex()
 {
   return true;
 }
@@ -148,7 +148,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
-size_t get_md5_digest_length(void)
+size_t get_md5_digest_length()
 {
   return MD5_LENGTH;
 }
@@ -210,7 +210,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 //-------------------------------------------------------------------
 // Utility Function for SHA256
 //-------------------------------------------------------------------
-size_t get_sha256_digest_length(void)
+size_t get_sha256_digest_length()
 {
   return SHA256_LENGTH;
 }

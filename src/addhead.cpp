@@ -164,7 +164,7 @@ bool AdditionalHeader::Load(const char* file)
   return true;
 }
 
-void AdditionalHeader::Unload(void)
+void AdditionalHeader::Unload()
 {
   is_enable = false;
 
@@ -239,7 +239,7 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
   return list;
 }
 
-bool AdditionalHeader::Dump(void) const
+bool AdditionalHeader::Dump() const
 {
   if(!IS_S3FS_LOG_DBG()){
     return true;
