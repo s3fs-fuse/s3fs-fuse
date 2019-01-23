@@ -108,7 +108,7 @@ function test_mv_file {
     rm_test_file $ALT_TEST_TEXT_FILE
 }
 
-function test_mv_directory {
+function test_mv_empty_directory {
     describe "Testing mv directory function ..."
     if [ -e $TEST_DIR ]; then
        echo "Unexpected, this file/directory exists: ${TEST_DIR}"
@@ -118,13 +118,36 @@ function test_mv_directory {
     mk_test_dir
 
     mv ${TEST_DIR} ${TEST_DIR}_rename
-
     if [ ! -d "${TEST_DIR}_rename" ]; then
        echo "Directory ${TEST_DIR} was not renamed"
        return 1
     fi
 
     rmdir ${TEST_DIR}_rename
+    if [ -e "${TEST_DIR}_rename" ]; then
+       echo "Could not remove the test directory, it still exists: ${TEST_DIR}_rename"
+       return 1
+    fi
+}
+
+function test_mv_nonempty_directory {
+    describe "Testing mv directory function ..."
+    if [ -e $TEST_DIR ]; then
+       echo "Unexpected, this file/directory exists: ${TEST_DIR}"
+       return 1
+    fi
+
+    mk_test_dir
+
+    touch ${TEST_DIR}/file
+
+    mv ${TEST_DIR} ${TEST_DIR}_rename
+    if [ ! -d "${TEST_DIR}_rename" ]; then
+       echo "Directory ${TEST_DIR} was not renamed"
+       return 1
+    fi
+
+    rm -r ${TEST_DIR}_rename
     if [ -e "${TEST_DIR}_rename" ]; then
        echo "Could not remove the test directory, it still exists: ${TEST_DIR}_rename"
        return 1
@@ -493,7 +516,8 @@ function add_all_tests {
     add_tests test_truncate_file 
     add_tests test_truncate_empty_file
     add_tests test_mv_file
-    add_tests test_mv_directory
+    add_tests test_mv_empty_directory
+    add_tests test_mv_nonempty_directory
     add_tests test_redirects
     add_tests test_mkdir_rmdir
     add_tests test_chmod
