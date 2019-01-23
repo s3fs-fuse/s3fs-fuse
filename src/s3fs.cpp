@@ -134,6 +134,7 @@ static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = FIVE_GB;
+static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
@@ -3755,32 +3756,46 @@ static int s3fs_check_service(void)
 
     // check wrong endpoint, and automatically switch endpoint
     if(300 <= responseCode && responseCode < 500){
-      // check region error
+
+      // check region error(for putting message or retrying)
       BodyData* body = s3fscurl.GetBodyData();
       string    expectregion;
       if(check_region_error(body->str(), endpoint, expectregion)){
-        // current endpoint is wrong, so try to connect to expected region.
-        S3FS_PRN_CRIT("Could not connect wrong region %s, so retry to connect region %s.", endpoint.c_str(), expectregion.c_str());
-        endpoint = expectregion;
-        if(S3fsCurl::IsSignatureV4()){
-            if(host == "http://s3.amazonaws.com"){
-                host = "http://s3-" + endpoint + ".amazonaws.com";
-            }else if(host == "https://s3.amazonaws.com"){
-                host = "https://s3-" + endpoint + ".amazonaws.com";
-            }
-        }
+        // [NOTE]
+        // If endpoint is not specified(using us-east-1 region) and
+        // an error is encountered accessing a different region, we
+        // will retry the check on the expected region.
+        // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
+        //
+        if(is_specified_endpoint){
+          const char* tmp_expect_ep = expectregion.c_str();
+          S3FS_PRN_CRIT("The bucket region is not '%s', it is correctly '%s'. You should specify 'endpoint=%s' option.", 
+            endpoint.c_str(), tmp_expect_ep, tmp_expect_ep);
 
-        // retry to check with new endpoint
-        s3fscurl.DestroyCurlHandle();
-        res          = s3fscurl.CheckBucket();
-        responseCode = s3fscurl.GetLastResponseCode();
+        }else{
+          // current endpoint is wrong, so try to connect to expected region.
+          S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
+          endpoint = expectregion;
+          if(S3fsCurl::IsSignatureV4()){
+              if(host == "http://s3.amazonaws.com"){
+                  host = "http://s3-" + endpoint + ".amazonaws.com";
+              }else if(host == "https://s3.amazonaws.com"){
+                  host = "https://s3-" + endpoint + ".amazonaws.com";
+              }
+          }
+
+          // retry to check with new endpoint
+          s3fscurl.DestroyCurlHandle();
+          res          = s3fscurl.CheckBucket();
+          responseCode = s3fscurl.GetLastResponseCode();
+        }
       }
     }
 
     // try signature v2
     if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
       // switch sigv2
-      S3FS_PRN_WARN("Could not connect, so retry to connect by signature version 2.");
+      S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
       S3fsCurl::SetSignatureV4(false);
 
       // retry to check with sigv2
@@ -4838,6 +4853,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "endpoint=")){
       endpoint              = strchr(arg, '=') + sizeof(char);
+      is_specified_endpoint = true;
       return 0;
     }
     if(0 == strcmp(arg, "use_path_request_style")){
