@@ -89,7 +89,7 @@ bool AdditionalHeader::Load(const char* file)
     if('#' == line[0]){
       continue;
     }
-    if(0 == line.size()){
+    if(line.empty()){
       continue;
     }
     // load a line
@@ -108,8 +108,8 @@ bool AdditionalHeader::Load(const char* file)
     }
 
     // check it
-    if(0 == head.size()){
-      if(0 == key.size()){
+    if(head.empty()){
+      if(key.empty()){
         continue;
       }
       S3FS_PRN_ERR("file format error: %s key(suffix) is no HTTP header value.", key.c_str());

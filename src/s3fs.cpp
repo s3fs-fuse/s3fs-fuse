@@ -706,7 +706,7 @@ static int check_parent_object_access(const char* path, int mask)
     return 0;
   }
   if(X_OK == (mask & X_OK)){
-    for(parent = mydirname(path); 0 < parent.size(); parent = mydirname(parent)){
+    for(parent = mydirname(path); !parent.empty(); parent = mydirname(parent)){
       if(parent == "."){
         parent = "/";
       }
@@ -2513,7 +2513,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
   while(truncated){
     string each_query = query_delimiter;
-    if(next_marker != ""){
+    if(!next_marker.empty()){
       each_query += "marker=" + urlEncode(next_marker) + "&";
       next_marker = "";
     }
@@ -2679,7 +2679,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
       }
     }
   }
-  if(0 < strNs.size()){
+  if(!strNs.empty()){
     nsurl  = strNs;
     result = true;
   }
@@ -3828,7 +3828,7 @@ static int s3fs_check_service(void)
   s3fscurl.DestroyCurlHandle();
 
   // make sure remote mountpath exists and is a directory
-  if(mount_prefix.size() > 0){
+  if(!mount_prefix.empty()){
     if(remote_mountpath_exists(mount_prefix.c_str()) != 0){
       S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
       return EXIT_FAILURE;
@@ -3871,7 +3871,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
   // read each line
   while(getline(PF, line)){
     line = trim(line);
-    if(0 == line.size()){
+    if(line.empty()){
       continue;
     }
     if('#' == line[0]){
@@ -3932,7 +3932,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
       secret    = trim(iter->substr(first_pos + 1, string::npos));
     }
     if(resmap.end() != resmap.find(bucketname)){
-      S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", ("" == bucketname ? "default" : bucketname.c_str()));
+      S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
       return -1;
     }
     kv.clear();
@@ -4038,7 +4038,7 @@ static int read_aws_credentials_file(const std::string &filename)
   string line;
   while(getline(PF, line)){
     line = trim(line);
-    if(0 == line.size()){
+    if(line.empty()){
       continue;
     }
     if('#' == line[0]){
@@ -4129,7 +4129,7 @@ static int read_passwd_file(void)
   }
 
   string bucket_key = allbucket_fields_type;
-  if(0 < bucket.size() && bucketmap.end() != bucketmap.find(bucket)){
+  if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
     bucket_key = bucket;
   }
   if(bucketmap.end() == bucketmap.find(bucket_key)){
@@ -4183,7 +4183,7 @@ static int get_access_keys(void)
   }
 
   // 2 - was specified on the command line
-  if(passwd_file.size() > 0){
+  if(!passwd_file.empty()){
     ifstream PF(passwd_file.c_str());
     if(PF.good()){
        PF.close();
@@ -4215,7 +4215,7 @@ static int get_access_keys(void)
   AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
   if(AWS_CREDENTIAL_FILE != NULL){
     passwd_file.assign(AWS_CREDENTIAL_FILE);
-    if(passwd_file.size() > 0){
+    if(!passwd_file.empty()){
       ifstream PF(passwd_file.c_str());
       if(PF.good()){
          PF.close();
@@ -4340,7 +4340,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
   int ret;
   if(key == FUSE_OPT_KEY_NONOPT){
     // the first NONOPT option is the bucket name
-    if(bucket.size() == 0){
+    if(bucket.empty()){
       if ((ret = set_bucket(arg))){
         return ret;
       }
@@ -4351,7 +4351,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
 
     // the second NONOPT option is the mountpoint(not utility mode)
-    if(0 == mountpoint.size() && 0 == utility_mode){
+    if(mountpoint.empty() && 0 == utility_mode){
       // save the mountpoint and do some basic error checking
       mountpoint = arg;
       struct stat stbuf;
@@ -5054,7 +5054,7 @@ int main(int argc, char* argv[])
   }
 
   // The first plain argument is the bucket
-  if(bucket.size() == 0){
+  if(bucket.empty()){
     S3FS_PRN_EXIT("missing BUCKET argument.");
     show_usage();
     S3fsCurl::DestroyS3fsCurl();
@@ -5091,7 +5091,7 @@ int main(int argc, char* argv[])
   // readable, non-empty directory, this checks determines
   // if the mountpoint option was ever supplied
   if(utility_mode == 0){
-    if(mountpoint.size() == 0){
+    if(mountpoint.empty()){
       S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
       show_usage();
       S3fsCurl::DestroyS3fsCurl();
@@ -5107,7 +5107,7 @@ int main(int argc, char* argv[])
     s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
   }
-  if(passwd_file.size() > 0 && S3fsCurl::IsSetAccessKeys()){
+  if(!passwd_file.empty() && S3fsCurl::IsSetAccessKeys()){
     S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();

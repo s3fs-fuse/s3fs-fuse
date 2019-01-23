@@ -176,7 +176,7 @@ bool CacheFileStat::SetPath(const char* tpath, bool is_open)
 
 bool CacheFileStat::Open(void)
 {
-  if(0 == path.size()){
+  if(path.empty()){
     return false;
   }
   if(-1 != fd){
@@ -665,7 +665,7 @@ void FdEntity::Clear(void)
   AutoLock auto_lock(&fdent_lock);
 
   if(-1 != fd){
-    if(0 != cachepath.size()){
+    if(!cachepath.empty()){
       CacheFileStat cfstat(path.c_str());
       if(!pagelist.Serialize(cfstat, true)){
         S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
@@ -702,7 +702,7 @@ void FdEntity::Close(void)
       refcnt--;
     }
     if(0 == refcnt){
-      if(0 != cachepath.size()){
+      if(!cachepath.empty()){
         CacheFileStat cfstat(path.c_str());
         if(!pagelist.Serialize(cfstat, true)){
           S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
@@ -834,7 +834,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
   bool  need_save_csf = false;  // need to save(reset) cache stat file
   bool  is_truncate   = false;  // need to truncate
 
-  if(0 != cachepath.size()){
+  if(!cachepath.empty()){
     // using cache
 
     // open cache and cache stat file, load page info.
@@ -1039,7 +1039,7 @@ int FdEntity::SetMtime(time_t time)
       S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
       return -errno;
     }
-  }else if(0 < cachepath.size()){
+  }else if(!cachepath.empty()){
     // not opened file yet.
     struct utimbuf n_mtime;
     n_mtime.modtime = time;
@@ -1237,7 +1237,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
   // [NOTE]
   // This method calling means that the cache file is never used no more.
   //
-  if(0 != cachepath.size()){
+  if(!cachepath.empty()){
     // remove cache files(and cache stat file)
     FdManager::DeleteCacheFile(path.c_str());
     // cache file path does not use no more.
@@ -1826,7 +1826,7 @@ bool FdManager::SetCacheDir(const char* dir)
 
 bool FdManager::DeleteCacheDirectory(void)
 {
-  if(0 == FdManager::cache_dir.size()){
+  if(FdManager::cache_dir.empty()){
     return true;
   }
   string cache_path;
@@ -1843,7 +1843,7 @@ int FdManager::DeleteCacheFile(const char* path)
   if(!path){
     return -EIO;
   }
-  if(0 == FdManager::cache_dir.size()){
+  if(FdManager::cache_dir.empty()){
     return 0;
   }
   string cache_path;
@@ -1876,7 +1876,7 @@ int FdManager::DeleteCacheFile(const char* path)
 
 bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_create_dir, bool is_mirror_path)
 {
-  if(0 == FdManager::cache_dir.size()){
+  if(FdManager::cache_dir.empty()){
     cache_path = "";
     return true;
   }
@@ -1908,7 +1908,7 @@ bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_crea
 
 bool FdManager::CheckCacheTopDir(void)
 {
-  if(0 == FdManager::cache_dir.size()){
+  if(FdManager::cache_dir.empty()){
     return true;
   }
   string toppath(FdManager::cache_dir + "/" + bucket);
@@ -1938,7 +1938,7 @@ bool FdManager::CheckCacheDirExist(void)
   if(!FdManager::check_cache_dir_exist){
     return true;
   }
-  if(0 == FdManager::cache_dir.size()){
+  if(FdManager::cache_dir.empty()){
     return true;
   }
   // check the directory
@@ -1965,7 +1965,7 @@ uint64_t FdManager::GetFreeDiskSpace(const char* path)
 {
   struct statvfs vfsbuf;
   string         ctoppath;
-  if(0 < FdManager::cache_dir.size()){
+  if(!FdManager::cache_dir.empty()){
     ctoppath = FdManager::cache_dir + "/";
     ctoppath = get_exist_directory_path(ctoppath);	// existed directory
     if(ctoppath != "/"){
@@ -2107,7 +2107,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
       // make new obj
       ent = new FdEntity(path, cache_path.c_str());
 
-      if(0 < cache_path.size()){
+      if(!cache_path.empty()){
         // using cache
         fent[string(path)] = ent;
       }else{
