@@ -48,7 +48,7 @@ using namespace std;
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
-std::string mount_prefix   = "";
+std::string mount_prefix;
 
 //-------------------------------------------------------------------
 // Utility
@@ -756,7 +756,7 @@ time_t get_mtime(const char *str)
   // truncating the floating point or less (in seconds or less) to
   // correspond to this.
   //
-  string strmtime("");
+  string strmtime;
   if(str && '\0' != *str){
     strmtime = str;
     string::size_type pos = strmtime.find('.', 0);

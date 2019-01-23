@@ -352,7 +352,7 @@ bool             S3fsCurl::is_public_bucket    = false;
 string           S3fsCurl::default_acl         = "private";
 storage_class_t  S3fsCurl::storage_class       = STANDARD;
 sseckeylist_t    S3fsCurl::sseckeys;
-std::string      S3fsCurl::ssekmsid            = "";
+std::string      S3fsCurl::ssekmsid;
 sse_type_t       S3fsCurl::ssetype             = SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
@@ -2713,7 +2713,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
 
   // requestHeaders
   if(0 <= ssekey_pos){
-    string md5("");
+    string md5;
     if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(SSE_C, md5, true, false)){
       S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%d)(=md5(%s)).", ssekey_pos, md5.c_str());
       return false;
@@ -2850,7 +2850,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   }
   // SSE
   if(!is_copy){
-    string ssevalue("");
+    string ssevalue;
     if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
       S3FS_PRN_WARN("Failed to set SSE header, but continue...");
     }
@@ -2980,7 +2980,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
   }
   // SSE
-  string ssevalue("");
+  string ssevalue;
   if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
     S3FS_PRN_WARN("Failed to set SSE header, but continue...");
   }
@@ -3250,7 +3250,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   }
   // SSE
   if(!is_copy){
-    string ssevalue("");
+    string ssevalue;
     if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
       S3FS_PRN_WARN("Failed to set SSE header, but continue...");
     }
@@ -3504,7 +3504,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
 
   // SSE
   if(SSE_C == S3fsCurl::GetSseType()){
-    string ssevalue("");
+    string ssevalue;
     if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
       S3FS_PRN_WARN("Failed to set SSE header, but continue...");
     }
@@ -4117,7 +4117,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
     return list;
   }
   string strkey = data;
-  string strval = "";
+  string strval;
 
   string::size_type pos = strkey.find(':', 0);
   if(string::npos != pos){

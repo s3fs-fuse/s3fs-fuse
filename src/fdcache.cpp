@@ -1798,7 +1798,7 @@ pthread_mutex_t FdManager::fd_manager_lock;
 pthread_mutex_t FdManager::cache_cleanup_lock;
 pthread_mutex_t FdManager::reserved_diskspace_lock;
 bool            FdManager::is_lock_init(false);
-string          FdManager::cache_dir("");
+string          FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 size_t          FdManager::free_disk_space = 0;
 
@@ -1837,7 +1837,7 @@ int FdManager::DeleteCacheFile(const char* path)
   if(0 == FdManager::cache_dir.size()){
     return 0;
   }
-  string cache_path = "";
+  string cache_path;
   if(!FdManager::MakeCachePath(path, cache_path, false)){
     return 0;
   }
@@ -2090,7 +2090,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
 
     }else if(is_create){
       // not found
-      string cache_path = "";
+      string cache_path;
       if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
         S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
         return NULL;
@@ -2109,7 +2109,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
         // The reason why this process here, please look at the definition of the
         // comments of NOCACHE_PATH_PREFIX_FORM symbol.
         //
-        string tmppath("");
+        string tmppath;
         FdManager::MakeRandomTempPath(path, tmppath);
         fent[tmppath] = ent;
       }
@@ -2208,7 +2208,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
     if((*iter).second == ent){
       fent.erase(iter++);
 
-      string tmppath("");
+      string tmppath;
       FdManager::MakeRandomTempPath(path, tmppath);
       fent[tmppath] = ent;
     }else{

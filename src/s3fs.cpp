@@ -97,10 +97,10 @@ bool complement_stat              = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string host                  = "https://s3.amazonaws.com";
-std::string bucket                = "";
+std::string bucket;
 std::string endpoint              = "us-east-1";
-std::string cipher_suites         = "";
-std::string instance_name         = "";
+std::string cipher_suites;
+std::string instance_name;
 s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
 std::string aws_profile           = "default";
@@ -114,7 +114,7 @@ static mode_t mp_mode             = 0;    // mode of mount point
 static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
-static std::string passwd_file    = "";
+static std::string passwd_file;
 static bool utility_mode          = false;
 static bool noxmlns               = false;
 static bool nocopyapi             = false;
@@ -138,7 +138,7 @@ static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
 
-static const std::string allbucket_fields_type = "";         // special key for mapping(This name is absolutely not used as a bucket name)
+static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string aws_accesskeyid       = "AWSAccessKeyId";
 static const std::string aws_secretkey         = "AWSSecretKey";
@@ -2481,7 +2481,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
   string    query_delimiter;;
   string    query_prefix;;
   string    query_maxkey;;
-  string    next_marker = "";
+  string    next_marker;
   bool      truncated = true;
   S3fsCurl  s3fscurl;
   xmlDocPtr doc;
@@ -2657,7 +2657,7 @@ static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathC
 static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
 {
   static time_t tmLast = 0;  // cache for 60 sec.
-  static string strNs("");
+  static string strNs;
   bool result = false;
 
   if(!doc){
@@ -2689,10 +2689,10 @@ static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& h
 {
   string xmlnsurl;
   string ex_contents = "//";
-  string ex_key      = "";
+  string ex_key;
   string ex_cprefix  = "//";
-  string ex_prefix   = "";
-  string ex_etag     = "";
+  string ex_prefix;
+  string ex_etag;
 
   if(!doc){
     return -1;
@@ -2849,7 +2849,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
         // OK
         return strdup(mybname);
       }else if(basepath && 0 < strlen(basepath) && '/' == basepath[strlen(basepath) - 1] && 0 == strncmp(dirpath, basepath, strlen(basepath) - 1)){
-        string withdirname = "";
+        string withdirname;
         if(strlen(dirpath) > strlen(basepath)){
           withdirname = &dirpath[strlen(basepath)];
         }
@@ -2940,7 +2940,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
   // parse each key:val
   for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(',')){
     string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
-    string    key  = "";
+    string    key;
     PXATTRVAL pval = NULL;
     if(!parse_xattr_keyval(pair, key, pval)){
       // something format error, so skip this.
@@ -3571,9 +3571,9 @@ static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
 
   string xmlnsurl;
   string ex_upload = "//";
-  string ex_key    = "";
-  string ex_id     = "";
-  string ex_date   = "";
+  string ex_key;
+  string ex_id;
+  string ex_date;
 
   if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
     xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
@@ -4614,7 +4614,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
-      std::string endpoint_url = "";
+      std::string endpoint_url;
       std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
       // Check url for http / https protocol string
       if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {

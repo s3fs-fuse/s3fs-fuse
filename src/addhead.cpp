@@ -94,7 +94,7 @@ bool AdditionalHeader::Load(const char* file)
     }
     // load a line
     stringstream ss(line);
-    string       key("");       // suffix(key)
+    string       key;           // suffix(key)
     string       head;          // additional HTTP header
     string       value;         // header value
     if(0 == isblank(line[0])){
