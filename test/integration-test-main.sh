@@ -487,6 +487,17 @@ function test_write_after_seek_ahead {
    rm testfile
 }
 
+function test_overwrite_existing_file_range {
+    describe "Test overwrite range succeeds"
+    dd if=<(seq 1000) of=${TEST_TEXT_FILE}
+    dd if=/dev/zero of=${TEST_TEXT_FILE} seek=1 count=1 bs=1024 conv=notrunc
+    cmp ${TEST_TEXT_FILE} <(
+        seq 1000 | head -c 1024
+        dd if=/dev/zero count=1 bs=1024
+        seq 1000 | tail -c +2049
+    )
+    rm -f ${TEST_TEXT_FILE}
+}
 
 function add_all_tests {
     add_tests test_append_file 
@@ -510,6 +521,7 @@ function add_all_tests {
     add_tests test_update_time
     add_tests test_rm_rf_dir
     add_tests test_write_after_seek_ahead
+    add_tests test_overwrite_existing_file_range
 }
 
 init_suite

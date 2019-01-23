@@ -1732,6 +1732,15 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     pagelist.SetPageLoadedStatus(start, static_cast<size_t>(wsize), true);
   }
 
+  // Load uninitialized area which starts from (start + size) to EOF after writing.
+  if(pagelist.Size() > static_cast<size_t>(start) + size){
+    result = Load(static_cast<size_t>(start + size), pagelist.Size());
+    if(0 != result){
+      S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
+      return static_cast<ssize_t>(result);
+    }
+  }
+
   // check multipart uploading
   if(0 < upload_id.length()){
     mp_size += static_cast<size_t>(wsize);
