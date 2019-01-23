@@ -4310,7 +4310,7 @@ static int set_bucket(const char* arg)
       return -1;
     }
     bucket = strtok(bucket_name, ":");
-    char* pmount_prefix = strtok(NULL, ":");
+    char* pmount_prefix = strtok(NULL, "");
     if(pmount_prefix){
       if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
         S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
