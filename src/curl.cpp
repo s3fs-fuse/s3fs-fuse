@@ -4261,7 +4261,7 @@ string get_canonical_headers(const struct curl_slist* list)
         // skip empty-value headers (as they are discarded by libcurl)
         continue;
       }
-      strhead       = strkey + string(":") + strval;
+      strhead       = strkey.append(":").append(strval);
     }else{
       strhead       = trim(lower(strhead));
     }
@@ -4290,7 +4290,7 @@ string get_canonical_headers(const struct curl_slist* list, bool only_amz)
         // skip empty-value headers (as they are discarded by libcurl)
         continue;
       }
-      strhead       = strkey + string(":") + strval;
+      strhead       = strkey.append(":").append(strval);
     }else{
       strhead       = trim(lower(strhead));
     }

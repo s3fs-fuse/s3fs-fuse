@@ -120,8 +120,7 @@ string trim_right(const string &s, const string &t /* = SPACES */)
 
 string trim(const string &s, const string &t /* = SPACES */)
 {
-  string d(s);
-  return trim_left(trim_right(d, t), t);
+  return trim_left(trim_right(s, t), t);
 }
 
 /**
