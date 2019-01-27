@@ -7,12 +7,12 @@
 ###
 ### UsageFunction <program name>
 ###
-UsageFuntion()
+UsageFunction()
 {
     echo "Usage: $1 [-h] [-y] [-all] <base directory>"
     echo "  -h   print usage"
     echo "  -y   no confirm"
-    echo "  -all force all directoris"
+    echo "  -all force all directories"
     echo "       There is no -all option is only to merge for other S3 client."
     echo "       If -all is specified, this shell script merge all directory"
     echo "       for s3fs old version."
@@ -28,7 +28,7 @@ DIRPARAM=""
 
 while [ "$1" != "" ]; do
     if [ "X$1" = "X-help" -o "X$1" = "X-h" -o "X$1" = "X-H" ]; then
-        UsageFuntion $OWNNAME
+        UsageFunction $OWNNAME
         exit 0
     elif [ "X$1" = "X-y" -o "X$1" = "X-Y" ]; then
         AUTOYES="yes"
@@ -38,7 +38,7 @@ while [ "$1" != "" ]; do
         if [ "X$DIRPARAM" != "X" ]; then
             echo "*** Input error."
             echo ""
-            UsageFuntion $OWNNAME
+            UsageFunction $OWNNAME
             exit 1
         fi
         DIRPARAM=$1
@@ -48,7 +48,7 @@ done
 if [ "X$DIRPARAM" = "X" ]; then
     echo "*** Input error."
     echo ""
-    UsageFuntion $OWNNAME
+    UsageFunction $OWNNAME
     exit 1
 fi
 
@@ -62,7 +62,7 @@ fi
 echo "#############################################################################"
 echo "[CAUTION]"
 echo "This program merges a directory made in s3fs which is older than version 1.64."
-echo "And made in other S3 client appilication."
+echo "And made in other S3 client application."
 echo "This program may be have bugs which are not fixed yet."
 echo "Please execute this program by responsibility of your own."
 echo "#############################################################################"
@@ -104,7 +104,7 @@ for DIR in $DIRLIST; do
     if [ "$ALLYES" = "no" ]; then
         ### Skip "d---------" directories.
         ### Other clients make directory object "dir/" which don't have
-        ### "x-amz-meta-mode" attribyte.
+        ### "x-amz-meta-mode" attribute.
         ### Then these directories is "d---------", it is target directory.
         DIRPERMIT=`ls -ld --time-style=+'%Y%m%d%H%M' $DIR | awk '{print $1}'`
         if [ "$DIRPERMIT" != "d---------" ]; then
@@ -112,7 +112,7 @@ for DIR in $DIRLIST; do
         fi
     fi
 
-    ### Comfirm
+    ### Confirm
     ANSWER=""
     if [ "$AUTOYES" = "yes" ]; then
         ANSWER="y"

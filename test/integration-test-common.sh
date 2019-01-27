@@ -146,14 +146,14 @@ function start_s3fs {
     # If VALGRIND is set, pass it as options to valgrind.
     # start valgrind-listener in another shell. 
     # eg: VALGRIND="--tool=memcheck --leak-check=full" ./small-integration-test.sh
-    # Start valgind-listener (default port is 1500)
+    # Start valgrind-listener (default port is 1500)
     if [ -n "${VALGRIND}" ]; then
         VALGRIND_EXEC="valgrind ${VALGRIND} --log-socket=127.0.1.1"
     fi
 
     # Common s3fs options:
     #
-    # TODO: Allow all these options to be overriden with env variables
+    # TODO: Allow all these options to be overridden with env variables
     #
     # use_path_request_style
     #     The test env doesn't have virtual hosts
