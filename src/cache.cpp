@@ -211,9 +211,7 @@ void StatCache::Clear(void)
   pthread_mutex_lock(&StatCache::stat_cache_lock);
 
   for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); stat_cache.erase(iter++)){
-    if((*iter).second){
-      delete (*iter).second;
-    }
+    delete (*iter).second;
   }
   S3FS_MALLOCTRIM(0);
 
@@ -405,9 +403,7 @@ bool StatCache::AddStat(std::string& key, headers_t& meta, bool forcedir, bool n
 
   stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
   if(stat_cache.end() != iter){
-    if(iter->second){
-      delete iter->second;
-    }
+    delete iter->second;
     stat_cache.erase(iter);
   }
   stat_cache[key] = ent;
@@ -459,9 +455,7 @@ bool StatCache::AddNoObjectCache(string& key)
 
   stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
   if(stat_cache.end() != iter){
-    if(iter->second){
-      delete iter->second;
-    }
+    delete iter->second;
     stat_cache.erase(iter);
   }
   stat_cache[key] = ent;
@@ -505,9 +499,7 @@ bool StatCache::TruncateCache(void)
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
       stat_cache_entry* entry = iter->second;
       if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
-        if(entry){
-            delete entry;
-        }
+        delete entry;
         stat_cache.erase(iter++);
       }else{
         ++iter;
@@ -544,9 +536,7 @@ bool StatCache::TruncateCache(void)
     stat_cache_t::iterator siter = *iiter;
 
     S3FS_PRN_DBG("truncate stat cache[path=%s]", siter->first.c_str());
-    if(siter->second){
-        delete siter->second;
-    }
+    delete siter->second;
     stat_cache.erase(siter);
   }
   S3FS_MALLOCTRIM(0);
@@ -567,9 +557,7 @@ bool StatCache::DelStat(const char* key)
 
   stat_cache_t::iterator iter;
   if(stat_cache.end() != (iter = stat_cache.find(string(key)))){
-    if((*iter).second){
-      delete (*iter).second;
-    }
+    delete (*iter).second;
     stat_cache.erase(iter);
   }
   if(0 < strlen(key) && 0 != strcmp(key, "/")){
@@ -582,9 +570,7 @@ bool StatCache::DelStat(const char* key)
       strpath += "/";
     }
     if(stat_cache.end() != (iter = stat_cache.find(strpath))){
-      if((*iter).second){
-        delete (*iter).second;
-      }
+      delete (*iter).second;
       stat_cache.erase(iter);
     }
   }

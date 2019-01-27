@@ -2886,9 +2886,7 @@ static int remote_mountpath_exists(const char* path)
 static void free_xattrs(xattrs_t& xattrs)
 {
   for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); xattrs.erase(iter++)){
-    if(iter->second){
-      delete iter->second;
-    }
+    delete iter->second;
   }
 }
 
@@ -3327,9 +3325,7 @@ static int s3fs_removexattr(const char* path, const char* name)
   }
 
   // make new header_t after deleting name xattr
-  if(xiter->second){
-    delete xiter->second;
-  }
+  delete xiter->second;
   xattrs.erase(xiter);
 
   // build new xattr
