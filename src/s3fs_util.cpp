@@ -1218,7 +1218,7 @@ void show_help (void)
     "      error from the S3 server.\n"
     "\n"
     "   sigv2 (default is signature version 4)\n"
-    "      - sets signing AWS requests by sing Signature Version 2\n"
+    "      - sets signing AWS requests by using Signature Version 2\n"
     "\n"
     "   mp_umask (default is \"0000\")\n"
     "      - sets umask for the mount point directory.\n"
