@@ -220,10 +220,8 @@ But if you set the allow_other with this option, you can control permissions of 
 \fB\-o\fR nomultipart - disable multipart uploads
 .TP
 \fB\-o\fR enable_content_md5 ( default is disable )
-verifying uploaded data without multipart by content-md5 header.
-Enable to send "Content-MD5" header when uploading a object without multipart posting.
-If this option is enabled, it has some influences on a performance of s3fs when uploading small object.
-Because s3fs always checks MD5 when uploading large object, this option does not affect on large object.
+Allow S3 server to check data integrity of uploads via the Content-MD5 header.
+This can add CPU overhead to transfers.
 .TP
 \fB\-o\fR ecs ( default is disable )
 This option instructs s3fs to query the ECS container credential metadata address instead of the instance metadata address.
