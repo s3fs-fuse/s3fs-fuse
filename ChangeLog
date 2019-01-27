@@ -46,7 +46,7 @@ Version 1.83 -- Dec 17, 2017
 #638 - Minor fixes to README
 #639 - Update Homebrew instructions
 #642 - Fixed potential atomic violation in S3fsCurl::AddUserAgent - #633
-#644 - Fixed with unnecessary equal in POST uploads url argment - #643
+#644 - Fixed with unnecessary equal in POST uploads url argument - #643
 #645 - Configure S3Proxy for SSL
 #646 - Simplify S3Proxy PID handling
 #652 - Fix s3fs_init message
@@ -112,7 +112,7 @@ Version 1.81 -- May 13, 2017
 #540 - Address cppcheck 1.77 warnings
 #545 - Changed base cached time of stat_cache_expire option - #523
 #546 - Fixed double initialization of SSL library at foreground
-#550 - Add umount instruction for unplivileged user
+#550 - Add umount instruction for unprivileged user
 #551 - Updated stat_cache_expire option description - #545
 #552 - switch S3fsMultiCurl to use foreground threads
 #553 - add TLS cipher suites customization
@@ -165,7 +165,7 @@ Version 1.80 -- May 29, 2016
 #250 - s3fs can print version with short commit hash - #228
 #251 - Skip xattr tests if utilities are missing
 #252 - This fixes an issue with caching when the creation of a subdirectory …
-#253 - Added chacking cache dir perms at starting.
+#253 - Added checking cache dir perms at starting.
 #256 - Add no atomic rename to limitations
 #257 - Update README.md: Bugfix password file permissions errors
 #258 - Update README.md to better explain mount upon boot
@@ -193,7 +193,7 @@ Version 1.80 -- May 29, 2016
 #306 - Fix read concurrency to work in parallel count
 #307 - Fix pthread portability problem
 #308 - Changed ensure free disk space as additional change for #306
-#309 - Check pthread prtability in configure as additional change for #307
+#309 - Check pthread portability in configure as additional change for #307
 #310 - Update integration-test-main.sh as additional change for #300
 #311 - Change error log to debug log in s3fs_read()
 #313 - fix gitignore
@@ -205,14 +205,14 @@ Version 1.80 -- May 29, 2016
 #330 - Pass by const reference where possible
 #331 - Address various clang warnings
 #334 - Bucket host should include port and not path
-#336 - update REAME.md for fstab
+#336 - update README.md for fstab
 #338 - Fixed a bug about IAMCRED type could not be retried.
 #339 - Updated README.md for fstab example.
 #341 - Fix the memory leak issue in fdcache.
 #346 - Fix empty directory check against AWS S3
 #348 - Integration test summary, continue on error
 #350 - Changed cache out logic for stat - #340
-#351 - Check cache dirctory path and attributes - #347
+#351 - Check cache directory path and attributes - #347
 #352 - Remove stat file cache dir if specified del_cache - #337
 #354 - Supported regex type for additional header format - #343
 #355 - Fixed codes about clock_gettime for osx
@@ -289,7 +289,7 @@ issue #184 - Add usage information for multipart_size
 issue #185 - Correct obvious typos in usage and README
 issue #190 - Add a no_check_certificate option.
 issue #194 - Tilda in a file-name breaks things (EPERM)
-issue #198 - Disasble integration tests for Travis 
+issue #198 - Disable integration tests for Travis 
 issue #199 - Supported extended attributes(retry)
 issue #200 - fixed fallback to sigv2 for bucket create and GCS
 issue #202 - Specialize {set,get}xattr for OS X

@@ -259,7 +259,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
     }
     string name = (*iter).first;
     if(CutSlash && 1 < name.length() && '/' == name[name.length() - 1]){
-      // only "/" string is skio this.
+      // only "/" string is skipped this.
       name = name.substr(0, name.length() - 1);
     }
     list.push_back(name);
@@ -661,7 +661,7 @@ bool check_exist_dir_permission(const char* dirpath)
   struct stat st;
   if(0 != stat(dirpath, &st)){
     if(ENOENT == errno){
-      // dir does not exitst
+      // dir does not exist
       return true;
     }
     if(EACCES == errno){
@@ -848,7 +848,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
                 mode |= S_IFDIR;
               }else{
                 if(complement_stat){
-                  // If complement lack stat mode, when the object has '/' charactor at end of name
+                  // If complement lack stat mode, when the object has '/' character at end of name
                   // and content type is text/plain and the object's size is 0 or 1, it should be
                   // directory.
                   off_t size = get_size(meta);

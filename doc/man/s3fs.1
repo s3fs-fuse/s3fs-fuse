@@ -299,7 +299,7 @@ Most of the generic mount options described in 'man mount' are supported (ro, rw
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
 .SH NOTES
 .TP
-The maximum size of objects that s3fs can handle depends on Amazone S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
+The maximum size of objects that s3fs can handle depends on Amazon S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
 .TP
 If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses md5 checksums to minimize downloads from S3.
 .TP

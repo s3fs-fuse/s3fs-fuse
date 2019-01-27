@@ -1774,7 +1774,7 @@ void FdEntity::CleanupCache()
   }
 
   if (is_modify) {
-    // cache is not commited to s3, cannot cleanup
+    // cache is not committed to s3, cannot cleanup
     return;
   }
 
