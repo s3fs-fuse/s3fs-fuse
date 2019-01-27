@@ -607,7 +607,7 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
       if(line[0]=='#'){
         continue;
       }
-      if(line.size() == 0){
+      if(line.empty()){
         continue;
       }
 
@@ -617,7 +617,7 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
       while(tmp){
         string ext;
         tmp >> ext;
-        if(ext.size() == 0){
+        if(ext.empty()){
           continue;
         }
         S3fsCurl::mimeTypes[ext] = mimeType;
@@ -704,7 +704,7 @@ bool S3fsCurl::LocateBundle(void)
   // See if environment variable CURL_CA_BUNDLE is set
   // if so, check it, if it is a good path, then set the
   // curl_ca_bundle variable to it
-  if(0 == S3fsCurl::curl_ca_bundle.size()){
+  if(S3fsCurl::curl_ca_bundle.empty()){
     char* CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
     if(CURL_CA_BUNDLE != NULL)  {
       // check for existence and readability of the file
@@ -960,7 +960,7 @@ storage_class_t S3fsCurl::SetStorageClass(storage_class_t storage_class)
 bool S3fsCurl::PushbackSseKeys(string& onekey)
 {
   onekey = trim(onekey);
-  if(0 == onekey.size()){
+  if(onekey.empty()){
     return false;
   }
   if('#' == onekey[0]){
@@ -1043,7 +1043,7 @@ bool S3fsCurl::SetSseCKeys(const char* filepath)
   while(getline(ssefs, line)){
     S3fsCurl::PushbackSseKeys(line);
   }
-  if(0 == S3fsCurl::sseckeys.size()){
+  if(S3fsCurl::sseckeys.empty()){
     S3FS_PRN_ERR("There is no SSE Key in file(%s).", filepath);
     return false;
   }
@@ -1070,7 +1070,7 @@ bool S3fsCurl::FinalCheckSse(void)
   }else if(SSE_S3 == S3fsCurl::ssetype){
     S3fsCurl::ssekmsid.erase();
   }else if(SSE_C == S3fsCurl::ssetype){
-    if(0 == S3fsCurl::sseckeys.size()){
+    if(S3fsCurl::sseckeys.empty()){
       S3FS_PRN_ERR("sse type is SSE-C, but there is no custom key.");
       return false;
     }
@@ -1105,7 +1105,7 @@ bool S3fsCurl::LoadEnvSseCKeys(void)
   while(getline(fullkeys, onekey, ':')){
     S3fsCurl::PushbackSseKeys(onekey);
   }
-  if(0 == S3fsCurl::sseckeys.size()){
+  if(S3fsCurl::sseckeys.empty()){
     S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", envkeys);
     return false;
   }
@@ -1566,7 +1566,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
 bool S3fsCurl::CheckIAMCredentialUpdate(void)
 {
-  if(0 == S3fsCurl::IAM_role.size() && !S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth){
+  if(S3fsCurl::IAM_role.empty() && !S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth){
     return true;
   }
   if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
@@ -1714,7 +1714,7 @@ bool S3fsCurl::ResetHandle(void)
     if(0 == S3fsCurl::ssl_verify_hostname){
       curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0);
     }
-    if(S3fsCurl::curl_ca_bundle.size() != 0){
+    if(!S3fsCurl::curl_ca_bundle.empty()){
       curl_easy_setopt(hCurl, CURLOPT_CAINFO, S3fsCurl::curl_ca_bundle.c_str());
     }
   }
@@ -2174,7 +2174,7 @@ int S3fsCurl::RequestPerform(void)
 
         // try to locate cert, if successful, then set the
         // option and continue
-        if(0 == S3fsCurl::curl_ca_bundle.size()){
+        if(S3fsCurl::curl_ca_bundle.empty()){
           if(!S3fsCurl::LocateBundle()){
             S3FS_PRN_ERR("could not get CURL_CA_BUNDLE.");
             return -EIO;
@@ -2252,7 +2252,7 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
   string Signature;
   string StringToSign;
 
-  if(0 < S3fsCurl::IAM_role.size() || S3fsCurl::is_ecs){
+  if(!S3fsCurl::IAM_role.empty() || S3fsCurl::is_ecs){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
   }
 
@@ -2290,7 +2290,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   string Signature, StringCQ, StringToSign;
   string uriencode;
 
-  if(0 < S3fsCurl::IAM_role.size()  || S3fsCurl::is_ecs){
+  if(!S3fsCurl::IAM_role.empty()  || S3fsCurl::is_ecs){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
   }
 
@@ -2543,7 +2543,7 @@ int S3fsCurl::GetIAMCredentials(void)
   if (!S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth) {
     S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
 
-    if(0 == S3fsCurl::IAM_role.size()) {
+    if(S3fsCurl::IAM_role.empty()) {
       S3FS_PRN_ERR("IAM role name is empty.");
       return -EIO;
     }
