@@ -32,7 +32,7 @@ matrix:
         - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
       script:
         - ./autogen.sh
-        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include'
+        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'
         - make
         - make cppcheck
         - make check -C src
@@ -54,7 +54,7 @@ matrix:
         - brew install cppcheck
       script:
         - ./autogen.sh
-        - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure
+        - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03'
         - make
         - make cppcheck
         - make check -C src
@@ -80,7 +80,7 @@ matrix:
         - cd ../ 
       script:
         - ./autogen.sh
-        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include'
+        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'
         - make
         - make cppcheck
         - make check -C src
