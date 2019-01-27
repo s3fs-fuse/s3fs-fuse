@@ -3958,21 +3958,24 @@ S3fsMultiCurl::~S3fsMultiCurl()
 bool S3fsMultiCurl::ClearEx(bool is_all)
 {
   s3fscurlmap_t::iterator iter;
-  for(iter = cMap_req.begin(); iter != cMap_req.end(); cMap_req.erase(iter++)){
+  for(iter = cMap_req.begin(); iter != cMap_req.end(); ++iter){
     S3fsCurl* s3fscurl = (*iter).second;
     if(s3fscurl){
       s3fscurl->DestroyCurlHandle();
       delete s3fscurl;  // with destroy curl handle.
     }
   }
+  cMap_req.clear();
 
   if(is_all){
-    for(iter = cMap_all.begin(); iter != cMap_all.end(); cMap_all.erase(iter++)){
+    for(iter = cMap_all.begin(); iter != cMap_all.end(); ++iter){
       S3fsCurl* s3fscurl = (*iter).second;
       s3fscurl->DestroyCurlHandle();
       delete s3fscurl;
     }
+    cMap_all.clear();
   }
+
   S3FS_MALLOCTRIM(0);
 
   return true;
@@ -4078,7 +4081,7 @@ int S3fsMultiCurl::MultiPerform()
 
 int S3fsMultiCurl::MultiRead()
 {
-  for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); cMap_req.erase(iter++)) {
+  for(s3fscurlmap_t::iterator iter = cMap_req.begin(); iter != cMap_req.end(); ++iter) {
     S3fsCurl* s3fscurl = (*iter).second;
 
     bool isRetry = false;
@@ -4139,6 +4142,8 @@ int S3fsMultiCurl::MultiRead()
       }
     }
   }
+  cMap_req.clear();
+
   return 0;
 }
 
@@ -4155,12 +4160,13 @@ int S3fsMultiCurl::Request()
     // set curl handle to multi handle
     int                     result;
     s3fscurlmap_t::iterator iter;
-    for(iter = cMap_all.begin(); iter != cMap_all.end(); cMap_all.erase(iter++)){
+    for(iter = cMap_all.begin(); iter != cMap_all.end(); ++iter){
       CURL*     hCurl    = (*iter).first;
       S3fsCurl* s3fscurl = (*iter).second;
 
       cMap_req[hCurl] = s3fscurl;
     }
+    cMap_all.clear();
 
     // Send multi request.
     if(0 != (result = MultiPerform())){

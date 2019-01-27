@@ -213,9 +213,10 @@ void StatCache::Clear()
 {
   AutoLock lock(&StatCache::stat_cache_lock);
 
-  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); stat_cache.erase(iter++)){
+  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ++iter){
     delete (*iter).second;
   }
+  stat_cache.clear();
   S3FS_MALLOCTRIM(0);
 }
 
