@@ -282,12 +282,13 @@ CURL* CurlHandlerPool::GetHandler()
 
   assert(mIndex >= -1 && mIndex < mMaxHandlers);
 
-  pthread_mutex_lock(&mLock);
-  if (mIndex >= 0) {
-    S3FS_PRN_DBG("Get handler from pool: %d", mIndex);
-    h = mHandlers[mIndex--];
+  {
+    AutoLock lock(&mLock);
+    if (mIndex >= 0) {
+      S3FS_PRN_DBG("Get handler from pool: %d", mIndex);
+      h = mHandlers[mIndex--];
+    }
   }
-  pthread_mutex_unlock(&mLock);
 
   if (!h) {
     S3FS_PRN_INFO("Pool empty: create new handler");
@@ -303,14 +304,15 @@ void CurlHandlerPool::ReturnHandler(CURL* h)
 
   assert(mIndex >= -1 && mIndex < mMaxHandlers);
 
-  pthread_mutex_lock(&mLock);
-  if (mIndex < mMaxHandlers - 1) {
-    mHandlers[++mIndex] = h;
-    curl_easy_reset(h);
-    needCleanup = false;
-    S3FS_PRN_DBG("Return handler to pool: %d", mIndex);
+  {
+    AutoLock lock(&mLock);
+    if (mIndex < mMaxHandlers - 1) {
+      mHandlers[++mIndex] = h;
+      curl_easy_reset(h);
+      needCleanup = false;
+      S3FS_PRN_DBG("Return handler to pool: %d", mIndex);
+    }
   }
-  pthread_mutex_unlock(&mLock);
 
   if (needCleanup) {
     S3FS_PRN_INFO("Pool full: destroy the handler");
@@ -573,7 +575,7 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
   time_t now = time(0);
   progress_t p(dlnow, ulnow);
 
-  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+  AutoLock lock(&S3fsCurl::curl_handles_lock);
 
   // any progress?
   if(p != S3fsCurl::curl_progress[curl]){
@@ -583,14 +585,12 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
   }else{
     // timeout?
     if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
-      pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
       S3FS_PRN_ERR("timeout now: %jd, curl_times[curl]: %jd, readwrite_timeout: %jd",
                       (intmax_t)now, (intmax_t)(S3fsCurl::curl_times[curl]), (intmax_t)readwrite_timeout);
       return CURLE_ABORTED_BY_CALLBACK;
     }
   }
 
-  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
   return 0;
 }
 
@@ -1744,7 +1744,7 @@ bool S3fsCurl::ResetHandle(void)
 
 bool S3fsCurl::CreateCurlHandle(bool force)
 {
-  pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+  AutoLock lock(&S3fsCurl::curl_handles_lock);
 
   if(hCurl){
     if(!force){
@@ -1774,8 +1774,6 @@ bool S3fsCurl::CreateCurlHandle(bool force)
 
   ResetHandle();
 
-  pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
-
   return true;
 }
 
@@ -1784,7 +1782,7 @@ bool S3fsCurl::DestroyCurlHandle(bool force)
   ClearInternalData();
 
   if(hCurl){
-    pthread_mutex_lock(&S3fsCurl::curl_handles_lock);
+    AutoLock lock(&S3fsCurl::curl_handles_lock);
 
     S3fsCurl::curl_times.erase(hCurl);
     S3fsCurl::curl_progress.erase(hCurl);
@@ -1794,8 +1792,6 @@ bool S3fsCurl::DestroyCurlHandle(bool force)
       curl_easy_cleanup(hCurl);
     }
     hCurl = NULL;
-
-    pthread_mutex_unlock(&S3fsCurl::curl_handles_lock);
   }else{
     return false;
   }
