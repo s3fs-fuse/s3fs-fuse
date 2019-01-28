@@ -2373,7 +2373,6 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
   curlmulti.SetSuccessCallback(multi_head_callback);
   curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-  // TODO: deindent
   s3obj_list_t::iterator iter;
 
   fillerlist.clear();
