@@ -609,9 +609,9 @@ string mybasename(const string& path)
 // mkdir --parents
 int mkdirp(const string& path, mode_t mode)
 {
-  string       base;
-  string       component;
-  stringstream ss(path);
+  string        base;
+  string        component;
+  istringstream ss(path);
   while (getline(ss, component, '/')) {
     base += "/" + component;
 
@@ -632,10 +632,10 @@ int mkdirp(const string& path, mode_t mode)
 // get existed directory path
 string get_exist_directory_path(const string& path)
 {
-  string       existed("/");    // "/" is existed.
-  string       base;
-  string       component;
-  stringstream ss(path);
+  string        existed("/");    // "/" is existed.
+  string        base;
+  string        component;
+  istringstream ss(path);
   while (getline(ss, component, '/')) {
     if(base != "/"){
       base += "/";

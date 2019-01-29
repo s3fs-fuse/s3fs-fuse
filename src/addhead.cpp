@@ -93,10 +93,10 @@ bool AdditionalHeader::Load(const char* file)
       continue;
     }
     // load a line
-    stringstream ss(line);
-    string       key;           // suffix(key)
-    string       head;          // additional HTTP header
-    string       value;         // header value
+    istringstream ss(line);
+    string        key;           // suffix(key)
+    string        head;          // additional HTTP header
+    string        value;         // header value
     if(0 == isblank(line[0])){
       ss >> key;
     }
@@ -245,8 +245,8 @@ bool AdditionalHeader::Dump(void) const
     return true;
   }
 
-  stringstream ssdbg;
-  int          cnt = 1;
+  ostringstream ssdbg;
+  int           cnt = 1;
 
   ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
 
