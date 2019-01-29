@@ -1197,7 +1197,7 @@ void show_help (void)
     "        space is smaller than this value, s3fs do not use diskspace\n"
     "        as possible in exchange for the performance.\n"
     "\n"
-    "   singlepart_copy_limit (default=\"5120\")\n"
+    "   singlepart_copy_limit (default=\"512\")\n"
     "      - maximum size, in MB, of a single-part copy before trying \n"
     "      multipart copy.\n"
     "\n"

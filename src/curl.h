@@ -309,7 +309,9 @@ class S3fsCurl
     static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
 
     static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl);
+    static bool CopyMultipartPostCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+    static S3fsCurl* CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
     static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
@@ -337,8 +339,9 @@ class S3fsCurl
     int GetIAMCredentials(void);
 
     int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
-    int CopyMultipartPostRequest(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
+    int CopyMultipartPostSetup(const char* from, const char* to, int part_num, std::string& upload_id, headers_t& meta);
     bool UploadMultipartPostComplete();
+    bool CopyMultipartPostComplete();
 
   public:
     // class methods
