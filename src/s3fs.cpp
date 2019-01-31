@@ -3684,11 +3684,6 @@ static int s3fs_utility_mode(void)
     }
   }
 
-  // Destroy curl
-  if(!S3fsCurl::DestroyS3fsCurl()){
-    S3FS_PRN_WARN("Could not release curl library.");
-  }
-
   // ssl
   s3fs_destroy_global_ssl();
 
