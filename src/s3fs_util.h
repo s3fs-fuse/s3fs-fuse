@@ -133,6 +133,7 @@ time_t cvtIAMExpireStringToTime(const char* s);
 time_t get_lastmodified(const char* s);
 time_t get_lastmodified(headers_t& meta);
 bool is_need_check_obj_detail(headers_t& meta);
+bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value);
 
 void show_usage(void);
 void show_help(void);
