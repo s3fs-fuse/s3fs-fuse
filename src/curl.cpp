@@ -1429,6 +1429,14 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   // Multi request
   if(0 != (result = curlmulti.Request())){
     S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+
+    S3fsCurl s3fscurl_abort(true);
+    int result2 = s3fscurl_abort.AbortMultipartUpload(tpath, upload_id);
+    s3fscurl_abort.DestroyCurlHandle();
+    if(result2 != 0){
+      S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+    }
+
     return result;
   }
 
@@ -3923,6 +3931,14 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   // Multi request
   if(0 != (result = curlmulti.Request())){
     S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+
+    S3fsCurl s3fscurl_abort(true);
+    int result2 = s3fscurl_abort.AbortMultipartUpload(to, upload_id);
+    s3fscurl_abort.DestroyCurlHandle();
+    if(result2 != 0){
+      S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+    }
+
     return result;
   }
 
