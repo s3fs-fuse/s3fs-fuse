@@ -148,9 +148,9 @@ static const std::string aws_secretkey         = "AWSSecretKey";
 // Static functions : prototype
 //-------------------------------------------------------------------
 static void s3fs_usr2_handler(int sig);
-static bool set_s3fs_usr2_handler(void);
+static bool set_s3fs_usr2_handler();
 static s3fs_log_level set_s3fs_log_level(s3fs_log_level level);
-static s3fs_log_level bumpup_s3fs_log_level(void);
+static s3fs_log_level bumpup_s3fs_log_level();
 static bool is_special_name_folder_object(const char* path);
 static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, dirtype* pDirType = NULL);
 static int remove_old_type_dir(const string& path, dirtype type);
@@ -190,14 +190,14 @@ static void free_xattrs(xattrs_t& xattrs);
 static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
-static int s3fs_utility_mode(void);
-static int s3fs_check_service(void);
+static int s3fs_utility_mode();
+static int s3fs_check_service();
 static int parse_passwd_file(bucketkvmap_t& resmap);
 static int check_for_aws_format(const kvmap_t& kvmap);
-static int check_passwd_file_perms(void);
+static int check_passwd_file_perms();
 static int read_aws_credentials_file(const std::string &filename);
-static int read_passwd_file(void);
-static int get_access_keys(void);
+static int read_passwd_file();
+static int get_access_keys();
 static int set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
@@ -251,7 +251,7 @@ static void s3fs_usr2_handler(int sig)
     bumpup_s3fs_log_level();
   }
 }
-static bool set_s3fs_usr2_handler(void)
+static bool set_s3fs_usr2_handler()
 {
   struct sigaction sa;
 
@@ -276,7 +276,7 @@ static s3fs_log_level set_s3fs_log_level(s3fs_log_level level)
   return old;
 }
 
-static s3fs_log_level bumpup_s3fs_log_level(void)
+static s3fs_log_level bumpup_s3fs_log_level()
 {
   s3fs_log_level old = debug_level;
   debug_level        = ( S3FS_LOG_CRIT == debug_level ? S3FS_LOG_ERR :
@@ -912,7 +912,7 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
   return 0;
 }
 
-static int do_create_bucket(void)
+static int do_create_bucket()
 {
   S3FS_PRN_INFO2("/");
 
@@ -3642,7 +3642,7 @@ static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
   return true;
 }
 
-static int s3fs_utility_mode(void)
+static int s3fs_utility_mode()
 {
   if(!utility_mode){
     return EXIT_FAILURE;
@@ -3734,7 +3734,7 @@ static bool check_region_error(const char* pbody, const string& currentep, strin
   return true;
 }
 
-static int s3fs_check_service(void)
+static int s3fs_check_service()
 {
   S3FS_PRN_INFO("check services.");
 
@@ -3977,7 +3977,7 @@ static int check_for_aws_format(const kvmap_t& kvmap)
 //
 // only two options: return or error out
 //
-static int check_passwd_file_perms(void)
+static int check_passwd_file_perms()
 {
   struct stat info;
 
@@ -4089,7 +4089,7 @@ static int read_aws_credentials_file(const std::string &filename)
 //
 // only one default key pair is allowed, but not required
 //
-static int read_passwd_file(void)
+static int read_passwd_file()
 {
   bucketkvmap_t bucketmap;
   kvmap_t       keyval;
@@ -4161,7 +4161,7 @@ static int read_passwd_file(void)
 // 4 - from the users ~/.passwd-s3fs
 // 5 - from /etc/passwd-s3fs
 //
-static int get_access_keys(void)
+static int get_access_keys()
 {
   // should be redundant
   if(S3fsCurl::IsPublicBucket()){

@@ -57,7 +57,7 @@ const char* s3fs_crypt_lib_name(void)
 
 #else	// USE_GNUTLS_NETTLE
 
-const char* s3fs_crypt_lib_name(void)
+const char* s3fs_crypt_lib_name()
 {
   static const char version[] = "GnuTLS(gcrypt)";
 
@@ -69,7 +69,7 @@ const char* s3fs_crypt_lib_name(void)
 //-------------------------------------------------------------------
 // Utility Function for global init
 //-------------------------------------------------------------------
-bool s3fs_init_global_ssl(void)
+bool s3fs_init_global_ssl()
 {
   if(GNUTLS_E_SUCCESS != gnutls_global_init()){
     return false;
@@ -82,7 +82,7 @@ bool s3fs_init_global_ssl(void)
   return true;
 }
 
-bool s3fs_destroy_global_ssl(void)
+bool s3fs_destroy_global_ssl()
 {
   gnutls_global_deinit();
   return true;
@@ -91,12 +91,12 @@ bool s3fs_destroy_global_ssl(void)
 //-------------------------------------------------------------------
 // Utility Function for crypt lock
 //-------------------------------------------------------------------
-bool s3fs_init_crypt_mutex(void)
+bool s3fs_init_crypt_mutex()
 {
   return true;
 }
 
-bool s3fs_destroy_crypt_mutex(void)
+bool s3fs_destroy_crypt_mutex()
 {
   return true;
 }
@@ -191,7 +191,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
-size_t get_md5_digest_length(void)
+size_t get_md5_digest_length()
 {
   return 16;
 }
@@ -303,7 +303,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 //-------------------------------------------------------------------
 // Utility Function for SHA256
 //-------------------------------------------------------------------
-size_t get_sha256_digest_length(void)
+size_t get_sha256_digest_length()
 {
   return 32;
 }

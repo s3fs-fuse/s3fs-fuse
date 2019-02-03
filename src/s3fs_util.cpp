@@ -993,13 +993,13 @@ bool is_need_check_obj_detail(headers_t& meta)
 //-------------------------------------------------------------------
 // Help
 //-------------------------------------------------------------------
-void show_usage (void)
+void show_usage ()
 {
   printf("Usage: %s BUCKET:[PATH] MOUNTPOINT [OPTION]...\n",
     program_name.c_str());
 }
 
-void show_help (void)
+void show_help ()
 {
   show_usage();
   printf(
@@ -1365,7 +1365,7 @@ void show_help (void)
   return;
 }
 
-void show_version(void)
+void show_version()
 {
   printf(
   "Amazon Simple Storage Service File System V%s(commit:%s) with %s\n"
