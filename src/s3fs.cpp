@@ -1550,7 +1550,7 @@ static int s3fs_rename(const char* from, const char* to)
 static int s3fs_link(const char* from, const char* to)
 {
   S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
-  return -EPERM;
+  return -ENOTSUP;
 }
 
 static int s3fs_chmod(const char* path, mode_t mode)
