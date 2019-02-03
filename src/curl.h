@@ -282,6 +282,8 @@ class S3fsCurl
     std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
     std::string          query_string;         // request query string
     Semaphore            *sem;
+    pthread_mutex_t      *completed_tids_lock;
+    std::vector<pthread_t> *completed_tids;
 
   public:
     // constructor/destructor
@@ -485,6 +487,9 @@ class S3fsMultiCurl
 
     S3fsMultiSuccessCallback SuccessCallback;
     S3fsMultiRetryCallback   RetryCallback;
+
+    pthread_mutex_t completed_tids_lock;
+    std::vector<pthread_t> completed_tids;
 
   private:
     bool ClearEx(bool is_all);
