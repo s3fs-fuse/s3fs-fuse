@@ -51,7 +51,8 @@ static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
 #include <malloc.h>
 
 #define DISPWARN_MALLOCTRIM(str)
-#define S3FS_MALLOCTRIM(pad)          malloc_trim(pad)
+// malloc_trim disabled due to performance overhead with many threads/heaps
+#define S3FS_MALLOCTRIM(pad)
 #define S3FS_XMLFREEDOC(doc) \
         { \
           xmlFreeDoc(doc); \
