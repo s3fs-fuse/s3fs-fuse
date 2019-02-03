@@ -2104,7 +2104,7 @@ int S3fsCurl::RequestPerform()
   }
 
   // 1 attempt + retries...
-  for(int retrycnt = S3fsCurl::retries; 0 < retrycnt; retrycnt--){
+  for(int retrycnt = 0; retrycnt < S3fsCurl::retries; ++retrycnt){
     // Requests
     CURLcode curlCode = curl_easy_perform(hCurl);
 
@@ -2119,11 +2119,6 @@ int S3fsCurl::RequestPerform()
         if(LastResponseCode >= 200 && LastResponseCode < 300){
           S3FS_PRN_INFO3("HTTP response code %ld", LastResponseCode);
           return 0;
-        }
-        if(500 <= LastResponseCode){
-          S3FS_PRN_ERR("HTTP response code = %ld Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
-          sleep(4);
-          break; 
         }
 
         // Service response codes which are >= 300 && < 500
@@ -2146,6 +2141,17 @@ int S3fsCurl::RequestPerform()
             S3FS_PRN_INFO3("HTTP response code 404 was returned, returning ENOENT");
             S3FS_PRN_DBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
             return -ENOENT;
+
+          case 501:
+            S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
+            S3FS_PRN_DBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
+            return -ENOTSUP;
+
+          case 503:
+            S3FS_PRN_INFO3("HTTP response code 503 was returned, slowing down");
+            S3FS_PRN_DBG("Body Text: %s", (bodydata ? bodydata->str() : ""));
+            sleep(4 << retry_count);
+            break;
 
           default:
             S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", LastResponseCode, (bodydata ? bodydata->str() : ""));
