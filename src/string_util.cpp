@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <time.h>
 
 #include <sstream>
 #include <string>
@@ -281,6 +282,75 @@ string get_date_iso8601(time_t tm)
   char buf[100];
   strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime(&tm));
   return buf;
+}
+
+bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
+{
+  if(!pdate){
+    return false;
+  }
+
+  struct tm tm;
+  char*     prest = strptime(pdate, "%Y-%m-%dT%T", &tm);
+  if(prest == pdate){
+    // wrong format
+    return false;
+  }
+  unixtime = mktime(&tm);
+  return true;
+}
+
+//
+// Convert to unixtime from string which formatted by following:
+//   "12Y12M12D12h12m12s", "86400s", "9h30m", etc
+//
+bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
+{
+  if(!argv){
+    return false;
+  }
+  unixtime = 0;
+  const char* ptmp;
+  int         last_unit_type = 0;       // unit flag.
+  bool        is_last_number;
+  time_t      tmptime;
+  for(ptmp = argv, is_last_number = true, tmptime = 0; ptmp && *ptmp; ++ptmp){
+    if('0' <= *ptmp && *ptmp <= '9'){
+      tmptime        *= 10;
+      tmptime        += static_cast<time_t>(*ptmp - '0');
+      is_last_number  = true;
+    }else if(is_last_number){
+      if('Y' == *ptmp && 1 > last_unit_type){
+        unixtime      += (tmptime * (60 * 60 * 24 * 365));   // average 365 day / year
+        last_unit_type = 1;
+      }else if('M' == *ptmp && 2 > last_unit_type){
+        unixtime      += (tmptime * (60 * 60 * 24 * 30));    // average 30 day / month
+        last_unit_type = 2;
+      }else if('D' == *ptmp && 3 > last_unit_type){
+        unixtime      += (tmptime * (60 * 60 * 24));
+        last_unit_type = 3;
+      }else if('h' == *ptmp && 4 > last_unit_type){
+        unixtime      += (tmptime * (60 * 60));
+        last_unit_type = 4;
+      }else if('m' == *ptmp && 5 > last_unit_type){
+        unixtime      += (tmptime * 60);
+        last_unit_type = 5;
+      }else if('s' == *ptmp && 6 > last_unit_type){
+        unixtime      += tmptime;
+        last_unit_type = 6;
+      }else{
+        return false;
+      }
+      tmptime        = 0;
+      is_last_number = false;
+    }else{
+      return false;
+    }
+  }
+  if(is_last_number){
+    return false;
+  }
+  return true;
 }
 
 std::string s3fs_hex(const unsigned char* input, size_t length)

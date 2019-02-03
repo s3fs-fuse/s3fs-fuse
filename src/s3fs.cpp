@@ -73,16 +73,25 @@ static bool IS_RMTYPEDIR(dirtype type) { return DIRTYPE_OLD == type || DIRTYPE_F
 #define ENOATTR				ENODATA
 #endif
 
+//
+// Type of utility process mode
+//
+enum utility_incomp_type{
+  NO_UTILITY_MODE = 0,      // not utility mode
+  INCOMP_TYPE_LIST,         // list of incomplete mpu
+  INCOMP_TYPE_ABORT         // delete incomplete mpu
+};
+
 //-------------------------------------------------------------------
 // Structs
 //-------------------------------------------------------------------
-typedef struct incomplete_multipart_info{
+typedef struct incomplete_multipart_upload_info{
   string key;
   string id;
   string date;
-}UNCOMP_MP_INFO;
+}INCOMP_MPU_INFO;
 
-typedef std::list<UNCOMP_MP_INFO>          uncomp_mp_list_t;
+typedef std::list<INCOMP_MPU_INFO>         incomp_mpu_list_t;
 typedef std::list<std::string>             readline_t;
 typedef std::map<std::string, std::string> kvmap_t;
 typedef std::map<std::string, kvmap_t>     bucketkvmap_t;
@@ -115,7 +124,7 @@ static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file;
-static bool utility_mode          = false;
+static utility_incomp_type utility_mode = NO_UTILITY_MODE;
 static bool noxmlns               = false;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
@@ -183,14 +192,14 @@ static int clone_directory_object(const char* from, const char* to);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
 static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key);
-static void print_uncomp_mp_list(uncomp_mp_list_t& list);
-static bool abort_uncomp_mp_list(uncomp_mp_list_t& list);
-static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list);
+static void print_incomp_mpu_list(incomp_mpu_list_t& list);
+static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time);
+static bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list);
 static void free_xattrs(xattrs_t& xattrs);
 static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
-static int s3fs_utility_mode();
+static int s3fs_utility_processing(time_t abort_time);
 static int s3fs_check_service();
 static int parse_passwd_file(bucketkvmap_t& resmap);
 static int check_for_aws_format(const kvmap_t& kvmap);
@@ -3493,7 +3502,7 @@ static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const c
   return exp_value;
 }
 
-static void print_uncomp_mp_list(uncomp_mp_list_t& list)
+static void print_incomp_mpu_list(incomp_mpu_list_t& list)
 {
   printf("\n");
   printf("Lists the parts that have been uploaded for a specific multipart upload.\n");
@@ -3503,7 +3512,7 @@ static void print_uncomp_mp_list(uncomp_mp_list_t& list)
     printf("---------------------------------------------------------------\n");
 
     int cnt = 0;
-    for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
+    for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
       printf(" Path     : %s\n", (*iter).key.c_str());
       printf(" UploadId : %s\n", (*iter).id.c_str());
       printf(" Date     : %s\n", (*iter).date.c_str());
@@ -3516,34 +3525,30 @@ static void print_uncomp_mp_list(uncomp_mp_list_t& list)
   }
 }
 
-static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
+static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
 {
-  char buff[1024];
-
   if(list.empty()){
     return true;
   }
-  memset(buff, 0, sizeof(buff));
+  time_t now_time = time(NULL);
 
-  // confirm
-  while(true){
-    printf("Would you remove all objects? [Y/N]\n");
-    if(NULL != fgets(buff, sizeof(buff), stdin)){
-      if(0 == strcasecmp(buff, "Y\n") || 0 == strcasecmp(buff, "YES\n")){
-        break;
-      }else if(0 == strcasecmp(buff, "N\n") || 0 == strcasecmp(buff, "NO\n")){
-        return true;
-      }
-      printf("*** please put Y(yes) or N(no).\n");
-    }
-  }
-
-  // do removing their.
+  // do removing.
   S3fsCurl s3fscurl;
   bool     result = true;
-  for(uncomp_mp_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
+  for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
     const char* tpath     = (*iter).key.c_str();
     string      upload_id = (*iter).id;
+
+    if(0 != abort_time){    // abort_time is 0, it means all.
+      time_t    date = 0;
+      if(!get_unixtime_from_iso8601((*iter).date.c_str(), date)){
+        S3FS_PRN_DBG("date format is not ISO 8601 for %s multipart uploading object, skip this.", tpath);
+        continue;
+      }
+      if(now_time <= (date + abort_time)){
+        continue;
+      }
+    }
 
     if(0 != s3fscurl.AbortMultipartUpload(tpath, upload_id)){
       S3FS_PRN_EXIT("Failed to remove %s multipart uploading object.", tpath);
@@ -3559,7 +3564,7 @@ static bool abort_uncomp_mp_list(uncomp_mp_list_t& list)
   return result;
 }
 
-static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
+static bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
 {
   if(!doc){
     return false;
@@ -3605,7 +3610,7 @@ static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
   for(cnt = 0, upload_nodes = upload_xp->nodesetval; cnt < upload_nodes->nodeNr; cnt++){
     ctx->node = upload_nodes->nodeTab[cnt];
 
-    UNCOMP_MP_INFO  part;
+    INCOMP_MPU_INFO part;
     xmlChar*        ex_value;
 
     // search "Key" tag
@@ -3643,18 +3648,18 @@ static bool get_uncomp_mp_list(xmlDocPtr doc, uncomp_mp_list_t& list)
   return true;
 }
 
-static int s3fs_utility_mode()
+static int s3fs_utility_processing(time_t abort_time)
 {
-  if(!utility_mode){
+  if(NO_UTILITY_MODE == utility_mode){
     return EXIT_FAILURE;
   }
-  printf("Utility Mode\n");
+  printf("\n*** s3fs run as utility mode.\n\n");
 
   S3fsCurl s3fscurl;
   string   body;
   int      result = EXIT_SUCCESS;
   if(0 != s3fscurl.MultipartListRequest(body)){
-    S3FS_PRN_EXIT("Could not get list multipart upload.");
+    S3FS_PRN_EXIT("Could not get list multipart upload.\nThere is no incomplete multipart uploaded object in bucket.\n");
     result = EXIT_FAILURE;
   }else{
     // parse result(incomplete multipart upload information)
@@ -3666,19 +3671,22 @@ static int s3fs_utility_mode()
       result = EXIT_FAILURE;
 
     }else{
-      // make working uploads list
-      uncomp_mp_list_t list;
-      if(!get_uncomp_mp_list(doc, list)){
-        S3FS_PRN_DBG("get_uncomp_mp_list exited with error.");
+      // make incomplete uploads list
+      incomp_mpu_list_t list;
+      if(!get_incomp_mpu_list(doc, list)){
+        S3FS_PRN_DBG("get_incomp_mpu_list exited with error.");
         result = EXIT_FAILURE;
 
       }else{
-        // print list
-        print_uncomp_mp_list(list);
-        // remove
-        if(!abort_uncomp_mp_list(list)){
-          S3FS_PRN_DBG("an error occurred during removal process.");
-          result = EXIT_FAILURE;
+        if(INCOMP_TYPE_LIST == utility_mode){
+          // print list
+          print_incomp_mpu_list(list);
+        }else if(INCOMP_TYPE_ABORT == utility_mode){
+          // remove
+          if(!abort_incomp_mpu_list(list, abort_time)){
+            S3FS_PRN_DBG("an error occurred during removal process.");
+            result = EXIT_FAILURE;
+          }
         }
       }
       S3FS_XMLFREEDOC(doc);
@@ -4343,7 +4351,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
 
     // the second NONOPT option is the mountpoint(not utility mode)
-    if(mountpoint.empty() && !utility_mode){
+    if(mountpoint.empty() && NO_UTILITY_MODE == utility_mode){
       // save the mountpoint and do some basic error checking
       mountpoint = arg;
       struct stat stbuf;
@@ -4381,7 +4389,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
 
     // Unknown option
-    if(!utility_mode){
+    if(NO_UTILITY_MODE == utility_mode){
       S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
     }else{
       S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
@@ -4946,12 +4954,15 @@ int main(int argc, char* argv[])
   int fuse_res;
   int option_index = 0; 
   struct fuse_operations s3fs_oper;
+  time_t incomp_abort_time = (24 * 60 * 60);
 
   static const struct option long_opts[] = {
-    {"help",    no_argument, NULL, 'h'},
-    {"version", no_argument, 0,     0},
-    {"debug",   no_argument, NULL, 'd'},
-    {0, 0, 0, 0}
+    {"help",                 no_argument,       NULL, 'h'},
+    {"version",              no_argument,       0,     0},
+    {"debug",                no_argument,       NULL, 'd'},
+    {"incomplete-mpu-list",  no_argument,       NULL, 'u'},
+    {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
+    {NULL, 0, NULL, 0}
   };
 
   // init syslog(default CRIT)
@@ -4989,8 +5000,30 @@ int main(int argc, char* argv[])
       break;
     case 's':
       break;
-    case 'u':
-      utility_mode = true;
+    case 'u':   // --incomplete-mpu-list
+      if(NO_UTILITY_MODE != utility_mode){
+        S3FS_PRN_EXIT("already utility mode option is specified.");
+        exit(EXIT_FAILURE);
+      }
+      utility_mode = INCOMP_TYPE_LIST;
+      break;
+    case 'a':   // --incomplete-mpu-abort
+      if(NO_UTILITY_MODE != utility_mode){
+        S3FS_PRN_EXIT("already utility mode option is specified.");
+        exit(EXIT_FAILURE);
+      }
+      utility_mode = INCOMP_TYPE_ABORT;
+
+      // check expire argument
+      if(NULL != optarg && 0 == strcasecmp(optarg, "all")){ // all is 0s
+        incomp_abort_time = 0;
+      }else if(NULL != optarg){
+        if(!convert_unixtime_from_option_arg(optarg, incomp_abort_time)){
+          S3FS_PRN_EXIT("--incomplete-mpu-abort option argument is wrong.");
+          exit(EXIT_FAILURE);
+        }
+      }
+      // if optarg is null, incomp_abort_time is 24H(default)
       break;
     default:
       exit(EXIT_FAILURE);
@@ -5082,7 +5115,7 @@ int main(int argc, char* argv[])
   // if the option was given, we all ready checked for a
   // readable, non-empty directory, this checks determines
   // if the mountpoint option was ever supplied
-  if(!utility_mode){
+  if(NO_UTILITY_MODE == utility_mode){
     if(mountpoint.empty()){
       S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
       show_usage();
@@ -5182,8 +5215,8 @@ int main(int argc, char* argv[])
   }
   */
 
-  if(utility_mode){
-    int exitcode = s3fs_utility_mode();
+  if(NO_UTILITY_MODE != utility_mode){
+    int exitcode = s3fs_utility_processing(incomp_abort_time);
 
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();
