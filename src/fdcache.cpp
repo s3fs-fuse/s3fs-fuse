@@ -1508,6 +1508,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
      */
     if(pagelist.Size() > static_cast<size_t>(MAX_MULTIPART_CNT * S3fsCurl::GetMultipartSize())){
       // close f ?
+      S3FS_PRN_ERR("Part count exceeds %d.  Increase multipart size and try again.", MAX_MULTIPART_CNT);
       return -ENOTSUP;
     }
 
