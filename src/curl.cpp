@@ -2483,7 +2483,7 @@ void S3fsCurl::insertV4Headers()
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 	
   if(!S3fsCurl::IsPublicBucket()){
-    string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST ? "=" : ""), strdate, contentSHA256, date8601);
+    string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST || type == REQTYPE_MULTILIST ? "=" : ""), strdate, contentSHA256, date8601);
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
         "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
@@ -3416,7 +3416,8 @@ int S3fsCurl::MultipartListRequest(string& body)
   path            = get_realpath("/");
   MakeUrlResource(path.c_str(), resource, turl);
 
-  turl           += "?uploads";
+  query_string    = "uploads";
+  turl           += "?" + query_string;
   url             = prepare_url(turl.c_str());
   requestHeaders  = NULL;
   responseHeaders.clear();
@@ -3461,7 +3462,8 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
   string turl;
   MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
-  turl           += "?uploadId=" + upload_id;
+  query_string    = "uploadId=" + upload_id;
+  turl           += "?" + query_string;
   url             = prepare_url(turl.c_str());
   path            = get_realpath(tpath);
   requestHeaders  = NULL;
