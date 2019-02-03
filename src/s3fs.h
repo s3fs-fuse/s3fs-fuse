@@ -33,26 +33,32 @@ static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
   } \
 }
 
+// [NOTE]
+// s3fs use many small allocated chunk in heap area for stats
+// cache and parsing xml, etc. The OS may decide that giving
+// this little memory back to the kernel will cause too much
+// overhead and delay the operation.
+// Address of gratitude, this workaround quotes a document of
+// libxml2.( http://xmlsoft.org/xmlmem.html )
 //
-// s3fs use many small allocated chunk in heap area for
-// stats cache and parsing xml, etc. The OS may decide
-// that giving this little memory back to the kernel
-// will cause too much overhead and delay the operation.
-// So s3fs calls malloc_trim function to really get the
-// memory back. Following macros is prepared for that
-// your system does not have it.
+// When valgrind is used to test memory leak of s3fs, a large
+// amount of chunk may be reported. You can check the memory
+// release accurately by defining the S3FS_MALLOC_TRIM flag
+// and building it. Also, when executing s3fs, you can define
+// the MMAP_THRESHOLD environment variable and check more
+// accurate memory leak.( see, man 3 free )
 //
-// Address of gratitude, this workaround quotes a document
-// of libxml2.
-// http://xmlsoft.org/xmlmem.html
-//
+#ifdef S3FS_MALLOC_TRIM
 #ifdef HAVE_MALLOC_TRIM
-
 #include <malloc.h>
-
-#define DISPWARN_MALLOCTRIM(str)
-// malloc_trim disabled due to performance overhead with many threads/heaps
+#define S3FS_MALLOCTRIM(pad)    malloc_trim(pad)
+#else   // HAVE_MALLOC_TRIM
 #define S3FS_MALLOCTRIM(pad)
+#endif  // HAVE_MALLOC_TRIM
+#else   // S3FS_MALLOC_TRIM
+#define S3FS_MALLOCTRIM(pad)
+#endif  // S3FS_MALLOC_TRIM
+
 #define S3FS_XMLFREEDOC(doc) \
         { \
           xmlFreeDoc(doc); \
@@ -73,18 +79,6 @@ static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
           xmlXPathFreeObject(obj); \
           S3FS_MALLOCTRIM(0); \
         }
-
-#else // HAVE_MALLOC_TRIM
-
-#define DISPWARN_MALLOCTRIM(str) \
-        fprintf(stderr, "Warning: %s without malloc_trim is possibility of the use memory increase.\n", program_name.c_str())
-#define S3FS_MALLOCTRIM(pad)
-#define S3FS_XMLFREEDOC(doc)          xmlFreeDoc(doc)
-#define S3FS_XMLFREE(ptr)             xmlFree(ptr)
-#define S3FS_XMLXPATHFREECONTEXT(ctx) xmlXPathFreeContext(ctx)
-#define S3FS_XMLXPATHFREEOBJECT(obj)  xmlXPathFreeObject(obj)
-
-#endif // HAVE_MALLOC_TRIM
 
 #endif // S3FS_S3_H_
 
