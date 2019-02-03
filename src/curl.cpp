@@ -611,7 +611,7 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
         continue;
       }
 
-      stringstream tmp(line);
+      istringstream tmp(line);
       string mimeType;
       tmp >> mimeType;
       while(tmp){
@@ -808,7 +808,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
   headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
   string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
   string key;
-  stringstream ss(header);
+  istringstream ss(header);
 
   if(getline(ss, key, ':')){
     // Force to lower, only "x-amz"
@@ -3681,7 +3681,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   off_t          chunk;
   off_t          bytes_remaining;
   etaglist_t     list;
-  stringstream   strrange;
+  ostringstream  strrange;
 
   S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3814,7 +3814,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
   off_t          chunk;
   off_t          bytes_remaining;
   etaglist_t     list;
-  stringstream   strrange;
+  ostringstream  strrange;
 
   S3FS_PRN_INFO3("[from=%s][to=%s]", SAFESTRPTR(from), SAFESTRPTR(to));
 

@@ -33,7 +33,7 @@
 using namespace std;
 
 template <class T> std::string str(T value) {
-  std::stringstream s;
+  std::ostringstream s;
   s << value;
   return s.str();
 }

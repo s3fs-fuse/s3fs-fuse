@@ -503,7 +503,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     //
     // put to file
     //
-    stringstream ssall;
+    ostringstream ssall;
     ssall << Size();
 
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
@@ -543,8 +543,8 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       free(ptmp);
       return false;
     }
-    string       oneline;
-    stringstream ssall(ptmp);
+    string        oneline;
+    istringstream ssall(ptmp);
 
     // loaded
     Clear();
@@ -560,8 +560,8 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     // load each part
     bool is_err = false;
     while(getline(ssall, oneline, '\n')){
-      string       part;
-      stringstream ssparts(oneline);
+      string        part;
+      istringstream ssparts(oneline);
       // offset
       if(!getline(ssparts, part, ':')){
         is_err = true;
