@@ -822,9 +822,9 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
   }
 
   FdEntity* ent = NULL;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !(FdManager::get()->IsCacheDir())))){
+  if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
     // no opened fd
-    if(FdManager::get()->IsCacheDir()){
+    if(FdManager::IsCacheDir()){
       // create cache file if be needed
       ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(buf.st_size), -1, false, true);
     }
@@ -2564,8 +2564,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     // reset(initialize) curl object
     s3fscurl.DestroyCurlHandle();
 
-    if (check_content_only)
+    if(check_content_only){
       break;
+    }
   }
   S3FS_MALLOCTRIM(0);
 
@@ -4341,7 +4342,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
 
     // the second NONOPT option is the mountpoint(not utility mode)
-    if(mountpoint.empty() && 0 == utility_mode){
+    if(mountpoint.empty() && !utility_mode){
       // save the mountpoint and do some basic error checking
       mountpoint = arg;
       struct stat stbuf;
@@ -4379,7 +4380,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
 
     // Unknown option
-    if(0 == utility_mode){
+    if(!utility_mode){
       S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
     }else{
       S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
@@ -4988,7 +4989,7 @@ int main(int argc, char* argv[])
     case 's':
       break;
     case 'u':
-      utility_mode = 1;
+      utility_mode = true;
       break;
     default:
       exit(EXIT_FAILURE);
@@ -5080,7 +5081,7 @@ int main(int argc, char* argv[])
   // if the option was given, we all ready checked for a
   // readable, non-empty directory, this checks determines
   // if the mountpoint option was ever supplied
-  if(utility_mode == 0){
+  if(!utility_mode){
     if(mountpoint.empty()){
       S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
       show_usage();

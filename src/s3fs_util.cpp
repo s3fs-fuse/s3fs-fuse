@@ -419,7 +419,6 @@ void free_mvnodes(MVNODE *head)
     free(my_head->new_path);
     free(my_head);
   }
-  return;
 }
 
 //-------------------------------------------------------------------
@@ -1362,7 +1361,6 @@ void show_help ()
     "\n"
     "s3fs home page: <https://github.com/s3fs-fuse/s3fs-fuse>\n"
   );
-  return;
 }
 
 void show_version()
@@ -1374,7 +1372,6 @@ void show_version()
   "This is free software: you are free to change and redistribute it.\n"
   "There is NO WARRANTY, to the extent permitted by law.\n",
   VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
-  return;
 }
 
 /*
