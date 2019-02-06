@@ -1471,7 +1471,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
         // enough disk space
         // Load all uninitialized area
         result = Load();
-        FdManager::get()->FreeReservedDiskSpace(restsize);
+        FdManager::FreeReservedDiskSpace(restsize);
         if(0 != result){
           S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
           return static_cast<ssize_t>(result);
@@ -1646,7 +1646,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
       result = Load(start, load_size);
     }
 
-    FdManager::get()->FreeReservedDiskSpace(load_size);
+    FdManager::FreeReservedDiskSpace(load_size);
 
     if(0 != result){
       S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
@@ -1698,7 +1698,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       if(0 < start){
         result = Load(0, static_cast<size_t>(start));
       }
-      FdManager::get()->FreeReservedDiskSpace(restsize);
+      FdManager::FreeReservedDiskSpace(restsize);
       if(0 != result){
         S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
         return static_cast<ssize_t>(result);
