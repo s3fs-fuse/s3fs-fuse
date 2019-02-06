@@ -2884,9 +2884,10 @@ static int remote_mountpath_exists(const char* path)
 
 static void free_xattrs(xattrs_t& xattrs)
 {
-  for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); xattrs.erase(iter++)){
+  for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
     delete iter->second;
   }
+  xattrs.clear();
 }
 
 static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval)
