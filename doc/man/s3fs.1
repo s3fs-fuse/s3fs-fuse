@@ -16,7 +16,9 @@ For root.
 For unprivileged user.
 .SS utility mode ( remove interrupted multipart uploading objects )
 .TP
-\fBs3fs \-u bucket
+\fBs3fs --incomplete-mpu-list(-u) bucket
+.TP
+\fBs3fs --incomplete-mpu-abort[=all | =<expire date format>] bucket
 .SH DESCRIPTION
 s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
 .SH AUTHENTICATION
@@ -292,6 +294,18 @@ When s3fs catch the signal SIGUSR2, the debug level is bumpup.
 .TP
 \fB\-o\fR curldbg - put curl debug message
 Put the debug message from libcurl when this option is specified.
+.SS "utility mode options"
+.TP
+\fB\-u\fR or \fB\-\-incomplete\-mpu\-list\fR
+Lists multipart incomplete objects uploaded to the specified bucket.
+.TP
+\fB\-\-incomplete\-mpu\-abort\fR all or date format(default="24H")
+Delete the multipart incomplete object uploaded to the specified bucket.
+If "all" is specified for this option, all multipart incomplete objects will be deleted.
+If you specify no argument as an option, objects older than 24 hours(24H) will be deleted(This is the default value).
+You can specify an optional date format.
+It can be specified as year, month, day, hour, minute, second, and it is expressed as "Y", "M", "D", "h", "m", "s" respectively.
+For example, "1Y6M10D12h30m30s".
 .SH FUSE/MOUNT OPTIONS
 .TP
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
