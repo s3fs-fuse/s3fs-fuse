@@ -96,7 +96,7 @@ off_t s3fs_strtoofft(const char* str, bool is_base_16)
 string lower(string s)
 {
   // change each character of the string to lower case
-  for(unsigned int i = 0; i < s.length(); i++){
+  for(size_t i = 0; i < s.length(); i++){
     s[i] = tolower(s[i]);
   }
   return s;
@@ -132,7 +132,7 @@ string trim(const string &s, const string &t /* = SPACES */)
 string urlEncode(const string &s)
 {
   string result;
-  for (unsigned i = 0; i < s.length(); ++i) {
+  for (size_t i = 0; i < s.length(); ++i) {
     char c = s[i];
     if (c == '/' // Note- special case for fuse paths...
       || c == '.'
@@ -160,7 +160,7 @@ string urlEncode(const string &s)
 string urlEncode2(const string &s)
 {
   string result;
-  for (unsigned i = 0; i < s.length(); ++i) {
+  for (size_t i = 0; i < s.length(); ++i) {
     char c = s[i];
     if (c == '=' // Note- special case for fuse paths...
       || c == '&' // Note- special case for s3...
@@ -185,11 +185,11 @@ string urlEncode2(const string &s)
 string urlDecode(const string& s)
 {
   string result;
-  for(unsigned i = 0; i < s.length(); ++i){
+  for(size_t i = 0; i < s.length(); ++i){
     if(s[i] != '%'){
       result += s[i];
     }else{
-      char ch = 0;
+      int ch = 0;
       if(s.length() <= ++i){
         break;       // wrong format.
       }
@@ -199,7 +199,7 @@ string urlDecode(const string& s)
       }
       ch *= 16;
       ch += ('0' <= s[i] && s[i] <= '9') ? (s[i] - '0') : ('A' <= s[i] && s[i] <= 'F') ? (s[i] - 'A' + 0x0a) : ('a' <= s[i] && s[i] <= 'f') ? (s[i] - 'a' + 0x0a) : 0x00;
-      result += ch;
+      result += static_cast<char>(ch);
     }
   }
   return result;
@@ -525,9 +525,9 @@ bool s3fs_wtf8_encode(const char *s, string *result)
     invalid = true;
     if (result) {
       unsigned escape = escape_base + c;
-      *result += 0xe0 | ((escape >> 12) & 0x0f);
-      *result += 0x80 | ((escape >> 06) & 0x3f);
-      *result += 0x80 | ((escape >> 00) & 0x3f);
+      *result += static_cast<char>(0xe0 | ((escape >> 12) & 0x0f));
+      *result += static_cast<char>(0x80 | ((escape >> 06) & 0x3f));
+      *result += static_cast<char>(0x80 | ((escape >> 00) & 0x3f));
     }
   }
   return invalid;
@@ -556,7 +556,7 @@ bool s3fs_wtf8_decode(const char *s, string *result)
         // convert back
         encoded = true;
         if(result){
-          *result += code - escape_base;
+          *result += static_cast<char>(code - escape_base);
         }
         s+=2;
         continue;

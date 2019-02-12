@@ -3853,7 +3853,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     strrange.str("");
     strrange.clear(stringstream::goodbit);
 
-    if(0 != (result = CopyMultipartPostSetup(tpath, tpath, (list.size() + 1), upload_id, meta))){
+    if(0 != (result = CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size() + 1), upload_id, meta))){
       return result;
     }
     list.push_back(partdata.etag);
