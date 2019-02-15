@@ -451,6 +451,96 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
   return result;
 }
 
+/* handle invalid utf8 by creating surrogate escape pairs.
+ * this converts the data into the so-called wtf-8 encoding.
+ * It is necessary if we are given data that isn't proper utf8
+ * but the aws api requires proper utf8 for object names
+ */
+string s3fs_surrogateescape(const string &s)
+{
+  // Pass valid utf8 code through
+  string result;
+  for (unsigned i = 0; i < s.length(); i++) {
+    unsigned char c = s[i];
+    // single byte encoding
+    if (c <= 0x7f) {
+      result += c;
+      continue;
+    }
+    // two byte encoding
+    if ((c & 0xe0) == 0xc0) {
+      if ((i + 1) < s.length() && (s[i+1] & 0xc0) == 0x80) {
+        // printf("two bytes %02x at %d\n", c, i);
+        result += c;
+        result += s[++i];
+        continue;
+      }
+    } 
+    // three byte encoding
+    if ((c & 0xf0) == 0xe0) {
+      if ((i + 2) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80) {
+        // printf("three bytes %02x at %d\n", c, i);
+        result += c;
+        result += s[++i];
+        result += s[++i];
+        continue;
+      }
+    }
+    // four byte encoding
+    if ((c & 0xf8) == 0xf0) {
+      if ((i + 3) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80 && (s[i+3] & 0xc0) == 0x80) {
+        // printf("four bytes %02x at %d\n", c, i);
+        result += c;
+        result += s[++i];
+        result += s[++i];
+        result += s[++i];
+        continue;
+      }
+    }
+    // printf("invalid %02x at %d\n", c, i);
+    // Invalid utf8 code.  Convert to the surrogate pair (also known as wtf-8 encoding)
+    // we use lone surrogates, UDC80-UDCFF for this.
+    // if the byte is below 128, we cannot do this so we just pass the byte through and hope
+    // for the best, but really, this should be an error
+    if (c < 128) {
+      result += c;
+      continue;
+    }
+    // output the lone surrogate as utf8 encoded.  This is a three byte utf8 encoding:
+    unsigned surr = 0xdc00 + c;
+    result += 0xe0 | ((surr >> 12) & 0x0f);
+    result += 0x80 | ((surr >> 06) & 0x3f);
+    result += 0x80 | ((surr >> 00) & 0x3f);
+  }
+  return result;
+}
+
+string s3fs_surrogatedecode(const string &s)
+{
+  // the reverse operation.  Look for lone surrogates and replace them
+  string result;
+  for (unsigned i = 0; i < s.length(); i++) {
+    unsigned char c = s[i];
+    // look for a three byte encoding matching a lone surrogate
+    // three byte encoding
+    if ((c & 0xf0) == 0xe0) {
+      if ((i + 2) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80) {
+        unsigned surr = (c & 0x0f) << 12;
+        surr |= (s[i+1] & 0x3f) << 6;
+        surr |= (s[i+2] & 0x3f) << 0;
+        if (surr >= 0xdc80 && surr <= 0xdcff) {
+           // convert back
+           result += surr & 0xff;
+	   i+=2;
+           continue;
+        }
+      }
+    }
+    result += c;
+  }
+  return result;
+}
+
 /*
 * Local variables:
 * tab-width: 4

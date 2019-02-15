@@ -87,10 +87,35 @@ void test_strtoofft()
   ASSERT_EQUALS(s3fs_strtoofft("deadbeef", /*is_base_16=*/ true), static_cast<off_t>(3735928559L));
 }
 
+void test_surrogateescape()
+{
+  std::string ascii("normal string");
+  std::string utf8("Hyld\xc3\xbdpi \xc3\xbej\xc3\xb3\xc3\xb0""f\xc3\xa9lagsins vex \xc3\xbar k\xc3\xa6rkomnu b\xc3\xb6li \xc3\xad \xc3\xa1st");
+  std::string cp1252("Hyld\xfdpi \xfej\xf3\xf0""f\xe9lagsins vex \xfar k\xe6rkomnu b\xf6li \xed \xe1st");
+  std::string broken = utf8;
+  broken[14] = 0x97;
+  std::string mixed = ascii + utf8 + cp1252;
+
+  ASSERT_EQUALS(s3fs_surrogateescape(ascii), ascii);
+  ASSERT_EQUALS(s3fs_surrogatedecode(ascii), ascii);
+  ASSERT_EQUALS(s3fs_surrogateescape(utf8), utf8);
+  ASSERT_EQUALS(s3fs_surrogatedecode(utf8), utf8);
+
+  ASSERT_NEQUALS(s3fs_surrogateescape(cp1252), cp1252);
+  ASSERT_EQUALS(s3fs_surrogatedecode(s3fs_surrogateescape(cp1252)), cp1252);
+
+  ASSERT_NEQUALS(s3fs_surrogateescape(broken), broken);
+  ASSERT_EQUALS(s3fs_surrogatedecode(s3fs_surrogateescape(broken)), broken);
+
+  ASSERT_NEQUALS(s3fs_surrogateescape(mixed), mixed);
+  ASSERT_EQUALS(s3fs_surrogatedecode(s3fs_surrogateescape(mixed)), mixed);
+}
+
 int main(int argc, char *argv[])
 {
   test_trim();
   test_base64();
   test_strtoofft();
+  test_surrogateescape();
   return 0;
 }

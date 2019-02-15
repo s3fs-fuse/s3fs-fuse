@@ -20,11 +20,50 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <stdio.h>
 
 template <typename T> void assert_equals(const T &x, const T &y, const char *file, int line)
 {
   if (x != y) {
     std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
+    std::cerr << std::endl;
+    std::exit(1);
+  }
+}
+
+template <> void assert_equals(const std::string &x, const std::string &y, const char *file, int line)
+{
+  if (x != y) {
+    std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
+    for (unsigned i=0; i<x.length(); i++)
+       fprintf(stderr, "%02x ", (unsigned char)x[i]);
+    std::cerr << std::endl;
+    for (unsigned i=0; i<y.length(); i++)
+       fprintf(stderr, "%02x ", (unsigned char)y[i]);
+    std::cerr << std::endl;
+    std::exit(1);
+  }
+}
+
+
+template <typename T> void assert_nequals(const T &x, const T &y, const char *file, int line)
+{
+  if (x == y) {
+    std::cerr << x << " == " << y << " at " << file << ":" << line << std::endl;
+    std::exit(1);
+  }
+}
+
+template <> void assert_nequals(const std::string &x, const std::string &y, const char *file, int line)
+{
+  if (x == y) {
+    std::cerr << x << " == " << y << " at " << file << ":" << line << std::endl;
+    for (unsigned i=0; i<x.length(); i++)
+       fprintf(stderr, "%02x ", (unsigned char)x[i]);
+    std::cerr << std::endl;
+    for (unsigned i=0; i<y.length(); i++)
+       fprintf(stderr, "%02x ", (unsigned char)y[i]);
+    std::cerr << std::endl;
     std::exit(1);
   }
 }
@@ -42,6 +81,9 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
 
 #define ASSERT_EQUALS(x, y) \
   assert_equals((x), (y), __FILE__, __LINE__)
+
+#define ASSERT_NEQUALS(x, y) \
+  assert_nequals((x), (y), __FILE__, __LINE__)
 
 #define ASSERT_STREQUALS(x, y) \
   assert_strequals((x), (y), __FILE__, __LINE__)
