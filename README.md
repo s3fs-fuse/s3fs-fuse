@@ -167,6 +167,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 * no atomic renames of files or directories
 * no coordination between multiple clients mounting the same bucket
 * no hard links
+* inotify detects only local modifications, not external ones by other clients or tools
 
 References
 ----------
