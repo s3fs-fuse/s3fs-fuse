@@ -659,9 +659,8 @@ string S3fsCurl::LookupMimeType(const string& name)
     return result;
   }
   // extract the last extension
-  if(last_pos != string::npos){
-    ext = name.substr(1+last_pos, string::npos);
-  }
+  ext = name.substr(1+last_pos, string::npos);
+
   if (last_pos != string::npos) {
      // one dot was found, now look for another
      if (first_pos != string::npos && first_pos < last_pos) {
