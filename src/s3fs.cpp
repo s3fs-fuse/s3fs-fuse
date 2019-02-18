@@ -147,6 +147,7 @@ static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
+static bool is_wtf8               = true;
 
 static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
@@ -252,6 +253,17 @@ static int s3fs_listxattr(const char* path, char* list, size_t size);
 static int s3fs_removexattr(const char* path, const char* name);
 
 //-------------------------------------------------------------------
+// WTF8 macros
+//-------------------------------------------------------------------
+#define WTF8_ENCODE(ARG)  \
+  std::string ARG##_buf; \
+  const char * ARG = _##ARG; \
+  if (is_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
+    s3fs_wtf8_encode( _##ARG, &ARG##_buf); \
+    ARG = ARG##_buf.c_str(); \
+  }
+
+//-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
 static void s3fs_usr2_handler(int sig)
@@ -267,7 +279,7 @@ static bool set_s3fs_usr2_handler()
   memset(&sa, 0, sizeof(struct sigaction));
   sa.sa_handler = s3fs_usr2_handler;
   sa.sa_flags   = SA_RESTART;
-  if(0 != sigaction(SIGUSR2, &sa, NULL)){
+	  if(0 != sigaction(SIGUSR2, &sa, NULL)){
     return false;
   }
   return true;
@@ -847,8 +859,9 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
   return 0;
 }
 
-static int s3fs_getattr(const char* path, struct stat* stbuf)
+static int s3fs_getattr(const char* _path, struct stat* stbuf)
 {
+  WTF8_ENCODE(path)
   int result;
 
   S3FS_PRN_INFO("[path=%s]", path);
@@ -881,11 +894,12 @@ static int s3fs_getattr(const char* path, struct stat* stbuf)
   return result;
 }
 
-static int s3fs_readlink(const char* path, char* buf, size_t size)
+static int s3fs_readlink(const char* _path, char* buf, size_t size)
 {
-  if(!path || !buf || 0 >= size){
+  if(!_path || !buf || 0 >= size){
     return 0;
   }
+  WTF8_ENCODE(path)
   // Open
   FdEntity*   ent;
   if(NULL == (ent = get_local_fent(path))){
@@ -913,6 +927,9 @@ static int s3fs_readlink(const char* path, char* buf, size_t size)
 
   // check buf if it has space words.
   string strTmp = trim(string(buf));
+  // decode wtf8. This will always be shorter
+  if (is_wtf8)
+    strTmp = s3fs_wtf8_decode(strTmp);
   strcpy(buf, strTmp.c_str());
 
   FdManager::get()->Close(ent);
@@ -985,8 +1002,9 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
   return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
-static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
+static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 {
+  WTF8_ENCODE(path)
   int       result;
   struct fuse_context* pcxt;
 
@@ -1006,8 +1024,9 @@ static int s3fs_mknod(const char *path, mode_t mode, dev_t rdev)
   return result;
 }
 
-static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi)
+static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   int result;
   struct fuse_context* pcxt;
 
@@ -1073,8 +1092,9 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
   return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
-static int s3fs_mkdir(const char* path, mode_t mode)
+static int s3fs_mkdir(const char* _path, mode_t mode)
 {
+  WTF8_ENCODE(path)
   int result;
   struct fuse_context* pcxt;
 
@@ -1102,8 +1122,9 @@ static int s3fs_mkdir(const char* path, mode_t mode)
   return result;
 }
 
-static int s3fs_unlink(const char* path)
+static int s3fs_unlink(const char* _path)
 {
+  WTF8_ENCODE(path)
   int result;
 
   S3FS_PRN_INFO("[path=%s]", path);
@@ -1135,8 +1156,9 @@ static int directory_empty(const char* path)
   return 0;
 }
 
-static int s3fs_rmdir(const char* path)
+static int s3fs_rmdir(const char* _path)
 {
+  WTF8_ENCODE(path)
   int result;
   string strpath;
   struct stat stbuf;
@@ -1191,8 +1213,10 @@ static int s3fs_rmdir(const char* path)
   return result;
 }
 
-static int s3fs_symlink(const char* from, const char* to)
+static int s3fs_symlink(const char* _from, const char* _to)
 {
+  WTF8_ENCODE(from)
+  WTF8_ENCODE(to)
   int result;
   struct fuse_context* pcxt;
 
@@ -1514,8 +1538,10 @@ static int rename_directory(const char* from, const char* to)
   return 0;
 }
 
-static int s3fs_rename(const char* from, const char* to)
+static int s3fs_rename(const char* _from, const char* _to)
 {
+  WTF8_ENCODE(from)
+  WTF8_ENCODE(to)
   struct stat buf;
   int result;
 
@@ -1556,14 +1582,17 @@ static int s3fs_rename(const char* from, const char* to)
   return result;
 }
 
-static int s3fs_link(const char* from, const char* to)
+static int s3fs_link(const char* _from, const char* _to)
 {
+  WTF8_ENCODE(from)
+  WTF8_ENCODE(to)
   S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
   return -ENOTSUP;
 }
 
-static int s3fs_chmod(const char* path, mode_t mode)
+static int s3fs_chmod(const char* _path, mode_t mode)
 {
+  WTF8_ENCODE(path)
   int result;
   string strpath;
   string newpath;
@@ -1639,8 +1668,9 @@ static int s3fs_chmod(const char* path, mode_t mode)
   return 0;
 }
 
-static int s3fs_chmod_nocopy(const char* path, mode_t mode)
+static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 {
+  WTF8_ENCODE(path)
   int         result;
   string      strpath;
   string      newpath;
@@ -1715,8 +1745,9 @@ static int s3fs_chmod_nocopy(const char* path, mode_t mode)
   return result;
 }
 
-static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
+static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 {
+  WTF8_ENCODE(path)
   int result;
   string strpath;
   string newpath;
@@ -1786,8 +1817,9 @@ static int s3fs_chown(const char* path, uid_t uid, gid_t gid)
   return 0;
 }
 
-static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
+static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 {
+  WTF8_ENCODE(path)
   int         result;
   string      strpath;
   string      newpath;
@@ -1870,8 +1902,9 @@ static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid)
   return result;
 }
 
-static int s3fs_utimens(const char* path, const struct timespec ts[2])
+static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 {
+  WTF8_ENCODE(path)
   int result;
   string strpath;
   string newpath;
@@ -1935,8 +1968,9 @@ static int s3fs_utimens(const char* path, const struct timespec ts[2])
   return 0;
 }
 
-static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
+static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 {
+  WTF8_ENCODE(path)
   int         result;
   string      strpath;
   string      newpath;
@@ -2017,8 +2051,9 @@ static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2])
   return result;
 }
 
-static int s3fs_truncate(const char* path, off_t size)
+static int s3fs_truncate(const char* _path, off_t size)
 {
+  WTF8_ENCODE(path)
   int result;
   headers_t meta;
   FdEntity* ent = NULL;
@@ -2084,8 +2119,9 @@ static int s3fs_truncate(const char* path, off_t size)
   return result;
 }
 
-static int s3fs_open(const char* path, struct fuse_file_info* fi)
+static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   int result;
   struct stat st;
   bool needs_flush = false;
@@ -2144,8 +2180,9 @@ static int s3fs_open(const char* path, struct fuse_file_info* fi)
   return 0;
 }
 
-static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
+static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   ssize_t res;
 
   S3FS_PRN_DBG("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
@@ -2175,8 +2212,9 @@ static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, str
   return static_cast<int>(res);
 }
 
-static int s3fs_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
+static int s3fs_write(const char* _path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   ssize_t res;
 
   S3FS_PRN_DBG("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
@@ -2197,8 +2235,9 @@ static int s3fs_write(const char* path, const char* buf, size_t size, off_t offs
   return static_cast<int>(res);
 }
 
-static int s3fs_statfs(const char* path, struct statvfs* stbuf)
+static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 {
+  // WTF8_ENCODE(path)
   // 256T
   stbuf->f_bsize  = 0X1000000;
   stbuf->f_blocks = 0X1000000;
@@ -2208,8 +2247,9 @@ static int s3fs_statfs(const char* path, struct statvfs* stbuf)
   return 0;
 }
 
-static int s3fs_flush(const char* path, struct fuse_file_info* fi)
+static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   int result;
 
   S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
@@ -2241,8 +2281,9 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi)
 // [NOTICE]
 // Assumption is a valid fd.
 //
-static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi)
+static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   int result = 0;
 
   S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
@@ -2263,8 +2304,9 @@ static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi)
   return result;
 }
 
-static int s3fs_release(const char* path, struct fuse_file_info* fi)
+static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
   // [NOTE]
@@ -2303,8 +2345,9 @@ static int s3fs_release(const char* path, struct fuse_file_info* fi)
   return 0;
 }
 
-static int s3fs_opendir(const char* path, struct fuse_file_info* fi)
+static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   int result;
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
 
@@ -2435,8 +2478,11 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
   //
   for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
     struct stat st;
+    bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
     string bpath = mybasename((*iter));
-    if(StatCache::getStatCacheData()->GetStat((*iter), &st)){
+    if (is_wtf8)
+        bpath = s3fs_wtf8_decode(bpath);
+    if(in_cache){
       filler(buf, bpath.c_str(), &st, 0);
     }else{
       S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
@@ -2447,8 +2493,9 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
   return result;
 }
 
-static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
+static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
 {
+  WTF8_ENCODE(path)
   S3ObjList head;
   int result;
 
