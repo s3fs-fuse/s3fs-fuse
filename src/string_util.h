@@ -58,8 +58,10 @@ std::string s3fs_hex(const unsigned char* input, size_t length);
 char* s3fs_base64(const unsigned char* input, size_t length);
 unsigned char* s3fs_decode64(const char* input, size_t* plength);
 
-std::string s3fs_surrogateescape(const std::string &s);
-std::string s3fs_surrogatedecode(const std::string &s);
+bool s3fs_wtf8_encode(const char *s, std::string *result);
+std::string s3fs_wtf8_encode(const std::string &s);
+bool s3fs_wtf8_decode(const char *s, std::string *result);
+std::string s3fs_wtf8_decode(const std::string &s);
 
 #endif // S3FS_STRING_UTIL_H_
 

@@ -451,93 +451,125 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
   return result;
 }
 
-/* handle invalid utf8 by creating surrogate escape pairs.
- * this converts the data into the so-called wtf-8 encoding.
- * It is necessary if we are given data that isn't proper utf8
- * but the aws api requires proper utf8 for object names
+/*
+ * detect and rewrite invalid utf8.  We take invalid bytes
+ * and encode them into a private region of the unicode
+ * space.  This is sometimes known as wtf8, wobbly transformation format.
+ * it is necessary because S3 validates the utf8 used for identifiers for
+ * correctness, while some clients may provide invalid utf, notably
+ * windows using cp1252.
  */
-string s3fs_surrogateescape(const string &s)
+static unsigned int escape_base = 0xe000;  // base location for transform
+
+// encode bytes into wobbly utf8.  s can be null. returns true if transform was needed.
+bool s3fs_wtf8_encode(const char *s, string *result)
 {
+  bool invalid = false;
+
   // Pass valid utf8 code through
-  string result;
-  for (unsigned i = 0; i < s.length(); i++) {
-    unsigned char c = s[i];
+  for (; *s; s++) {
+    unsigned char c = *s;
+
     // single byte encoding
     if (c <= 0x7f) {
-      result += c;
+      if (result)
+	*result += c;
       continue;
     }
-    // two byte encoding
-    if ((c & 0xe0) == 0xc0) {
-      if ((i + 1) < s.length() && (s[i+1] & 0xc0) == 0x80) {
-        // printf("two bytes %02x at %d\n", c, i);
-        result += c;
-        result += s[++i];
-        continue;
-      }
-    } 
-    // three byte encoding
-    if ((c & 0xf0) == 0xe0) {
-      if ((i + 2) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80) {
-        // printf("three bytes %02x at %d\n", c, i);
-        result += c;
-        result += s[++i];
-        result += s[++i];
-        continue;
-      }
-    }
-    // four byte encoding
-    if ((c & 0xf8) == 0xf0) {
-      if ((i + 3) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80 && (s[i+3] & 0xc0) == 0x80) {
-        // printf("four bytes %02x at %d\n", c, i);
-        result += c;
-        result += s[++i];
-        result += s[++i];
-        result += s[++i];
-        continue;
-      }
-    }
-    // printf("invalid %02x at %d\n", c, i);
-    // Invalid utf8 code.  Convert to the surrogate pair (also known as wtf-8 encoding)
-    // we use lone surrogates, UDC80-UDCFF for this.
-    // if the byte is below 128, we cannot do this so we just pass the byte through and hope
-    // for the best, but really, this should be an error
-    if (c < 128) {
-      result += c;
-      continue;
-    }
-    // output the lone surrogate as utf8 encoded.  This is a three byte utf8 encoding:
-    unsigned surr = 0xdc00 + c;
-    result += 0xe0 | ((surr >> 12) & 0x0f);
-    result += 0x80 | ((surr >> 06) & 0x3f);
-    result += 0x80 | ((surr >> 00) & 0x3f);
-  }
-  return result;
-}
 
-string s3fs_surrogatedecode(const string &s)
-{
-  // the reverse operation.  Look for lone surrogates and replace them
-  string result;
-  for (unsigned i = 0; i < s.length(); i++) {
-    unsigned char c = s[i];
-    // look for a three byte encoding matching a lone surrogate
-    // three byte encoding
-    if ((c & 0xf0) == 0xe0) {
-      if ((i + 2) < s.length() && (s[i+1] & 0xc0) == 0x80 && (s[i+2] & 0xc0) == 0x80) {
-        unsigned surr = (c & 0x0f) << 12;
-        surr |= (s[i+1] & 0x3f) << 6;
-        surr |= (s[i+2] & 0x3f) << 0;
-        if (surr >= 0xdc80 && surr <= 0xdcff) {
-           // convert back
-           result += surr & 0xff;
-	   i+=2;
-           continue;
+    // otherwise, it must be one of the valid start bytes
+    if ( c >= 0xc2 && c <= 0xf5 ) {
+
+      // two byte encoding
+      // don't need bounds check, string is zero terminated
+      if ((c & 0xe0) == 0xc0 && (s[1] & 0xc0) == 0x80) {
+        // all two byte encodings starting higher than c1 are valid
+        if (result) {
+          *result += c;
+          *result += *(++s);
+        }
+        continue;
+      } 
+      // three byte encoding
+      if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
+        const unsigned code = ((c & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+        if (code >= 0x800 && ! (code >= 0xd800 && code <= 0xd8ff)) {
+          // not overlong and not a surrogate pair 
+          if (result) {
+            *result += c;
+            *result += *(++s);
+            *result += *(++s);
+          }
+          continue;
+        }
+      }
+      // four byte encoding
+      if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 && (s[3] & 0xc0) == 0x80) {
+        const unsigned code = ((c & 0x0f) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+        if (code >= 0x1000 && code <= 0x10ffff) {
+          // not overlong and in defined unicode space
+          if (result) {
+            *result += c;
+            *result += *(++s);
+            *result += *(++s);
+            *result += *(++s);
+          }
+          continue;
         }
       }
     }
-    result += c;
+    // printf("invalid %02x at %d\n", c, i);
+    // Invalid utf8 code.  Convert it to a private two byte area of unicode
+    // e.g. the e000 - f8ff area.  This will be a three byte encoding
+    invalid = true;
+    if (result) {
+      unsigned escape = escape_base + c;
+      *result += 0xe0 | ((escape >> 12) & 0x0f);
+      *result += 0x80 | ((escape >> 06) & 0x3f);
+      *result += 0x80 | ((escape >> 00) & 0x3f);
+    }
   }
+  return invalid;
+}
+
+string s3fs_wtf8_encode(const string &s)
+{
+  string result;
+  s3fs_wtf8_encode(s.c_str(), &result);
+  return result;
+}
+
+// The reverse operation, turn encoded bytes back into their original values
+bool s3fs_wtf8_decode(const char *s, string *result)
+{
+  // the reverse operation.  Look for lone surrogates and replace them
+  bool encoded = false;
+  for (; *s; s++) {
+    unsigned char c = *s;
+    // look for a three byte tuple matching our encoding code
+    if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
+      unsigned code = (c & 0x0f) << 12;
+      code |= (s[1] & 0x3f) << 6;
+      code |= (s[2] & 0x3f) << 0;
+      if (code >= escape_base && code < escape_base + 0xff) {
+        // convert back
+        encoded = true;
+        if (result)
+          *result += code - escape_base;
+        s+=2;
+        continue;
+      }
+    }
+    if (result)
+      *result += c;
+  }
+  return encoded;
+}
+ 
+string s3fs_wtf8_decode(const string &s)
+{
+  string result;
+  s3fs_wtf8_decode(s.c_str(), &result);
   return result;
 }
 
