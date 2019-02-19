@@ -279,7 +279,7 @@ static bool set_s3fs_usr2_handler()
   memset(&sa, 0, sizeof(struct sigaction));
   sa.sa_handler = s3fs_usr2_handler;
   sa.sa_flags   = SA_RESTART;
-	  if(0 != sigaction(SIGUSR2, &sa, NULL)){
+  if(0 != sigaction(SIGUSR2, &sa, NULL)){
     return false;
   }
   return true;
