@@ -32,6 +32,7 @@ cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
             --std=c++03 \
+            --xml \
             -D HAVE_ATTR_XATTR_H \
             -D HAVE_SYS_EXTATTR_H \
             -D HAVE_MALLOC_TRIM \
@@ -40,4 +41,5 @@ cppcheck:
             -U ENOATTR \
             --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
+            --suppress=unmatchedSuppression \
             src/ test/

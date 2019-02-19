@@ -369,7 +369,7 @@ char* s3fs_base64(const unsigned char* input, size_t length)
   static const char* base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
   char* result;
 
-  if(!input || 0 >= length){
+  if(!input || 0 == length){
     return NULL;
   }
   if(NULL == (result = reinterpret_cast<char*>(malloc((((length / 3) + 1) * 4 + 1) * sizeof(char))))){

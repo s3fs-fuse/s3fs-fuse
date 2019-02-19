@@ -896,7 +896,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
 
 static int s3fs_readlink(const char* _path, char* buf, size_t size)
 {
-  if(!_path || !buf || 0 >= size){
+  if(!_path || !buf || 0 == size){
     return 0;
   }
   WTF8_ENCODE(path)
@@ -2198,7 +2198,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 
   // check real file size
   size_t realsize = 0;
-  if(!ent->GetSize(realsize) || realsize <= 0){
+  if(!ent->GetSize(realsize) || 0 == realsize){
     S3FS_PRN_DBG("file size is 0, so break to read.");
     FdManager::get()->Close(ent);
     return 0;
@@ -3302,7 +3302,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
   }
 
   // check parameters
-  if(size <= 0){
+  if(0 == size){
     free_xattrs(xattrs);
     return total;
   }

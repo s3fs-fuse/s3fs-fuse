@@ -152,7 +152,9 @@ bool S3ObjList::insert_normalized(const char* name, const char* normalized, bool
     // found name --> over write
     (*iter).second.orgname.erase();
     (*iter).second.etag.erase();
+                                                // cppcheck-suppress unreadVariable
     (*iter).second.normalname = normalized;
+                                                // cppcheck-suppress unreadVariable
     (*iter).second.is_dir     = is_dir;
   }else{
     // not found --> add new object
