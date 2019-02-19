@@ -147,7 +147,7 @@ static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
-static bool is_wtf8               = true;
+static bool use_wtf8              = false;
 
 static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
@@ -258,7 +258,7 @@ static int s3fs_removexattr(const char* path, const char* name);
 #define WTF8_ENCODE(ARG)  \
   std::string ARG##_buf; \
   const char * ARG = _##ARG; \
-  if (is_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
+  if (use_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
     s3fs_wtf8_encode( _##ARG, &ARG##_buf); \
     ARG = ARG##_buf.c_str(); \
   }
@@ -928,7 +928,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
   // check buf if it has space words.
   string strTmp = trim(string(buf));
   // decode wtf8. This will always be shorter
-  if (is_wtf8)
+  if (use_wtf8)
     strTmp = s3fs_wtf8_decode(strTmp);
   strcpy(buf, strTmp.c_str());
 
@@ -2480,7 +2480,7 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
     struct stat st;
     bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
     string bpath = mybasename((*iter));
-    if (is_wtf8)
+    if (use_wtf8)
         bpath = s3fs_wtf8_decode(bpath);
     if(in_cache){
       filler(buf, bpath.c_str(), &st, 0);
@@ -4990,6 +4990,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "secretAccessKey=")){
       S3FS_PRN_EXIT("option secretAccessKey is no longer supported.");
       return -1;
+    }
+    if(0 == strcmp(arg, "use_wtf8")){
+      use_wtf8 = true;
+      return 0;
     }
   }
   return 1;
