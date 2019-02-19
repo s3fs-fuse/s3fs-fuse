@@ -459,16 +459,20 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
  * correctness, while some clients may provide invalid utf, notably
  * windows using cp1252.
  */
-static unsigned int escape_base = 0xe000;  // base location for transform
 
-// encode bytes into wobbly utf8.  s can be null. returns true if transform was needed.
+// Base location for transform.  The range 0xE000 - 0xF8ff
+// is a private range, se use the start of this range.
+static unsigned int escape_base = 0xe000;
+
+// encode bytes into wobbly utf8.  
+// 'result' can be null. returns true if transform was needed.
 bool s3fs_wtf8_encode(const char *s, string *result)
 {
   bool invalid = false;
 
   // Pass valid utf8 code through
   for (; *s; s++) {
-    unsigned char c = *s;
+    const unsigned char c = *s;
 
     // single byte encoding
     if (c <= 0x7f) {
@@ -504,9 +508,9 @@ bool s3fs_wtf8_encode(const char *s, string *result)
         }
       }
       // four byte encoding
-      if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 && (s[3] & 0xc0) == 0x80) {
-        const unsigned code = ((c & 0x0f) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
-        if (code >= 0x1000 && code <= 0x10ffff) {
+      if ((c & 0xf8) == 0xf0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 && (s[3] & 0xc0) == 0x80) {
+        const unsigned code = ((c & 0x07) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+        if (code >= 0x10000 && code <= 0x10ffff) {
           // not overlong and in defined unicode space
           if (result) {
             *result += c;
@@ -540,9 +544,9 @@ string s3fs_wtf8_encode(const string &s)
 }
 
 // The reverse operation, turn encoded bytes back into their original values
+// The code assumes that we map to a three-byte code point.
 bool s3fs_wtf8_decode(const char *s, string *result)
 {
-  // the reverse operation.  Look for lone surrogates and replace them
   bool encoded = false;
   for (; *s; s++) {
     unsigned char c = *s;
@@ -551,7 +555,7 @@ bool s3fs_wtf8_decode(const char *s, string *result)
       unsigned code = (c & 0x0f) << 12;
       code |= (s[1] & 0x3f) << 6;
       code |= (s[2] & 0x3f) << 0;
-      if (code >= escape_base && code < escape_base + 0xff) {
+      if (code >= escape_base && code <= escape_base + 0xff) {
         // convert back
         encoded = true;
         if (result)
