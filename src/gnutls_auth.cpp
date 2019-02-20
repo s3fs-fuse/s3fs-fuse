@@ -370,9 +370,8 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
-                                                                                    // cppcheck-suppress constArgument
-  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(*digestlen)))){
+  size_t len = (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
+  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(len)))){
     return false;
   }
 
