@@ -452,6 +452,132 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
 }
 
 /*
+ * detect and rewrite invalid utf8.  We take invalid bytes
+ * and encode them into a private region of the unicode
+ * space.  This is sometimes known as wtf8, wobbly transformation format.
+ * it is necessary because S3 validates the utf8 used for identifiers for
+ * correctness, while some clients may provide invalid utf, notably
+ * windows using cp1252.
+ */
+
+// Base location for transform.  The range 0xE000 - 0xF8ff
+// is a private range, se use the start of this range.
+static unsigned int escape_base = 0xe000;
+
+// encode bytes into wobbly utf8.  
+// 'result' can be null. returns true if transform was needed.
+bool s3fs_wtf8_encode(const char *s, string *result)
+{
+  bool invalid = false;
+
+  // Pass valid utf8 code through
+  for (; *s; s++) {
+    const unsigned char c = *s;
+
+    // single byte encoding
+    if (c <= 0x7f) {
+      if (result)
+	*result += c;
+      continue;
+    }
+
+    // otherwise, it must be one of the valid start bytes
+    if ( c >= 0xc2 && c <= 0xf5 ) {
+
+      // two byte encoding
+      // don't need bounds check, string is zero terminated
+      if ((c & 0xe0) == 0xc0 && (s[1] & 0xc0) == 0x80) {
+        // all two byte encodings starting higher than c1 are valid
+        if (result) {
+          *result += c;
+          *result += *(++s);
+        }
+        continue;
+      } 
+      // three byte encoding
+      if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
+        const unsigned code = ((c & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+        if (code >= 0x800 && ! (code >= 0xd800 && code <= 0xd8ff)) {
+          // not overlong and not a surrogate pair 
+          if (result) {
+            *result += c;
+            *result += *(++s);
+            *result += *(++s);
+          }
+          continue;
+        }
+      }
+      // four byte encoding
+      if ((c & 0xf8) == 0xf0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 && (s[3] & 0xc0) == 0x80) {
+        const unsigned code = ((c & 0x07) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+        if (code >= 0x10000 && code <= 0x10ffff) {
+          // not overlong and in defined unicode space
+          if (result) {
+            *result += c;
+            *result += *(++s);
+            *result += *(++s);
+            *result += *(++s);
+          }
+          continue;
+        }
+      }
+    }
+    // printf("invalid %02x at %d\n", c, i);
+    // Invalid utf8 code.  Convert it to a private two byte area of unicode
+    // e.g. the e000 - f8ff area.  This will be a three byte encoding
+    invalid = true;
+    if (result) {
+      unsigned escape = escape_base + c;
+      *result += 0xe0 | ((escape >> 12) & 0x0f);
+      *result += 0x80 | ((escape >> 06) & 0x3f);
+      *result += 0x80 | ((escape >> 00) & 0x3f);
+    }
+  }
+  return invalid;
+}
+
+string s3fs_wtf8_encode(const string &s)
+{
+  string result;
+  s3fs_wtf8_encode(s.c_str(), &result);
+  return result;
+}
+
+// The reverse operation, turn encoded bytes back into their original values
+// The code assumes that we map to a three-byte code point.
+bool s3fs_wtf8_decode(const char *s, string *result)
+{
+  bool encoded = false;
+  for (; *s; s++) {
+    unsigned char c = *s;
+    // look for a three byte tuple matching our encoding code
+    if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
+      unsigned code = (c & 0x0f) << 12;
+      code |= (s[1] & 0x3f) << 6;
+      code |= (s[2] & 0x3f) << 0;
+      if (code >= escape_base && code <= escape_base + 0xff) {
+        // convert back
+        encoded = true;
+        if (result)
+          *result += code - escape_base;
+        s+=2;
+        continue;
+      }
+    }
+    if (result)
+      *result += c;
+  }
+  return encoded;
+}
+ 
+string s3fs_wtf8_decode(const string &s)
+{
+  string result;
+  s3fs_wtf8_decode(s.c_str(), &result);
+  return result;
+}
+
+/*
 * Local variables:
 * tab-width: 4
 * c-basic-offset: 4
