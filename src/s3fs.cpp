@@ -2332,6 +2332,9 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
   if(ent->GetFd() != static_cast<int>(fi->fh)){
     S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
+
+  // Once for the implicit refcnt from GetFdEntity and again for release
+  ent->Close();
   FdManager::get()->Close(ent);
 
   // check - for debug
