@@ -155,8 +155,8 @@ private:
 //----------------------------------------------
 class S3fsCurl;
 
-// Prototype function for razy setup options for curl handle
-typedef bool (*s3fscurl_razy_setup)(S3fsCurl* s3fscurl);
+// Prototype function for lazy setup options for curl handle
+typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
 
 typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
@@ -285,7 +285,7 @@ class S3fsCurl
     Semaphore            *sem;
     pthread_mutex_t      *completed_tids_lock;
     std::vector<pthread_t> *completed_tids;
-    s3fscurl_razy_setup  fpRazySetup;          // curl options for razy setting function
+    s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
 
   public:
     // constructor/destructor
@@ -318,7 +318,7 @@ class S3fsCurl
     static S3fsCurl* CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
     static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
-    // razy functions for set curl options
+    // lazy functions for set curl options
     static bool UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
     static bool CopyMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
     static bool PreGetObjectRequestSetCurlOpts(S3fsCurl* s3fscurl);
