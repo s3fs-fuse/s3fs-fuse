@@ -48,6 +48,13 @@ Some systems provide pre-built packages:
   sudo yum install s3fs-fuse
   ```
 
+* On Amazon Linux through EPEL repositories:
+
+  ```
+  sudo amazon-linux-extras install epel
+  sudo yum install s3fs-fuse
+  ```
+
 * On macOS, install via [Homebrew](https://brew.sh/):
 
   ```ShellSession
