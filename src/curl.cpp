@@ -1829,7 +1829,7 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     bodydata(NULL), headdata(NULL), LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE), op(""), query_string(""),
-    sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpRazySetup(NULL)
+    sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
 {
 }
 
@@ -1904,7 +1904,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
         return false;
       }else{
         // [NOTE]
-        // urther initialization processing is left to razy processing to be executed later.
+        // urther initialization processing is left to lazy processing to be executed later.
         // (Currently we do not use only_pool=true, but this code is remained for the future)
         return true;
       }
@@ -1979,7 +1979,7 @@ bool S3fsCurl::ClearInternalData()
   b_partdata_size      = 0;
   partdata.clear();
 
-  fpRazySetup          = NULL;
+  fpLazySetup          = NULL;
 
   S3FS_MALLOCTRIM(0);
 
@@ -2872,8 +2872,8 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
   type = REQTYPE_HEAD;
   insertAuthHeaders();
 
-  // set razy function
-  fpRazySetup = PreHeadRequestSetCurlOpts;
+  // set lazy function
+  fpLazySetup = PreHeadRequestSetCurlOpts;
 
   return true;
 }
@@ -2885,7 +2885,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
   S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
   // At first, try to get without SSE-C headers
-  if(!PreHeadRequest(tpath) || !fpRazySetup || !fpRazySetup(this) || 0 != (result = RequestPerform())){
+  if(!PreHeadRequest(tpath) || !fpLazySetup || !fpLazySetup(this) || 0 != (result = RequestPerform())){
     // If has SSE-C keys, try to get with all SSE-C keys.
     for(int pos = 0; static_cast<size_t>(pos) < S3fsCurl::sseckeys.size(); pos++){
       if(!DestroyCurlHandle()){
@@ -2894,8 +2894,8 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
       if(!PreHeadRequest(tpath, NULL, NULL, pos)){
         break;
       }
-      if(!fpRazySetup || !fpRazySetup(this)){
-        S3FS_PRN_ERR("Failed to razy setup in single head request.");
+      if(!fpLazySetup || !fpLazySetup(this)){
+        S3FS_PRN_ERR("Failed to lazy setup in single head request.");
         break;
       }
       if(0 == (result = RequestPerform())){
@@ -3196,8 +3196,8 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
   type = REQTYPE_GET;
   insertAuthHeaders();
 
-  // set razy function
-  fpRazySetup = PreGetObjectRequestSetCurlOpts;
+  // set lazy function
+  fpLazySetup = PreGetObjectRequestSetCurlOpts;
 
   // set info for callback func.
   // (use only fd, startpos and size, other member is not used.)
@@ -3232,8 +3232,8 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
   if(0 != (result = PreGetObjectRequest(tpath, fd, start, size, ssetype, ssevalue))){
     return result;
   }
-  if(!fpRazySetup || !fpRazySetup(this)){
-    S3FS_PRN_ERR("Failed to razy setup in single get object request.");
+  if(!fpLazySetup || !fpLazySetup(this)){
+    S3FS_PRN_ERR("Failed to lazy setup in single get object request.");
     return -1;
   }
 
@@ -3654,8 +3654,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   type = REQTYPE_UPLOADMULTIPOST;
   insertAuthHeaders();
 
-  // set razy function
-  fpRazySetup = UploadMultipartPostSetCurlOpts;
+  // set lazy function
+  fpLazySetup = UploadMultipartPostSetCurlOpts;
 
   return 0;
 }
@@ -3725,8 +3725,8 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
   type = REQTYPE_COPYMULTIPOST;
   insertAuthHeaders();
 
-  // set razy function
-  fpRazySetup = CopyMultipartPostSetCurlOpts;
+  // set lazy function
+  fpLazySetup = CopyMultipartPostSetCurlOpts;
 
   // request
   S3FS_PRN_INFO3("copying... [from=%s][to=%s][part=%d]", from, to, part_num);
@@ -4269,9 +4269,9 @@ void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
 {
   S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
   void*     result  = NULL;
-  if(s3fscurl && s3fscurl->fpRazySetup){
-    if(!s3fscurl->fpRazySetup(s3fscurl)){
-      S3FS_PRN_ERR("Failed to razy setup, then respond EIO.");
+  if(s3fscurl && s3fscurl->fpLazySetup){
+    if(!s3fscurl->fpLazySetup(s3fscurl)){
+      S3FS_PRN_ERR("Failed to lazy setup, then respond EIO.");
       result  = (void*)(intptr_t)(-EIO);
     }
   }
