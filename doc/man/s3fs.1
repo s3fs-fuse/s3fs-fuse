@@ -287,6 +287,14 @@ However, if there is a directory object other than "dir/" in the bucket, specify
 s3fs may not be able to recognize the object correctly if an object created by s3fs exists in the bucket.
 Please use this option when the directory in the bucket is only "dir/" object.
 .TP
+\fB\-o\fR use_wtf8 - support arbitrary file system encoding.
+S3 requires all object names to be valid utf-8. But some
+clients, notably Windows NFS clients, use their own encoding.
+This option re-encodes invalid utf-8 object names into valid
+utf-8 by mapping offending codes into a 'private' codepage of the
+Unicode set.
+Useful on clients not using utf-8 as their file system encoding.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit(critical), err(error), warn(warning), info(information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
@@ -306,14 +314,6 @@ If you specify no argument as an option, objects older than 24 hours(24H) will b
 You can specify an optional date format.
 It can be specified as year, month, day, hour, minute, second, and it is expressed as "Y", "M", "D", "h", "m", "s" respectively.
 For example, "1Y6M10D12h30m30s".
-.TP
-\fB\-o\fR use_wtf8 - support arbitrary file system encoding.
-S3 requires all object names to be valid utf-8. But some
-clients, notably Windows NFS clients, use their own encoding.
-This option re-encodes invalid utf-8 object names into valid
-utf-8 by mapping offending codes into a 'private' codepage of the
-Unicode set.
-Useful on clients not using utf-8 as their file system encoding.
 .SH FUSE/MOUNT OPTIONS
 .TP
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
