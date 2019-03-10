@@ -814,11 +814,17 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
       // truncate temporary file size
       if(-1 == ftruncate(fd, static_cast<size_t>(size))){
         S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
+        if(0 < refcnt){
+          refcnt--;
+        }
         return -EIO;
       }
       // resize page list
       if(!pagelist.Resize(static_cast<size_t>(size), false)){
         S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
+        if(0 < refcnt){
+          refcnt--;
+        }
         return -EIO;
       }
     }
@@ -2148,6 +2154,9 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
 
   // open
   if(0 != ent->Open(pmeta, size, time, no_fd_lock_wait)){
+    if(close){
+      ent->Close();
+    }
     return NULL;
   }
   if(close){
