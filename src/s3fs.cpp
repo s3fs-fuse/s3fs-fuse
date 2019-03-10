@@ -1563,6 +1563,7 @@ static int s3fs_rename(const char* _from, const char* _to)
   FdEntity *entity = FdManager::get()->ExistOpen(from);
   if(entity != NULL){
     entity->Flush(true);
+    StatCache::getStatCacheData()->DelStat(from);
   }
 
   // files larger than 5GB must be modified via the multipart interface
