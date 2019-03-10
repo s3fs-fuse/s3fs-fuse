@@ -700,6 +700,9 @@ void FdEntity::Close()
 
     if(0 < refcnt){
       refcnt--;
+    }else{
+      S3FS_PRN_EXIT("reference count underflow");
+      abort();
     }
     if(0 == refcnt){
       if(!cachepath.empty()){
@@ -2058,6 +2061,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
 
   fdent_map_t::iterator iter = fent.find(string(path));
   if(fent.end() != iter && (-1 == existfd || (*iter).second->GetFd() == existfd)){
+    iter->second->Dup();
     return (*iter).second;
   }
 
@@ -2066,6 +2070,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
       if((*iter).second && (*iter).second->GetFd() == existfd){
         // found opened fd in map
         if(0 == strcmp((*iter).second->GetPath(), path)){
+          iter->second->Dup();
           return (*iter).second;
         }
         // found fd, but it is used another file(file descriptor is recycled)
@@ -2084,6 +2089,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
   if(!path || '\0' == path[0]){
     return NULL;
   }
+  bool close = false;
   FdEntity* ent;
   {
     AutoLock auto_lock(&FdManager::fd_manager_lock);
@@ -2107,6 +2113,8 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
     if(fent.end() != iter){
       // found
       ent = (*iter).second;
+      ent->Dup();
+      close = true;
 
     }else if(is_create){
       // not found
@@ -2141,6 +2149,9 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time
   // open
   if(0 != ent->Open(pmeta, size, time, no_fd_lock_wait)){
     return NULL;
+  }
+  if(close){
+    ent->Close();
   }
   return ent;
 }

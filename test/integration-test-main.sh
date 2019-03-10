@@ -522,6 +522,20 @@ function test_overwrite_existing_file_range {
     rm -f ${TEST_TEXT_FILE}
 }
 
+function test_concurrency {
+    for i in `seq 10`; do echo foo > $i; done
+    for process in `seq 2`; do
+        for i in `seq 100`; do
+            file=$(ls | sed -n "$(($RANDOM % 10 + 1)){p;q}")
+            cat $file >/dev/null || true
+            rm -f $file
+            echo foo > $i || true
+        done &
+    done
+    wait
+}
+
+
 function add_all_tests {
     add_tests test_append_file 
     add_tests test_truncate_file 
@@ -546,6 +560,7 @@ function add_all_tests {
     add_tests test_rm_rf_dir
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
+    add_tests test_concurrency
 }
 
 init_suite
