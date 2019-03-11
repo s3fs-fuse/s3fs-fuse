@@ -1,5 +1,97 @@
-﻿ChangeLog for S3FS
+ChangeLog for S3FS
 ------------------
+
+Version 1.85 -- 11 Mar, 2019
+#804 - add Backblaze B2
+#812 - Fix typo s/mutliple/multiple/
+#819 - #691: Made instructions for creating password file more obvious.
+#820 - Enable big writes if capable
+#826 - For RPM distributions fuse-libs is enough
+#831 - Add support for storage class ONEZONE_IA.
+#832 - Simplify hex conversion
+#833 - New installation instructions for Fedora >= 27 and CentOS7
+#834 - Improve template for issues
+#835 - Make the compilation instructions generic
+#840 - Replace all mentions to MacOS X to macOS
+#849 - Correct typo
+#851 - Correctly compare list_object_max_keys
+#852 - Allow credentials from ${HOME}/.aws/credentials
+#853 - Replace ~ with ${HOME} in examples
+#855 - Include StackOverflow in FAQs
+#856 - Add icon for s3fs
+#859 - Upload S3 parts without batching
+#861 - Add 'profile' option to command line help.
+#865 - fix multihead warning check
+#866 - Multi-arch support for ppc64le
+#870 - Correct typos in command-line parsing
+#874 - Address cppcheck 1.86 errors
+#877 - Check arguments and environment before .aws/creds
+#882 - [curl] Assume long encryption keys are base64 encoded
+#885 - Update s3fs_util.cpp for correspondence of Nextcloud contype
+#888 - Add Server Fault to FAQs
+#892 - Repair xattr tests
+#893 - Store and retrieve file change time
+#894 - Default uid/gid/mode when object lacks permissions
+#895 - Emit more friendly error for buckets with dots
+#898 - Flush file before renaming
+#899 - Tighten up HTTP response code check
+#900 - Plug memory leak
+#901 - Plug memory leaks
+#902 - Avoid pass-by-value when not necessary
+#903 - Prefer find(char) over find(const char *)
+#904 - Remove unnecessary calls to std::string::c_str
+#905 - Fix comparison in s3fs_strtoofft
+#906 - Prefer HTTPS links where possible
+#908 - Added an error message when HTTP 301 status
+#909 - Ignore after period character of floating point in x-amz-meta-mtime
+#910 - Added a missing extension to .gitignore, and formatted dot files
+#911 - Added detail error message when HTTP 301/307 status
+#912 - Automatic region change made possible other than us-east-1(default)
+#913 - Prefer abort over assert(false)
+#914 - Issue readdir HEAD requests without batching
+#917 - Reference better-known AWS CLI for compatibility
+#918 - Load tail range during overwrite
+#919 - Add test for mv non-empty directory
+#920 - Remove unnecessary string copies
+#921 - Remove redundant string initializations
+#923 - Reverted automatic region change and changed messages
+#924 - Prefer empty over size checks
+#925 - Remove redundant null checks before delete
+#926 - Accept paths with : in them
+#930 - Correct enable_content_md5 docs
+#931 - Correct sigv2 typo
+#932 - Prefer AutoLock for synchronization
+#933 - Remove mirror path when deleting cache
+#934 - Checked and corrected all typo
+#937 - Disable malloc_trim
+#938 - Remove unneeded void parameter
+#939 - Prefer specific [io]stringstream where possible
+#940 - Copy parts in parallel
+#942 - Ensure s3fs compiles with C++03
+#943 - Return not supported when hard linking
+#944 - Repair utility mode
+#946 - Simplify async request completion code
+#948 - Add logging for too many parts
+#949 - Implement exponential backoff for 503
+#950 - Added S3FS_MALLOC_TRIM build switch
+#951 - Added a non-interactive option to utility mode
+#952 - Automatically abort failed multipart requests
+#953 - Update s3ql link
+#954 - Clear containers instead of individual erases
+#955 - Address miscellaneous clang-tidy warnings
+#957 - Upgrade to S3Proxy 1.6.1
+#958 - Document lack of inotify support
+#959 - Fixed code for latest cppcheck error on OSX
+#960 - Wtf8
+#961 - Work around cppcheck warnings
+#965 - Improvement of curl session pool for multipart
+#967 - Increase FdEntity reference count when returning
+#969 - Fix lazy typo
+#970 - Remove from file from stat cache during rename
+#972 - Add instructions for Amazon Linux
+#974 - Changed the description order of man page options
+#975 - Fixed ref-count when error occurred.
+#977 - Make macOS instructions consistent with others
 
 Version 1.84 -- Jul 8, 2018
 #704 - Update README.md with details about .passwd-s3fs
