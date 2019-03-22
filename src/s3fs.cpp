@@ -3932,7 +3932,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
       S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
       return -1;
     }
-    if(0 == line.find_first_of('[')){
+    if('[' == line[0]){
       S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
       return -1;
     }
