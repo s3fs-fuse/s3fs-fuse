@@ -26,6 +26,39 @@
 #include "psemaphore.h"
 
 //----------------------------------------------
+// Avoid dependency on libcurl version
+//----------------------------------------------
+// [NOTE]
+// The following symbols (enum) depend on the version of libcurl.
+//  CURLOPT_TCP_KEEPALIVE           7.25.0 and later
+//  CURLOPT_SSL_ENABLE_ALPN         7.36.0 and later
+//  CURLOPT_KEEP_SENDING_ON_ERROR   7.51.0 and later
+//
+// s3fs uses these, if you build s3fs with the old libcurl, 
+// substitute the following symbols to avoid errors.
+// If the version of libcurl linked at runtime is old,
+// curl_easy_setopt results in an error(CURLE_UNKNOWN_OPTION) and
+// a message is output.
+//
+#if defined(HAVE_CURLOPT_TCP_KEEPALIVE) && (HAVE_CURLOPT_TCP_KEEPALIVE == 1)
+  #define   S3FS_CURLOPT_TCP_KEEPALIVE          CURLOPT_TCP_KEEPALIVE
+#else
+  #define   S3FS_CURLOPT_TCP_KEEPALIVE          static_cast<CURLoption>(213)
+#endif
+
+#if defined(HAVE_CURLOPT_SSL_ENABLE_ALPN) && (HAVE_CURLOPT_SSL_ENABLE_ALPN == 1)
+  #define   S3FS_CURLOPT_SSL_ENABLE_ALPN        CURLOPT_SSL_ENABLE_ALPN
+#else
+  #define   S3FS_CURLOPT_SSL_ENABLE_ALPN        static_cast<CURLoption>(226)
+#endif
+
+#if defined(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR) && (HAVE_CURLOPT_KEEP_SENDING_ON_ERROR == 1)
+  #define   S3FS_CURLOPT_KEEP_SENDING_ON_ERROR  CURLOPT_KEEP_SENDING_ON_ERROR
+#else
+  #define   S3FS_CURLOPT_KEEP_SENDING_ON_ERROR  static_cast<CURLoption>(245)
+#endif
+
+//----------------------------------------------
 // Symbols
 //----------------------------------------------
 static const int MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
