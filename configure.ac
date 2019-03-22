@@ -265,6 +265,51 @@ AC_COMPILE_IFELSE(
 )
 
 dnl ----------------------------------------------
+dnl check CURLoption
+dnl ----------------------------------------------
+dnl CURLOPT_TCP_KEEPALIVE (is supported by 7.25.0 and later)
+AC_MSG_CHECKING([checking CURLOPT_TCP_KEEPALIVE])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
+                   [[CURLoption opt = CURLOPT_TCP_KEEPALIVE;]])
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_TCP_KEEPALIVE, 1, [Define to 1 if libcurl has CURLOPT_TCP_KEEPALIVE CURLoption])
+   AC_MSG_RESULT(yes)
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_TCP_KEEPALIVE, 0, [Define to 1 if libcurl has CURLOPT_TCP_KEEPALIVE CURLoption])
+   AC_MSG_RESULT(no)
+  ]
+)
+
+dnl CURLOPT_SSL_ENABLE_ALPN (is supported by 7.36.0 and later)
+AC_MSG_CHECKING([checking CURLOPT_SSL_ENABLE_ALPN])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
+                   [[CURLoption opt = CURLOPT_SSL_ENABLE_ALPN;]])
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_SSL_ENABLE_ALPN, 1, [Define to 1 if libcurl has CURLOPT_SSL_ENABLE_ALPN CURLoption])
+   AC_MSG_RESULT(yes)
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_SSL_ENABLE_ALPN, 0, [Define to 1 if libcurl has CURLOPT_SSL_ENABLE_ALPN CURLoption])
+   AC_MSG_RESULT(no)
+  ]
+)
+
+dnl CURLOPT_KEEP_SENDING_ON_ERROR (is supported by 7.51.0 and later)
+AC_MSG_CHECKING([checking CURLOPT_KEEP_SENDING_ON_ERROR])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
+                   [[CURLoption opt = CURLOPT_KEEP_SENDING_ON_ERROR;]])
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR, 1, [Define to 1 if libcurl has CURLOPT_KEEP_SENDING_ON_ERROR CURLoption])
+   AC_MSG_RESULT(yes)
+  ],
+  [AC_DEFINE(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR, 0, [Define to 1 if libcurl has CURLOPT_KEEP_SENDING_ON_ERROR CURLoption])
+   AC_MSG_RESULT(no)
+  ]
+)
+
+dnl ----------------------------------------------
 dnl output files
 dnl ----------------------------------------------
 AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)

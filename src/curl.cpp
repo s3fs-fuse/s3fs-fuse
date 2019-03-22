@@ -1848,9 +1848,15 @@ bool S3fsCurl::ResetHandle()
   curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress);
   curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl);
   // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
-  curl_easy_setopt(hCurl, CURLOPT_TCP_KEEPALIVE, 1);
-  // curl_easy_setopt(hCurl, CURLOPT_KEEP_SENDING_ON_ERROR, 1);    // after 7.51.0
-  // curl_easy_setopt(hCurl, CURLOPT_SSL_ENABLE_ALPN, 0);          // after 7.36.0 for disable ALPN for s3 server
+  if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_TCP_KEEPALIVE, 1)){
+    S3FS_PRN_WARN("The CURLOPT_TCP_KEEPALIVE option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.25.0 or later.");
+  }
+  if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_SSL_ENABLE_ALPN, 0)){
+    S3FS_PRN_WARN("The CURLOPT_SSL_ENABLE_ALPN option could not be unset. S3 server does not support ALPN, then this option should be disabled to maximize performance. you need to use libcurl 7.36.0 or later.");
+  }
+  if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1)){
+    S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
+  }
 
   if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
     // REQTYPE_IAMCRED and REQTYPE_IAMROLE are always HTTP
