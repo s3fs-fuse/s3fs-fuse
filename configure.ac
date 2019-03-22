@@ -273,10 +273,10 @@ dnl ----------------------------------------------
 dnl short commit hash
 dnl ----------------------------------------------
 AC_CHECK_PROG([GITCMD], [git —version], [yes], [no])
-AC_CHECK_FILE([.git], [DOTGITDIR=yes], [DOTGITDIR=no])
+AS_IF([test -d .git], [DOTGITDIR=yes], [DOTGITDIR=no])
 
 AC_MSG_CHECKING([github short commit hash])
-if test “x${GITCMD}” = “xyes” -a “x${DOTGITDIR}” = “xyes”; then
+if test "x${GITCMD}" = "xyes" -a "x${DOTGITDIR}" = "xyes"; then
     GITCOMMITHASH=`git rev-parse --short HEAD`
 elif test -f default_commit_hash; then
     GITCOMMITHASH=`cat default_commit_hash`
