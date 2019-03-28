@@ -330,6 +330,8 @@ The folder specified by use_cache is just a local cache. It can be deleted at an
 Local file caching works by calculating and comparing md5 checksums (ETag HTTP header).
 .TP
 s3fs leverages /etc/mime.types to "guess" the "correct" content-type based on file name extension. This means that you can copy a website to S3 and serve it up directly from S3 with correct content-types!
+.SH SEE ALSO
+fuse(8) mount(8) fusermount(1) fstab(5)
 .SH BUGS
 Due to S3's "eventual consistency" limitations, file creation can and will occasionally fail. Even after a successful create, subsequent reads can fail for an indeterminate time, even after one or more successful reads. Create and read enough files and you will eventually encounter this failure. This is not a flaw in s3fs and it is not something a FUSE wrapper like s3fs can work around. The retries option does not address this issue. Your application must either tolerate or compensate for these failures, for example by retrying creates or reads.
 .SH AUTHOR
