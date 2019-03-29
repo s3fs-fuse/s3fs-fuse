@@ -382,7 +382,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
       (*pType) = DIRTYPE_NOOBJ;
       nowpath  = "";
     }else{
-      nowpath = path;
+      nowpath = newpath;
       if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
         // "dir/" type
         (*pType) = DIRTYPE_NEW;
@@ -842,18 +842,23 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
     }
   }
 
-  FdEntity* ent = NULL;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
-    // no opened fd
-    if(FdManager::IsCacheDir()){
-      // create cache file if be needed
-      ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(buf.st_size), -1, false, true);
+  // [NOTE]
+  // if path is 'dir/', it does not have cache(could not open file for directory stat)
+  //
+  if('/' != path[strlen(path) - 1]){
+    FdEntity* ent = NULL;
+    if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
+      // no opened fd
+      if(FdManager::IsCacheDir()){
+        // create cache file if be needed
+        ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(buf.st_size), -1, false, true);
+      }
     }
-  }
-  if(ent){
-    time_t mtime = get_mtime(meta);
-    ent->SetMtime(mtime);
-    FdManager::get()->Close(ent);
+    if(ent){
+      time_t mtime = get_mtime(meta);
+      ent->SetMtime(mtime);
+      FdManager::get()->Close(ent);
+    }
   }
 
   return 0;
