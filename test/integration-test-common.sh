@@ -10,11 +10,11 @@
 # S3FS_CREDENTIALS_FILE=keyfile      s3fs format key file
 # TEST_BUCKET_1=bucketname           Name of bucket to use 
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
-# S3_URL="http://s3.amazonaws.com"   Specify Amazon AWS as the S3 provider 
+# S3_URL="https://s3.amazonaws.com"   Specify Amazon AWS as the S3 provider
 #
 # Example of running against Amazon S3 using a bucket named "bucket:
 #
-# S3FS_CREDENTIALS_FILE=keyfile TEST_BUCKET_1=bucket S3PROXY_BINARY="" S3_URL="http://s3.amazonaws.com" ./small-integration-test.sh
+# S3FS_CREDENTIALS_FILE=keyfile TEST_BUCKET_1=bucket S3PROXY_BINARY="" S3_URL="https://s3.amazonaws.com" ./small-integration-test.sh
 #
 # To change the s3fs-fuse debug level:
 #
@@ -27,7 +27,7 @@
 #
 # Run all of the tests from the makefile
 #
-#    S3FS_CREDENTIALS_FILE=keyfile TEST_BUCKET_1=bucket S3PROXY_BINARY="" S3_URL="http://s3.amazonaws.com" make check
+#    S3FS_CREDENTIALS_FILE=keyfile TEST_BUCKET_1=bucket S3PROXY_BINARY="" S3_URL="https://s3.amazonaws.com" make check
 #
 # Run the tests with request auth turned off in both S3Proxy and s3fs-fuse.  This can be
 # useful for poking around with plain old curl
