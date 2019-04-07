@@ -472,8 +472,9 @@ bool s3fs_wtf8_encode(const char *s, string *result)
 
     // single byte encoding
     if (c <= 0x7f) {
-      if (result)
-	*result += c;
+      if (result) {
+        *result += c;
+      }
       continue;
     }
 
@@ -554,14 +555,16 @@ bool s3fs_wtf8_decode(const char *s, string *result)
       if (code >= escape_base && code <= escape_base + 0xff) {
         // convert back
         encoded = true;
-        if (result)
+        if(result){
           *result += code - escape_base;
+        }
         s+=2;
         continue;
       }
     }
-    if (result)
+    if (result) {
       *result += c;
+    }
   }
   return encoded;
 }

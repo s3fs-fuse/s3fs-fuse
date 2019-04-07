@@ -933,8 +933,9 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
   // check buf if it has space words.
   string strTmp = trim(string(buf));
   // decode wtf8. This will always be shorter
-  if (use_wtf8)
+  if(use_wtf8){
     strTmp = s3fs_wtf8_decode(strTmp);
+  }
   strcpy(buf, strTmp.c_str());
 
   FdManager::get()->Close(ent);
@@ -2489,8 +2490,9 @@ static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse
     struct stat st;
     bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
     string bpath = mybasename((*iter));
-    if (use_wtf8)
-        bpath = s3fs_wtf8_decode(bpath);
+    if(use_wtf8){
+      bpath = s3fs_wtf8_decode(bpath);
+    }
     if(in_cache){
       filler(buf, bpath.c_str(), &st, 0);
     }else{
