@@ -5000,6 +5000,20 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       use_wtf8 = true;
       return 0;
     }
+
+    // [NOTE]
+    // following option will be discarding, because these are not for fuse.
+    // (Referenced sshfs.c)
+    //
+    if(0 == strcmp(arg, "auto")   ||
+       0 == strcmp(arg, "noauto") ||
+       0 == strcmp(arg, "user")   ||
+       0 == strcmp(arg, "nouser") ||
+       0 == strcmp(arg, "users")  ||
+       0 == strcmp(arg, "_netdev"))
+    {
+      return 0;
+    }
   }
   return 1;
 }
