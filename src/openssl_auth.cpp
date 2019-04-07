@@ -102,12 +102,7 @@ static unsigned long s3fs_crypt_get_threadid()
 
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
-  struct CRYPTO_dynlock_value* dyndata;
-
-  if(NULL == (dyndata = static_cast<struct CRYPTO_dynlock_value*>(malloc(sizeof(struct CRYPTO_dynlock_value))))){
-    S3FS_PRN_CRIT("Could not allocate memory for CRYPTO_dynlock_value");
-    return NULL;
-  }
+  struct CRYPTO_dynlock_value* dyndata = new CRYPTO_dynlock_value();
   pthread_mutex_init(&(dyndata->dyn_mutex), NULL);
   return dyndata;
 }
@@ -127,7 +122,7 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
 {
   if(dyndata){
     pthread_mutex_destroy(&(dyndata->dyn_mutex));
-    free(dyndata);
+    delete dyndata;
   }
 }
 
@@ -140,10 +135,7 @@ bool s3fs_init_crypt_mutex()
       return false;
     }
   }
-  if(NULL == (s3fs_crypt_mutex = static_cast<pthread_mutex_t*>(malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t))))){
-    S3FS_PRN_CRIT("Could not allocate memory for s3fs_crypt_mutex");
-    return false;
-  }
+  s3fs_crypt_mutex = new pthread_mutex_t[CRYPTO_num_locks()];
   for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
     pthread_mutex_init(&s3fs_crypt_mutex[cnt], NULL);
   }
@@ -174,7 +166,7 @@ bool s3fs_destroy_crypt_mutex()
     pthread_mutex_destroy(&s3fs_crypt_mutex[cnt]);
   }
   CRYPTO_cleanup_all_ex_data();
-  free(s3fs_crypt_mutex);
+  delete[] s3fs_crypt_mutex;
   s3fs_crypt_mutex = NULL;
 
   return true;
@@ -189,9 +181,7 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
     return false;
   }
   (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
-  if(NULL == ((*digest) = (unsigned char*)malloc(*digestlen))){
-    return false;
-  }
+  *digest = new unsigned char[*digestlen];
   if(is_sha256){
     HMAC(EVP_sha256(), key, keylen, data, datalen, *digest, digestlen);
   }else{
@@ -257,13 +247,11 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     memset(buf, 0, 512);
   }
 
-  if(NULL == (result = (unsigned char*)malloc(get_md5_digest_length()))){
-    return NULL;
-  }
+  result = new unsigned char[get_md5_digest_length()];
   MD5_Final(result, &md5ctx);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
 
@@ -281,9 +269,7 @@ size_t get_sha256_digest_length()
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
   (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
-  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(*digestlen)))){
-    return false;
-  }
+  *digest = new unsigned char[*digestlen];
 
   const EVP_MD* md    = EVP_get_digestbyname("sha256");
   EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
@@ -335,15 +321,12 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     EVP_DigestUpdate(sha256ctx, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = (unsigned char*)malloc(get_sha256_digest_length()))){
-    EVP_MD_CTX_destroy(sha256ctx);
-    return NULL;
-  }
+  result = new unsigned char[get_sha256_digest_length()];
   EVP_DigestFinal_ex(sha256ctx, result, NULL);
   EVP_MD_CTX_destroy(sha256ctx);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
   return result;

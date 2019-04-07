@@ -112,9 +112,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
     return false;
   }
 
-  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(SHA1_DIGEST_SIZE)))){
-    return false;
-  }
+  *digest = new unsigned char[SHA1_DIGEST_SIZE];
 
   struct hmac_sha1_ctx ctx_hmac;
   hmac_sha1_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
@@ -131,9 +129,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
     return false;
   }
 
-  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(SHA256_DIGEST_SIZE)))){
-    return false;
-  }
+  *digest = new unsigned char[SHA256_DIGEST_SIZE];
 
   struct hmac_sha256_ctx ctx_hmac;
   hmac_sha256_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
@@ -155,11 +151,9 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
   if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
     return false;
   }
-  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(*digestlen + 1)))){
-    return false;
-  }
+  *digest = new unsigned char[*digestlen + 1];
   if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, *digest)){
-    free(*digest);
+    delete[] *digest;
     *digest = NULL;
     return false;
   }
@@ -175,11 +169,9 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
   if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
     return false;
   }
-  if(NULL == (*digest = reinterpret_cast<unsigned char*>(malloc(*digestlen + 1)))){
-    return false;
-  }
+  *digest = new unsigned char[*digestlen + 1];
   if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, *digest)){
-    free(*digest);
+    delete[] *digest;
     *digest = NULL;
     return false;
   }
@@ -226,13 +218,11 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     md5_update(&ctx_md5, bytes, buf);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
-    return NULL;
-  }
+  result = new unsigned char[get_md5_digest_length()];
   md5_digest(&ctx_md5, get_md5_digest_length(), result);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
 
@@ -283,15 +273,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     gcry_md_write(ctx_md5, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_md5_digest_length())))){
-    gcry_md_close(ctx_md5);
-    return NULL;
-  }
+  result = new unsigned char[get_md5_digest_length()];
   memcpy(result, gcry_md_read(ctx_md5, 0), get_md5_digest_length());
   gcry_md_close(ctx_md5);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
 
@@ -312,9 +299,7 @@ size_t get_sha256_digest_length()
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
   (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
-  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(*digestlen)))){
-    return false;
-  }
+  *digest = new unsigned char[*digestlen];
 
   struct sha256_ctx ctx_sha256;
   sha256_init(&ctx_sha256);
@@ -353,13 +338,11 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     sha256_update(&ctx_sha256, bytes, buf);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
-    return NULL;
-  }
+  result = new unsigned char[get_sha256_digest_length()];
   sha256_digest(&ctx_sha256, get_sha256_digest_length(), result);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
 
@@ -371,15 +354,13 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
   size_t len = (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
-  if(NULL == ((*digest) = reinterpret_cast<unsigned char*>(malloc(len)))){
-    return false;
-  }
+  *digest = new unsigned char[len];
 
   gcry_md_hd_t   ctx_sha256;
   gcry_error_t   err;
   if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_sha256, GCRY_MD_SHA256, 0))){
     S3FS_PRN_ERR("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
-    free(*digest);
+    delete[] *digest;
     return false;
   }
   gcry_md_write(ctx_sha256, data, datalen);
@@ -431,15 +412,12 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     gcry_md_write(ctx_sha256, buf, bytes);
     memset(buf, 0, 512);
   }
-  if(NULL == (result = reinterpret_cast<unsigned char*>(malloc(get_sha256_digest_length())))){
-    gcry_md_close(ctx_sha256);
-    return NULL;
-  }
+  result = new unsigned char[get_sha256_digest_length()];
   memcpy(result, gcry_md_read(ctx_sha256, 0), get_sha256_digest_length());
   gcry_md_close(ctx_sha256);
 
   if(-1 == lseek(fd, start, SEEK_SET)){
-    free(result);
+    delete[] result;
     return NULL;
   }
 

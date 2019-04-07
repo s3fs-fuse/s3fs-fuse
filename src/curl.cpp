@@ -986,7 +986,7 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
     if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), &keylength))) {
       raw_key = string(p_key, keylength);
       base64_key = onekey;
-      free(p_key);
+      delete[] p_key;
     } else {
       S3FS_PRN_ERR("Failed to convert base64 to SSE-C key %s", onekey.c_str());
       return false;
@@ -997,7 +997,7 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
     if(NULL != (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))) {
       raw_key = onekey;
       base64_key = pbase64_key;
-      free(pbase64_key);
+      delete[] pbase64_key;
     } else {
       S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
       return false;
@@ -2436,7 +2436,7 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
   free(md);
 
   Signature = base64;
-  free(base64);
+  delete[] base64;
 
   return Signature;
 }
@@ -2479,9 +2479,9 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   s3fs_HMAC256(kDate, kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion, &kRegion_len);
   s3fs_HMAC256(kRegion, kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService, &kService_len);
   s3fs_HMAC256(kService, kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning, &kSigning_len);
-  free(kDate);
-  free(kRegion);
-  free(kService);
+  delete[] kDate;
+  delete[] kRegion;
+  delete[] kService;
 
   const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
   unsigned int         cRequest_len = StringCQ.size();
@@ -2489,7 +2489,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   for(cnt = 0; cnt < sRequest_len; cnt++){
     sprintf(&hexsRequest[cnt * 2], "%02x", sRequest[cnt]);
   }
-  free(sRequest);
+  delete[] sRequest;
 
   StringToSign  = "AWS4-HMAC-SHA256\n";
   StringToSign += date8601 + "\n";
@@ -2506,8 +2506,8 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   for(cnt = 0; cnt < md_len; cnt++){
     sprintf(&hexSig[cnt * 2], "%02x", md[cnt]);
   }
-  free(kSigning);
-  free(md);
+  delete[] kSigning;
+  delete[] md;
 
   Signature = hexSig;
 
@@ -2578,7 +2578,7 @@ void S3fsCurl::insertV4Headers()
       for(cnt = 0; cnt < sRequest_len; cnt++){
         sprintf(&hexsRequest[cnt * 2], "%02x", sRequest[cnt]);
       }
-      free(sRequest);
+      delete[] sRequest;
       payload_hash.assign(hexsRequest, &hexsRequest[sRequest_len * 2]);
       break;
     }
@@ -3628,8 +3628,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
     char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", md5base64p);
-    free(md5base64p);
-    free(md5raw);
+    delete[] md5base64p;
+    delete[] md5raw;
   }
 
   // make request

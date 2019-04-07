@@ -531,16 +531,12 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       Init(0, false);
       return true;
     }
-    char* ptmp;
-    if(NULL == (ptmp = (char*)calloc(st.st_size + 1, sizeof(char)))){
-      S3FS_PRN_CRIT("could not allocate memory.");
-      S3FS_FUSE_EXIT();
-      return false;
-    }
+    char* ptmp = new char[st.st_size + 1];
+    ptmp[st.st_size] = '\0';
     // read from file
     if(0 >= pread(file.GetFd(), ptmp, st.st_size, 0)){
       S3FS_PRN_ERR("failed to read stats(%d)", errno);
-      free(ptmp);
+      delete[] ptmp;
       return false;
     }
     string        oneline;
@@ -552,7 +548,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     // load(size)
     if(!getline(ssall, oneline, '\n')){
       S3FS_PRN_ERR("failed to parse stats.");
-      free(ptmp);
+      delete[] ptmp;
       return false;
     }
     size_t total = s3fs_strtoofft(oneline.c_str());
@@ -583,7 +579,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       // add new area
       SetPageLoadedStatus(offset, size, is_loaded);
     }
-    free(ptmp);
+    delete[] ptmp;
     if(is_err){
       S3FS_PRN_ERR("failed to parse stats.");
       Clear();

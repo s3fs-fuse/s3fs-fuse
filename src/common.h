@@ -147,9 +147,7 @@ typedef struct xattr_value{
   explicit xattr_value(unsigned char* pval = NULL, size_t len = 0) : pvalue(pval), length(len) {}
   ~xattr_value()
   {
-    if(pvalue){
-      free(pvalue);
-    }
+    delete[] pvalue;
   }
 }XATTRVAL, *PXATTRVAL;
 
