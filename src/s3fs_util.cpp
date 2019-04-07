@@ -318,22 +318,17 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
   char *p_old_path;
   char *p_new_path;
 
-  p = (MVNODE *) malloc(sizeof(MVNODE));
-  if (p == NULL) {
-    printf("create_mvnode: could not allocation memory for p\n");
-    S3FS_FUSE_EXIT();
-    return NULL;
-  }
+  p = new MVNODE();
 
   if(NULL == (p_old_path = strdup(old_path))){
-    free(p);
+    delete p;
     printf("create_mvnode: could not allocation memory for p_old_path\n");
     S3FS_FUSE_EXIT();
     return NULL;
   }
 
   if(NULL == (p_new_path = strdup(new_path))){
-    free(p);
+    delete p;
     free(p_old_path);
     printf("create_mvnode: could not allocation memory for p_new_path\n");
     S3FS_FUSE_EXIT();
@@ -417,7 +412,7 @@ void free_mvnodes(MVNODE *head)
     next = my_head->next;
     free(my_head->old_path);
     free(my_head->new_path);
-    free(my_head);
+    delete my_head;
   }
 }
 
@@ -475,33 +470,27 @@ string get_username(uid_t uid)
     }
     maxlen = res;
   }
-  if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-    S3FS_PRN_CRIT("failed to allocate memory.");
-    return string("");
-  }
+  pbuf = new char[maxlen];
   // get pw information
   while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
-    free(pbuf);
+    delete[] pbuf;
     maxlen *= 2;
-    if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-      S3FS_PRN_CRIT("failed to allocate memory.");
-      return string("");
-    }
+    pbuf = new char[maxlen];
   }
 
   if(0 != result){
     S3FS_PRN_ERR("could not get pw information(%d).", result);
-    free(pbuf);
+    delete[] pbuf;
     return string("");
   }
 
   // check pw
   if(NULL == ppwinfo){
-    free(pbuf);
+    delete[] pbuf;
     return string("");
   }
   string name = SAFESTRPTR(ppwinfo->pw_name);
-  free(pbuf);
+  delete[] pbuf;
   return name;
 }
 
@@ -531,30 +520,24 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     }
     maxlen = res;
   }
-  if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-    S3FS_PRN_CRIT("failed to allocate memory.");
-    return -ENOMEM;
-  }
+  pbuf = new char[maxlen];
   // get group information
   while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-    free(pbuf);
+    delete[] pbuf;
     maxlen *= 2;
-    if(NULL == (pbuf = (char*)malloc(sizeof(char) * maxlen))){
-      S3FS_PRN_CRIT("failed to allocate memory.");
-      return -ENOMEM;
-    }
+    pbuf = new char[maxlen];
   }
 
   if(0 != result){
     S3FS_PRN_ERR("could not get group information(%d).", result);
-    free(pbuf);
+    delete[] pbuf;
     return -result;
   }
 
   // check group
   if(NULL == pginfo){
     // there is not gid in group.
-    free(pbuf);
+    delete[] pbuf;
     return -EINVAL;
   }
 
@@ -564,11 +547,11 @@ int is_uid_include_group(uid_t uid, gid_t gid)
   for(ppgr_mem = pginfo->gr_mem; ppgr_mem && *ppgr_mem; ppgr_mem++){
     if(username == *ppgr_mem){
       // Found username in group.
-      free(pbuf);
+      delete[] pbuf;
       return 1;
     }
   }
-  free(pbuf);
+  delete[] pbuf;
   return 0;
 }
 

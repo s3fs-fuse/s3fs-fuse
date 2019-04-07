@@ -3035,7 +3035,7 @@ static std::string build_xattrs(const xattrs_t& xattrs)
       char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
       if(base64val){
         strxattrs += base64val;
-        free(base64val);
+        delete[] base64val;
       }
     }
     strxattrs += '\"';
@@ -3083,11 +3083,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
   PXATTRVAL pval = new XATTRVAL;
   pval->length = size;
   if(0 < size){
-    if(NULL == (pval->pvalue = (unsigned char*)malloc(size))){
-      delete pval;
-      free_xattrs(xattrs);
-      return -ENOMEM;
-    }
+    pval->pvalue = new unsigned char[size];
     memcpy(pval->pvalue, value, size);
   }else{
     pval->pvalue = NULL;

@@ -44,10 +44,10 @@ string s3fs_get_content_md5(int fd)
   if(NULL == (base64 = s3fs_base64(md5hex, get_md5_digest_length()))){
     return string("");  // ENOMEM
   }
-  free(md5hex);
+  delete[] md5hex;
 
   Signature = base64;
-  free(base64);
+  delete[] base64;
 
   return Signature;
 }
@@ -62,7 +62,7 @@ string s3fs_md5sum(int fd, off_t start, ssize_t size)
   }
 
   std::string md5 = s3fs_hex(md5hex, digestlen);
-  free(md5hex);
+  delete[] md5hex;
 
   return md5;
 }
@@ -81,7 +81,7 @@ string s3fs_sha256sum(int fd, off_t start, ssize_t size)
   for(size_t pos = 0; pos < digestlen; pos++){
     snprintf(sha256 + 2 * pos, 3, "%02x", sha256hex[pos]);
   }
-  free(sha256hex);
+  delete[] sha256hex;
 
   return string(sha256);
 }
