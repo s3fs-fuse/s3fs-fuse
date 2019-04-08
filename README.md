@@ -25,37 +25,39 @@ Installation
 
 Many systems provide pre-built packages:
 
-* On Debian 9 and Ubuntu 16.04 or newer:
-
-  ```
-  sudo apt-get install s3fs
-  ```
-
-* On SUSE 12 or newer and openSUSE 42.1 or newer:
-
-  ```
-  sudo zypper in s3fs
-  ```
-
-* On Fedora 27 and newer:
-  ```
-  sudo yum install s3fs-fuse
-  ```
-
-* On RHEL/CentOS 7 and newer through EPEL repositories:
-  ```
-  sudo yum install epel-release
-  sudo yum install s3fs-fuse
-  ```
-
-* On Amazon Linux through EPEL repositories:
+* Amazon Linux via EPEL:
 
   ```
   sudo amazon-linux-extras install epel
   sudo yum install s3fs-fuse
   ```
 
-* On macOS, install via [Homebrew](https://brew.sh/):
+* Debian 9 and Ubuntu 16.04 or newer:
+
+  ```
+  sudo apt-get install s3fs
+  ```
+
+* Fedora 27 or newer:
+
+  ```
+  sudo yum install s3fs-fuse
+  ```
+
+* RHEL and CentOS 7 or newer through via EPEL:
+
+  ```
+  sudo yum install epel-release
+  sudo yum install s3fs-fuse
+  ```
+
+* SUSE 12 and openSUSE 42.1 or newer:
+
+  ```
+  sudo zypper install s3fs
+  ```
+
+* macOS via [Homebrew](https://brew.sh/):
 
   ```
   brew cask install osxfuse
