@@ -141,6 +141,7 @@ static bool is_remove_cache       = false;
 static bool is_ecs                = false;
 static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
+static bool is_use_session_token  = false;
 static bool create_bucket         = false;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
@@ -4219,23 +4220,29 @@ static int read_passwd_file()
 //
 static int get_access_keys()
 {
+  // S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
+  S3FS_PRN_INFO2("get_access_keys");
   // should be redundant
   if(S3fsCurl::IsPublicBucket()){
+      S3FS_PRN_INFO2("is public bucket");
      return EXIT_SUCCESS;
   }
 
   // access key loading is deferred
   if(load_iamrole || is_ecs){
+     S3FS_PRN_INFO2("load IAM role or is_ecs");
      return EXIT_SUCCESS;
   }
 
   // 1 - keys specified on the command line
   if(S3fsCurl::IsSetAccessKeys()){
+     S3FS_PRN_INFO2("keys specified on command line");
      return EXIT_SUCCESS;
   }
 
   // 2 - was specified on the command line
   if(!passwd_file.empty()){
+    S3FS_PRN_INFO2("passwd_file specified on command line");
     ifstream PF(passwd_file.c_str());
     if(PF.good()){
        PF.close();
@@ -4249,11 +4256,28 @@ static int get_access_keys()
   // 3  - environment variables
   char* AWSACCESSKEYID     = getenv("AWSACCESSKEYID");
   char* AWSSECRETACCESSKEY = getenv("AWSSECRETACCESSKEY");
+  char* AWSSESSIONTOKEN    = getenv("AWSSESSIONTOKEN");
   if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
     if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
         (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
       S3FS_PRN_EXIT("if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too.");
       return EXIT_FAILURE;
+    }
+    S3FS_PRN_INFO2("access key from env variables");
+    if (AWSSESSIONTOKEN != NULL) {
+      S3FS_PRN_INFO2("session token is available");
+      is_use_session_token = true;
+      S3fsCurl::SetIsUseSessionToken(true);
+      if (!S3fsCurl::SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)) {
+         S3FS_PRN_EXIT("session token is invalid.");
+         return EXIT_FAILURE;
+      }
+    } else {
+      S3FS_PRN_INFO2("session token is not available");
+      if (is_use_session_token) {
+        S3FS_PRN_EXIT("environment variable AWSSESSIONTOKEN is expected to be set.");
+        return EXIT_FAILURE;
+      }
     }
     if(!S3fsCurl::SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
       S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
@@ -4679,6 +4703,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       S3fsCurl::SetIAMFieldCount(2);
       is_ibm_iam_auth = true;
       return 0;
+    }
+    if (0 == strcmp(arg, "use_session_token")) {
+      S3fsCurl::SetIsUseSessionToken(true);
+      is_use_session_token = true;
     }
     if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
       std::string endpoint_url;
