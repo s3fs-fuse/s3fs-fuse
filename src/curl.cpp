@@ -63,7 +63,7 @@ static const std::string empty_payload_hash = "e3b0c44298fc1c149afbf4c8996fb9242
 // This function uses temporary file, but should not use it.
 // For not using it, we implement function in each auth file(openssl, nss. gnutls).
 //
-static bool make_md5_from_string(const char* pstr, string& md5)
+static bool make_md5_from_binary(const char* pstr, size_t length, string& md5)
 {
   if(!pstr || '\0' == pstr[0]){
     S3FS_PRN_ERR("Parameter is wrong.");
@@ -74,7 +74,6 @@ static bool make_md5_from_string(const char* pstr, string& md5)
     S3FS_PRN_ERR("Could not make tmpfile.");
     return false;
   }
-  size_t length = strlen(pstr);
   if(length != fwrite(pstr, sizeof(char), length, fp)){
     S3FS_PRN_ERR("Failed to write tmpfile.");
     fclose(fp);
@@ -1006,7 +1005,7 @@ bool S3fsCurl::PushbackSseKeys(string& onekey)
 
   // make MD5
   string strMd5;
-  if(!make_md5_from_string(raw_key.c_str(), strMd5)){
+  if(!make_md5_from_binary(raw_key.c_str(), raw_key.length(), strMd5)){
     S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", raw_key.c_str());
     return false;
   }
