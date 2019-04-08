@@ -4232,29 +4232,23 @@ static int read_passwd_file()
 //
 static int get_access_keys()
 {
-  // S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
-  S3FS_PRN_INFO2("get_access_keys");
   // should be redundant
   if(S3fsCurl::IsPublicBucket()){
-      S3FS_PRN_INFO2("is public bucket");
      return EXIT_SUCCESS;
   }
 
   // access key loading is deferred
   if(load_iamrole || is_ecs){
-     S3FS_PRN_INFO2("load IAM role or is_ecs");
      return EXIT_SUCCESS;
   }
 
   // 1 - keys specified on the command line
   if(S3fsCurl::IsSetAccessKeys()){
-     S3FS_PRN_INFO2("keys specified on command line");
      return EXIT_SUCCESS;
   }
 
   // 2 - was specified on the command line
   if(!passwd_file.empty()){
-    S3FS_PRN_INFO2("passwd_file specified on command line");
     ifstream PF(passwd_file.c_str());
     if(PF.good()){
        PF.close();

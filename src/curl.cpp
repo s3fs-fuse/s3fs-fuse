@@ -337,8 +337,6 @@ static const std::string IAMCRED_ACCESSKEYID = "AccessKeyId";
 static const std::string IAMCRED_SECRETACCESSKEY = "SecretAccessKey";
 static const std::string IAMCRED_ROLEARN = "RoleArn";
 
-static const std::string AWS_SESSION_TOKEN_VAR = "AWS_SESSION_TOKEN";
-
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
 #ifndef CURLSHE_NOT_BUILT_IN
