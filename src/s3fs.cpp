@@ -4086,6 +4086,7 @@ static int read_aws_credentials_file(const std::string &filename)
   string profile;
   string accesskey;
   string secret;
+  string session_token;
 
   // read each line
   string line;
@@ -4105,6 +4106,7 @@ static int read_aws_credentials_file(const std::string &filename)
       profile = line.substr(1, line.size() - 2);
       accesskey.clear();
       secret.clear();
+      session_token.clear();
     }
 
     size_t pos = line.find_first_of('=');
@@ -4117,16 +4119,26 @@ static int read_aws_credentials_file(const std::string &filename)
       accesskey = value;
     }else if(key == "aws_secret_access_key"){
       secret = value;
+    }else if(key == "aws_session_token"){
+      session_token = value;
     }
   }
 
   if(profile != aws_profile){
     return EXIT_FAILURE;
   }
-  if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
-    S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
-    return EXIT_FAILURE;
+  if (session_token.empty()) {
+    if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
+      S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
+      return EXIT_FAILURE;
+    }
+  } else {
+    if (!S3fsCurl::SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str())) {
+      S3FS_PRN_EXIT("session token is invalid.");
+      return EXIT_FAILURE;
+    }
   }
+
   return EXIT_SUCCESS;
 }
 
