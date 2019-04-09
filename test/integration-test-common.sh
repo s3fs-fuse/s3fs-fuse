@@ -72,18 +72,18 @@ function retry {
     N=$1; shift;
     status=0
     for i in $(seq $N); do
-        echo "Trying: $@"
-        $@
+        echo "Trying: $*"
+        "$@"
         status=$?
         if [ $status == 0 ]; then
             break
         fi
         sleep 1
-        echo "Retrying: $@"
+        echo "Retrying: $*"
     done
 
     if [ $status != 0 ]; then
-        echo "timeout waiting for $@"
+        echo "timeout waiting for $*"
     fi
     set -o errexit
     return $status
@@ -187,7 +187,7 @@ function start_s3fs {
             -o dbglevel=${DBGLEVEL:=info} \
             -o retries=3 \
             -f \
-            ${@} | stdbuf -oL -eL sed -u "s/^/s3fs: /" &
+            "${@}" | stdbuf -oL -eL sed -u "s/^/s3fs: /" &
     )
 
     if [ `uname` = "Darwin" ]; then
