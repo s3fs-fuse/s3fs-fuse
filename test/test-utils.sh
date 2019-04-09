@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #### Test utils
 
 set -o errexit
@@ -120,7 +122,7 @@ function add_tests {
 # Log test name and description
 #    describe [DESCRIPTION]
 function describe {
-    echo "${FUNCNAME[1]}: "$@""
+    echo "${FUNCNAME[1]}: \"$*\""
 }
 
 # Runs each test in a suite and summarizes results.  The list of
