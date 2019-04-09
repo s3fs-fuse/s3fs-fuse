@@ -385,6 +385,7 @@ int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 bool             S3fsCurl::is_sigv4            = true;           // default
 bool             S3fsCurl::is_ua               = true;           // default
+bool             S3fsCurl::is_use_session_token = false;         // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -1194,6 +1195,17 @@ bool S3fsCurl::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey
   return true;
 }
 
+bool S3fsCurl::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char* SessionToken)
+{
+  if((!S3fsCurl::is_ibm_iam_auth && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0] || !SessionToken || '\0' == SessionToken[0]){
+    return false;
+  }
+  AWSAccessKeyId     = AccessKeyId;
+  AWSSecretAccessKey = SecretAccessKey;
+  AWSAccessToken     = SessionToken;
+  return true;
+}
+
 long S3fsCurl::SetSslVerifyHostname(long value)
 {
   if(0 != value && 1 != value){
@@ -1208,6 +1220,13 @@ bool S3fsCurl::SetIsIBMIAMAuth(bool flag)
 {
   bool old = S3fsCurl::is_ibm_iam_auth;
   S3fsCurl::is_ibm_iam_auth = flag;
+  return old;
+}
+
+bool S3fsCurl::SetIsUseSessionToken(bool flag)
+{
+  bool old = S3fsCurl::is_use_session_token;
+  S3fsCurl::is_use_session_token = flag;
   return old;
 }
 
@@ -2408,7 +2427,7 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
   string Signature;
   string StringToSign;
 
-  if(!S3fsCurl::IAM_role.empty() || S3fsCurl::is_ecs){
+  if(!S3fsCurl::IAM_role.empty() || S3fsCurl::is_ecs || S3fsCurl::is_use_session_token){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
   }
 
@@ -2446,7 +2465,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   string Signature, StringCQ, StringToSign;
   string uriencode;
 
-  if(!S3fsCurl::IAM_role.empty()  || S3fsCurl::is_ecs){
+  if(!S3fsCurl::IAM_role.empty()  || S3fsCurl::is_ecs || S3fsCurl::is_use_session_token){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
   }
 
