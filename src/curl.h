@@ -270,6 +270,7 @@ class S3fsCurl
     static std::string      AWSAccessToken;
     static time_t           AWSAccessTokenExpire;
     static bool             is_ecs;
+    static bool             is_use_session_token;
     static bool             is_ibm_iam_auth;
     static std::string      IAM_cred_url;
     static size_t           IAM_field_count;
@@ -428,6 +429,7 @@ class S3fsCurl
     static bool SetVerbose(bool flag);
     static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
     static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
+    static bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
     static bool IsSetAccessKeyID(void){
                   return (0 < S3fsCurl::AWSAccessKeyId.size());
                 }
@@ -443,6 +445,7 @@ class S3fsCurl
     static int SetMaxMultiRequest(int max);
     static int GetMaxMultiRequest(void) { return S3fsCurl::max_multireq; }
     static bool SetIsECS(bool flag);
+    static bool SetIsUseSessionToken(bool flag);
     static bool SetIsIBMIAMAuth(bool flag);
     static size_t SetIAMFieldCount(size_t field_count);
     static std::string SetIAMCredentialsURL(const char* url);
