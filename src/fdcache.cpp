@@ -623,14 +623,16 @@ int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
 // FdEntity methods
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath)
-        : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)), cachepath(SAFESTRPTR(cpath)), mirrorpath(""),
-          fd(-1), pfile(NULL), is_modify(false), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0)
+        : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
+          fd(-1), pfile(NULL), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0), is_modify(false),
+          cachepath(SAFESTRPTR(cpath)), mirrorpath("")
 {
   try{
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, S3FS_MUTEX_RECURSIVE);   // recursive mutex
     pthread_mutex_init(&fdent_lock, &attr);
+    pthread_mutex_init(&fdent_data_lock, &attr);
     is_lock_init = true;
   }catch(exception& e){
     S3FS_PRN_CRIT("failed to init mutex");
@@ -643,6 +645,7 @@ FdEntity::~FdEntity()
 
   if(is_lock_init){
     try{
+      pthread_mutex_destroy(&fdent_data_lock);
       pthread_mutex_destroy(&fdent_lock);
     }catch(exception& e){
       S3FS_PRN_CRIT("failed to destroy mutex");
@@ -654,6 +657,7 @@ FdEntity::~FdEntity()
 void FdEntity::Clear()
 {
   AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_data_lock(&fdent_data_lock);
 
   if(-1 != fd){
     if(!cachepath.empty()){
@@ -696,6 +700,7 @@ void FdEntity::Close()
       abort();
     }
     if(0 == refcnt){
+      AutoLock auto_data_lock(&fdent_data_lock);
       if(!cachepath.empty()){
         CacheFileStat cfstat(path.c_str());
         if(!pagelist.Serialize(cfstat, true)){
@@ -796,6 +801,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     return -EIO;
   }
 
+  AutoLock auto_data_lock(&fdent_data_lock);
   if(-1 != fd){
     // already opened, needs to increment refcnt.
     Dup();
@@ -994,7 +1000,7 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
       return false;
     }
   }
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_data_lock);
 
   if(force_load){
     SetAllStatusUnloaded();
@@ -1173,7 +1179,7 @@ int FdEntity::Load(off_t start, off_t size)
   if(-1 == fd){
     return -EBADF;
   }
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_data_lock);
 
   int result = 0;
 
@@ -1475,7 +1481,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   if(-1 == fd){
     return -EBADF;
   }
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_data_lock);
 
   if(!force_sync && !is_modify){
     // nothing to update.
@@ -1629,7 +1635,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   if(-1 == fd){
     return -EBADF;
   }
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_data_lock);
 
   if(force_load){
     pagelist.SetPageLoadedStatus(start, size, false);
@@ -1692,7 +1698,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(NULL, size)){
     FdManager::get()->CleanupCacheDir();
   }
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_data_lock);
 
   // check file size
   if(pagelist.Size() < start){

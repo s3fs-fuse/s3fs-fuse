@@ -112,22 +112,23 @@ class FdEntity
   private:
     pthread_mutex_t fdent_lock;
     bool            is_lock_init;
-    PageList        pagelist;
     int             refcnt;         // reference count
     std::string     path;           // object path
-    std::string     cachepath;      // local cache file path
-                                    // (if this is empty, does not load/save pagelist.)
-    std::string     mirrorpath;     // mirror file path to local cache file path
     int             fd;             // file descriptor(tmp file or cache file)
     FILE*           pfile;          // file pointer(tmp file or cache file)
-    bool            is_modify;      // if file is changed, this flag is true
     headers_t       orgmeta;        // original headers at opening
     off_t           size_orgmeta;   // original file size in original headers
 
+    pthread_mutex_t fdent_data_lock;// protects the following members
+    PageList        pagelist;
     std::string     upload_id;      // for no cached multipart uploading when no disk space
     etaglist_t      etaglist;       // for no cached multipart uploading when no disk space
     off_t           mp_start;       // start position for no cached multipart(write method only)
     off_t           mp_size;        // size for no cached multipart(write method only)
+    bool            is_modify;      // if file is changed, this flag is true
+    std::string     cachepath;      // local cache file path
+                                    // (if this is empty, does not load/save pagelist.)
+    std::string     mirrorpath;     // mirror file path to local cache file path
 
   private:
     static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
