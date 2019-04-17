@@ -76,38 +76,46 @@ enum s3fs_log_level{
 #define S3FS_LOG_NEST(nest)  (nest < S3FS_LOG_NEST_MAX ? s3fs_log_nest[nest] : s3fs_log_nest[S3FS_LOG_NEST_MAX - 1])
 
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
+     do{ \
        if(S3FS_LOG_CRIT == level || (S3FS_LOG_CRIT != debug_level && level == (debug_level & level))){ \
          if(foreground){ \
            fprintf(stdout, "%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
            syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s%s:%s(%d): " fmt "%s", instance_name.c_str(), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          } \
-       }
+       } \
+     }while(0)
 
 #define S3FS_LOW_LOGPRN2(level, nest, fmt, ...) \
+     do{ \
        if(S3FS_LOG_CRIT == level || (S3FS_LOG_CRIT != debug_level && level == (debug_level & level))){ \
          if(foreground){ \
            fprintf(stdout, "%s%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(level), S3FS_LOG_NEST(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
          }else{ \
            syslog(S3FS_LOG_LEVEL_TO_SYSLOG(level), "%s%s" fmt "%s", instance_name.c_str(), S3FS_LOG_NEST(nest), __VA_ARGS__); \
          } \
-       }
+       } \
+     }while(0)
 
 #define S3FS_LOW_LOGPRN_EXIT(fmt, ...) \
+     do{ \
        if(foreground){ \
          fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
        }else{ \
          fprintf(stderr, "s3fs: " fmt "%s\n", __VA_ARGS__); \
          syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
-       }
+       } \
+     }while(0)
 
 // Special macro for init message
 #define S3FS_PRN_INIT_INFO(fmt, ...) \
+     do{ \
        if(foreground){ \
          fprintf(stdout, "%s%s%s:%s(%d): " fmt "%s\n", S3FS_LOG_LEVEL_STRING(S3FS_LOG_INFO), S3FS_LOG_NEST(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
        }else{ \
          syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_INFO), "%s%s" fmt "%s", instance_name.c_str(), S3FS_LOG_NEST(0), __VA_ARGS__, ""); \
-       }
+       } \
+     }while(0)
 
 // [NOTE]
 // small trick for VA_ARGS
