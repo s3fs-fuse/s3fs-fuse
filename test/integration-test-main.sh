@@ -24,6 +24,20 @@ set -o pipefail
 
 source test-utils.sh
 
+function test_create_empty_file {
+    describe "Testing creating an empty file ..."
+
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+
+    touch ${TEST_TEXT_FILE}
+
+    check_file_size "${TEST_TEXT_FILE}" 0
+
+    aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${OBJECT_NAME}"
+
+    rm_test_file
+}
+
 function test_append_file {
     describe "Testing append to file ..."
     TEST_INPUT="echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
@@ -1425,6 +1439,7 @@ function add_all_tests {
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
     fi
+    add_tests test_create_empty_file
     add_tests test_append_file
     add_tests test_truncate_file
     add_tests test_truncate_upload
