@@ -4011,14 +4011,16 @@ static int check_for_aws_format(const kvmap_t& kvmap)
   if(kvmap.empty()){
     return 0;
   }
-  if(kvmap.end() == kvmap.find(str1) && kvmap.end() == kvmap.find(str2)){
+  kvmap_t::const_iterator str1_it = kvmap.find(str1);
+  kvmap_t::const_iterator str2_it = kvmap.find(str2);
+  if(kvmap.end() == str1_it && kvmap.end() == str2_it){
     return 0;
   }
-  if(kvmap.end() == kvmap.find(str1) || kvmap.end() == kvmap.find(str2)){
+  if(kvmap.end() == str1_it || kvmap.end() == str2_it){
     S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
     return -1;
   }
-  if(!S3fsCurl::SetAccessKey(kvmap.at(str1).c_str(), kvmap.at(str2).c_str())){
+  if(!S3fsCurl::SetAccessKey(str1_it->second.c_str(), str2_it->second.c_str())){
     S3FS_PRN_EXIT("failed to set access key/secret key.");
     return -1;
   }
@@ -4184,9 +4186,10 @@ static int read_passwd_file()
   //
   // check key=value type format.
   //
-  if(bucketmap.end() != bucketmap.find(keyval_fields_type)){
+  bucketkvmap_t::iterator it = bucketmap.find(keyval_fields_type);
+  if(bucketmap.end() != it){
     // aws format
-    result = check_for_aws_format(bucketmap[keyval_fields_type]);
+    result = check_for_aws_format(it->second);
     if(-1 == result){
        return EXIT_FAILURE;
     }else if(1 == result){
@@ -4199,16 +4202,19 @@ static int read_passwd_file()
   if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
     bucket_key = bucket;
   }
-  if(bucketmap.end() == bucketmap.find(bucket_key)){
+  it = bucketmap.find(bucket_key);
+  if(bucketmap.end() == it){
     S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
     return EXIT_FAILURE;
   }
-  keyval = bucketmap[bucket_key];
-  if(keyval.end() == keyval.find(string(aws_accesskeyid)) || keyval.end() == keyval.find(string(aws_secretkey))){
+  keyval = it->second;
+  kvmap_t::iterator aws_accesskeyid_it = keyval.find(aws_accesskeyid);
+  kvmap_t::iterator aws_secretkey_it = keyval.find(aws_secretkey);
+  if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
     S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
     return EXIT_FAILURE;
   }
-  if(!S3fsCurl::SetAccessKey(keyval.at(string(aws_accesskeyid)).c_str(), keyval.at(string(aws_secretkey)).c_str())){
+  if(!S3fsCurl::SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str())){
     S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
     return EXIT_FAILURE;
   }
