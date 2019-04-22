@@ -26,12 +26,13 @@ static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
 
 #include <fuse.h>
 
-#define S3FS_FUSE_EXIT() { \
+#define S3FS_FUSE_EXIT() \
+do{ \
   struct fuse_context* pcxt = fuse_get_context(); \
   if(pcxt){ \
     fuse_exit(pcxt->fuse); \
   } \
-}
+}while(0)
 
 // [NOTE]
 // s3fs use many small allocated chunk in heap area for stats
@@ -60,25 +61,25 @@ static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
 #endif  // S3FS_MALLOC_TRIM
 
 #define S3FS_XMLFREEDOC(doc) \
-        { \
+        do{ \
           xmlFreeDoc(doc); \
           S3FS_MALLOCTRIM(0); \
-        }
+        }while(0)
 #define S3FS_XMLFREE(ptr) \
-        { \
+        do{ \
           xmlFree(ptr); \
           S3FS_MALLOCTRIM(0); \
-        }
+        }while(0)
 #define S3FS_XMLXPATHFREECONTEXT(ctx) \
-        { \
+        do{ \
           xmlXPathFreeContext(ctx); \
           S3FS_MALLOCTRIM(0); \
-        }
+        }while(0)
 #define S3FS_XMLXPATHFREEOBJECT(obj) \
-        { \
+        do{ \
           xmlXPathFreeObject(obj); \
           S3FS_MALLOCTRIM(0); \
-        }
+        }while(0)
 
 #endif // S3FS_S3_H_
 

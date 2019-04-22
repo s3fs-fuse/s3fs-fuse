@@ -1892,8 +1892,8 @@ bool S3fsCurl::ResetHandle()
     curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare);
   }
   if(!S3fsCurl::is_cert_check) {
-    S3FS_PRN_DBG("'no_check_certificate' option in effect.")
-    S3FS_PRN_DBG("The server certificate won't be checked against the available certificate authorities.")
+    S3FS_PRN_DBG("'no_check_certificate' option in effect.");
+    S3FS_PRN_DBG("The server certificate won't be checked against the available certificate authorities.");
     curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYPEER, false);
   }
   if(S3fsCurl::is_verbose){
