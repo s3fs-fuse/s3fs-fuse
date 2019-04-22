@@ -1,13 +1,11 @@
-s3fs
-====
+# s3fs
 
 s3fs allows Linux and macOS to mount an S3 bucket via FUSE.
 s3fs preserves the native object format for files, allowing use of other
 tools like [AWS CLI](https://github.com/aws/aws-cli).
 [![Build Status](https://travis-ci.org/s3fs-fuse/s3fs-fuse.svg?branch=master)](https://travis-ci.org/s3fs-fuse/s3fs-fuse)
 
-Features
---------
+## Features
 
 * large subset of POSIX including reading/writing files, directories, symlinks, mode, uid/gid, and extended attributes
 * compatible with Amazon S3, Google Cloud Storage, and other S3-based object stores
@@ -20,8 +18,7 @@ Features
 * user-specified regions, including Amazon GovCloud
 * authenticate via v2 or v4 signatures
 
-Installation
-------------
+## Installation
 
 Many systems provide pre-built packages:
 
@@ -66,8 +63,7 @@ Many systems provide pre-built packages:
 
 Otherwise consult the [complation instructions](COMPILATION.md).
 
-Examples
---------
+## Examples
 
 s3fs supports the standard
 [AWS credentials file](https://docs.aws.amazon.com/cli/latest/userguide/cli-config-files.html)
@@ -117,14 +113,17 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=htt
 ```
 
 or(fstab)
+
 ```
 s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=https://url.to.s3/ 0 0
 ```
 
 To use IBM IAM Authentication, use the `-o ibm_iam_auth` option, and specify the Service Instance ID and API Key in your credentials file:
+
 ```
 echo SERVICEINSTANCEID:APIKEY > /path/to/passwd
 ```
+
 The Service Instance ID is only required when using the `-o create_bucket` option.
 
 Note: You may also want to create the global credential file first
@@ -136,9 +135,7 @@ chmod 600 /etc/passwd-s3fs
 
 Note2: You may also need to make sure `netfs` service is start on boot
 
-
-Limitations
------------
+## Limitations
 
 Generally S3 cannot offer the same performance or semantics as a local file system.  More specifically:
 
@@ -150,8 +147,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 * no hard links
 * inotify detects only local modifications, not external ones by other clients or tools
 
-References
-----------
+## References
 
 * [goofys](https://github.com/kahing/goofys) - similar to s3fs but has better performance and less POSIX compatibility
 * [s3backer](https://github.com/archiecobbs/s3backer) - mount an S3 bucket as a single file
@@ -159,14 +155,13 @@ References
 * [s3ql](https://github.com/s3ql/s3ql/) - similar to s3fs but uses its own object format
 * [YAS3FS](https://github.com/danilop/yas3fs) - similar to s3fs but uses SNS to allow multiple clients to mount a bucket
 
-Frequently Asked Questions
---------------------------
+## Frequently Asked Questions
+
 * [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ)
 * [s3fs on Stack Overflow](https://stackoverflow.com/questions/tagged/s3fs)
 * [s3fs on Server Fault](https://serverfault.com/questions/tagged/s3fs)
 
-License
--------
+## License
 
 Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>
 
