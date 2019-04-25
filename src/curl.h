@@ -445,7 +445,6 @@ class S3fsCurl
     static int SetMaxMultiRequest(int max);
     static int GetMaxMultiRequest(void) { return S3fsCurl::max_multireq; }
     static bool SetIsECS(bool flag);
-    static bool SetIsUseSessionToken(bool flag);
     static bool SetIsIBMIAMAuth(bool flag);
     static size_t SetIAMFieldCount(size_t field_count);
     static std::string SetIAMCredentialsURL(const char* url);
