@@ -4132,6 +4132,10 @@ static int read_aws_credentials_file(const std::string &filename)
     return EXIT_FAILURE;
   }
   if (session_token.empty()) {
+    if (is_use_session_token) {
+      S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/credentials file for profile: %s.", aws_profile.c_str());
+      return EXIT_FAILURE;
+    }
     if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
       S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
       return EXIT_FAILURE;
@@ -4280,8 +4284,6 @@ static int get_access_keys()
     S3FS_PRN_INFO2("access key from env variables");
     if (AWSSESSIONTOKEN != NULL) {
       S3FS_PRN_INFO2("session token is available");
-      is_use_session_token = true;
-      S3fsCurl::SetIsUseSessionToken(true);
       if (!S3fsCurl::SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)) {
          S3FS_PRN_EXIT("session token is invalid.");
          return EXIT_FAILURE;
@@ -4719,7 +4721,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if (0 == STR2NCMP(arg, "use_session_token")) {
-      S3fsCurl::SetIsUseSessionToken(true);
       is_use_session_token = true;
     }
     if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){

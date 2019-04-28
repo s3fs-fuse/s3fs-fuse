@@ -1205,6 +1205,7 @@ bool S3fsCurl::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
   AWSAccessKeyId     = AccessKeyId;
   AWSSecretAccessKey = SecretAccessKey;
   AWSAccessToken     = SessionToken;
+  S3fsCurl::is_use_session_token = true;
   return true;
 }
 
@@ -1222,13 +1223,6 @@ bool S3fsCurl::SetIsIBMIAMAuth(bool flag)
 {
   bool old = S3fsCurl::is_ibm_iam_auth;
   S3fsCurl::is_ibm_iam_auth = flag;
-  return old;
-}
-
-bool S3fsCurl::SetIsUseSessionToken(bool flag)
-{
-  bool old = S3fsCurl::is_use_session_token;
-  S3fsCurl::is_use_session_token = flag;
   return old;
 }
 
