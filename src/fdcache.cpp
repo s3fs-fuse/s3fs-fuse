@@ -806,7 +806,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
     Dup();
 
     // check only file size(do not need to save cfs and time.
-    if(0 <= size && pagelist.Size() != static_cast<size_t>(size) && size_orgmeta != 0 && pagelist.Size() <= size_orgmeta){
+    if(0 <= size && pagelist.Size() != static_cast<size_t>(size) && pagelist.Size() <= size_orgmeta){
       // truncate temporary file size
       if(-1 == ftruncate(fd, static_cast<size_t>(size))){
         S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
