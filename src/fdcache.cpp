@@ -1025,6 +1025,16 @@ bool FdEntity::GetStats(struct stat& st)
   return true;
 }
 
+int FdEntity::SetCtime(time_t time)
+{
+  if(-1 == time){
+    return 0;
+  }
+
+  orgmeta["x-amz-meta-ctime"] = str(time);
+  return 0;
+}
+
 int FdEntity::SetMtime(time_t time)
 {
   S3FS_PRN_INFO3("[path=%s][fd=%d][time=%jd]", path.c_str(), fd, (intmax_t)time);
