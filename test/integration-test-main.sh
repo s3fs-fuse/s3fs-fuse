@@ -352,6 +352,30 @@ function test_multipart_copy {
     rm_test_file "${BIG_FILE}-copy"
 }
 
+function test_multipart_mix {
+    describe "Testing multi-part mix ..."
+
+    if [ `uname` = "Darwin" ]; then
+       cat /dev/null > $BIG_FILE
+    fi
+    dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
+    dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
+
+    # modify directly(seek 7.5MB offset)
+    echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}" bs=1 seek=7864320 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}" bs=1 seek=7864320 conv=notrunc
+
+    # Verify contents of file
+    echo "Comparing test file"
+    if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}"
+    then
+       return 1
+    fi
+
+    rm -f "/tmp/${BIG_FILE}"
+    rm_test_file "${BIG_FILE}"
+}
+
 function test_special_characters {
     describe "Testing special characters ..."
 
@@ -552,6 +576,7 @@ function add_all_tests {
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
+    add_tests test_multipart_mix
     add_tests test_special_characters
     add_tests test_symlink
     add_tests test_extended_attributes

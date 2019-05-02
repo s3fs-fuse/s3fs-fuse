@@ -88,6 +88,7 @@ class PageList
     static void FreeList(fdpage_list_t& list);
 
     explicit PageList(size_t size = 0, bool is_loaded = false);
+    explicit PageList(const PageList& other);
     ~PageList();
 
     bool Init(size_t size, bool is_loaded);
@@ -99,6 +100,8 @@ class PageList
     bool FindUnloadedPage(off_t start, off_t& resstart, size_t& ressize) const;
     size_t GetTotalUnloadedPageSize(off_t start = 0, size_t size = 0) const;    // size=0 is checking to end of list
     int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, size_t size = 0) const;  // size=0 is checking to end of list
+    bool GetLoadPageListForMultipartUpload(fdpage_list_t& dlpages);
+    bool GetMultipartSizeList(fdpage_list_t& mplist, size_t partsize) const;
 
     bool Serialize(CacheFileStat& file, bool is_output);
     void Dump(void);
@@ -110,6 +113,8 @@ class PageList
 class FdEntity
 {
   private:
+    static bool     mixmultipart;   // whether multipart uploading can use copy api.
+
     pthread_mutex_t fdent_lock;
     bool            is_lock_init;
     PageList        pagelist;
@@ -139,6 +144,8 @@ class FdEntity
     bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
 
   public:
+    static bool SetNoMixMultipart(void);
+
     explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
     ~FdEntity();
 

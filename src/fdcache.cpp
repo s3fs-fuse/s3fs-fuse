@@ -252,6 +252,14 @@ PageList::PageList(size_t size, bool is_loaded)
   Init(size, is_loaded);
 }
 
+PageList::PageList(const PageList& other)
+{
+  for(fdpage_list_t::const_iterator iter = other.pages.begin(); iter != other.pages.end(); ++iter){
+    fdpage* page = new fdpage((*iter)->offset, (*iter)->bytes, (*iter)->loaded);
+    pages.push_back(page);
+  }
+}
+
 PageList::~PageList()
 {
   Clear();
@@ -494,6 +502,117 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, size_t
   return unloaded_list.size();
 }
 
+// [NOTE]
+// This method is called in advance when mixing POST and COPY in multi-part upload.
+// The minimum size of each part must be 5 MB, and the data area below this must be
+// downloaded from S3.
+// This method checks the current PageList status and returns the area that needs
+// to be downloaded so that each part is at least 5 MB.
+//
+bool PageList::GetLoadPageListForMultipartUpload(fdpage_list_t& dlpages)
+{
+  // compress before this processing
+  if(!Compress()){
+    return false;
+  }
+
+  size_t    before_loaded_size = 0;
+  bool      before_indigent    = false;
+  fdpage*   dlpage             = NULL;
+  for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    if((*iter)->loaded){
+      // Loaded area
+      before_loaded_size += (*iter)->bytes;
+      if(MIN_MULTIPART_SIZE <= before_loaded_size){
+        before_indigent    = false;
+      }else{
+        before_indigent    = true;                                                  // smaller than 5MB
+      }
+    }else{
+      // Unloaded area
+      if(before_indigent){
+        // Last Load area is less than 5 MB
+        size_t tmpsize = min((MIN_MULTIPART_SIZE - before_loaded_size), (*iter)->bytes);
+        if(MIN_MULTIPART_SIZE <= ((*iter)->bytes - tmpsize)){
+          // Make an area to download to set the previous Load area to 5 MB
+          dlpage = new fdpage((*iter)->offset, tmpsize, (*iter)->loaded);           // don't care for loaded flag
+          dlpages.push_back(dlpage);
+
+          // The remaining unloaded area is also 5MB or more
+          before_loaded_size = 0;
+          before_indigent    = false;
+
+        }else{
+          // If the size lacking in 5 MB of the previous area is divided
+          // from this area, the remaining unloaded area will be 5 MB or less.
+          // Therefore, this unloaded area is to be loaded all
+          //
+          dlpage = new fdpage((*iter)->offset, (*iter)->bytes, (*iter)->loaded);    // don't care for loaded flag
+          dlpages.push_back(dlpage);
+
+          // The previous load area and this area will be the contiguous
+          // load area. So check the size of this area again.
+          //
+          before_loaded_size += (*iter)->bytes;
+          if(MIN_MULTIPART_SIZE <= before_loaded_size){
+            before_indigent    = false;
+          }else{
+            before_indigent    = true;
+          }
+        }
+      }else{
+        // Last Load area is lager than 5 MB.
+        if(MIN_MULTIPART_SIZE <= (*iter)->bytes){
+          // This unloaded area is lager than 5 MB, too.
+          before_loaded_size = 0;
+        }else{
+          // This unloaded area is smaller than 5 MB. Thus this unloaded
+          // area is to be loaded all.
+          dlpage = new fdpage((*iter)->offset, (*iter)->bytes, (*iter)->loaded);    // don't care for loaded flag
+          dlpages.push_back(dlpage);
+
+          before_loaded_size += (*iter)->bytes;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+bool PageList::GetMultipartSizeList(fdpage_list_t& mplist, size_t partsize) const
+{
+  if(!mplist.empty()){
+    return false;
+  }
+
+  PageList tmpPageObj(*this);
+  if(!tmpPageObj.Compress()){
+    return false;
+  }
+
+  for(fdpage_list_t::const_iterator iter = tmpPageObj.pages.begin(); iter != tmpPageObj.pages.end(); ++iter){
+    off_t  start    = (*iter)->offset;
+    size_t remains  = (*iter)->bytes;
+
+    while(0 < remains){
+      size_t    onesize;
+      if((*iter)->loaded){
+        // Uploading parts, this page must be 5MB - partsize
+        onesize = std::min(remains, partsize);
+      }else{
+        // Not uploading parts, this page must be 5MB - 5GB
+        onesize = std::min(remains, static_cast<size_t>(FIVE_GB));
+      }
+      fdpage*   page = new fdpage(start, onesize, (*iter)->loaded);
+      mplist.push_back(page);
+
+      start     += onesize;
+      remains   -= onesize;
+    }
+  }
+  return true;
+}
+
 bool PageList::Serialize(CacheFileStat& file, bool is_output)
 {
   if(!file.Open()){
@@ -610,6 +729,15 @@ void PageList::Dump()
 //------------------------------------------------
 // FdEntity class methods
 //------------------------------------------------
+bool FdEntity::mixmultipart = true;
+
+bool FdEntity::SetNoMixMultipart(void)
+{
+  bool old = mixmultipart;
+  mixmultipart = false;
+  return old;
+}
+
 int FdEntity::FillFile(int fd, unsigned char byte, size_t size, off_t start)
 {
   unsigned char bytes[1024 * 32];         // 32kb
@@ -1484,8 +1612,12 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       // check disk space
       if(ReserveDiskSpace(restsize)){
         // enough disk space
-        // Load all uninitialized area
-        result = Load();
+
+        // Load all uninitialized area(no mix multipart uploading)
+        if(!FdEntity::mixmultipart){
+          result = Load();
+        }
+
         FdManager::FreeReservedDiskSpace(restsize);
         if(0 != result){
           S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
@@ -1545,11 +1677,42 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       if(120 > S3fsCurl::GetReadwriteTimeout()){
         backup = S3fsCurl::SetReadwriteTimeout(120);
       }
-      result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
+
+      if(FdEntity::mixmultipart){
+        // multipart uploading can use copy api
+
+        // This is to ensure that each part is 5MB or more.
+        // If the part is less than 5MB, download it.
+        fdpage_list_t dlpages;
+        if(!pagelist.GetLoadPageListForMultipartUpload(dlpages)){
+          S3FS_PRN_ERR("something error occurred during getting download pagelist.");
+          return -1;
+        }
+        for(fdpage_list_t::const_iterator iter = dlpages.begin(); iter != dlpages.end(); ++iter){
+          if(0 != (result = Load((*iter)->offset, (*iter)->bytes))){
+            S3FS_PRN_ERR("failed to get parts(start=%jd, size=%jd) before uploading.", (*iter)->offset, (*iter)->bytes);
+            return result;
+          }
+        }
+
+        // multipart uploading with copy api
+        result = S3fsCurl::ParallelMixMultipartUploadRequest(tpath ? tpath : path.c_str(), orgmeta, fd, pagelist);
+
+      }else{
+        // multipart uploading not using copy api
+        result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
+      }
+
       if(0 != backup){
         S3fsCurl::SetReadwriteTimeout(backup);
       }
     }else{
+      // If there are unloaded pages, they are loaded at here.
+      if(0 != (result = Load())){
+        S3FS_PRN_ERR("failed to load parts before uploading object(%d)", result);
+        return result;
+      }
+
       S3fsCurl s3fscurl(true);
       result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
     }
@@ -1710,9 +1873,12 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       // enough disk space
 
       // Load uninitialized area which starts from 0 to (start + size) before writing.
-      if(0 < start){
-        result = Load(0, static_cast<size_t>(start));
+      if(!FdEntity::mixmultipart){
+        if(0 < start){
+          result = Load(0, static_cast<size_t>(start));
+        }
       }
+
       FdManager::FreeReservedDiskSpace(restsize);
       if(0 != result){
         S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
@@ -1749,11 +1915,13 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   }
 
   // Load uninitialized area which starts from (start + size) to EOF after writing.
-  if(pagelist.Size() > static_cast<size_t>(start) + size){
-    result = Load(static_cast<size_t>(start + size), pagelist.Size());
-    if(0 != result){
-      S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
-      return static_cast<ssize_t>(result);
+  if(!FdEntity::mixmultipart){
+    if(pagelist.Size() > static_cast<size_t>(start) + size){
+      result = Load(static_cast<size_t>(start + size), pagelist.Size());
+      if(0 != result){
+        S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
+        return static_cast<ssize_t>(result);
+      }
     }
   }
 
