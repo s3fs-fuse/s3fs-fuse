@@ -356,6 +356,89 @@ function test_multipart_copy {
     rm_test_file "${BIG_FILE}-copy"
 }
 
+function test_multipart_mix {
+    describe "Testing multi-part mix ..."
+
+    if [ `uname` = "Darwin" ]; then
+       cat /dev/null > $BIG_FILE
+    fi
+    dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
+    dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
+
+    # (1) Edit the middle of an existing file
+    #     modify directly(seek 7.5MB offset)
+    #     In the case of nomultipart and nocopyapi,
+    #     it makes no sense, but copying files is because it leaves no cache.
+    #
+    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${BIG_FILE} ${BIG_FILE}-mix
+
+    MODIFY_START_BLOCK=$((15*1024*1024/2/4))
+    echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+
+    # Verify contents of file
+    echo "Comparing test file (1)"
+    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    then
+       return 1
+    fi
+
+    # (2) Write to an area larger than the size of the existing file
+    #     modify directly(over file end offset)
+    #
+    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${BIG_FILE} ${BIG_FILE}-mix
+
+    OVER_FILE_BLOCK_POS=$((26*1024*1024/4))
+    echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$OVER_FILE_BLOCK_POS conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$OVER_FILE_BLOCK_POS conv=notrunc
+
+    # Verify contents of file
+    echo "Comparing test file (2)"
+    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    then
+       return 1
+    fi
+
+    # (3) Writing from the 0th byte
+    #
+    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${BIG_FILE} ${BIG_FILE}-mix
+
+    echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
+
+    # Verify contents of file
+    echo "Comparing test file (3)"
+    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    then
+       return 1
+    fi
+
+    # (4) Write to the area within 5MB from the top
+    #     modify directly(seek 1MB offset)
+    #
+    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${BIG_FILE} ${BIG_FILE}-mix
+
+    MODIFY_START_BLOCK=$((1*1024*1024))
+    echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+
+    # Verify contents of file
+    echo "Comparing test file (4)"
+    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    then
+       return 1
+    fi
+
+    rm -f "/tmp/${BIG_FILE}"
+    rm -f "/tmp/${BIG_FILE}-mix"
+    rm_test_file "${BIG_FILE}"
+    rm_test_file "${BIG_FILE}-mix"
+}
+
 function test_special_characters {
     describe "Testing special characters ..."
 
@@ -585,6 +668,7 @@ function add_all_tests {
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
+    add_tests test_multipart_mix
     add_tests test_special_characters
     add_tests test_symlink
     add_tests test_extended_attributes

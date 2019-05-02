@@ -259,6 +259,11 @@ Notice: if s3fs handles the extended attribute, s3fs can not work to copy comman
 disable registering xml name space for response of ListBucketResult and ListVersionsResult etc. Default name space is looked up from "http://s3.amazonaws.com/doc/2006-03-01".
 This option should not be specified now, because s3fs looks up xmlns automatically after v1.66.
 .TP
+\fB\-o\fR nomixupload - disable copy in multipart uploads.
+Disable to use PUT (copy api) when multipart uploading large size objects.
+By default, when doing multipart upload, the range of unchanged data will use PUT (copy api) whenever possible.
+When nocopyapi or norenameapi is specified, use of PUT (copy api) is invalidated even if this option is not specified.
+.TP
 \fB\-o\fR nocopyapi - for other incomplete compatibility object storage.
 For a distributed object storage which is compatibility S3 API without PUT (copy api).
 If you set this option, s3fs do not use PUT with "x-amz-copy-source" (copy api). Because traffic is increased 2-3 times by this option, we do not recommend this.
