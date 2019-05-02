@@ -154,6 +154,7 @@ class FdEntity
     int GetFd(void) const { return fd; }
 
     bool GetStats(struct stat& st);
+    int SetCtime(time_t time);
     int SetMtime(time_t time);
     bool UpdateCtime(void);
     bool UpdateMtime(void);

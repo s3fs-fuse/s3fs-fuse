@@ -1735,6 +1735,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
       return -EIO;
     }
 
+    ent->SetCtime(time(NULL));
+
     // Change file mode
     ent->SetMode(mode);
 
@@ -1890,6 +1892,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
       S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
       return -EIO;
     }
+
+    ent->SetCtime(time(NULL));
 
     // Change owner
     ent->SetUId(uid);
