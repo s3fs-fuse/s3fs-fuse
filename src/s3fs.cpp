@@ -2143,7 +2143,13 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
   // clear stat for reading fresh stat.
   // (if object stat is changed, we refresh it. then s3fs gets always
   // stat when s3fs open the object).
-  StatCache::getStatCacheData()->DelStat(path);
+  if(StatCache::getStatCacheData()->HasStat(path)){
+    // flush any dirty data so that subsequent stat gets correct size
+    if((result = s3fs_flush(_path, fi)) != 0){
+      S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
+    }
+    StatCache::getStatCacheData()->DelStat(path);
+  }
 
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
   if(0 != (result = check_parent_object_access(path, X_OK))){

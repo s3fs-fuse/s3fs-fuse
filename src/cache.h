@@ -65,7 +65,7 @@ class StatCache
     ~StatCache();
 
     void Clear(void);
-    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
+    bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
     // Truncate stat cache
     bool TruncateCache(void);
 
@@ -93,19 +93,19 @@ class StatCache
     }
 
     // Get stat cache
-    bool GetStat(std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL) {
+    bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL) {
       return GetStat(key, pst, meta, overcheck, NULL, pisforce);
     }
-    bool GetStat(std::string& key, struct stat* pst, bool overcheck = true) {
+    bool GetStat(const std::string& key, struct stat* pst, bool overcheck = true) {
       return GetStat(key, pst, NULL, overcheck, NULL, NULL);
     }
-    bool GetStat(std::string& key, headers_t* meta, bool overcheck = true) {
+    bool GetStat(const std::string& key, headers_t* meta, bool overcheck = true) {
       return GetStat(key, NULL, meta, overcheck, NULL, NULL);
     }
-    bool HasStat(std::string& key, bool overcheck = true) {
+    bool HasStat(const std::string& key, bool overcheck = true) {
       return GetStat(key, NULL, NULL, overcheck, NULL, NULL);
     }
-    bool HasStat(std::string& key, const char* etag, bool overcheck = true) {
+    bool HasStat(const std::string& key, const char* etag, bool overcheck = true) {
       return GetStat(key, NULL, NULL, overcheck, etag, NULL);
     }
 

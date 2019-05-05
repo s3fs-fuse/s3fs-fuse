@@ -547,6 +547,15 @@ function test_concurrency {
     rm -f `seq 100`
 }
 
+function test_open_second_fd {
+    describe "read from an open fd"
+    rm -f ${TEST_TEXT_FILE}
+    RESULT=$( (echo foo ; wc -c < ${TEST_TEXT_FILE} >&2) 2>& 1>${TEST_TEXT_FILE})
+    if [ "$RESULT" -ne 4 ]; then
+        echo "size mismatch, expected: 4, was: ${RESULT}"
+        return 1
+    fi
+}
 
 function add_all_tests {
     add_tests test_append_file 
@@ -574,6 +583,7 @@ function add_all_tests {
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
     add_tests test_concurrency
+    add_tests test_open_second_fd
 }
 
 init_suite
