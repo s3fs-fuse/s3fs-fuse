@@ -110,7 +110,7 @@ struct filepart
   std::string etag;         // expected etag value
   int         fd;           // base file(temporary full file) descriptor
   off_t       startpos;     // seek fd point for uploading
-  ssize_t     size;         // uploading size
+  off_t       size;         // uploading size
   etaglist_t* etaglist;     // use only parallel upload
   int         etagpos;      // use only parallel upload
 
@@ -487,7 +487,7 @@ class S3fsCurl
     int AbortMultipartUpload(const char* tpath, std::string& upload_id);
     int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
     int MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy);
-    int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list);
+    int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etaglist_t& list);
     int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
     // methods(variables)

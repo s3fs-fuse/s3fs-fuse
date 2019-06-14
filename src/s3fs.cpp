@@ -801,7 +801,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
   time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
   bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-  if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(stobj.st_size), mtime, force_tmpfile, true))){
+  if(NULL == (ent = FdManager::get()->Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
     S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
     return NULL;
   }
@@ -852,7 +852,7 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
       // no opened fd
       if(FdManager::IsCacheDir()){
         // create cache file if be needed
-        ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(buf.st_size), -1, false, true);
+        ent = FdManager::get()->Open(path, &meta, buf.st_size, -1, false, true);
       }
     }
     if(ent){
@@ -913,13 +913,13 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     return -EIO;
   }
   // Get size
-  size_t readsize;
+  off_t readsize;
   if(!ent->GetSize(readsize)){
     S3FS_PRN_ERR("could not get file size(file=%s)", path);
     FdManager::get()->Close(ent);
     return -EIO;
   }
-  if(size <= readsize){
+  if(static_cast<off_t>(size) <= readsize){
     readsize = size - 1;
   }
   // Read
@@ -2086,11 +2086,11 @@ static int s3fs_truncate(const char* _path, off_t size)
   // Get file information
   if(0 == (result = get_object_attribute(path, NULL, &meta))){
     // Exists -> Get file(with size)
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(size), -1, false, true))){
+    if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, false, true))){
       S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
       return -EIO;
     }
-    if(0 != (result = ent->Load(0, static_cast<size_t>(size)))){
+    if(0 != (result = ent->Load(0, size))){
       S3FS_PRN_ERR("could not download file(%s): result=%d", path, result);
       FdManager::get()->Close(ent);
       return result;
@@ -2111,7 +2111,7 @@ static int s3fs_truncate(const char* _path, off_t size)
     meta["x-amz-meta-uid"]   = str(pcxt->uid);
     meta["x-amz-meta-gid"]   = str(pcxt->gid);
 
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(size), -1, true, true))){
+    if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, true, true))){
       S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
       return -EIO;
     }
@@ -2172,7 +2172,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
   FdEntity*   ent;
   headers_t   meta;
   get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-  if(NULL == (ent = FdManager::get()->Open(path, &meta, static_cast<ssize_t>(st.st_size), st.st_mtime, false, true))){
+  if(NULL == (ent = FdManager::get()->Open(path, &meta, st.st_size, st.st_mtime, false, true))){
     StatCache::getStatCacheData()->DelStat(path);
     return -EIO;
   }
@@ -2209,7 +2209,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
   }
 
   // check real file size
-  size_t realsize = 0;
+  off_t realsize = 0;
   if(!ent->GetSize(realsize) || 0 == realsize){
     S3FS_PRN_DBG("file size is 0, so break to read.");
     FdManager::get()->Close(ent);
@@ -2229,7 +2229,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
   WTF8_ENCODE(path)
   ssize_t res;
 
-  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
+  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
@@ -4878,10 +4878,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "ensure_diskfree=")){
-      size_t dfsize = static_cast<size_t>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
-      if(dfsize < static_cast<size_t>(S3fsCurl::GetMultipartSize())){
+      off_t dfsize = s3fs_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
+      if(dfsize < S3fsCurl::GetMultipartSize()){
         S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
-        dfsize = static_cast<size_t>(S3fsCurl::GetMultipartSize());
+        dfsize = S3fsCurl::GetMultipartSize();
       }
       FdManager::SetEnsureFreeDiskSpace(dfsize);
       return 0;

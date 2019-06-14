@@ -3172,7 +3172,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   }
   S3fsCurl::AddUserAgent(hCurl);                                // put User-Agent
 
-  S3FS_PRN_INFO3("uploading... [path=%s][fd=%d][size=%jd]", tpath, fd, (intmax_t)(-1 != fd ? st.st_size : 0));
+  S3FS_PRN_INFO3("uploading... [path=%s][fd=%d][size=%lld]", tpath, fd, static_cast<long long int>(-1 != fd ? st.st_size : 0));
 
   int result = RequestPerform();
   delete bodydata;
@@ -3186,7 +3186,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
 int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, string& ssevalue)
 {
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd]", SAFESTRPTR(tpath), (intmax_t)start, (intmax_t)size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%jd]", SAFESTRPTR(tpath), static_cast<long long int>(start), (intmax_t)size);
 
   if(!tpath || -1 == fd || 0 > start || 0 > size){
     return -1;
@@ -3239,7 +3239,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 {
   int result;
 
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd]", SAFESTRPTR(tpath), (intmax_t)start, (intmax_t)size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%jd]", SAFESTRPTR(tpath), static_cast<long long int>(start), (intmax_t)size);
 
   if(!tpath){
     return -1;
@@ -3625,7 +3625,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
 
 int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const string& upload_id)
 {
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), (intmax_t)(partdata.size), part_num);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long int>(partdata.startpos), static_cast<long long int>(partdata.size), part_num);
 
   if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
     return -1;
@@ -3685,7 +3685,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
 {
   int result;
 
-  S3FS_PRN_INFO3("[tpath=%s][start=%jd][size=%jd][part=%d]", SAFESTRPTR(tpath), (intmax_t)(partdata.startpos), (intmax_t)(partdata.size), part_num);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long int>(partdata.startpos), static_cast<long long int>(partdata.size), part_num);
 
   // setup
   if(0 != (result = S3fsCurl::UploadMultipartPostSetup(tpath, part_num, upload_id))){
@@ -3925,9 +3925,9 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   return 0;
 }
 
-int S3fsCurl::MultipartUploadRequest(const string& upload_id, const char* tpath, int fd, off_t offset, size_t size, etaglist_t& list)
+int S3fsCurl::MultipartUploadRequest(const string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etaglist_t& list)
 {
-  S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%jd][size=%jd]", upload_id.c_str(), SAFESTRPTR(tpath), fd, (intmax_t)offset, (intmax_t)size);
+  S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%lld][size=%lld]", upload_id.c_str(), SAFESTRPTR(tpath), fd, static_cast<long long int>(offset), static_cast<long long int>(size));
 
   // duplicate fd
   int fd2;
