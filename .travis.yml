@@ -43,15 +43,12 @@ matrix:
     - os: osx
       osx_image: xcode8.3
       before_install:
-        - brew update
-        - brew install truncate
-        - brew tap caskroom/cask
-        - brew cask install osxfuse
+        - HOMEBREW_NO_AUTO_UPDATE=1 brew tap caskroom/cask
+        - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
+        - HOMEBREW_NO_AUTO_UPDATE=1 brew install cppcheck gnu-sed truncate
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
-        - brew install gnu-sed
         - sudo ln -s /usr/local/opt/gnu-sed/bin/gsed /usr/local/bin/sed
         - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
-        - brew install cppcheck
       script:
         - ./autogen.sh
         - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03'
