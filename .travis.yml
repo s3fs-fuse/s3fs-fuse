@@ -30,6 +30,7 @@ matrix:
         - sudo apt-get update -qq
         - sudo apt-get install -qq attr cppcheck libfuse-dev openjdk-7-jdk
         - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
+        - sudo pip install --upgrade awscli
       script:
         - ./autogen.sh
         - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'
@@ -45,7 +46,7 @@ matrix:
       before_install:
         - HOMEBREW_NO_AUTO_UPDATE=1 brew tap caskroom/cask
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
-        - HOMEBREW_NO_AUTO_UPDATE=1 brew install cppcheck gnu-sed truncate
+        - HOMEBREW_NO_AUTO_UPDATE=1 brew install awscli cppcheck gnu-sed truncate
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
         - sudo ln -s /usr/local/opt/gnu-sed/bin/gsed /usr/local/bin/sed
         - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
@@ -69,6 +70,7 @@ matrix:
         - sudo apt-get update -qq
         - sudo apt-get install -qq attr cppcheck libfuse-dev openjdk-7-jdk
         - sudo update-alternatives --set java /usr/lib/jvm/java-7-openjdk-ppc64el/jre/bin/java
+        - sudo pip install --upgrade awscli
       script:
         - ./autogen.sh
         - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'

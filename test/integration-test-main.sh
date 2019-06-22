@@ -295,6 +295,16 @@ function test_remove_nonempty_directory {
     rm_test_dir
 }
 
+function test_external_modification {
+    describe "Test external modification to an object"
+    echo "old" > ${TEST_TEXT_FILE}
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    sleep 2
+    echo "new new" | AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws s3 --endpoint-url "${S3_URL}" --no-verify-ssl cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    cmp ${TEST_TEXT_FILE} <(echo "new new")
+    rm -f ${TEST_TEXT_FILE}
+}
+
 function test_rename_before_close {
     describe "Testing rename before close ..."
     (
@@ -523,6 +533,7 @@ function test_overwrite_existing_file_range {
 }
 
 function test_concurrency {
+    describe "Test concurrent updates to a directory"
     for i in `seq 10`; do echo foo > $i; done
     for process in `seq 2`; do
         for i in `seq 100`; do
@@ -549,6 +560,7 @@ function add_all_tests {
     add_tests test_chown
     add_tests test_list
     add_tests test_remove_nonempty_directory
+    add_tests test_external_modification
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy

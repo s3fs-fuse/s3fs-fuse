@@ -842,6 +842,16 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
   if(!cachepath.empty()){
     // using cache
 
+    struct stat st;
+    if(stat(cachepath.c_str(), &st) == 0){
+      if(st.st_mtime < time){
+        S3FS_PRN_DBG("cache file stale, removing: %s", cachepath.c_str());
+        if(unlink(cachepath.c_str()) != 0){
+          return (0 == errno ? -EIO : -errno);
+        }
+      }
+    }
+
     // open cache and cache stat file, load page info.
     CacheFileStat cfstat(path.c_str());
 
