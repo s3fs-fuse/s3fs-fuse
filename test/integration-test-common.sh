@@ -221,8 +221,7 @@ function start_s3fs {
 function stop_s3fs {
     # Retry in case file system is in use
     if [ `uname` = "Darwin" ]; then
-        df | grep -q $TEST_BUCKET_MOUNT_POINT_1
-        if [ $? -eq 0 ]; then
+        if df | grep -q $TEST_BUCKET_MOUNT_POINT_1; then
             retry 10 df | grep -q $TEST_BUCKET_MOUNT_POINT_1 && umount $TEST_BUCKET_MOUNT_POINT_1
         fi
     else
