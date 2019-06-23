@@ -247,7 +247,7 @@ void PageList::FreeList(fdpage_list_t& list)
   list.clear();
 }
 
-PageList::PageList(size_t size, bool is_loaded)
+PageList::PageList(off_t size, bool is_loaded)
 {
   Init(size, is_loaded);
 }
@@ -262,7 +262,7 @@ void PageList::Clear()
   PageList::FreeList(pages);
 }
 
-bool PageList::Init(size_t size, bool is_loaded)
+bool PageList::Init(off_t size, bool is_loaded)
 {
   Clear();
   fdpage* page = new fdpage(0, size, is_loaded);
@@ -270,13 +270,13 @@ bool PageList::Init(size_t size, bool is_loaded)
   return true;
 }
 
-size_t PageList::Size() const
+off_t PageList::Size() const
 {
   if(pages.empty()){
     return 0;
   }
   fdpage_list_t::const_reverse_iterator riter = pages.rbegin();
-  return static_cast<size_t>((*riter)->next());
+  return (*riter)->next();
 }
 
 bool PageList::Compress()
@@ -311,7 +311,7 @@ bool PageList::Parse(off_t new_pos)
       // nothing to do
       return true;
     }else if((*iter)->offset < new_pos && new_pos < (*iter)->next()){
-      fdpage* page    = new fdpage((*iter)->offset, static_cast<size_t>(new_pos - (*iter)->offset), (*iter)->loaded);
+      fdpage* page    = new fdpage((*iter)->offset, new_pos - (*iter)->offset, (*iter)->loaded);
       (*iter)->bytes -= (new_pos - (*iter)->offset);
       (*iter)->offset = new_pos;
       pages.insert(iter, page);
@@ -321,29 +321,29 @@ bool PageList::Parse(off_t new_pos)
   return false;
 }
 
-bool PageList::Resize(size_t size, bool is_loaded)
+bool PageList::Resize(off_t size, bool is_loaded)
 {
-  size_t total = Size();
+  off_t total = Size();
 
   if(0 == total){
     Init(size, is_loaded);
 
   }else if(total < size){
     // add new area
-    fdpage* page = new fdpage(static_cast<off_t>(total), (size - total), is_loaded);
+    fdpage* page = new fdpage(total, (size - total), is_loaded);
     pages.push_back(page);
 
   }else if(size < total){
     // cut area
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
-      if(static_cast<size_t>((*iter)->next()) <= size){
+      if((*iter)->next() <= size){
         ++iter;
       }else{
-        if(size <= static_cast<size_t>((*iter)->offset)){
+        if(size <= (*iter)->offset){
           delete *iter;
           iter = pages.erase(iter);
         }else{
-          (*iter)->bytes = size - static_cast<size_t>((*iter)->offset);
+          (*iter)->bytes = size - (*iter)->offset;
         }
       }
     }
@@ -354,7 +354,7 @@ bool PageList::Resize(size_t size, bool is_loaded)
   return Compress();
 }
 
-bool PageList::IsPageLoaded(off_t start, size_t size) const
+bool PageList::IsPageLoaded(off_t start, off_t size) const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if((*iter)->end() < start){
@@ -363,29 +363,29 @@ bool PageList::IsPageLoaded(off_t start, size_t size) const
     if(!(*iter)->loaded){
       return false;
     }
-    if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->next())){
+    if(0 != size && start + size <= (*iter)->next()){
       break;
     }
   }
   return true;
 }
 
-bool PageList::SetPageLoadedStatus(off_t start, size_t size, bool is_loaded, bool is_compress)
+bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool is_compress)
 {
-  size_t now_size = Size();
+  off_t now_size = Size();
 
-  if(now_size <= static_cast<size_t>(start)){
-    if(now_size < static_cast<size_t>(start)){
+  if(now_size <= start){
+    if(now_size < start){
       // add
-      Resize(static_cast<size_t>(start), false);
+      Resize(start, false);
     }
-    Resize(static_cast<size_t>(start + size), is_loaded);
+    Resize(start + size, is_loaded);
 
-  }else if(now_size <= static_cast<size_t>(start + size)){
+  }else if(now_size <= start + size){
     // cut
-    Resize(static_cast<size_t>(start), false);
+    Resize(start, false);
     // add
-    Resize(static_cast<size_t>(start + size), is_loaded);
+    Resize(start + size, is_loaded);
 
   }else{
     // start-size are inner pages area
@@ -397,7 +397,7 @@ bool PageList::SetPageLoadedStatus(off_t start, size_t size, bool is_loaded, boo
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
       if((*iter)->end() < start){
         continue;
-      }else if(static_cast<off_t>(start + size) <= (*iter)->offset){
+      }else if(start + size <= (*iter)->offset){
         break;
       }else{
         (*iter)->loaded = is_loaded;
@@ -408,7 +408,7 @@ bool PageList::SetPageLoadedStatus(off_t start, size_t size, bool is_loaded, boo
   return (is_compress ? Compress() : true);
 }
 
-bool PageList::FindUnloadedPage(off_t start, off_t& resstart, size_t& ressize) const
+bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(start <= (*iter)->end()){
@@ -422,10 +422,10 @@ bool PageList::FindUnloadedPage(off_t start, off_t& resstart, size_t& ressize) c
   return false;
 }
 
-size_t PageList::GetTotalUnloadedPageSize(off_t start, size_t size) const
+off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
 {
-  size_t restsize = 0;
-  off_t  next     = static_cast<off_t>(start + size);
+  off_t restsize = 0;
+  off_t next     = start + size;
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if((*iter)->next() <= start){
       continue;
@@ -436,18 +436,18 @@ size_t PageList::GetTotalUnloadedPageSize(off_t start, size_t size) const
     if((*iter)->loaded){
       continue;
     }
-    size_t tmpsize;
+    off_t tmpsize;
     if((*iter)->offset <= start){
       if((*iter)->next() <= next){
-        tmpsize = static_cast<size_t>((*iter)->next() - start);
+        tmpsize = ((*iter)->next() - start);
       }else{
-        tmpsize = static_cast<size_t>(next - start);                         // = size
+        tmpsize = next - start;                         // = size
       }
     }else{
       if((*iter)->next() <= next){
-        tmpsize = static_cast<size_t>((*iter)->next() - (*iter)->offset);   // = (*iter)->bytes
+        tmpsize = (*iter)->next() - (*iter)->offset;   // = (*iter)->bytes
       }else{
-        tmpsize = static_cast<size_t>(next - (*iter)->offset);
+        tmpsize = next - (*iter)->offset;
       }
     }
     restsize += tmpsize;
@@ -455,15 +455,15 @@ size_t PageList::GetTotalUnloadedPageSize(off_t start, size_t size) const
   return restsize;
 }
 
-int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, size_t size) const
+int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t size) const
 {
   // If size is 0, it means loading to end.
   if(0 == size){
-    if(static_cast<size_t>(start) < Size()){
-      size = static_cast<size_t>(Size() - start);
+    if(start < Size()){
+      size = Size() - start;
     }
   }
-  off_t next = static_cast<off_t>(start + size);
+  off_t next = start + size;
 
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if((*iter)->next() <= start){
@@ -477,9 +477,9 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, size_t
     }
 
     // page area
-    off_t  page_start = max((*iter)->offset, start);
-    off_t  page_next  = min((*iter)->next(), next);
-    size_t page_size  = static_cast<size_t>(page_next - page_start);
+    off_t page_start = max((*iter)->offset, start);
+    off_t page_next  = min((*iter)->next(), next);
+    off_t page_size  = page_next - page_start;
 
     // add list
     fdpage_list_t::reverse_iterator riter = unloaded_list.rbegin();
@@ -551,7 +551,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       delete[] ptmp;
       return false;
     }
-    size_t total = s3fs_strtoofft(oneline.c_str());
+    off_t total = s3fs_strtoofft(oneline.c_str());
 
     // load each part
     bool is_err = false;
@@ -588,7 +588,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
 
     // check size
     if(total != Size()){
-      S3FS_PRN_ERR("different size(%jd - %jd).", (intmax_t)total, (intmax_t)Size());
+      S3FS_PRN_ERR("different size(%lld - %lld).", static_cast<long long int>(total), static_cast<long long int>(Size()));
       Clear();
       return false;
     }
@@ -602,7 +602,7 @@ void PageList::Dump()
 
   S3FS_PRN_DBG("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
-    S3FS_PRN_DBG("  [%08d] -> {%014jd - %014zu : %s}", cnt, (intmax_t)((*iter)->offset), (*iter)->bytes, (*iter)->loaded ? "true" : "false");
+    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014zu : %s}", cnt, static_cast<long long int>((*iter)->offset), (*iter)->bytes, (*iter)->loaded ? "true" : "false");
   }
   S3FS_PRN_DBG("}");
 }
@@ -610,13 +610,13 @@ void PageList::Dump()
 //------------------------------------------------
 // FdEntity class methods
 //------------------------------------------------
-int FdEntity::FillFile(int fd, unsigned char byte, size_t size, off_t start)
+int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
 {
   unsigned char bytes[1024 * 32];         // 32kb
-  memset(bytes, byte, min(sizeof(bytes), size));
+  memset(bytes, byte, min(static_cast<off_t>(sizeof(bytes)), size));
 
-  for(ssize_t total = 0, onewrote = 0; static_cast<size_t>(total) < size; total += onewrote){
-    if(-1 == (onewrote = pwrite(fd, bytes, min(sizeof(bytes), (size - static_cast<size_t>(total))), start + total))){
+  for(off_t total = 0, onewrote = 0; total < size; total += onewrote){
+    if(-1 == (onewrote = pwrite(fd, bytes, min(static_cast<off_t>(sizeof(bytes)), size - total), start + total))){
       S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
       return -errno;
     }
@@ -791,9 +791,9 @@ int FdEntity::OpenMirrorFile()
   return mirrorfd;
 }
 
-int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_wait)
+int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wait)
 {
-  S3FS_PRN_DBG("[path=%s][fd=%d][size=%jd][time=%jd]", path.c_str(), fd, (intmax_t)size, (intmax_t)time);
+  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%jd]", path.c_str(), fd, static_cast<long long int>(size), (intmax_t)time);
 
   AutoLock auto_lock(&fdent_lock, no_fd_lock_wait);
   if (!auto_lock.isLockAcquired()) {
@@ -806,9 +806,9 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
     Dup();
 
     // check only file size(do not need to save cfs and time.
-    if(0 <= size && pagelist.Size() != static_cast<size_t>(size)){
+    if(0 <= size && pagelist.Size() != size){
       // truncate temporary file size
-      if(-1 == ftruncate(fd, static_cast<size_t>(size))){
+      if(-1 == ftruncate(fd, size)){
         S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
         if(0 < refcnt){
           refcnt--;
@@ -816,7 +816,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
         return -EIO;
       }
       // resize page list
-      if(!pagelist.Resize(static_cast<size_t>(size), false)){
+      if(!pagelist.Resize(size, false)){
         S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
         if(0 < refcnt){
           refcnt--;
@@ -825,10 +825,10 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
       }
     }
     // set original headers and set size.
-    size_t new_size = (0 <= size ? static_cast<size_t>(size) : size_orgmeta);
+    off_t new_size = (0 <= size ? size : size_orgmeta);
     if(pmeta){
       orgmeta  = *pmeta;
-      new_size = static_cast<size_t>(get_size(orgmeta));
+      new_size = get_size(orgmeta);
     }
     if(new_size < size_orgmeta){
       size_orgmeta = new_size;
@@ -857,17 +857,17 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
       }
       // check size, st_size, loading stat file
       if(-1 == size){
-        if(static_cast<size_t>(st.st_size) != pagelist.Size()){
+        if(st.st_size != pagelist.Size()){
           pagelist.Resize(st.st_size, false);
           need_save_csf = true;     // need to update page info
         }
-        size = static_cast<ssize_t>(st.st_size);
+        size = st.st_size;
       }else{
-        if(static_cast<size_t>(size) != pagelist.Size()){
-          pagelist.Resize(static_cast<size_t>(size), false);
+        if(size != pagelist.Size()){
+          pagelist.Resize(size, false);
           need_save_csf = true;     // need to update page info
         }
-        if(static_cast<size_t>(size) != static_cast<size_t>(st.st_size)){
+        if(size != st.st_size){
           is_truncate = true;
         }
       }
@@ -883,7 +883,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
         size = 0;
         pagelist.Init(0, false);
       }else{
-        pagelist.Resize(static_cast<size_t>(size), false);
+        pagelist.Resize(size, false);
         is_truncate = true;
       }
     }
@@ -922,14 +922,14 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
       size = 0;
       pagelist.Init(0, false);
     }else{
-      pagelist.Resize(static_cast<size_t>(size), false);
+      pagelist.Resize(size, false);
       is_truncate = true;
     }
   }
 
   // truncate cache(tmp) file
   if(is_truncate){
-    if(0 != ftruncate(fd, static_cast<off_t>(size)) || 0 != fsync(fd)){
+    if(0 != ftruncate(fd, size) || 0 != fsync(fd)){
       S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
       fclose(pfile);
       pfile = NULL;
@@ -953,7 +953,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
   // set original headers and size in it.
   if(pmeta){
     orgmeta      = *pmeta;
-    size_orgmeta = static_cast<size_t>(get_size(orgmeta));
+    size_orgmeta = get_size(orgmeta);
   }else{
     orgmeta.clear();
     size_orgmeta = 0;
@@ -978,7 +978,7 @@ int FdEntity::Open(headers_t* pmeta, ssize_t size, time_t time, bool no_fd_lock_
 // So we do not check disk space for this option mode, if there is no enough
 // disk space this method will be failed.
 //
-bool FdEntity::OpenAndLoadAll(headers_t* pmeta, size_t* size, bool force_load)
+bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
 {
   int result;
 
@@ -1093,7 +1093,7 @@ bool FdEntity::UpdateMtime()
   return true;
 }
 
-bool FdEntity::GetSize(size_t& size)
+bool FdEntity::GetSize(off_t& size)
 {
   if(-1 == fd){
     return false;
@@ -1161,9 +1161,9 @@ bool FdEntity::SetAllStatus(bool is_loaded)
   return true;
 }
 
-int FdEntity::Load(off_t start, size_t size)
+int FdEntity::Load(off_t start, off_t size)
 {
-  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
+  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
   if(-1 == fd){
     return -EBADF;
@@ -1176,20 +1176,20 @@ int FdEntity::Load(off_t start, size_t size)
   fdpage_list_t unloaded_list;
   if(0 < pagelist.GetUnloadedPages(unloaded_list, start, size)){
     for(fdpage_list_t::iterator iter = unloaded_list.begin(); iter != unloaded_list.end(); ++iter){
-      if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
+      if(0 != size && start + size <= (*iter)->offset){
         // reached end
         break;
       }
       // check loading size
-      size_t need_load_size = 0;
-      if(static_cast<size_t>((*iter)->offset) < size_orgmeta){
+      off_t need_load_size = 0;
+      if((*iter)->offset < size_orgmeta){
         // original file size(on S3) is smaller than request.
-        need_load_size = (static_cast<size_t>((*iter)->next()) <= size_orgmeta ? (*iter)->bytes : (size_orgmeta - (*iter)->offset));
+        need_load_size = ((*iter)->next() <= size_orgmeta ? (*iter)->bytes : (size_orgmeta - (*iter)->offset));
       }
-      size_t over_size = (*iter)->bytes - need_load_size;
+      off_t over_size = (*iter)->bytes - need_load_size;
 
       // download
-      if(static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) <= need_load_size && !nomultipart){ // default 20MB
+      if(2 * S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){ // default 20MB
         // parallel request
         // Additional time is needed for large files
         time_t backup = 0;
@@ -1224,7 +1224,7 @@ int FdEntity::Load(off_t start, size_t size)
       }
 
       // Set loaded flag
-      pagelist.SetPageLoadedStatus((*iter)->offset, static_cast<off_t>((*iter)->bytes), true);
+      pagelist.SetPageLoadedStatus((*iter)->offset, (*iter)->bytes, true);
     }
     PageList::FreeList(unloaded_list);
   }
@@ -1239,11 +1239,11 @@ int FdEntity::Load(off_t start, size_t size)
 // [NOTICE]
 // Need to lock before calling this method.
 //
-int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
+int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
 {
   int result = 0;
 
-  S3FS_PRN_INFO3("[path=%s][fd=%d][offset=%jd][size=%jd]", path.c_str(), fd, (intmax_t)start, (intmax_t)size);
+  S3FS_PRN_INFO3("[path=%s][fd=%d][offset=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
   if(-1 == fd){
     return -EBADF;
@@ -1279,14 +1279,14 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
     if((*iter)->end() < start){
       continue;
     }
-    if(0 != size && static_cast<size_t>(start + size) <= static_cast<size_t>((*iter)->offset)){
+    if(0 != size && start + size <= (*iter)->offset){
       break;
     }
     // download each multipart size(default 10MB) in unit
-    for(size_t oneread = 0, totalread = ((*iter)->offset < start ? start : 0); totalread < (*iter)->bytes; totalread += oneread){
+    for(off_t oneread = 0, totalread = ((*iter)->offset < start ? start : 0); totalread < static_cast<off_t>((*iter)->bytes); totalread += oneread){
       int   upload_fd = fd;
       off_t offset    = (*iter)->offset + totalread;
-      oneread         = min(((*iter)->bytes - totalread), static_cast<size_t>(S3fsCurl::GetMultipartSize()));
+      oneread         = min(static_cast<off_t>((*iter)->bytes) - totalread, S3fsCurl::GetMultipartSize());
 
       // check rest size is over minimum part size
       //
@@ -1312,7 +1312,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
 
         // load offset & size
         size_t need_load_size = 0;
-        if(size_orgmeta <= static_cast<size_t>(offset)){
+        if(size_orgmeta <= offset){
           // all area is over of original size
           need_load_size      = 0;
         }else{
@@ -1339,7 +1339,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
         if(0 < need_load_size){
           S3fsCurl s3fscurl;
           if(0 != (result = s3fscurl.GetObjectRequest(path.c_str(), tmpfd, offset, oneread))){
-            S3FS_PRN_ERR("failed to get object(start=%zd, size=%zu) for file(%d).", offset, oneread, tmpfd);
+            S3FS_PRN_ERR("failed to get object(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), tmpfd);
             break;
           }
         }
@@ -1359,7 +1359,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
 
       // single area upload by multipart post
       if(0 != (result = NoCacheMultipartPost(upload_fd, offset, oneread))){
-        S3FS_PRN_ERR("failed to multipart post(start=%zd, size=%zu) for file(%d).", offset, oneread, upload_fd);
+        S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
         break;
       }
     }
@@ -1370,14 +1370,14 @@ int FdEntity::NoCacheLoadAndPost(off_t start, size_t size)
     // set loaded flag
     if(!(*iter)->loaded){
       if((*iter)->offset < start){
-        fdpage* page    = new fdpage((*iter)->offset, static_cast<size_t>(start - (*iter)->offset), (*iter)->loaded);
+        fdpage* page    = new fdpage(((*iter)->offset, start - (*iter)->offset), (*iter)->loaded);
         (*iter)->bytes -= (start - (*iter)->offset);
         (*iter)->offset = start;
         pagelist.pages.insert(iter, page);
       }
-      if(0 != size && static_cast<size_t>(start + size) < static_cast<size_t>((*iter)->next())){
-        fdpage* page    = new fdpage((*iter)->offset, static_cast<size_t>((start + size) - (*iter)->offset), true);
-        (*iter)->bytes -= static_cast<size_t>((start + size) - (*iter)->offset);
+      if(0 != size && start + size < (*iter)->next()){
+        fdpage* page    = new fdpage(((*iter)->offset, (start + size - (*iter)->offset), true));
+        (*iter)->bytes -= (start + size - (*iter)->offset);
         (*iter)->offset = start + size;
         pagelist.pages.insert(iter, page);
       }else{
@@ -1424,7 +1424,7 @@ int FdEntity::NoCachePreMultipartPost()
 // At no disk space for caching object.
 // This method is uploading one part of multipart.
 //
-int FdEntity::NoCacheMultipartPost(int tgfd, off_t start, size_t size)
+int FdEntity::NoCacheMultipartPost(int tgfd, off_t start, off_t size)
 {
   if(-1 == tgfd || upload_id.empty()){
     S3FS_PRN_ERR("Need to initialize for multipart post.");
@@ -1478,7 +1478,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   }
 
   // If there is no loading all of the area, loading all area.
-  size_t restsize = pagelist.GetTotalUnloadedPageSize();
+  off_t restsize = pagelist.GetTotalUnloadedPageSize();
   if(0 < restsize){
     if(0 == upload_id.length()){
       // check disk space
@@ -1521,7 +1521,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
      * 
      * If file is > 20MB, then multipart will kick in
      */
-    if(pagelist.Size() > static_cast<size_t>(MAX_MULTIPART_CNT * S3fsCurl::GetMultipartSize())){
+    if(pagelist.Size() > MAX_MULTIPART_CNT * S3fsCurl::GetMultipartSize()){
       // close f ?
       S3FS_PRN_ERR("Part count exceeds %d.  Increase multipart size and try again.", MAX_MULTIPART_CNT);
       return -ENOTSUP;
@@ -1539,7 +1539,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
     }
 
-    if(pagelist.Size() >= static_cast<size_t>(2 * S3fsCurl::GetMultipartSize()) && !nomultipart){ // default 20MB
+    if(pagelist.Size() >= 2 * S3fsCurl::GetMultipartSize() && !nomultipart){ // default 20MB
       // Additional time is needed for large files
       time_t backup = 0;
       if(120 > S3fsCurl::GetReadwriteTimeout()){
@@ -1561,13 +1561,13 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
     }
 
     // reset uploaded file size
-    size_orgmeta = static_cast<size_t>(st.st_size);
+    size_orgmeta = st.st_size;
 
   }else{
     // upload rest data
     if(0 < mp_size){
       if(0 != (result = NoCacheMultipartPost(fd, mp_start, mp_size))){
-        S3FS_PRN_ERR("failed to multipart post(start=%zd, size=%zu) for file(%d).", mp_start, mp_size, fd);
+        S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(mp_start), static_cast<long long int>(mp_size), fd);
         return result;
       }
       mp_start = 0;
@@ -1593,7 +1593,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
 
 // [NOTICE]
 // Need to lock before calling this method.
-bool FdEntity::ReserveDiskSpace(size_t size)
+bool FdEntity::ReserveDiskSpace(off_t size)
 {
   if(FdManager::get()->ReserveDiskSpace(size)){
     return true;
@@ -1619,7 +1619,7 @@ bool FdEntity::ReserveDiskSpace(size_t size)
 
 ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 {
-  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
+  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
 
   if(-1 == fd){
     return -EBADF;
@@ -1636,13 +1636,13 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   if(0 < pagelist.GetTotalUnloadedPageSize(start, size)){
     // load size(for prefetch)
     size_t load_size = size;
-    if(static_cast<size_t>(start + size) < pagelist.Size()){
-      size_t prefetch_max_size = max(size, static_cast<size_t>(S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount()));
+    if(start + static_cast<ssize_t>(size) < pagelist.Size()){
+      ssize_t prefetch_max_size = max(static_cast<off_t>(size), S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount());
 
-      if(static_cast<size_t>(start + prefetch_max_size) < pagelist.Size()){
+      if(start + prefetch_max_size < pagelist.Size()){
         load_size = prefetch_max_size;
       }else{
-        load_size = static_cast<size_t>(pagelist.Size() - start);
+        load_size = pagelist.Size() - start;
       }
     }
 
@@ -1664,7 +1664,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     FdManager::FreeReservedDiskSpace(load_size);
 
     if(0 != result){
-      S3FS_PRN_ERR("could not download. start(%jd), size(%zu), errno(%d)", (intmax_t)start, size, result);
+      S3FS_PRN_ERR("could not download. start(%lld), size(%zu), errno(%d)", static_cast<long long int>(start), size, result);
       return -EIO;
     }
   }
@@ -1678,7 +1678,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 
 ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 {
-  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%jd][size=%zu]", path.c_str(), fd, (intmax_t)start, size);
+  S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
 
   if(-1 == fd){
     return -EBADF;
@@ -1690,14 +1690,14 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   AutoLock auto_lock(&fdent_lock);
 
   // check file size
-  if(pagelist.Size() < static_cast<size_t>(start)){
+  if(pagelist.Size() < start){
     // grow file size
-    if(-1 == ftruncate(fd, static_cast<size_t>(start))){
+    if(-1 == ftruncate(fd, start)){
       S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
       return -EIO;
     }
     // add new area
-    pagelist.SetPageLoadedStatus(static_cast<off_t>(pagelist.Size()), static_cast<size_t>(start) - pagelist.Size(), false);
+    pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), false);
   }
 
   int     result = 0;
@@ -1705,13 +1705,13 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
   if(0 == upload_id.length()){
     // check disk space
-    size_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
+    off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
     if(ReserveDiskSpace(restsize)){
       // enough disk space
 
       // Load uninitialized area which starts from 0 to (start + size) before writing.
       if(0 < start){
-        result = Load(0, static_cast<size_t>(start));
+        result = Load(0, start);
       }
       FdManager::FreeReservedDiskSpace(restsize);
       if(0 != result){
@@ -1745,12 +1745,12 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     is_modify = true;
   }
   if(0 < wsize){
-    pagelist.SetPageLoadedStatus(start, static_cast<size_t>(wsize), true);
+    pagelist.SetPageLoadedStatus(start, wsize, true);
   }
 
   // Load uninitialized area which starts from (start + size) to EOF after writing.
-  if(pagelist.Size() > static_cast<size_t>(start) + size){
-    result = Load(static_cast<size_t>(start + size), pagelist.Size());
+  if(pagelist.Size() > start + static_cast<off_t>(size)){
+    result = Load(start + size, pagelist.Size());
     if(0 != result){
       S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
       return static_cast<ssize_t>(result);
@@ -1759,11 +1759,11 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
   // check multipart uploading
   if(0 < upload_id.length()){
-    mp_size += static_cast<size_t>(wsize);
-    if(static_cast<size_t>(S3fsCurl::GetMultipartSize()) <= mp_size){
+    mp_size += wsize;
+    if(S3fsCurl::GetMultipartSize() <= mp_size){
       // over one multipart size
       if(0 != (result = NoCacheMultipartPost(fd, mp_start, mp_size))){
-        S3FS_PRN_ERR("failed to multipart post(start=%zd, size=%zu) for file(%d).", mp_start, mp_size, fd);
+        S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(mp_start), static_cast<long long int>(mp_size), fd);
         return result;
       }
       // [NOTE]
@@ -1825,7 +1825,7 @@ pthread_mutex_t FdManager::reserved_diskspace_lock;
 bool            FdManager::is_lock_init(false);
 string          FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
-size_t          FdManager::free_disk_space = 0;
+off_t           FdManager::free_disk_space = 0;
 
 //------------------------------------------------
 // FdManager class methods
@@ -1980,14 +1980,14 @@ bool FdManager::CheckCacheDirExist()
   return true;
 }
 
-size_t FdManager::SetEnsureFreeDiskSpace(size_t size)
+off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
 {
-  size_t old = FdManager::free_disk_space;
+  off_t old = FdManager::free_disk_space;
   FdManager::free_disk_space = size;
   return old;
 }
 
-uint64_t FdManager::GetFreeDiskSpace(const char* path)
+off_t FdManager::GetFreeDiskSpace(const char* path)
 {
   struct statvfs vfsbuf;
   string         ctoppath;
@@ -2012,10 +2012,10 @@ uint64_t FdManager::GetFreeDiskSpace(const char* path)
   return (vfsbuf.f_bavail * vfsbuf.f_frsize);
 }
 
-bool FdManager::IsSafeDiskSpace(const char* path, size_t size)
+bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
 {
-  uint64_t fsize = FdManager::GetFreeDiskSpace(path);
-  return ((size + FdManager::GetEnsureFreeDiskSpace()) <= fsize);
+  off_t fsize = FdManager::GetFreeDiskSpace(path);
+  return size + FdManager::GetEnsureFreeDiskSpace() <= fsize;
 }
 
 //------------------------------------------------
@@ -2094,9 +2094,9 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
   return NULL;
 }
 
-FdEntity* FdManager::Open(const char* path, headers_t* pmeta, ssize_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
 {
-  S3FS_PRN_DBG("[path=%s][size=%jd][time=%jd]", SAFESTRPTR(path), (intmax_t)size, (intmax_t)time);
+  S3FS_PRN_DBG("[path=%s][size=%lld][time=%jd]", SAFESTRPTR(path), static_cast<long long int>(size), (intmax_t)time);
 
   if(!path || '\0' == path[0]){
     return NULL;
@@ -2330,7 +2330,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
   closedir(dp);
 }
 
-bool FdManager::ReserveDiskSpace(size_t size)
+bool FdManager::ReserveDiskSpace(off_t size)
 {
   AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
   if(IsSafeDiskSpace(NULL, size)){
@@ -2340,7 +2340,7 @@ bool FdManager::ReserveDiskSpace(size_t size)
   return false;
 }
 
-void FdManager::FreeReservedDiskSpace(size_t size)
+void FdManager::FreeReservedDiskSpace(off_t size)
 {
   AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
   free_disk_space -= size;
