@@ -1037,7 +1037,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
   int result;
   struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o][flags=%d]", path, mode, fi->flags);
+  S3FS_PRN_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -2138,7 +2138,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
   struct stat st;
   bool needs_flush = false;
 
-  S3FS_PRN_INFO("[path=%s][flags=%d]", path, fi->flags);
+  S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
   // clear stat for reading fresh stat.
   // (if object stat is changed, we refresh it. then s3fs gets always
@@ -2366,7 +2366,7 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
   int result;
   int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
 
-  S3FS_PRN_INFO("[path=%s][flags=%d]", path, fi->flags);
+  S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
   if(0 == (result = check_object_access(path, mask, NULL))){
     result = check_parent_object_access(path, mask);
@@ -3111,7 +3111,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
 #endif
 {
-  S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=%d]", path, name, value, size, flags);
+  S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
 
   if((value && 0 == size) || (!value && 0 < size)){
     S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
