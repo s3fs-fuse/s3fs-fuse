@@ -1939,7 +1939,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
   // Because that type only uses HTTP protocol, then the special
   // logic in ResetHandle function.
   //
-  if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
+  if(!fpLazySetup && (type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE)){
     type = REQTYPE_UNSET;
   }
 
@@ -3425,7 +3425,6 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   }
 
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
-  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", NULL);
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
   op = "POST";
@@ -3438,6 +3437,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", "0");
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
   S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
@@ -4191,7 +4191,7 @@ int S3fsMultiCurl::MultiRead()
 
     long responseCode = -1;
     if(s3fscurl->GetResponseCode(responseCode, false)){
-      if(400 > responseCode){
+      if(400 > responseCode && responseCode > 0){
         // add into stat cache
         if(SuccessCallback && !SuccessCallback(s3fscurl)){
           S3FS_PRN_WARN("error from callback function(%s).", s3fscurl->url.c_str());
