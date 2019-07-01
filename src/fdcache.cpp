@@ -602,7 +602,7 @@ void PageList::Dump()
 
   S3FS_PRN_DBG("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
-    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014zu : %s}", cnt, static_cast<long long int>((*iter)->offset), (*iter)->bytes, (*iter)->loaded ? "true" : "false");
+    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s}", cnt, static_cast<long long int>((*iter)->offset), static_cast<long long int>((*iter)->bytes), (*iter)->loaded ? "true" : "false");
   }
   S3FS_PRN_DBG("}");
 }
