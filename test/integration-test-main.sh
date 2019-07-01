@@ -544,6 +544,7 @@ function test_concurrency {
         done &
     done
     wait
+    rm -f `seq 100`
 }
 
 
