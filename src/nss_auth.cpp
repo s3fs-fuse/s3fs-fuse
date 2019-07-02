@@ -167,17 +167,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     size = static_cast<ssize_t>(st.st_size);
   }
 
-  // seek to top of file.
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    return NULL;
-  }
-
   memset(buf, 0, 512);
   md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = read(fd, buf, bytes);
+    bytes = pread(fd, buf, bytes, start + total);
     if(0 == bytes){
       // end of file
       break;
@@ -193,11 +188,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
   result = new unsigned char[get_md5_digest_length()];
   PK11_DigestFinal(md5ctx, result, &md5outlen, get_md5_digest_length());
   PK11_DestroyContext(md5ctx, PR_TRUE);
-
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    delete[] result;
-    return NULL;
-  }
 
   return result;
 }
@@ -243,17 +233,12 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     size = static_cast<ssize_t>(st.st_size);
   }
 
-  // seek to top of file.
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    return NULL;
-  }
-
   memset(buf, 0, 512);
   sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = read(fd, buf, bytes);
+    bytes = pread(fd, buf, bytes, start + total);
     if(0 == bytes){
       // end of file
       break;
@@ -269,11 +254,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
   result = new unsigned char[get_sha256_digest_length()];
   PK11_DigestFinal(sha256ctx, result, &sha256outlen, get_sha256_digest_length());
   PK11_DestroyContext(sha256ctx, PR_TRUE);
-
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    delete[] result;
-    return NULL;
-  }
 
   return result;
 }

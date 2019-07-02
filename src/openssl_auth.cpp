@@ -239,17 +239,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
     size = static_cast<ssize_t>(st.st_size);
   }
 
-  // seek to top of file.
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    return NULL;
-  }
-
   memset(buf, 0, 512);
   MD5_Init(&md5ctx);
 
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = read(fd, buf, bytes);
+    bytes = pread(fd, buf, bytes, start + total);
     if(0 == bytes){
       // end of file
       break;
@@ -264,11 +259,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 
   result = new unsigned char[get_md5_digest_length()];
   MD5_Final(result, &md5ctx);
-
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    delete[] result;
-    return NULL;
-  }
 
   return result;
 }
@@ -312,18 +302,13 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
     size = static_cast<ssize_t>(st.st_size);
   }
 
-  // seek to top of file.
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    return NULL;
-  }
-
   sha256ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(sha256ctx, md, NULL);
 
   memset(buf, 0, 512);
   for(ssize_t total = 0; total < size; total += bytes){
     bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = read(fd, buf, bytes);
+    bytes = pread(fd, buf, bytes, start + total);
     if(0 == bytes){
       // end of file
       break;
@@ -340,10 +325,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
   EVP_DigestFinal_ex(sha256ctx, result, NULL);
   EVP_MD_CTX_destroy(sha256ctx);
 
-  if(-1 == lseek(fd, start, SEEK_SET)){
-    delete[] result;
-    return NULL;
-  }
   return result;
 }
 
