@@ -176,6 +176,9 @@ You can specify this option for performance, s3fs memorizes in stat cache that t
 do not check ssl certificate.
 server certificate won't be checked against the available certificate authorities.
 .TP
+\fB\-o\fR ssl_verify_hostname (default="2")
+When 0, do not verify the SSL certificate against the hostname.
+.TP
 \fB\-o\fR nodnscache - disable dns cache.
 s3fs is always using dns cache, this option make dns cache disable.
 .TP
