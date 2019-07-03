@@ -220,7 +220,7 @@ void StatCache::Clear()
   S3FS_MALLOCTRIM(0);
 }
 
-bool StatCache::GetStat(string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
+bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
 {
   bool is_delete_cache = false;
   string strpath = key;
