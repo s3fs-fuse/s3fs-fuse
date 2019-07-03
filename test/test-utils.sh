@@ -3,6 +3,7 @@
 #### Test utils
 
 set -o errexit
+set -o pipefail
 
 # Configuration
 TEST_TEXT="HELLO WORLD"

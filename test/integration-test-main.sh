@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -o errexit
+set -o pipefail
 
 source test-utils.sh
 
@@ -290,7 +291,10 @@ function test_remove_nonempty_directory {
     describe "Testing removing a non-empty directory"
     mk_test_dir
     touch "${TEST_DIR}/file"
-    rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
+    (
+        set +o pipefail
+        rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
+    )
     rm "${TEST_DIR}/file"
     rm_test_dir
 }
@@ -365,11 +369,14 @@ function test_multipart_copy {
 function test_special_characters {
     describe "Testing special characters ..."
 
-    ls 'special' 2>&1 | grep -q 'No such file or directory'
-    ls 'special?' 2>&1 | grep -q 'No such file or directory'
-    ls 'special*' 2>&1 | grep -q 'No such file or directory'
-    ls 'special~' 2>&1 | grep -q 'No such file or directory'
-    ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
+    (
+        set +o pipefail
+        ls 'special' 2>&1 | grep -q 'No such file or directory'
+        ls 'special?' 2>&1 | grep -q 'No such file or directory'
+        ls 'special*' 2>&1 | grep -q 'No such file or directory'
+        ls 'special~' 2>&1 | grep -q 'No such file or directory'
+        ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
+    )
 }
 
 function test_symlink {
