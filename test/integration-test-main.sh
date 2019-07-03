@@ -537,7 +537,7 @@ function test_concurrency {
     for i in `seq 10`; do echo foo > $i; done
     for process in `seq 2`; do
         for i in `seq 100`; do
-            file=$(ls | sed -n "$(($RANDOM % 10 + 1)){p;q}")
+            file=$(ls | sed -n "$(($RANDOM % 10 + 1))p")
             cat $file >/dev/null || true
             rm -f $file
             echo foo > $i || true
