@@ -241,9 +241,6 @@ bool CacheFileStat::Release()
 //------------------------------------------------
 void PageList::FreeList(fdpage_list_t& list)
 {
-  for(fdpage_list_t::iterator iter = list.begin(); iter != list.end(); iter = list.erase(iter)){
-    delete (*iter);
-  }
   list.clear();
 }
 
@@ -265,7 +262,7 @@ void PageList::Clear()
 bool PageList::Init(off_t size, bool is_loaded)
 {
   Clear();
-  fdpage* page = new fdpage(0, size, is_loaded);
+  fdpage page(0, size, is_loaded);
   pages.push_back(page);
   return true;
 }
@@ -276,7 +273,7 @@ off_t PageList::Size() const
     return 0;
   }
   fdpage_list_t::const_reverse_iterator riter = pages.rbegin();
-  return (*riter)->next();
+  return riter->next();
 }
 
 bool PageList::Compress()
@@ -286,17 +283,16 @@ bool PageList::Compress()
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
     if(is_first){
       is_first       = false;
-      is_last_loaded = (*iter)->loaded;
+      is_last_loaded = iter->loaded;
       ++iter;
     }else{
-      if(is_last_loaded == (*iter)->loaded){
+      if(is_last_loaded == iter->loaded){
         fdpage_list_t::iterator biter = iter;
         --biter;
-        (*biter)->bytes += (*iter)->bytes;
-        delete *iter;
+        biter->bytes += iter->bytes;
         iter = pages.erase(iter);
       }else{
-        is_last_loaded = (*iter)->loaded;
+        is_last_loaded = iter->loaded;
         ++iter;
       }
     }
@@ -307,13 +303,13 @@ bool PageList::Compress()
 bool PageList::Parse(off_t new_pos)
 {
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if(new_pos == (*iter)->offset){
+    if(new_pos == iter->offset){
       // nothing to do
       return true;
-    }else if((*iter)->offset < new_pos && new_pos < (*iter)->next()){
-      fdpage* page    = new fdpage((*iter)->offset, new_pos - (*iter)->offset, (*iter)->loaded);
-      (*iter)->bytes -= (new_pos - (*iter)->offset);
-      (*iter)->offset = new_pos;
+    }else if(iter->offset < new_pos && new_pos < iter->next()){
+      fdpage page(iter->offset, new_pos - iter->offset, iter->loaded);
+      iter->bytes -= (new_pos - iter->offset);
+      iter->offset = new_pos;
       pages.insert(iter, page);
       return true;
     }
@@ -330,20 +326,19 @@ bool PageList::Resize(off_t size, bool is_loaded)
 
   }else if(total < size){
     // add new area
-    fdpage* page = new fdpage(total, (size - total), is_loaded);
+    fdpage page(total, (size - total), is_loaded);
     pages.push_back(page);
 
   }else if(size < total){
     // cut area
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
-      if((*iter)->next() <= size){
+      if(iter->next() <= size){
         ++iter;
       }else{
-        if(size <= (*iter)->offset){
-          delete *iter;
+        if(size <= iter->offset){
           iter = pages.erase(iter);
         }else{
-          (*iter)->bytes = size - (*iter)->offset;
+          iter->bytes = size - iter->offset;
         }
       }
     }
@@ -357,13 +352,13 @@ bool PageList::Resize(off_t size, bool is_loaded)
 bool PageList::IsPageLoaded(off_t start, off_t size) const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if((*iter)->end() < start){
+    if(iter->end() < start){
       continue;
     }
-    if(!(*iter)->loaded){
+    if(!iter->loaded){
       return false;
     }
-    if(0 != size && start + size <= (*iter)->next()){
+    if(0 != size && start + size <= iter->next()){
       break;
     }
   }
@@ -395,12 +390,12 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool
 
     // set loaded flag
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
-      if((*iter)->end() < start){
+      if(iter->end() < start){
         continue;
-      }else if(start + size <= (*iter)->offset){
+      }else if(start + size <= iter->offset){
         break;
       }else{
-        (*iter)->loaded = is_loaded;
+        iter->loaded = is_loaded;
       }
     }
   }
@@ -411,10 +406,10 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool
 bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if(start <= (*iter)->end()){
-      if(!(*iter)->loaded){
-        resstart = (*iter)->offset;
-        ressize  = (*iter)->bytes;
+    if(start <= iter->end()){
+      if(!iter->loaded){
+        resstart = iter->offset;
+        ressize  = iter->bytes;
         return true;
       }
     }
@@ -427,27 +422,27 @@ off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
   off_t restsize = 0;
   off_t next     = start + size;
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if((*iter)->next() <= start){
+    if(iter->next() <= start){
       continue;
     }
-    if(next <= (*iter)->offset){
+    if(next <= iter->offset){
       break;
     }
-    if((*iter)->loaded){
+    if(iter->loaded){
       continue;
     }
     off_t tmpsize;
-    if((*iter)->offset <= start){
-      if((*iter)->next() <= next){
-        tmpsize = ((*iter)->next() - start);
+    if(iter->offset <= start){
+      if(iter->next() <= next){
+        tmpsize = (iter->next() - start);
       }else{
         tmpsize = next - start;                         // = size
       }
     }else{
-      if((*iter)->next() <= next){
-        tmpsize = (*iter)->next() - (*iter)->offset;   // = (*iter)->bytes
+      if(iter->next() <= next){
+        tmpsize = iter->next() - iter->offset;   // = iter->bytes
       }else{
-        tmpsize = next - (*iter)->offset;
+        tmpsize = next - iter->offset;
       }
     }
     restsize += tmpsize;
@@ -466,28 +461,28 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t 
   off_t next = start + size;
 
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if((*iter)->next() <= start){
+    if(iter->next() <= start){
       continue;
     }
-    if(next <= (*iter)->offset){
+    if(next <= iter->offset){
       break;
     }
-    if((*iter)->loaded){
+    if(iter->loaded){
       continue; // already loaded
     }
 
     // page area
-    off_t page_start = max((*iter)->offset, start);
-    off_t page_next  = min((*iter)->next(), next);
+    off_t page_start = max(iter->offset, start);
+    off_t page_next  = min(iter->next(), next);
     off_t page_size  = page_next - page_start;
 
     // add list
     fdpage_list_t::reverse_iterator riter = unloaded_list.rbegin();
-    if(riter != unloaded_list.rend() && (*riter)->next() == page_start){
+    if(riter != unloaded_list.rend() && riter->next() == page_start){
       // merge to before page
-      (*riter)->bytes += page_size;
+      riter->bytes += page_size;
     }else{
-      fdpage* page = new fdpage(page_start, page_size, false);
+      fdpage page(page_start, page_size, false);
       unloaded_list.push_back(page);
     }
   }
@@ -507,7 +502,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     ssall << Size();
 
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
-      ssall << "\n" << (*iter)->offset << ":" << (*iter)->bytes << ":" << ((*iter)->loaded ? "1" : "0");
+      ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0");
     }
 
     string strall = ssall.str();
@@ -602,7 +597,7 @@ void PageList::Dump()
 
   S3FS_PRN_DBG("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
-    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s}", cnt, static_cast<long long int>((*iter)->offset), static_cast<long long int>((*iter)->bytes), (*iter)->loaded ? "true" : "false");
+    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "true" : "false");
   }
   S3FS_PRN_DBG("}");
 }
@@ -1186,17 +1181,17 @@ int FdEntity::Load(off_t start, off_t size)
   fdpage_list_t unloaded_list;
   if(0 < pagelist.GetUnloadedPages(unloaded_list, start, size)){
     for(fdpage_list_t::iterator iter = unloaded_list.begin(); iter != unloaded_list.end(); ++iter){
-      if(0 != size && start + size <= (*iter)->offset){
+      if(0 != size && start + size <= iter->offset){
         // reached end
         break;
       }
       // check loading size
       off_t need_load_size = 0;
-      if((*iter)->offset < size_orgmeta){
+      if(iter->offset < size_orgmeta){
         // original file size(on S3) is smaller than request.
-        need_load_size = ((*iter)->next() <= size_orgmeta ? (*iter)->bytes : (size_orgmeta - (*iter)->offset));
+        need_load_size = (iter->next() <= size_orgmeta ? iter->bytes : (size_orgmeta - iter->offset));
       }
-      off_t over_size = (*iter)->bytes - need_load_size;
+      off_t over_size = iter->bytes - need_load_size;
 
       // download
       if(2 * S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){ // default 20MB
@@ -1206,7 +1201,7 @@ int FdEntity::Load(off_t start, off_t size)
         if(120 > S3fsCurl::GetReadwriteTimeout()){
           backup = S3fsCurl::SetReadwriteTimeout(120);
         }
-        result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+        result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, iter->offset, need_load_size);
         if(0 != backup){
           S3fsCurl::SetReadwriteTimeout(backup);
         }
@@ -1214,7 +1209,7 @@ int FdEntity::Load(off_t start, off_t size)
         // single request
         if(0 < need_load_size){
           S3fsCurl s3fscurl;
-          result = s3fscurl.GetObjectRequest(path.c_str(), fd, (*iter)->offset, need_load_size);
+          result = s3fscurl.GetObjectRequest(path.c_str(), fd, iter->offset, need_load_size);
         }else{
           result = 0;
         }
@@ -1225,7 +1220,7 @@ int FdEntity::Load(off_t start, off_t size)
 
       // initialize for the area of over original size
       if(0 < over_size){
-        if(0 != (result = FdEntity::FillFile(fd, 0, over_size, (*iter)->offset + need_load_size))){
+        if(0 != (result = FdEntity::FillFile(fd, 0, over_size, iter->offset + need_load_size))){
           S3FS_PRN_ERR("failed to fill rest bytes for fd(%d). errno(%d)", fd, result);
           break;
         }
@@ -1234,7 +1229,7 @@ int FdEntity::Load(off_t start, off_t size)
       }
 
       // Set loaded flag
-      pagelist.SetPageLoadedStatus((*iter)->offset, (*iter)->bytes, true);
+      pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, true);
     }
     PageList::FreeList(unloaded_list);
   }
@@ -1286,17 +1281,17 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
 
   // loop uploading by multipart
   for(fdpage_list_t::iterator iter = pagelist.pages.begin(); iter != pagelist.pages.end(); ++iter){
-    if((*iter)->end() < start){
+    if(iter->end() < start){
       continue;
     }
-    if(0 != size && start + size <= (*iter)->offset){
+    if(0 != size && start + size <= iter->offset){
       break;
     }
     // download each multipart size(default 10MB) in unit
-    for(off_t oneread = 0, totalread = ((*iter)->offset < start ? start : 0); totalread < static_cast<off_t>((*iter)->bytes); totalread += oneread){
+    for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < static_cast<off_t>(iter->bytes); totalread += oneread){
       int   upload_fd = fd;
-      off_t offset    = (*iter)->offset + totalread;
-      oneread         = min(static_cast<off_t>((*iter)->bytes) - totalread, S3fsCurl::GetMultipartSize());
+      off_t offset    = iter->offset + totalread;
+      oneread         = min(static_cast<off_t>(iter->bytes) - totalread, S3fsCurl::GetMultipartSize());
 
       // check rest size is over minimum part size
       //
@@ -1306,15 +1301,15 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
       // we incorporate the final part to the previous part. If the previous part
       // is over 5GB, we want to even out the last part and the previous part.
       //
-      if(((*iter)->bytes - totalread - oneread) < MIN_MULTIPART_SIZE){
-        if(FIVE_GB < ((*iter)->bytes - totalread)){
-          oneread = ((*iter)->bytes - totalread) / 2;
+      if((iter->bytes - totalread - oneread) < MIN_MULTIPART_SIZE){
+        if(FIVE_GB < iter->bytes - totalread){
+          oneread = (iter->bytes - totalread) / 2;
         }else{
-          oneread = ((*iter)->bytes - totalread);
+          oneread = iter->bytes - totalread;
         }
       }
 
-      if(!(*iter)->loaded){
+      if(!iter->loaded){
         //
         // loading or initializing
         //
@@ -1378,20 +1373,20 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
     }
 
     // set loaded flag
-    if(!(*iter)->loaded){
-      if((*iter)->offset < start){
-        fdpage* page    = new fdpage(((*iter)->offset, start - (*iter)->offset), (*iter)->loaded);
-        (*iter)->bytes -= (start - (*iter)->offset);
-        (*iter)->offset = start;
+    if(!iter->loaded){
+      if(iter->offset < start){
+        fdpage page(iter->offset, start - iter->offset, iter->loaded);
+        iter->bytes -= (start - iter->offset);
+        iter->offset = start;
         pagelist.pages.insert(iter, page);
       }
-      if(0 != size && start + size < (*iter)->next()){
-        fdpage* page    = new fdpage(((*iter)->offset, (start + size - (*iter)->offset), true));
-        (*iter)->bytes -= (start + size - (*iter)->offset);
-        (*iter)->offset = start + size;
+      if(0 != size && start + size < iter->next()){
+        fdpage page(iter->offset, start + size - iter->offset, true);
+        iter->bytes -= (start + size - iter->offset);
+        iter->offset = start + size;
         pagelist.pages.insert(iter, page);
       }else{
-        (*iter)->loaded = true;
+        iter->loaded = true;
       }
     }
   }
