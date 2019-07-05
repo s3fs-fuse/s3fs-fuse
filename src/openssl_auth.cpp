@@ -82,6 +82,7 @@ struct CRYPTO_dynlock_value
 
 static pthread_mutex_t* s3fs_crypt_mutex = NULL;
 
+static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused));
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 {
   if(s3fs_crypt_mutex){
@@ -93,6 +94,7 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
   }
 }
 
+static unsigned long s3fs_crypt_get_threadid() __attribute__ ((unused));
 static unsigned long s3fs_crypt_get_threadid()
 {
   // For FreeBSD etc, some system's pthread_t is structure pointer.
@@ -100,6 +102,7 @@ static unsigned long s3fs_crypt_get_threadid()
   return (unsigned long)(pthread_self());
 }
 
+static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line) __attribute__ ((unused));
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
   struct CRYPTO_dynlock_value* dyndata = new CRYPTO_dynlock_value();
@@ -107,6 +110,7 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
   return dyndata;
 }
 
+static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused));
 static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
   if(dyndata){
@@ -118,6 +122,7 @@ static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyn
   }
 }
 
+static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused));
 static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
   if(dyndata){
