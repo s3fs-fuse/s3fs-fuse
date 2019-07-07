@@ -937,7 +937,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
   if(use_wtf8){
     strTmp = s3fs_wtf8_decode(strTmp);
   }
-  strcpy(buf, strTmp.c_str());
+  strncpy(buf, strTmp.c_str(), size);
 
   FdManager::get()->Close(ent);
   S3FS_MALLOCTRIM(0);
@@ -973,7 +973,7 @@ static int do_create_bucket()
   headers_t meta;
 
   S3fsCurl s3fscurl(true);
-  long     res = s3fscurl.PutRequest("/", meta, tmpfd);
+  int      res = s3fscurl.PutRequest("/", meta, tmpfd);
   if(res < 0){
     long responseCode = s3fscurl.GetLastResponseCode();
     if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
@@ -4558,7 +4558,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "multireq_max=")){
-      long maxreq = static_cast<long>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
+      int maxreq = static_cast<int>(s3fs_strtoofft(strchr(arg, '=') + sizeof(char)));
       S3fsCurl::SetMaxMultiRequest(maxreq);
       return 0;
     }

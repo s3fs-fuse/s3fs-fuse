@@ -1,6 +1,7 @@
 Checks: '
     -*,
     bugprone-*,
+    -bugprone-macro-parentheses,
     google-*,
     -google-build-using-namespace,
     -google-readability-casting,
@@ -12,6 +13,7 @@ Checks: '
     -misc-redundant-expression,
     -misc-unused-parameters,
     modernize-*,
+    -modernize-avoid-c-arrays,
     -modernize-deprecated-headers,
     -modernize-loop-convert,
     -modernize-use-auto,
@@ -22,5 +24,7 @@ Checks: '
     readability-*,
     -readability-else-after-return,
     -readability-implicit-bool-conversion,
+    -readability-isolate-declaration,
+    -readability-magic-numbers,
     -readability-named-parameter,
     -readability-simplify-boolean-expr'
