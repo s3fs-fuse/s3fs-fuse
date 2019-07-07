@@ -1194,7 +1194,7 @@ int FdEntity::Load(off_t start, off_t size)
       off_t over_size = iter->bytes - need_load_size;
 
       // download
-      if(2 * S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){ // default 20MB
+      if(S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){
         // parallel request
         // Additional time is needed for large files
         time_t backup = 0;
@@ -1544,7 +1544,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
     }
 
-    if(pagelist.Size() >= 2 * S3fsCurl::GetMultipartSize() && !nomultipart){ // default 20MB
+    if(pagelist.Size() >= S3fsCurl::GetMultipartSize() && !nomultipart){
       // Additional time is needed for large files
       time_t backup = 0;
       if(120 > S3fsCurl::GetReadwriteTimeout()){
