@@ -5,6 +5,7 @@
 #
 
 set -o errexit
+set -o pipefail
 
 # Require root
 REQUIRE_ROOT=require-root.sh

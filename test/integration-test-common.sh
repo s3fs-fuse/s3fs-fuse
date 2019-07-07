@@ -38,6 +38,8 @@
 # eg: VALGRIND="--tool=memcheck --leak-check=full" ./small-integration-test.sh
 
 set -o errexit
+set -o pipefail
+
 S3FS=../src/s3fs
 
 # Allow these defaulted values to be overridden
