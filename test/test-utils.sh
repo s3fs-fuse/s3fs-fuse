@@ -14,6 +14,12 @@ BIG_FILE=big-file-s3fs.txt
 BIG_FILE_LENGTH=$((25 * 1024 * 1024))
 export RUN_DIR
 
+if [ `uname` = "Darwin" ]; then
+    export SED_BUFFER_FLAG="-l"
+else
+    export SED_BUFFER_FLAG="--unbuffered"
+fi
+
 function mk_test_file {
     if [ $# == 0 ]; then
         TEXT=$TEST_TEXT

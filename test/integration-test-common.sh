@@ -186,7 +186,7 @@ function start_s3fs {
             -o dbglevel=${DBGLEVEL:=info} \
             -o retries=3 \
             -f \
-            "${@}" | stdbuf -oL -eL sed -u "s/^/s3fs: /" &
+            "${@}" | stdbuf -oL -eL sed $SED_BUFFER_FLAG "s/^/s3fs: /" &
     )
 
     if [ `uname` = "Darwin" ]; then
