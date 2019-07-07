@@ -303,6 +303,11 @@ utf-8 by mapping offending codes into a 'private' codepage of the
 Unicode set.
 Useful on clients not using utf-8 as their file system encoding.
 .TP
+\fB\-o\fR use_session_token - indicate that session token should be provided.
+If credentials are provided by environment variables this switch
+forces presence check of AWSSESSIONTOKEN variable.
+Otherwise an error is returned.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit (critical), err (error), warn (warning), info (information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
