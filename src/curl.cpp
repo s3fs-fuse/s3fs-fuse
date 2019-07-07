@@ -2444,10 +2444,10 @@ string S3fsCurl::CalcSignatureV2(const string& method, const string& strMD5, con
 
   char* base64;
   if(NULL == (base64 = s3fs_base64(md, md_len))){
-    free(md);
+    delete[] md;
     return string("");  // ENOMEM
   }
-  free(md);
+  delete[] md;
 
   Signature = base64;
   delete[] base64;
