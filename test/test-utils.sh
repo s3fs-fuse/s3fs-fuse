@@ -21,6 +21,30 @@ else
     export SED_BUFFER_FLAG="--unbuffered"
 fi
 
+function get_xattr() {
+    if [ `uname` = "Darwin" ]; then
+        xattr -p "$1" "$2"
+    else
+        getfattr -n "$1" --only-values "$2"
+    fi
+}
+
+function set_xattr() {
+    if [ `uname` = "Darwin" ]; then
+        xattr -w "$1" "$2" "$3"
+    else
+        setfattr -n "$1" -v "$2" "$3"
+    fi
+}
+
+function del_xattr() {
+    if [ `uname` = "Darwin" ]; then
+        xattr -d "$1" "$2"
+    else
+        setfattr -x "$1" "$2"
+    fi
+}
+
 function mk_test_file {
     if [ $# == 0 ]; then
         TEXT=$TEST_TEXT

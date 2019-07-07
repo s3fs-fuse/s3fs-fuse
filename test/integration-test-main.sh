@@ -396,27 +396,24 @@ function test_symlink {
 }
 
 function test_extended_attributes {
-    command -v setfattr >/dev/null 2>&1 || \
-        { echo "Skipping extended attribute tests" ; return; }
-
     describe "Testing extended attributes ..."
 
     rm -f $TEST_TEXT_FILE
     touch $TEST_TEXT_FILE
 
     # set value
-    setfattr -n key1 -v value1 $TEST_TEXT_FILE
-    getfattr -n key1 --only-values $TEST_TEXT_FILE | grep -q '^value1$'
+    set_xattr key1 value1 $TEST_TEXT_FILE
+    get_xattr key1 $TEST_TEXT_FILE | grep -q '^value1$'
 
     # append value
-    setfattr -n key2 -v value2 $TEST_TEXT_FILE
-    getfattr -n key1 --only-values $TEST_TEXT_FILE | grep -q '^value1$'
-    getfattr -n key2 --only-values $TEST_TEXT_FILE | grep -q '^value2$'
+    set_xattr key2 value2 $TEST_TEXT_FILE
+    get_xattr key1 $TEST_TEXT_FILE | grep -q '^value1$'
+    get_xattr key2 $TEST_TEXT_FILE | grep -q '^value2$'
 
     # remove value
-    setfattr -x key1 $TEST_TEXT_FILE
-    ! getfattr -n key1 --only-values $TEST_TEXT_FILE
-    getfattr -n key2 --only-values $TEST_TEXT_FILE | grep -q '^value2$'
+    del_xattr key1 $TEST_TEXT_FILE
+    ! get_xattr key1 $TEST_TEXT_FILE
+    get_xattr key2 $TEST_TEXT_FILE | grep -q '^value2$'
 }
 
 function test_mtime_file {
@@ -477,20 +474,14 @@ function test_update_time() {
        return 1
     fi
 
-    if command -v setfattr >/dev/null 2>&1; then
-        sleep 2
-        setfattr -n key -v value $TEST_TEXT_FILE
+    sleep 2
+    set_xattr key value $TEST_TEXT_FILE
 
-        ctime4=`get_ctime $TEST_TEXT_FILE`
-        mtime4=`get_mtime $TEST_TEXT_FILE`
-        if [ $ctime3 -eq $ctime4 -o $mtime3 -ne $mtime4 ]; then
-           echo "Expected updated ctime: $ctime3 != $ctime4 and same mtime: $mtime3 == $mtime4"
-           return 1
-        fi
-    else
-        echo "Skipping extended attribute test"
-        ctime4=`get_ctime $TEST_TEXT_FILE`
-        mtime4=`get_mtime $TEST_TEXT_FILE`
+    ctime4=`get_ctime $TEST_TEXT_FILE`
+    mtime4=`get_mtime $TEST_TEXT_FILE`
+    if [ $ctime3 -eq $ctime4 -o $mtime3 -ne $mtime4 ]; then
+       echo "Expected updated ctime: $ctime3 != $ctime4 and same mtime: $mtime3 == $mtime4"
+       return 1
     fi
 
     sleep 2
