@@ -983,6 +983,9 @@ static int do_create_bucket()
       // retry to check
       s3fscurl.DestroyCurlHandle();
       res = s3fscurl.PutRequest("/", meta, tmpfd);
+    }else if(responseCode == 409){
+      // bucket already exists
+      res = 0;
     }
   }
   if(ptmpfp != NULL){

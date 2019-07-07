@@ -135,7 +135,6 @@ function stop_s3proxy {
 # Mount the bucket, function arguments passed to s3fs in addition to
 # a set of common arguments.  
 function start_s3fs {
-
     # Public bucket if PUBLIC is set
     if [ -n "${PUBLIC}" ]; then
         AUTH_OPT="-o public_bucket=1"
