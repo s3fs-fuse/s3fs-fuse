@@ -853,7 +853,6 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     // try to open cache file
     if(-1 != (fd = open(cachepath.c_str(), O_RDWR)) && pagelist.Serialize(cfstat, false)){
       // succeed to open cache file and to load stats data
-      struct stat st;
       memset(&st, 0, sizeof(struct stat));
       if(-1 == fstat(fd, &st)){
         S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
