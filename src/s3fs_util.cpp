@@ -31,6 +31,9 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
+#include <libxml/tree.h>
 
 #include <string>
 #include <sstream>
@@ -970,6 +973,50 @@ bool is_need_check_obj_detail(headers_t& meta)
     return false;
   }
   return true;
+}
+
+bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value)
+{
+  bool result = false;
+
+  if(!data || !key){
+    return result;
+  }
+  value.clear();
+
+  xmlDocPtr doc;
+  if(NULL == (doc = xmlReadMemory(data, len, "", NULL, 0))){
+    return result;
+  }
+
+  if(NULL == doc->children){
+    S3FS_XMLFREEDOC(doc);
+    return result;
+  }
+  for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
+    // For DEBUG
+    // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+    // printf("cur_node_name: %s\n", cur_node_name.c_str());
+
+    if(XML_ELEMENT_NODE == cur_node->type){
+      string elementName = reinterpret_cast<const char*>(cur_node->name);
+      // For DEBUG
+      // printf("elementName: %s\n", elementName.c_str());
+
+      if(cur_node->children){
+        if(XML_TEXT_NODE == cur_node->children->type){
+          if(elementName == key) {
+            value = reinterpret_cast<const char *>(cur_node->children->content);
+            result    = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  S3FS_XMLFREEDOC(doc);
+
+  return result;
 }
 
 //-------------------------------------------------------------------

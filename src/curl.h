@@ -379,7 +379,6 @@ class S3fsCurl
     void insertAuthHeaders();
     std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
     std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
-    bool GetUploadId(std::string& upload_id);
     int GetIAMCredentials(void);
 
     int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);

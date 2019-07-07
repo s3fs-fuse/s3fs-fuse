@@ -31,9 +31,6 @@
 #include <pthread.h>
 #include <assert.h>
 #include <curl/curl.h>
-#include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
-#include <libxml/tree.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -2531,50 +2528,6 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   return Signature;
 }
 
-// XML in BodyData has UploadId, Parse XML body for UploadId
-bool S3fsCurl::GetUploadId(string& upload_id)
-{
-  bool result = false;
-
-  if(!bodydata){
-    return result;
-  }
-  upload_id.clear();
-
-  xmlDocPtr doc;
-  if(NULL == (doc = xmlReadMemory(bodydata->str(), bodydata->size(), "", NULL, 0))){
-    return result;
-  }
-  if(NULL == doc->children){
-    S3FS_XMLFREEDOC(doc);
-    return result;
-  }
-  for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
-    // For DEBUG
-    // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
-    // printf("cur_node_name: %s\n", cur_node_name.c_str());
-
-    if(XML_ELEMENT_NODE == cur_node->type){
-      string elementName = reinterpret_cast<const char*>(cur_node->name);
-      // For DEBUG
-      // printf("elementName: %s\n", elementName.c_str());
-
-      if(cur_node->children){
-        if(XML_TEXT_NODE == cur_node->children->type){
-          if(elementName == "UploadId") {
-            upload_id = reinterpret_cast<const char *>(cur_node->children->content);
-            result    = true;
-            break;
-          }
-        }
-      }
-    }
-  }
-  S3FS_XMLFREEDOC(doc);
-
-  return result;
-}
-
 void S3fsCurl::insertV4Headers()
 {
   string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;
@@ -3449,8 +3402,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     return result;
   }
 
-  // Parse XML body for UploadId
-  if(!S3fsCurl::GetUploadId(upload_id)){
+  if(!simple_parse_xml(bodydata->str(), bodydata->size(), "UploadId", upload_id)){
     delete bodydata;
     bodydata = NULL;
     return -1;
@@ -3793,33 +3745,12 @@ bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl)
 
 bool S3fsCurl::CopyMultipartPostComplete()
 {
-  // parse ETag from response
-  xmlDocPtr doc;
-  if(NULL == (doc = xmlReadMemory(bodydata->str(), bodydata->size(), "", NULL, 0))){
-    return false;
+  std::string etag;
+  partdata.uploaded = simple_parse_xml(bodydata->str(), bodydata->size(), "ETag", etag);
+  if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
+    etag.assign(etag.substr(1, etag.size() - 2));
   }
-  if(NULL == doc->children){
-    S3FS_XMLFREEDOC(doc);
-    return false;
-  }
-  for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
-    if(XML_ELEMENT_NODE == cur_node->type){
-      string elementName = reinterpret_cast<const char*>(cur_node->name);
-      if(cur_node->children){
-        if(XML_TEXT_NODE == cur_node->children->type){
-          if(elementName == "ETag") {
-            string etag = reinterpret_cast<const char *>(cur_node->children->content);
-            if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
-              etag.assign(etag.substr(1, etag.size() - 2));
-            }
-            partdata.etaglist->at(partdata.etagpos).assign(etag);
-            partdata.uploaded = true;
-          }
-        }
-      }
-    }
-  }
-  S3FS_XMLFREEDOC(doc);
+  partdata.etaglist->at(partdata.etagpos).assign(etag);
 
   delete bodydata;
   bodydata = NULL;

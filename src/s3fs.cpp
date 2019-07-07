@@ -3769,39 +3769,30 @@ static int s3fs_utility_processing(time_t abort_time)
 
 //
 // If calling with wrong region, s3fs gets following error body as 400 error code.
-// "<Error><Code>AuthorizationHeaderMalformed</Code><Message>The authorization header is 
-//  malformed; the region 'us-east-1' is wrong; expecting 'ap-northeast-1'</Message>
-//  <Region>ap-northeast-1</Region><RequestId>...</RequestId><HostId>...</HostId>
+// "<Error>
+//    <Code>AuthorizationHeaderMalformed</Code>
+//    <Message>The authorization header is malformed; the region 'us-east-1' is wrong; expecting 'ap-northeast-1'</Message>
+//    <Region>ap-northeast-1</Region>
+//    <RequestId>...</RequestId>
+//    <HostId>...</HostId>
 //  </Error>"
 //
-// So this is cheep codes but s3fs should get correct region automatically.
+// So this is cheap code but s3fs should get correct region automatically.
 //
-static bool check_region_error(const char* pbody, const string& currentep, string& expectregion)
+static bool check_region_error(const char* pbody, size_t len, string& expectregion)
 {
   if(!pbody){
     return false;
   }
-  const char* region;
-  const char* regionend;
-  if(NULL == (region = strcasestr(pbody, "<Message>The authorization header is malformed; the region "))){
+
+  std::string code;
+  if(!simple_parse_xml(pbody, len, "Code", code) || code != "AuthorizationHeaderMalformed"){
     return false;
   }
-  // check current endpoint region in body.
-  if(NULL == (region = strcasestr(region, currentep.c_str()))){
+
+  if(!simple_parse_xml(pbody, len, "Region", expectregion)){
     return false;
   }
-  if(NULL == (region = strcasestr(region, "expecting \'"))){
-    return false;
-  }
-  region += strlen("expecting \'");
-  if(NULL == (regionend = strchr(region, '\''))){
-    return false;
-  }
-  string strtmp(region, (regionend - region));
-  if(0 == strtmp.length()){
-    return false;
-  }
-  expectregion = strtmp;
 
   return true;
 }
@@ -3828,7 +3819,7 @@ static int s3fs_check_service()
       // check region error(for putting message or retrying)
       BodyData* body = s3fscurl.GetBodyData();
       string    expectregion;
-      if(check_region_error(body->str(), endpoint, expectregion)){
+      if(check_region_error(body->str(), body->size(), expectregion)){
         // [NOTE]
         // If endpoint is not specified(using us-east-1 region) and
         // an error is encountered accessing a different region, we
