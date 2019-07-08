@@ -690,10 +690,11 @@ void FdEntity::Clear()
 
 void FdEntity::Close()
 {
+  AutoLock auto_lock(&fdent_lock);
+
   S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt - 1 : refcnt));
 
   if(-1 != fd){
-    AutoLock auto_lock(&fdent_lock);
 
     if(0 < refcnt){
       refcnt--;
@@ -804,6 +805,8 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     // had to wait for fd lock, return
     return -EIO;
   }
+
+  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%jd]", path.c_str(), fd, static_cast<long long int>(size), (intmax_t)time);
 
   AutoLock auto_data_lock(&fdent_data_lock);
   if(-1 != fd){
@@ -994,6 +997,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 //
 bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
 {
+  AutoLock auto_lock(&fdent_lock);
   int result;
 
   S3FS_PRN_INFO3("[path=%s][fd=%d]", path.c_str(), fd);
@@ -1003,7 +1007,7 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
       return false;
     }
   }
-  AutoLock auto_lock(&fdent_data_lock);
+  AutoLock auto_data_lock(&fdent_data_lock);
 
   if(force_load){
     SetAllStatusUnloaded();
@@ -1045,19 +1049,21 @@ int FdEntity::SetCtime(time_t time)
     return 0;
   }
 
+  AutoLock auto_lock(&fdent_lock);
   orgmeta["x-amz-meta-ctime"] = str(time);
   return 0;
 }
 
 int FdEntity::SetMtime(time_t time, bool lock_already_held)
 {
+  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
   S3FS_PRN_INFO3("[path=%s][fd=%d][time=%jd]", path.c_str(), fd, (intmax_t)time);
 
   if(-1 == time){
     return 0;
   }
 
-  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
   if(-1 != fd){
     struct timeval tv[2];
     tv[0].tv_sec = time;
@@ -1109,10 +1115,10 @@ bool FdEntity::UpdateMtime()
 
 bool FdEntity::GetSize(off_t& size)
 {
+  AutoLock auto_lock(&fdent_lock);
   if(-1 == fd){
     return false;
   }
-  AutoLock auto_lock(&fdent_lock);
 
   size = pagelist.Size();
   return true;
