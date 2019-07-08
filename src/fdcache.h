@@ -148,15 +148,15 @@ class FdEntity
     bool IsMultiOpened(void) const { return refcnt > 1; }
     int Open(headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
     bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
-    int Dup();
+    int Dup(bool lock_already_held = false);
 
     const char* GetPath(void) const { return path.c_str(); }
     void SetPath(const std::string &newpath) { path = newpath; }
     int GetFd(void) const { return fd; }
 
-    bool GetStats(struct stat& st);
+    bool GetStats(struct stat& st, bool lock_already_held = false);
     int SetCtime(time_t time);
-    int SetMtime(time_t time);
+    int SetMtime(time_t time, bool lock_already_held = false);
     bool UpdateCtime(void);
     bool UpdateMtime(void);
     bool GetSize(off_t& size);
@@ -165,7 +165,7 @@ class FdEntity
     bool SetGId(gid_t gid);
     bool SetContentType(const char* path);
 
-    int Load(off_t start = 0, off_t size = 0);                 // size=0 means loading to end
+    int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false);  // size=0 means loading to end
     int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);   // size=0 means loading to end
     int NoCachePreMultipartPost(void);
     int NoCacheMultipartPost(int tgfd, off_t start, off_t size);

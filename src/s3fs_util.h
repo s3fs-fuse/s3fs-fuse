@@ -86,14 +86,20 @@ typedef struct mvnode {
 
 class AutoLock
 {
-  private:
-    pthread_mutex_t* auto_mutex;
-    bool is_lock_acquired;
-
   public:
-    explicit AutoLock(pthread_mutex_t* pmutex, bool no_wait = false);
+    enum Type {
+      NO_WAIT = 1,
+      ALREADY_LOCKED = 2,
+      NONE = 0
+    };
+    explicit AutoLock(pthread_mutex_t* pmutex, Type type = NONE);
     bool isLockAcquired() const;
     ~AutoLock();
+
+  private:
+    pthread_mutex_t* const auto_mutex;
+    bool is_lock_acquired;
+    const Type type;
 };
 
 //-------------------------------------------------------------------

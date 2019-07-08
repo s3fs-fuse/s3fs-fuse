@@ -630,7 +630,9 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
   try{
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, S3FS_MUTEX_RECURSIVE);   // recursive mutex
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
     pthread_mutex_init(&fdent_lock, &attr);
     pthread_mutex_init(&fdent_data_lock, &attr);
     is_lock_init = true;
@@ -723,12 +725,13 @@ void FdEntity::Close()
   }
 }
 
-int FdEntity::Dup()
+int FdEntity::Dup(bool lock_already_held)
 {
+  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
   S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt + 1 : refcnt));
 
   if(-1 != fd){
-    AutoLock auto_lock(&fdent_lock);
     refcnt++;
   }
   return fd;
@@ -793,9 +796,10 @@ int FdEntity::OpenMirrorFile()
 
 int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wait)
 {
+  AutoLock auto_lock(&fdent_lock, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE);
+
   S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%jd]", path.c_str(), fd, static_cast<long long int>(size), (intmax_t)time);
 
-  AutoLock auto_lock(&fdent_lock, no_fd_lock_wait);
   if (!auto_lock.isLockAcquired()) {
     // had to wait for fd lock, return
     return -EIO;
@@ -804,7 +808,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
   AutoLock auto_data_lock(&fdent_data_lock);
   if(-1 != fd){
     // already opened, needs to increment refcnt.
-    Dup();
+    Dup(/*lock_already_held=*/ true);
 
     // check only file size(do not need to save cfs and time.
     if(0 <= size && pagelist.Size() != size){
@@ -971,7 +975,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 
   // set mtime(set "x-amz-meta-mtime" in orgmeta)
   if(-1 != time){
-    if(0 != SetMtime(time)){
+    if(0 != SetMtime(time, /*lock_already_held=*/ true)){
       S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
       fclose(pfile);
       pfile = NULL;
@@ -1007,7 +1011,7 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
   //
   // TODO: possibly do background for delay loading
   //
-  if(0 != (result = Load())){
+  if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true))){
     S3FS_PRN_ERR("could not download, result(%d)", result);
     return false;
   }
@@ -1020,9 +1024,9 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
   return true;
 }
 
-bool FdEntity::GetStats(struct stat& st)
+bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
 {
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
   if(-1 == fd){
     return false;
   }
@@ -1045,7 +1049,7 @@ int FdEntity::SetCtime(time_t time)
   return 0;
 }
 
-int FdEntity::SetMtime(time_t time)
+int FdEntity::SetMtime(time_t time, bool lock_already_held)
 {
   S3FS_PRN_INFO3("[path=%s][fd=%d][time=%jd]", path.c_str(), fd, (intmax_t)time);
 
@@ -1053,7 +1057,7 @@ int FdEntity::SetMtime(time_t time)
     return 0;
   }
 
-  AutoLock auto_lock(&fdent_lock);
+  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
   if(-1 != fd){
     struct timeval tv[2];
     tv[0].tv_sec = time;
@@ -1084,7 +1088,7 @@ bool FdEntity::UpdateCtime()
 {
   AutoLock auto_lock(&fdent_lock);
   struct stat st;
-  if(!GetStats(st)){
+  if(!GetStats(st, /*lock_already_held=*/ true)){
     return false;
   }
   orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
@@ -1095,7 +1099,7 @@ bool FdEntity::UpdateMtime()
 {
   AutoLock auto_lock(&fdent_lock);
   struct stat st;
-  if(!GetStats(st)){
+  if(!GetStats(st, /*lock_already_held=*/ true)){
     return false;
   }
   orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
@@ -1171,14 +1175,16 @@ bool FdEntity::SetAllStatus(bool is_loaded)
   return true;
 }
 
-int FdEntity::Load(off_t start, off_t size)
+int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
 {
+  AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
   S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
   if(-1 == fd){
     return -EBADF;
   }
-  AutoLock auto_lock(&fdent_data_lock);
+  AutoLock auto_data_lock(&fdent_data_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
   int result = 0;
 
@@ -1668,7 +1674,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     // Loading
     int result = 0;
     if(0 < size){
-      result = Load(start, load_size);
+      result = Load(start, load_size, /*lock_already_held=*/ true);
     }
 
     FdManager::FreeReservedDiskSpace(load_size);
@@ -1721,7 +1727,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
       // Load uninitialized area which starts from 0 to (start + size) before writing.
       if(0 < start){
-        result = Load(0, start);
+        result = Load(0, start, /*lock_already_held=*/ true);
       }
       FdManager::FreeReservedDiskSpace(restsize);
       if(0 != result){
@@ -1760,7 +1766,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
   // Load uninitialized area which starts from (start + size) to EOF after writing.
   if(pagelist.Size() > start + static_cast<off_t>(size)){
-    result = Load(start + size, pagelist.Size());
+    result = Load(start + size, pagelist.Size(), /*lock_already_held=*/ true);
     if(0 != result){
       S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
       return static_cast<ssize_t>(result);
@@ -1793,7 +1799,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
 
 void FdEntity::CleanupCache()
 {
-  AutoLock auto_lock(&fdent_lock, true);
+  AutoLock auto_lock(&fdent_lock, AutoLock::NO_WAIT);
 
   if (!auto_lock.isLockAcquired()) {
     return;
@@ -2282,7 +2288,7 @@ void FdManager::CleanupCacheDir()
     return;
   }
 
-  AutoLock auto_lock_no_wait(&FdManager::cache_cleanup_lock, true);
+  AutoLock auto_lock_no_wait(&FdManager::cache_cleanup_lock, AutoLock::NO_WAIT);
 
   if(auto_lock_no_wait.isLockAcquired()){
     S3FS_PRN_INFO("cache cleanup started");

@@ -422,12 +422,28 @@ void free_mvnodes(MVNODE *head)
 //-------------------------------------------------------------------
 // Class AutoLock
 //-------------------------------------------------------------------
-AutoLock::AutoLock(pthread_mutex_t* pmutex, bool no_wait) : auto_mutex(pmutex)
+AutoLock::AutoLock(pthread_mutex_t* pmutex, Type type) : auto_mutex(pmutex), type(type)
 {
-  if (no_wait) {
-    is_lock_acquired = pthread_mutex_trylock(auto_mutex) == 0;
+  if (type == ALREADY_LOCKED) {
+    is_lock_acquired = false;
+  } else if (type == NO_WAIT) {
+    int res = pthread_mutex_trylock(auto_mutex);
+    if(res == 0){
+      is_lock_acquired = true;
+    }else if(res == EBUSY){
+      is_lock_acquired = false;
+    }else{
+      S3FS_PRN_CRIT("pthread_mutex_trylock returned: %d", res);
+      abort();
+    }
   } else {
-    is_lock_acquired = pthread_mutex_lock(auto_mutex) == 0;
+    int res = pthread_mutex_lock(auto_mutex);
+    if(res == 0){
+      is_lock_acquired = true;
+    }else{
+      S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+      abort();
+    }
   }
 }
 
