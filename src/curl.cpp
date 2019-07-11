@@ -593,8 +593,8 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
   }else{
     // timeout?
     if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
-      S3FS_PRN_ERR("timeout now: %jd, curl_times[curl]: %jd, readwrite_timeout: %jd",
-                      (intmax_t)now, (intmax_t)(S3fsCurl::curl_times[curl]), (intmax_t)readwrite_timeout);
+      S3FS_PRN_ERR("timeout now: %lld, curl_times[curl]: %lld, readwrite_timeout: %lld",
+                      static_cast<long long>(now), static_cast<long long>((S3fsCurl::curl_times[curl])), static_cast<long long>(readwrite_timeout));
       return CURLE_ABORTED_BY_CALLBACK;
     }
   }
@@ -3141,7 +3141,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
 int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, string& ssevalue)
 {
-  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%jd]", SAFESTRPTR(tpath), static_cast<long long int>(start), (intmax_t)size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
   if(!tpath || -1 == fd || 0 > start || 0 > size){
     return -1;
@@ -3194,7 +3194,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
 {
   int result;
 
-  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%jd]", SAFESTRPTR(tpath), static_cast<long long int>(start), (intmax_t)size);
+  S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
   if(!tpath){
     return -1;
