@@ -18,15 +18,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cerrno>
 #include <pthread.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <string.h>
+#include <cstring>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/evp.h>

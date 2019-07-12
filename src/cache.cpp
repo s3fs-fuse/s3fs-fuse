@@ -18,7 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifndef HAVE_CLOCK_GETTIME
@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <pthread.h>
-#include <string.h>
+#include <cstring>
 #include <syslog.h>
 #include <string>
 #include <map>

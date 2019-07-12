@@ -18,18 +18,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <cstring>
 #include <unistd.h>
 #include <stdint.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <errno.h>
+#include <cerrno>
 #include <syslog.h>
 #include <pthread.h>
-#include <assert.h>
+#include <cassert>
 #include <curl/curl.h>
 #include <iostream>
 #include <fstream>
