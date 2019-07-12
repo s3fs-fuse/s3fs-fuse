@@ -9,7 +9,6 @@ Checks: '
     -google-runtime-int,
     -google-runtime-references,
     misc-*,
-    -misc-misplaced-const,
     -misc-redundant-expression,
     -misc-unused-parameters,
     modernize-*,
