@@ -147,7 +147,9 @@ StatCache::StatCache() : IsExpireTime(false), IsExpireIntervalType(false), Expir
     stat_cache.clear();
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, S3FS_MUTEX_RECURSIVE);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
     pthread_mutex_init(&StatCache::stat_cache_lock, &attr);
   }else{
     abort();
@@ -297,7 +299,7 @@ bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bo
   }
 
   if(is_delete_cache){
-    DelStat(strpath);
+    DelStat(strpath, /*lock_already_held=*/ true);
   }
   return false;
 }
@@ -536,14 +538,14 @@ bool StatCache::TruncateCache()
   return true;
 }
 
-bool StatCache::DelStat(const char* key)
+bool StatCache::DelStat(const char* key, bool lock_already_held)
 {
   if(!key){
     return false;
   }
   S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key);
 
-  AutoLock lock(&StatCache::stat_cache_lock);
+  AutoLock lock(&StatCache::stat_cache_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
   stat_cache_t::iterator iter;
   if(stat_cache.end() != (iter = stat_cache.find(string(key)))){

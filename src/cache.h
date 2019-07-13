@@ -120,9 +120,9 @@ class StatCache
     void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
 
     // Delete stat cache
-    bool DelStat(const char* key);
-    bool DelStat(std::string& key) {
-      return DelStat(key.c_str());
+    bool DelStat(const char* key, bool lock_already_held = false);
+    bool DelStat(std::string& key, bool lock_already_held = false) {
+      return DelStat(key.c_str(), lock_already_held);
     }
 };
 

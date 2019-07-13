@@ -33,7 +33,7 @@ matrix:
         - sudo pip install --upgrade awscli
       script:
         - ./autogen.sh
-        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'
+        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
         - make
         - make cppcheck
         - make check -C src
@@ -51,7 +51,7 @@ matrix:
         - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
       script:
         - ./autogen.sh
-        - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03'
+        - PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
         - make
         - make cppcheck
         - make check -C src
@@ -72,7 +72,7 @@ matrix:
         - sudo pip install --upgrade awscli
       script:
         - ./autogen.sh
-        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03'
+        - ./configure CPPFLAGS='-I/usr/local/opt/openssl/include' CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
         - make
         - make cppcheck
         - make check -C src
