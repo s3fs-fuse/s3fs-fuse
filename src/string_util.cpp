@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include <cerrno>
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +25,7 @@
 #include <syslog.h>
 #include <ctime>
 
+#include <stdexcept>
 #include <sstream>
 #include <string>
 #include <map>
@@ -50,45 +52,18 @@ template std::string str(unsigned long long value);
 
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
+// replacement for C++11 std::stoll
 off_t s3fs_strtoofft(const char* str, bool is_base_16)
 {
-  if(!str || '\0' == *str){
-    return 0;
+  errno = 0;
+  char *temp;
+  long long result = strtoll(str, &temp, is_base_16 ? 16 : 10);
+
+  if(temp == str || *temp != '\0'){
+    throw std::invalid_argument("s3fs_strtoofft");
   }
-  off_t  result;
-  bool   chk_space;
-  bool   chk_base16_prefix;
-  for(result = 0, chk_space = false, chk_base16_prefix = false; '\0' != *str; str++){
-    // check head space
-    if(!chk_space && isspace(*str)){
-      continue;
-    }else if(!chk_space){
-      chk_space = true;
-    }
-    // check prefix for base 16
-    if(!chk_base16_prefix){
-      chk_base16_prefix = true;
-      if('0' == *str && ('x' == str[1] || 'X' == str[1])){
-        is_base_16 = true;
-        str++;
-        continue;
-      }
-    }
-    // check like isalnum and set data
-    result *= (is_base_16 ? 16 : 10);
-    if('0' <= *str && '9' >= *str){
-      result += static_cast<off_t>(*str - '0');
-    }else if(is_base_16){
-      if('A' <= *str && *str <= 'F'){
-        result += static_cast<off_t>(*str - 'A' + 0x0a);
-      }else if('a' <= *str && *str <= 'f'){
-        result += static_cast<off_t>(*str - 'a' + 0x0a);
-      }else{
-        return 0;
-      }
-    }else{
-      return 0;
-    }
+  if((result == LLONG_MIN || result == LLONG_MAX) && errno == ERANGE){
+    throw std::out_of_range("s3fs_strtoofft");
   }
   return result;
 }

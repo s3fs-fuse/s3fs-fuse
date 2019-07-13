@@ -35,7 +35,7 @@ static inline int STR2NCMP(const char *str1, const char *str2) { return strncmp(
 
 template <class T> std::string str(T value);
 
-// Convert string to off_t.  Does not signal invalid input.
+// Convert string to off_t.  Throws std::invalid_argument and std::out_of_range on bad input.
 off_t s3fs_strtoofft(const char* str, bool is_base_16 = false);
 
 std::string trim_left(const std::string &s, const std::string &t = SPACES);
