@@ -84,7 +84,7 @@ bool AdditionalHeader::Load(const char* file)
 
   // read file
   string   line;
-  PADDHEAD paddhead;
+  ADDHEAD *paddhead;
   while(getline(AH, line)){
     if('#' == line[0]){
       continue;
@@ -169,7 +169,7 @@ void AdditionalHeader::Unload()
   is_enable = false;
 
   for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); iter = addheadlist.erase(iter)){
-    PADDHEAD paddhead = *iter;
+    ADDHEAD *paddhead = *iter;
     if(paddhead){
       if(paddhead->pregex){
         regfree(paddhead->pregex);
@@ -198,7 +198,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
   // Because to allow duplicate key, and then scanning the entire table.
   //
   for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-    const PADDHEAD paddhead = *iter;
+    const ADDHEAD *paddhead = *iter;
     if(!paddhead){
       continue;
     }
@@ -251,7 +251,7 @@ bool AdditionalHeader::Dump() const
   ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
 
   for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
-    const PADDHEAD paddhead = *iter;
+    const ADDHEAD *paddhead = *iter;
 
     ssdbg << "    [" << cnt << "] = {" << endl;
 

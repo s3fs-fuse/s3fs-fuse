@@ -31,9 +31,9 @@ typedef struct add_header{
   std::string   basestring;
   std::string   headkey;
   std::string   headvalue;
-}ADDHEAD, *PADDHEAD;
+}ADDHEAD;
 
-typedef std::vector<PADDHEAD>  addheadlist_t;
+typedef std::vector<ADDHEAD *> addheadlist_t;
 
 class AdditionalHeader
 {
