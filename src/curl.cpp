@@ -3646,6 +3646,11 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
     return result;
   }
 
+  if(!fpLazySetup || !fpLazySetup(this)){
+    S3FS_PRN_ERR("Failed to lazy setup in multipart upload post request.");
+    return -1;
+  }
+
   // request
   if(0 == (result = RequestPerform())){
     // UploadMultipartPostComplete returns true on success -> convert to 0
