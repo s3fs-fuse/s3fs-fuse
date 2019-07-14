@@ -2125,59 +2125,58 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
   }
   bool close = false;
   FdEntity* ent;
-  {
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    // search in mapping by key(path)
-    fdent_map_t::iterator iter = fent.find(string(path));
+  AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
-      // If the cache directory is not specified, s3fs opens a temporary file
-      // when the file is opened.
-      // Then if it could not find a entity in map for the file, s3fs should
-      // search a entity in all which opened the temporary file.
-      //
-      for(iter = fent.begin(); iter != fent.end(); ++iter){
-        if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
-          break;      // found opened fd in mapping
-        }
+  // search in mapping by key(path)
+  fdent_map_t::iterator iter = fent.find(string(path));
+
+  if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
+    // If the cache directory is not specified, s3fs opens a temporary file
+    // when the file is opened.
+    // Then if it could not find a entity in map for the file, s3fs should
+    // search a entity in all which opened the temporary file.
+    //
+    for(iter = fent.begin(); iter != fent.end(); ++iter){
+      if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
+        break;      // found opened fd in mapping
       }
     }
+  }
 
-    if(fent.end() != iter){
-      // found
-      ent = (*iter).second;
-      ent->Dup();
-      close = true;
+  if(fent.end() != iter){
+    // found
+    ent = (*iter).second;
+    ent->Dup();
+    close = true;
 
-    }else if(is_create){
-      // not found
-      string cache_path;
-      if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
-        S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
-        return NULL;
-      }
-      // make new obj
-      ent = new FdEntity(path, cache_path.c_str());
-
-      if(!cache_path.empty()){
-        // using cache
-        fent[string(path)] = ent;
-      }else{
-        // not using cache, so the key of fdentity is set not really existing path.
-        // (but not strictly unexisting path.)
-        //
-        // [NOTE]
-        // The reason why this process here, please look at the definition of the
-        // comments of NOCACHE_PATH_PREFIX_FORM symbol.
-        //
-        string tmppath;
-        FdManager::MakeRandomTempPath(path, tmppath);
-        fent[tmppath] = ent;
-      }
-    }else{
+  }else if(is_create){
+    // not found
+    string cache_path;
+    if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
+      S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
       return NULL;
     }
+    // make new obj
+    ent = new FdEntity(path, cache_path.c_str());
+
+    if(!cache_path.empty()){
+      // using cache
+      fent[string(path)] = ent;
+    }else{
+      // not using cache, so the key of fdentity is set not really existing path.
+      // (but not strictly unexisting path.)
+      //
+      // [NOTE]
+      // The reason why this process here, please look at the definition of the
+      // comments of NOCACHE_PATH_PREFIX_FORM symbol.
+      //
+      string tmppath;
+      FdManager::MakeRandomTempPath(path, tmppath);
+      fent[tmppath] = ent;
+    }
+  }else{
+    return NULL;
   }
 
   // open
