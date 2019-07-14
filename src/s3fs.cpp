@@ -18,13 +18,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <stdint.h>
 #include <dirent.h>
-#include <errno.h>
+#include <cerrno>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <libxml/xpath.h>
@@ -34,7 +34,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <getopt.h>
-#include <signal.h>
+#include <csignal>
 
 #include <fstream>
 #include <vector>
