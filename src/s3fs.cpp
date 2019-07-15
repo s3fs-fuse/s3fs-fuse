@@ -1081,7 +1081,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
 {
-  S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%jd][uid=%u][gid=%u]", path, mode, (intmax_t)time, (unsigned int)uid, (unsigned int)gid);
+  S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(time), (unsigned int)uid, (unsigned int)gid);
 
   if(!path || '\0' == path[0]){
     return -1;
@@ -1929,7 +1929,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
   struct stat stbuf;
   dirtype nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO("[path=%s][mtime=%jd]", path, (intmax_t)(ts[1].tv_sec));
+  S3FS_PRN_INFO("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
 
   if(0 == strcmp(path, "/")){
     S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -1994,7 +1994,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
   struct stat stbuf;
   dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO1("[path=%s][mtime=%s]", path, str(ts[1].tv_sec).c_str());
+  S3FS_PRN_INFO1("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
 
   if(0 == strcmp(path, "/")){
     S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -2074,7 +2074,7 @@ static int s3fs_truncate(const char* _path, off_t size)
   headers_t meta;
   FdEntity* ent = NULL;
 
-  S3FS_PRN_INFO("[path=%s][size=%jd]", path, (intmax_t)size);
+  S3FS_PRN_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
 
   if(size < 0){
     size = 0;
@@ -2207,7 +2207,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
   WTF8_ENCODE(path)
   ssize_t res;
 
-  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%jd][fd=%llu]", path, size, (intmax_t)offset, (unsigned long long)(fi->fh));
+  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
   FdEntity* ent;
   if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){

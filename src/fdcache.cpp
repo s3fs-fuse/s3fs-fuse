@@ -799,14 +799,14 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 {
   AutoLock auto_lock(&fdent_lock, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE);
 
-  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%jd]", path.c_str(), fd, static_cast<long long int>(size), (intmax_t)time);
+  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%lld]", path.c_str(), fd, static_cast<long long>(size), static_cast<long long>(time));
 
   if (!auto_lock.isLockAcquired()) {
     // had to wait for fd lock, return
     return -EIO;
   }
 
-  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%jd]", path.c_str(), fd, static_cast<long long int>(size), (intmax_t)time);
+  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%lld]", path.c_str(), fd, static_cast<long long>(size), static_cast<long long>(time));
 
   AutoLock auto_data_lock(&fdent_data_lock);
   if(-1 != fd){
@@ -1058,7 +1058,7 @@ int FdEntity::SetMtime(time_t time, bool lock_already_held)
 {
   AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-  S3FS_PRN_INFO3("[path=%s][fd=%d][time=%jd]", path.c_str(), fd, (intmax_t)time);
+  S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time));
 
   if(-1 == time){
     return 0;
@@ -2118,7 +2118,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
 
 FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
 {
-  S3FS_PRN_DBG("[path=%s][size=%lld][time=%jd]", SAFESTRPTR(path), static_cast<long long int>(size), (intmax_t)time);
+  S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time));
 
   if(!path || '\0' == path[0]){
     return NULL;
