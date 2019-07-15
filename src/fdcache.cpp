@@ -2046,10 +2046,15 @@ bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
 FdManager::FdManager()
 {
   if(this == FdManager::get()){
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
     try{
-      pthread_mutex_init(&FdManager::fd_manager_lock, NULL);
-      pthread_mutex_init(&FdManager::cache_cleanup_lock, NULL);
-      pthread_mutex_init(&FdManager::reserved_diskspace_lock, NULL);
+      pthread_mutex_init(&FdManager::fd_manager_lock, &attr);
+      pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr);
+      pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr);
       FdManager::is_lock_init = true;
     }catch(exception& e){
       FdManager::is_lock_init = false;
