@@ -532,17 +532,17 @@ function test_overwrite_existing_file_range {
 
 function test_concurrency {
     describe "Test concurrent updates to a directory"
-    for i in `seq 10`; do echo foo > $i; done
-    for process in `seq 2`; do
-        for i in `seq 100`; do
-            file=$(ls | sed -n "$(($RANDOM % 10 + 1))p")
+    for i in `seq 5`; do echo foo > $i; done
+    for process in `seq 10`; do
+        for i in `seq 5`; do
+            file=$(ls `seq 5` | sed -n "$(($RANDOM % 5 + 1))p")
             cat $file >/dev/null || true
             rm -f $file
-            echo foo > $i || true
+            echo foo > $file || true
         done &
     done
     wait
-    rm -f `seq 100`
+    rm -f `seq 5`
 }
 
 function test_open_second_fd {
