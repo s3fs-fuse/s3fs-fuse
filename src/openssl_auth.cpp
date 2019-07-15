@@ -106,7 +106,12 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
   struct CRYPTO_dynlock_value* dyndata = new CRYPTO_dynlock_value();
-  pthread_mutex_init(&(dyndata->dyn_mutex), NULL);
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+  pthread_mutex_init(&(dyndata->dyn_mutex), &attr);
   return dyndata;
 }
 
@@ -141,8 +146,13 @@ bool s3fs_init_crypt_mutex()
     }
   }
   s3fs_crypt_mutex = new pthread_mutex_t[CRYPTO_num_locks()];
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
   for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-    pthread_mutex_init(&s3fs_crypt_mutex[cnt], NULL);
+    pthread_mutex_init(&s3fs_crypt_mutex[cnt], &attr);
   }
   // static lock
   CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);

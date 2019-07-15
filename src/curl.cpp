@@ -236,7 +236,12 @@ const char* BodyData::str() const
 //-------------------------------------------------------------------
 bool CurlHandlerPool::Init()
 {
-  if (0 != pthread_mutex_init(&mLock, NULL)) {
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+  if (0 != pthread_mutex_init(&mLock, &attr)) {
     S3FS_PRN_ERR("Init curl handlers lock failed");
     return false;
   }
@@ -388,13 +393,18 @@ bool             S3fsCurl::is_use_session_token = false;         // default
 //-------------------------------------------------------------------
 bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
 {
-  if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, NULL)){
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+  if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, &attr)){
     return false;
   }
-  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_DNS], NULL)){
+  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_DNS], &attr)){
     return false;
   }
-  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_SSL_SESSION], NULL)){
+  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_SSL_SESSION], &attr)){
     return false;
   }
   if(!S3fsCurl::InitMimeType(MimeFile)){
@@ -3982,7 +3992,12 @@ S3fsMultiCurl::S3fsMultiCurl(int maxParallelism)
   , RetryCallback(NULL)
 {
   int res;
-  if (0 != (res = pthread_mutex_init(&completed_tids_lock, NULL))) {
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+  if (0 != (res = pthread_mutex_init(&completed_tids_lock, &attr))) {
     S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", res);
   }
 }
