@@ -1507,7 +1507,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
       if(ReserveDiskSpace(restsize)){
         // enough disk space
         // Load all uninitialized area
-        result = Load();
+        result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true);
         FdManager::FreeReservedDiskSpace(restsize);
         if(0 != result){
           S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
