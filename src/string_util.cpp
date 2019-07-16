@@ -234,7 +234,8 @@ string get_date_rfc850()
 {
   char buf[100];
   time_t t = time(NULL);
-  strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&t));
+  struct tm res;
+  strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime_r(&t, &res));
   return buf;
 }
 
@@ -248,14 +249,16 @@ void get_date_sigv3(string& date, string& date8601)
 string get_date_string(time_t tm)
 {
   char buf[100];
-  strftime(buf, sizeof(buf), "%Y%m%d", gmtime(&tm));
+  struct tm res;
+  strftime(buf, sizeof(buf), "%Y%m%d", gmtime_r(&tm, &res));
   return buf;
 }
 
 string get_date_iso8601(time_t tm)
 {
   char buf[100];
-  strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime(&tm));
+  struct tm res;
+  strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime_r(&tm, &res));
   return buf;
 }
 
