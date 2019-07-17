@@ -545,6 +545,16 @@ function test_concurrency {
     rm -f `seq 5`
 }
 
+function test_concurrent_writes {
+    describe "Test concurrent updates to a file"
+    dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
+    for process in `seq 10`; do
+        dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=1 bs=1024 conv=notrunc &
+    done
+    wait
+    rm_test_file
+}
+
 function test_open_second_fd {
     describe "read from an open fd"
     rm -f ${TEST_TEXT_FILE}
@@ -581,6 +591,7 @@ function add_all_tests {
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
     add_tests test_concurrency
+    add_tests test_concurrent_writes
     add_tests test_open_second_fd
 }
 
