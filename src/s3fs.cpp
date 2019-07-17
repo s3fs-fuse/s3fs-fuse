@@ -5091,6 +5091,8 @@ int main(int argc, char* argv[])
   xmlInitParser();
   LIBXML_TEST_VERSION
 
+  init_sysconf_vars();
+
   // get program name - emulate basename
   program_name.assign(argv[0]);
   size_t found = program_name.find_last_of('/');
