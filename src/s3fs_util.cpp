@@ -1194,7 +1194,7 @@ void show_help ()
     "   connect_timeout (default=\"300\" seconds)\n"
     "      - time to wait for connection before giving up\n"
     "\n"
-    "   readwrite_timeout (default=\"60\" seconds)\n"
+    "   readwrite_timeout (default=\"120\" seconds)\n"
     "      - time to wait between read/write activity before giving up\n"
     "\n"
     "   list_object_max_keys (default=\"1000\")\n"

@@ -1213,15 +1213,7 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
       // download
       if(S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){
         // parallel request
-        // Additional time is needed for large files
-        time_t backup = 0;
-        if(120 > S3fsCurl::GetReadwriteTimeout()){
-          backup = S3fsCurl::SetReadwriteTimeout(120);
-        }
         result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, iter->offset, need_load_size);
-        if(0 != backup){
-          S3fsCurl::SetReadwriteTimeout(backup);
-        }
       }else{
         // single request
         if(0 < need_load_size){
@@ -1562,15 +1554,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
     }
 
     if(pagelist.Size() >= S3fsCurl::GetMultipartSize() && !nomultipart){
-      // Additional time is needed for large files
-      time_t backup = 0;
-      if(120 > S3fsCurl::GetReadwriteTimeout()){
-        backup = S3fsCurl::SetReadwriteTimeout(120);
-      }
       result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
-      if(0 != backup){
-        S3fsCurl::SetReadwriteTimeout(backup);
-      }
     }else{
       S3fsCurl s3fscurl(true);
       result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
