@@ -39,7 +39,7 @@ matrix:
         - make check -C src
         - modprobe fuse
         - make check -C test
-        - cat test/test-suite.log
+        - test/filter-suite-log.sh test/test-suite.log
 
     - os: osx
       osx_image: xcode8.3
@@ -57,7 +57,7 @@ matrix:
         - make check -C src
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
         - make check -C test
-        - cat test/test-suite.log
+        - test/filter-suite-log.sh test/test-suite.log
 
 
     - os: linux-ppc64le
@@ -78,7 +78,7 @@ matrix:
         - make check -C src
         - modprobe fuse
         - make check -C test
-        - cat test/test-suite.log
+        - test/filter-suite-log.sh test/test-suite.log
 
 #
 # Local variables:
