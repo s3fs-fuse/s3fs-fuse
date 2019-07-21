@@ -59,7 +59,7 @@ fi
 # 2 : passed line of end of one small test(specified in test-utils.sh)
 # 3 : failed line of end of one small test(specified in test-utils.sh)
 #
-grep -n -e '^test_.*: ".*"' -o -e '^test_.* passed' -o -e '^test_.* failed' ${SUITELOG} 2>/dev/null | sed 's/:test_.*: ".*"/ 1/g' | sed 's/:test_.* passed/ 2/g' | sed 's/:test_.* failed/ 3/g' > ${TMP_LINENO_FILE}
+grep -n -e 'test_.*: ".*"' -o -e 'test_.* passed' -o -e 'test_.* failed' ${SUITELOG} 2>/dev/null | sed 's/:test_.*: ".*"/ 1/g' | sed 's/:test_.* passed/ 2/g' | sed 's/:test_.* failed/ 3/g' > ${TMP_LINENO_FILE}
 
 #
 # Loop for printing result
