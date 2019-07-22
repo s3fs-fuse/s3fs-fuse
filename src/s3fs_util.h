@@ -111,6 +111,7 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
 MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir, bool normdir = false);
 void free_mvnodes(MVNODE *head);
 
+void init_sysconf_vars();
 std::string get_username(uid_t uid);
 int is_uid_include_group(uid_t uid, gid_t gid);
 

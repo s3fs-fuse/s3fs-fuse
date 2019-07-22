@@ -53,6 +53,9 @@ using namespace std;
 //-------------------------------------------------------------------
 std::string mount_prefix;
 
+static size_t max_password_size;
+static size_t max_group_name_length;
+
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
@@ -459,36 +462,48 @@ AutoLock::~AutoLock()
   }
 }
 
+void init_sysconf_vars()
+{
+  // SUSv4tc1 says the following about _SC_GETGR_R_SIZE_MAX and
+  // _SC_GETPW_R_SIZE_MAX:
+  // Note that sysconf(_SC_GETGR_R_SIZE_MAX) may return -1 if
+  // there is no hard limit on the size of the buffer needed to
+  // store all the groups returned.
+
+  long res = sysconf(_SC_GETPW_R_SIZE_MAX);
+  if(0 > res){
+    if (errno != 0){
+      S3FS_PRN_WARN("could not get max pw length.");
+      abort();
+    }
+    res = 1024; // default initial length
+  }
+  max_password_size = res;
+
+  res = sysconf(_SC_GETGR_R_SIZE_MAX);
+  if(0 > res) {
+    if (errno != 0) {
+      S3FS_PRN_ERR("could not get max name length.");
+      abort();
+    }
+    res = 1024; // default initial length
+  }
+  max_group_name_length = res;
+}
+
 //-------------------------------------------------------------------
 // Utility for UID/GID
 //-------------------------------------------------------------------
 // get user name from uid
 string get_username(uid_t uid)
 {
-  static size_t maxlen = 0;	// set once
+  size_t maxlen = max_password_size;
   int result;
   char* pbuf;
   struct passwd pwinfo;
   struct passwd* ppwinfo = NULL;
 
   // make buffer
-  if(0 == maxlen){
-    long res = sysconf(_SC_GETPW_R_SIZE_MAX);
-    if(0 > res){
-      // SUSv4tc1 says the following about _SC_GETGR_R_SIZE_MAX and
-      // _SC_GETPW_R_SIZE_MAX:
-      // Note that sysconf(_SC_GETGR_R_SIZE_MAX) may return -1 if
-      // there is no hard limit on the size of the buffer needed to
-      // store all the groups returned.
-      if (errno != 0){
-        S3FS_PRN_WARN("could not get max pw length.");
-        maxlen = 0;
-        return string("");
-      }
-      res = 1024; // default initial length
-    }
-    maxlen = res;
-  }
   pbuf = new char[maxlen];
   // get pw information
   while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
@@ -515,30 +530,13 @@ string get_username(uid_t uid)
 
 int is_uid_include_group(uid_t uid, gid_t gid)
 {
-  static size_t maxlen = 0;	// set once
+  size_t maxlen = max_group_name_length;
   int result;
   char* pbuf;
   struct group ginfo;
   struct group* pginfo = NULL;
 
   // make buffer
-  if(0 == maxlen){
-    long res = sysconf(_SC_GETGR_R_SIZE_MAX);
-    if(0 > res) {
-      // SUSv4tc1 says the following about _SC_GETGR_R_SIZE_MAX and
-      // _SC_GETPW_R_SIZE_MAX:
-      // Note that sysconf(_SC_GETGR_R_SIZE_MAX) may return -1 if
-      // there is no hard limit on the size of the buffer needed to
-      // store all the groups returned.
-      if (errno != 0) {
-        S3FS_PRN_ERR("could not get max name length.");
-        maxlen = 0;
-        return -ERANGE;
-      }
-      res = 1024; // default initial length
-    }
-    maxlen = res;
-  }
   pbuf = new char[maxlen];
   // get group information
   while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
