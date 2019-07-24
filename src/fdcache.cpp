@@ -1479,7 +1479,15 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
 {
   int result = 0;
 
-  S3FS_PRN_INFO3("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd);
+  std::string tmppath;
+  headers_t tmporgmeta;
+  {
+    AutoLock auto_lock(&fdent_lock);
+    tmppath = path;
+    tmporgmeta = orgmeta;
+  }
+
+  S3FS_PRN_INFO3("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), tmppath.c_str(), fd);
 
   if(-1 == fd){
     return -EBADF;
@@ -1554,10 +1562,10 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
     }
 
     if(pagelist.Size() >= S3fsCurl::GetMultipartSize() && !nomultipart){
-      result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
+      result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, fd);
     }else{
       S3fsCurl s3fscurl(true);
-      result = s3fscurl.PutRequest(tpath ? tpath : path.c_str(), orgmeta, fd);
+      result = s3fscurl.PutRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, fd);
     }
 
     // seek to head of file.
