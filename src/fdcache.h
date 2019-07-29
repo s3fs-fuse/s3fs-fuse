@@ -221,7 +221,7 @@ class FdManager
     static bool SetCheckCacheDirExist(bool is_check);
     static bool CheckCacheDirExist(void);
 
-    static off_t GetEnsureFreeDiskSpace(void) { return FdManager::free_disk_space; }
+    static off_t GetEnsureFreeDiskSpace();
     static off_t SetEnsureFreeDiskSpace(off_t size);
     static bool IsSafeDiskSpace(const char* path, off_t size);
     static void FreeReservedDiskSpace(off_t size);
