@@ -245,7 +245,7 @@ bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bo
       if(ent->noobjcache){
         if(!IsCacheNoObject){
           // need to delete this cache.
-          DelStat(strpath);
+          DelStat(strpath, /*lock_already_held=*/ true);
         }else{
           // noobjcache = true means no object.
         }
@@ -339,7 +339,7 @@ bool StatCache::IsNoObjectCache(string& key, bool overcheck)
   }
 
   if(is_delete_cache){
-    DelStat(strpath);
+    DelStat(strpath, /*lock_already_held=*/ true);
   }
   return false;
 }
