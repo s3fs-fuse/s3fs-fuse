@@ -304,8 +304,16 @@ function test_external_modification {
     echo "old" > ${TEST_TEXT_FILE}
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     sleep 2
-    echo "new new" | AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws s3 --endpoint-url "${S3_URL}" --no-verify-ssl cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "new new" | aws_cli cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp ${TEST_TEXT_FILE} <(echo "new new")
+    rm -f ${TEST_TEXT_FILE}
+}
+
+function test_read_external_object() {
+    describe "create objects via aws CLI and read via s3fs"
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo "test" | aws_cli cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    cmp ${TEST_TEXT_FILE} <(echo "test")
     rm -f ${TEST_TEXT_FILE}
 }
 
@@ -579,6 +587,7 @@ function add_all_tests {
     add_tests test_list
     add_tests test_remove_nonempty_directory
     add_tests test_external_modification
+    add_tests test_read_external_object
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
