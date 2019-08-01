@@ -19,6 +19,7 @@ mkdir "${CACHE_DIR}"
 
 FLAGS=(
     enable_content_md5
+    enable_noobj_cache
     nocopyapi
     nomultipart
     notsup_compat_dir
