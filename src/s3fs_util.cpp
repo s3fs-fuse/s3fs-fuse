@@ -425,7 +425,7 @@ void free_mvnodes(MVNODE *head)
 //-------------------------------------------------------------------
 // Class AutoLock
 //-------------------------------------------------------------------
-AutoLock::AutoLock(pthread_mutex_t* pmutex, Type type) : auto_mutex(pmutex), type(type)
+AutoLock::AutoLock(pthread_mutex_t* pmutex, Type type) : auto_mutex(pmutex)
 {
   if (type == ALREADY_LOCKED) {
     is_lock_acquired = false;
