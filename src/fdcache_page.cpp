@@ -751,13 +751,14 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             return true;
         }
         char* ptmp = new char[st.st_size + 1];
-        ptmp[st.st_size] = '\0';
+        int res;
         // read from file
-        if(0 >= pread(file.GetFd(), ptmp, st.st_size, 0)){
+        if(0 >= (res = pread(file.GetFd(), ptmp, st.st_size, 0))){
             S3FS_PRN_ERR("failed to read stats(%d)", errno);
             delete[] ptmp;
             return false;
         }
+        ptmp[res] = '\0';
         std::string        oneline;
         std::istringstream ssall(ptmp);
     
