@@ -218,3 +218,7 @@ function get_mtime() {
         stat -c %Y "$1"
     fi
 }
+
+function aws_cli() {
+    AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws s3 --endpoint-url "${S3_URL}" --no-verify-ssl $*
+}
