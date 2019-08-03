@@ -99,7 +99,6 @@ class AutoLock
   private:
     pthread_mutex_t* const auto_mutex;
     bool is_lock_acquired;
-    const Type type;
 };
 
 //-------------------------------------------------------------------
