@@ -42,7 +42,7 @@ matrix:
         - test/filter-suite-log.sh test/test-suite.log
 
     - os: osx
-      osx_image: xcode8.3
+      osx_image: xcode9.2
       before_install:
         - HOMEBREW_NO_AUTO_UPDATE=1 brew tap caskroom/cask
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
