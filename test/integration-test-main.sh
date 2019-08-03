@@ -9,9 +9,6 @@ function test_append_file {
     describe "Testing append to file ..."
 
     # Write a small test file
-    if [ `uname` = "Darwin" ]; then
-       cat /dev/null > ${TEST_TEXT_FILE}
-    fi
     for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
     do
        echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
@@ -336,9 +333,6 @@ function test_rename_before_close {
 function test_multipart_upload {
     describe "Testing multi-part upload ..."
 
-    if [ `uname` = "Darwin" ]; then
-       cat /dev/null > $BIG_FILE
-    fi
     dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
 
@@ -356,9 +350,6 @@ function test_multipart_upload {
 function test_multipart_copy {
     describe "Testing multi-part copy ..."
 
-    if [ `uname` = "Darwin" ]; then
-       cat /dev/null > $BIG_FILE
-    fi
     dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
     mv "${BIG_FILE}" "${BIG_FILE}-copy"

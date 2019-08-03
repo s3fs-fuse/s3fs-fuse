@@ -152,6 +152,13 @@ function start_s3fs {
         VALGRIND_EXEC="valgrind ${VALGRIND} --log-socket=127.0.1.1"
     fi
 
+    # On OSX only, we need to specify the direct_io flag.
+    if [ `uname` = "Darwin" ]; then
+       DIRECT_IO_OPT="-o direct_io"
+    else
+       DIRECT_IO_OPT=""
+    fi
+
     # Common s3fs options:
     #
     # TODO: Allow all these options to be overridden with env variables
@@ -185,6 +192,7 @@ function start_s3fs {
             -o use_xattr=1 \
             -o createbucket \
             ${AUTH_OPT} \
+            ${DIRECT_IO_OPT} \
             -o dbglevel=${DBGLEVEL:=info} \
             -o retries=3 \
             -f \
