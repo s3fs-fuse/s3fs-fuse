@@ -298,8 +298,8 @@ class S3fsCurl
     std::string          url;                  // target object path(url)
     struct curl_slist*   requestHeaders;
     headers_t            responseHeaders;      // header data by HeaderCallback
-    BodyData*            bodydata;             // body data by WriteMemoryCallback
-    BodyData*            headdata;             // header data by WriteMemoryCallback
+    BodyData             bodydata;             // body data by WriteMemoryCallback
+    BodyData             headdata;             // header data by WriteMemoryCallback
     long                 LastResponseCode;
     const unsigned char* postdata;             // use by post method and read callback function.
     int                  postdata_remaining;   // use by post method and read callback function.
@@ -497,8 +497,8 @@ class S3fsCurl
     std::string GetUrl(void) const { return url; }
     std::string GetOp(void) const { return op; }
     headers_t* GetResponseHeaders(void) { return &responseHeaders; }
-    BodyData* GetBodyData(void) const { return bodydata; }
-    BodyData* GetHeadData(void) const { return headdata; }
+    BodyData* GetBodyData(void) { return &bodydata; }
+    BodyData* GetHeadData(void) { return &headdata; }
     long GetLastResponseCode(void) const { return LastResponseCode; }
     bool SetUseAhbe(bool ahbe);
     bool EnableUseAhbe(void) { return SetUseAhbe(true); }
