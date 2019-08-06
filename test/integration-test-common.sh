@@ -152,9 +152,9 @@ function start_s3fs {
         VALGRIND_EXEC="valgrind ${VALGRIND} --log-socket=127.0.1.1"
     fi
 
-    # On OSX only, we need to specify the direct_io flag.
+    # On OSX only, we need to specify the direct_io and auto_cache flag.
     if [ `uname` = "Darwin" ]; then
-       DIRECT_IO_OPT="-o direct_io"
+       DIRECT_IO_OPT="-o direct_io -o auto_cache"
     else
        DIRECT_IO_OPT=""
     fi
