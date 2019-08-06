@@ -4516,7 +4516,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 1; // continue for fuse option
     }
     if(0 == STR2NCMP(arg, "umask=")){
-      s3fs_umask = strtol(strchr(arg, '=') + sizeof(char), NULL, 0);
+      s3fs_umask = s3fs_strtoofft(strchr(arg, '=') + sizeof(char), /*is_base_16=*/ false);
       s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
       is_s3fs_umask = true;
       return 1; // continue for fuse option
@@ -4526,7 +4526,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 1; // continue for fuse option
     }
     if(0 == STR2NCMP(arg, "mp_umask=")){
-      mp_umask = strtol(strchr(arg, '=') + sizeof(char), NULL, 0);
+      mp_umask = s3fs_strtoofft(strchr(arg, '=') + sizeof(char), /*is_base_16=*/ false);
       mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
       is_mp_umask = true;
       return 0;
