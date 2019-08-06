@@ -605,7 +605,7 @@ size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBloc
 
 size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
@@ -624,8 +624,8 @@ size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 
 size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr)
 {
-    headers_t* headers = reinterpret_cast<headers_t*>(userPtr);
-    std::string header(reinterpret_cast<char*>(data), blockSize * numBlocks);
+    headers_t* headers = static_cast<headers_t*>(userPtr);
+    std::string header(static_cast<char*>(data), blockSize * numBlocks);
     std::string key;
     std::istringstream ss(header);
 
@@ -645,7 +645,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
 
 size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
@@ -677,7 +677,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
 
 size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = reinterpret_cast<S3fsCurl*>(userp);
+    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
