@@ -207,7 +207,7 @@ function start_s3fs {
          fi
          set -o errexit
     else
-        retry 5 grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
+        retry 20 grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
     fi
 
     # Quick way to start system up for manual testing with options under test
