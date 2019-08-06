@@ -193,6 +193,8 @@ function start_s3fs {
             -o createbucket \
             ${AUTH_OPT} \
             ${DIRECT_IO_OPT} \
+            -o stat_cache_expire=1 \
+            -o stat_cache_interval_expire=1 \
             -o dbglevel=${DBGLEVEL:=info} \
             -o retries=3 \
             -f \

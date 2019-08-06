@@ -309,6 +309,7 @@ function test_external_modification {
 function test_read_external_object() {
     describe "create objects via aws CLI and read via s3fs"
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    sleep 3
     echo "test" | aws_cli cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp ${TEST_TEXT_FILE} <(echo "test")
     rm -f ${TEST_TEXT_FILE}
