@@ -1573,7 +1573,10 @@ static int s3fs_rename(const char* _from, const char* _to)
   // flush pending writes if file is open
   FdEntity *entity = FdManager::get()->ExistOpen(from);
   if(entity != NULL){
-    entity->Flush(true);
+    if(0 != (result = entity->Flush(true))){
+      S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+      return result;
+    }
     StatCache::getStatCacheData()->DelStat(from);
   }
 
