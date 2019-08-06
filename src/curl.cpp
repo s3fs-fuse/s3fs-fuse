@@ -2524,9 +2524,9 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   unsigned int         cscope_len = StringToSign.size();
   unsigned char*       md         = NULL;
   unsigned int         md_len     = 0;
-  char                 hexSig[64 + 1];
 
   s3fs_HMAC256(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
+  char *hexSig = new char[2 * md_len + 1];
   for(cnt = 0; cnt < md_len; cnt++){
     sprintf(&hexSig[cnt * 2], "%02x", md[cnt]);
   }
@@ -2534,6 +2534,7 @@ string S3fsCurl::CalcSignature(const string& method, const string& canonical_uri
   delete[] md;
 
   Signature = hexSig;
+  delete[] hexSig;
 
   return Signature;
 }
