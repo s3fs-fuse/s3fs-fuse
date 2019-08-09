@@ -4535,7 +4535,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "default_acl=")){
-      const char* acl = strchr(arg, '=') + sizeof(char);
+      const char* acl_string = strchr(arg, '=') + sizeof(char);
+      acl_t acl = string_to_acl(acl_string);
+      if(acl == INVALID_ACL){
+        S3FS_PRN_EXIT("unknown value for default_acl: %s", acl_string);
+        return -1;
+      }
       S3fsCurl::SetDefaultAcl(acl);
       return 0;
     }
@@ -5292,12 +5297,8 @@ int main(int argc, char* argv[])
   if(is_ibm_iam_auth){
 
     // check that default ACL is either public-read or private
-    string defaultACL = S3fsCurl::GetDefaultAcl();
-    if(defaultACL == "private"){
-      // IBM's COS default ACL is private
-      // set acl as empty string to avoid sending x-amz-acl header
-      S3fsCurl::SetDefaultAcl("");
-    }else if(defaultACL != "public-read"){
+    acl_t defaultACL = S3fsCurl::GetDefaultAcl();
+    if(defaultACL != PRIVATE && defaultACL != PUBLIC_READ){
       S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
       S3fsCurl::DestroyS3fsCurl();
       s3fs_destroy_global_ssl();

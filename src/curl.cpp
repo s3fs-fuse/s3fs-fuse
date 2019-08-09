@@ -357,7 +357,7 @@ long             S3fsCurl::connect_timeout     = 300;  // default
 time_t           S3fsCurl::readwrite_timeout   = 120;  // default
 int              S3fsCurl::retries             = 5;    // default
 bool             S3fsCurl::is_public_bucket    = false;
-string           S3fsCurl::default_acl         = "private";
+acl_t            S3fsCurl::default_acl         = PRIVATE;
 storage_class_t  S3fsCurl::storage_class       = STANDARD;
 sseckeylist_t    S3fsCurl::sseckeys;
 std::string      S3fsCurl::ssekmsid;
@@ -955,14 +955,14 @@ bool S3fsCurl::SetPublicBucket(bool flag)
   return old;
 }
 
-string S3fsCurl::SetDefaultAcl(const char* acl)
+acl_t S3fsCurl::SetDefaultAcl(acl_t acl)
 {
-  string old = S3fsCurl::default_acl;
-  S3fsCurl::default_acl = acl ? acl : "";
+  acl_t old = S3fsCurl::default_acl;
+  S3fsCurl::default_acl = acl;
   return old;
 }
 
-string S3fsCurl::GetDefaultAcl()
+acl_t S3fsCurl::GetDefaultAcl()
 {
   return S3fsCurl::default_acl;
 }
@@ -2959,8 +2959,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   }
 
   // "x-amz-acl", storage class, sse
-  if(!S3fsCurl::default_acl.empty()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(S3fsCurl::default_acl != PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
   }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
@@ -3089,8 +3089,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
   }
   // "x-amz-acl", storage class, sse
-  if(!S3fsCurl::default_acl.empty()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(S3fsCurl::default_acl != PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
   }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
@@ -3354,8 +3354,8 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
     }
   }
   // "x-amz-acl", storage class, sse
-  if(!S3fsCurl::default_acl.empty()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.c_str());
+  if(S3fsCurl::default_acl != PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
   }
   if(REDUCED_REDUNDANCY == GetStorageClass()){
     requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
@@ -4547,6 +4547,54 @@ string prepare_url(const char* url)
   S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 
   return url_str;
+}
+
+const char *acl_to_string(acl_t acl)
+{
+  switch(acl){
+  case PRIVATE:
+    return "private";
+  case PUBLIC_READ:
+    return "public-read";
+  case PUBLIC_READ_WRITE:
+    return "public-read-write";
+  case AWS_EXEC_READ:
+    return "aws-exec-read";
+  case AUTHENTICATED_READ:
+    return "authenticated-read";
+  case BUCKET_OWNER_READ:
+    return "bucket-owner-read";
+  case BUCKET_OWNER_FULL_CONTROL:
+    return "bucket-owner-full-control";
+  case LOG_DELIVERY_WRITE:
+    return "log-delivery-write";
+  case INVALID_ACL:
+    return NULL;
+  }
+  abort();
+}
+
+acl_t string_to_acl(const char *acl)
+{
+  if(0 == strcmp(acl, "private")){
+    return PRIVATE;
+  }else if(0 == strcmp(acl, "public-read")){
+    return PUBLIC_READ;
+  }else if(0 == strcmp(acl, "public-read-write")){
+    return PUBLIC_READ_WRITE;
+  }else if(0 == strcmp(acl, "aws-exec-read")){
+    return AWS_EXEC_READ;
+  }else if(0 == strcmp(acl, "authenticated-read")){
+    return AUTHENTICATED_READ;
+  }else if(0 == strcmp(acl, "bucket-owner-read")){
+    return BUCKET_OWNER_READ;
+  }else if(0 == strcmp(acl, "bucket-owner-full-control")){
+    return BUCKET_OWNER_FULL_CONTROL;
+  }else if(0 == strcmp(acl, "log-delivery-write")){
+    return LOG_DELIVERY_WRITE;
+  }else{
+    return INVALID_ACL;
+  }
 }
 
 /*
