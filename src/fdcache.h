@@ -58,9 +58,10 @@ struct fdpage
   off_t  offset;
   off_t  bytes;
   bool   loaded;
+  bool   modified;
 
-  fdpage(off_t start = 0, off_t  size = 0, bool is_loaded = false)
-           : offset(start), bytes(size), loaded(is_loaded) {}
+  fdpage(off_t start = 0, off_t  size = 0, bool is_loaded = false, bool is_modified = false)
+           : offset(start), bytes(size), loaded(is_loaded), modified(is_modified) {}
 
   off_t next(void) const { return (offset + bytes); }
   off_t end(void) const { return (0 < bytes ? offset + bytes - 1 : 0); }
@@ -72,6 +73,7 @@ class FdEntity;
 //
 // Management of loading area/modifying
 //
+// cppcheck-suppress copyCtorAndEqOperator
 class PageList
 {
   friend class FdEntity;    // only one method access directly pages.
@@ -81,24 +83,29 @@ class PageList
 
   private:
     void Clear(void);
-    bool Compress(void);
+    bool Compress(bool force_modified = false);
     bool Parse(off_t new_pos);
+    bool RawGetUnloadPageList(fdpage_list_t& dlpages, off_t offset, off_t size);
 
   public:
     static void FreeList(fdpage_list_t& list);
 
-    explicit PageList(off_t size = 0, bool is_loaded = false);
+    explicit PageList(off_t size = 0, bool is_loaded = false, bool is_modified = false);
+    explicit PageList(const PageList& other);
     ~PageList();
 
-    bool Init(off_t size, bool is_loaded);
+    bool Init(off_t size, bool is_loaded, bool is_modified);
     off_t Size(void) const;
-    bool Resize(off_t size, bool is_loaded);
+    bool Resize(off_t size, bool is_loaded, bool is_modified);
 
     bool IsPageLoaded(off_t start = 0, off_t size = 0) const;                  // size=0 is checking to end of list
-    bool SetPageLoadedStatus(off_t start, off_t size, bool is_loaded = true, bool is_compress = true);
+    bool SetPageLoadedStatus(off_t start, off_t size, bool is_loaded = true, bool is_modified = false, bool is_compress = true);
     bool FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const;
     off_t GetTotalUnloadedPageSize(off_t start = 0, off_t size = 0) const;    // size=0 is checking to end of list
     int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
+
+    bool IsModified(void) const;
+    bool ClearAllModified(void);
 
     bool Serialize(CacheFileStat& file, bool is_output);
     void Dump(void);
@@ -125,7 +132,6 @@ class FdEntity
     etaglist_t      etaglist;       // for no cached multipart uploading when no disk space
     off_t           mp_start;       // start position for no cached multipart(write method only)
     off_t           mp_size;        // size for no cached multipart(write method only)
-    bool            is_modify;      // if file is changed, this flag is true
     std::string     cachepath;      // local cache file path
                                     // (if this is empty, does not load/save pagelist.)
     std::string     mirrorpath;     // mirror file path to local cache file path
@@ -153,6 +159,7 @@ class FdEntity
     const char* GetPath(void) const { return path.c_str(); }
     void SetPath(const std::string &newpath) { path = newpath; }
     int GetFd(void) const { return fd; }
+    bool IsModified(void) const { return pagelist.IsModified(); }
 
     bool GetStats(struct stat& st, bool lock_already_held = false);
     int SetCtime(time_t time);

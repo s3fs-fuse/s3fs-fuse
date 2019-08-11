@@ -512,6 +512,17 @@ function test_rm_rf_dir {
    fi
 }
 
+function test_copy_file {
+   describe "Test simple copy"
+
+   dd if=/dev/urandom of=/tmp/simple_file bs=1024 count=1
+   cp /tmp/simple_file copied_simple_file
+   cmp /tmp/simple_file copied_simple_file
+
+   rm /tmp/simple_file
+   rm copied_simple_file
+}
+
 function test_write_after_seek_ahead {
    describe "Test writes succeed after a seek ahead"
    dd if=/dev/zero of=testfile seek=1 count=1 bs=1024
@@ -589,6 +600,7 @@ function add_all_tests {
     add_tests test_mtime_file
     add_tests test_update_time
     add_tests test_rm_rf_dir
+    add_tests test_copy_file
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
     add_tests test_concurrency
