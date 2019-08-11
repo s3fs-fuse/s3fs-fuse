@@ -314,6 +314,8 @@ class S3fsCurl
     int                  b_ssekey_pos;         // backup for retrying
     std::string          b_ssevalue;           // backup for retrying
     sse_type_t           b_ssetype;            // backup for retrying
+    std::string          b_from;               // backup for retrying(for copy request)
+    headers_t            b_meta;               // backup for retrying(for copy request)
     std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
     std::string          query_string;         // request query string
     Semaphore            *sem;

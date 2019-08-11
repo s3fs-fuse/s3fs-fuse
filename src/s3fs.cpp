@@ -834,6 +834,9 @@ static int put_headers(const char* path, headers_t& meta, bool is_copy)
 
   if(buf.st_size >= FIVE_GB){
     // multipart
+    if(nocopyapi || nomultipart){
+      return -EFBIG;    // File too large
+    }
     if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
       return result;
     }
