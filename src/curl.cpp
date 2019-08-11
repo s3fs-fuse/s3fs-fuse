@@ -1376,10 +1376,12 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
   newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
   newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+  newcurl->b_from              = s3fscurl->b_from;
+  newcurl->b_meta              = s3fscurl->b_meta;
   newcurl->retry_count         = s3fscurl->retry_count + 1;
 
   // setup new curl object
-  if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
+  if(0 != newcurl->CopyMultipartPostSetup(s3fscurl->b_from.c_str(), s3fscurl->path.c_str(), part_num, upload_id, s3fscurl->b_meta)){
     S3FS_PRN_ERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
     delete newcurl;
     return NULL;
@@ -3769,6 +3771,11 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
   }
   DestroyCurlHandle();
 
+  // Initialize S3fsMultiCurl
+  S3fsMultiCurl curlmulti(GetMaxParallelCount());
+  curlmulti.SetSuccessCallback(S3fsCurl::CopyMultipartPostCallback);
+  curlmulti.SetRetryCallback(S3fsCurl::CopyMultipartPostRetryCallback);
+
   for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
     chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
@@ -3777,11 +3784,39 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     strrange.str("");
     strrange.clear(stringstream::goodbit);
 
-    if(0 != (result = CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size() + 1), upload_id, meta))){
+    // s3fscurl sub object
+    S3fsCurl* s3fscurl_para = new S3fsCurl(true);
+    s3fscurl_para->b_from   = SAFESTRPTR(tpath);
+    s3fscurl_para->b_meta   = meta;
+    s3fscurl_para->partdata.add_etag_list(&list);
+
+    // initiate upload part for parallel
+    if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
+      S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+      delete s3fscurl_para;
       return result;
     }
-    list.push_back(partdata.etag);
-    DestroyCurlHandle();
+
+    // set into parallel object
+    if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+      S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
+      delete s3fscurl_para;
+      return -1;
+    }
+  }
+
+  // Multi request
+  if(0 != (result = curlmulti.Request())){
+    S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+
+    S3fsCurl s3fscurl_abort(true);
+    int result2 = s3fscurl_abort.AbortMultipartUpload(tpath, upload_id);
+    s3fscurl_abort.DestroyCurlHandle();
+    if(result2 != 0){
+      S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+    }
+
+    return result;
   }
 
   if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
@@ -3923,7 +3958,9 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     strrange.clear(stringstream::goodbit);
 
     // s3fscurl sub object
-    S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
+    S3fsCurl* s3fscurl_para = new S3fsCurl(true);
+    s3fscurl_para->b_from   = SAFESTRPTR(from);
+    s3fscurl_para->b_meta   = meta;
     s3fscurl_para->partdata.add_etag_list(&list);
 
     // initiate upload part for parallel
