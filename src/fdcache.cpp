@@ -244,9 +244,16 @@ void PageList::FreeList(fdpage_list_t& list)
   list.clear();
 }
 
-PageList::PageList(off_t size, bool is_loaded)
+PageList::PageList(off_t size, bool is_loaded, bool is_modified)
 {
-  Init(size, is_loaded);
+  Init(size, is_loaded, is_modified);
+}
+
+PageList::PageList(const PageList& other)
+{
+  for(fdpage_list_t::const_iterator iter = other.pages.begin(); iter != other.pages.end(); ++iter){
+    pages.push_back(*iter);
+  }
 }
 
 PageList::~PageList()
@@ -259,10 +266,10 @@ void PageList::Clear()
   PageList::FreeList(pages);
 }
 
-bool PageList::Init(off_t size, bool is_loaded)
+bool PageList::Init(off_t size, bool is_loaded, bool is_modified)
 {
   Clear();
-  fdpage page(0, size, is_loaded);
+  fdpage page(0, size, is_loaded, is_modified);
   pages.push_back(page);
   return true;
 }
@@ -276,23 +283,33 @@ off_t PageList::Size() const
   return riter->next();
 }
 
-bool PageList::Compress()
+bool PageList::Compress(bool force_modified)
 {
-  bool is_first       = true;
-  bool is_last_loaded = false;
+  bool is_first         = true;
+  bool is_last_loaded   = false;
+  bool is_last_modified = false;
+
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
     if(is_first){
-      is_first       = false;
-      is_last_loaded = iter->loaded;
+      is_first         = false;
+      is_last_loaded   = force_modified ? true : iter->loaded;
+      is_last_modified = iter->modified;
       ++iter;
     }else{
-      if(is_last_loaded == iter->loaded){
-        fdpage_list_t::iterator biter = iter;
-        --biter;
-        biter->bytes += iter->bytes;
-        iter = pages.erase(iter);
+      if(is_last_modified == iter->modified){
+        if(force_modified || is_last_loaded == iter->loaded){
+          fdpage_list_t::iterator biter = iter;
+          --biter;
+          biter->bytes += iter->bytes;
+          iter = pages.erase(iter);
+        }else{
+          is_last_loaded   = iter->loaded;
+          is_last_modified = iter->modified;
+          ++iter;
+        }
       }else{
-        is_last_loaded = iter->loaded;
+        is_last_loaded   = force_modified ? true : iter->loaded;
+        is_last_modified = iter->modified;
         ++iter;
       }
     }
@@ -307,7 +324,7 @@ bool PageList::Parse(off_t new_pos)
       // nothing to do
       return true;
     }else if(iter->offset < new_pos && new_pos < iter->next()){
-      fdpage page(iter->offset, new_pos - iter->offset, iter->loaded);
+      fdpage page(iter->offset, new_pos - iter->offset, iter->loaded, false);
       iter->bytes -= (new_pos - iter->offset);
       iter->offset = new_pos;
       pages.insert(iter, page);
@@ -317,16 +334,16 @@ bool PageList::Parse(off_t new_pos)
   return false;
 }
 
-bool PageList::Resize(off_t size, bool is_loaded)
+bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
 {
   off_t total = Size();
 
   if(0 == total){
-    Init(size, is_loaded);
+    Init(size, is_loaded, is_modified);
 
   }else if(total < size){
     // add new area
-    fdpage page(total, (size - total), is_loaded);
+    fdpage page(total, (size - total), is_loaded, is_modified);
     pages.push_back(page);
 
   }else if(size < total){
@@ -365,22 +382,22 @@ bool PageList::IsPageLoaded(off_t start, off_t size) const
   return true;
 }
 
-bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool is_compress)
+bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool is_modified, bool is_compress)
 {
   off_t now_size = Size();
 
   if(now_size <= start){
     if(now_size < start){
       // add
-      Resize(start, false);
+      Resize(start, false, is_modified);   // set modified flag from now end pos to specified start pos.
     }
-    Resize(start + size, is_loaded);
+    Resize(start + size, is_loaded, is_modified);
 
   }else if(now_size <= start + size){
     // cut
-    Resize(start, false);
+    Resize(start, false, false);            // not changed loaded/modified flags in existing area.
     // add
-    Resize(start + size, is_loaded);
+    Resize(start + size, is_loaded, is_modified);
 
   }else{
     // start-size are inner pages area
@@ -395,7 +412,8 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, bool is_loaded, bool
       }else if(start + size <= iter->offset){
         break;
       }else{
-        iter->loaded = is_loaded;
+        iter->loaded   = is_loaded;
+        iter->modified = is_modified;
       }
     }
   }
@@ -407,7 +425,7 @@ bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) co
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(start <= iter->end()){
-      if(!iter->loaded){
+      if(!iter->loaded && !iter->modified){     // Do not load unloaded and modified areas
         resstart = iter->offset;
         ressize  = iter->bytes;
         return true;
@@ -428,7 +446,7 @@ off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
     if(next <= iter->offset){
       break;
     }
-    if(iter->loaded){
+    if(iter->loaded || iter->modified){
       continue;
     }
     off_t tmpsize;
@@ -467,8 +485,8 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t 
     if(next <= iter->offset){
       break;
     }
-    if(iter->loaded){
-      continue; // already loaded
+    if(iter->loaded || iter->modified){
+      continue; // already loaded or modified
     }
 
     // page area
@@ -482,11 +500,31 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t 
       // merge to before page
       riter->bytes += page_size;
     }else{
-      fdpage page(page_start, page_size, false);
+      fdpage page(page_start, page_size, false, false);
       unloaded_list.push_back(page);
     }
   }
   return unloaded_list.size();
+}
+
+bool PageList::IsModified(void) const
+{
+  for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    if(iter->modified){
+      return true;
+    }
+  }
+  return false;
+}
+
+bool PageList::ClearAllModified(void)
+{
+  for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    if(iter->modified){
+      iter->modified = false;
+    }
+  }
+  return Compress();
 }
 
 bool PageList::Serialize(CacheFileStat& file, bool is_output)
@@ -502,7 +540,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     ssall << Size();
 
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
-      ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0");
+      ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
     }
 
     string strall = ssall.str();
@@ -523,7 +561,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     }
     if(0 >= st.st_size){
       // nothing
-      Init(0, false);
+      Init(0, false, false);
       return true;
     }
     char* ptmp = new char[st.st_size + 1];
@@ -571,8 +609,14 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
         break;
       }
       bool is_loaded = (1 == s3fs_strtoofft(part.c_str()) ? true : false);
+      bool is_modified;
+      if(!getline(ssparts, part, ':')){
+        is_modified = false;        // old version does not have this part.
+      }else{
+        is_modified = (1 == s3fs_strtoofft(part.c_str()) ? true : false);
+      }
       // add new area
-      SetPageLoadedStatus(offset, size, is_loaded);
+      SetPageLoadedStatus(offset, size, is_loaded, is_modified);
     }
     delete[] ptmp;
     if(is_err){
@@ -597,7 +641,7 @@ void PageList::Dump()
 
   S3FS_PRN_DBG("pages = {");
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
-    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "true" : "false");
+    S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s / %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "loaded" : "unloaded", iter->modified ? "modified" : "not modified");
   }
   S3FS_PRN_DBG("}");
 }
@@ -624,7 +668,7 @@ int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath)
         : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
-          fd(-1), pfile(NULL), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0), is_modify(false),
+          fd(-1), pfile(NULL), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
           cachepath(SAFESTRPTR(cpath)), mirrorpath("")
 {
   try{
@@ -681,11 +725,10 @@ void FdEntity::Clear()
       mirrorpath.erase();
     }
   }
-  pagelist.Init(0, false);
+  pagelist.Init(0, false, false);
   refcnt        = 0;
   path          = "";
   cachepath     = "";
-  is_modify     = false;
 }
 
 void FdEntity::Close()
@@ -824,7 +867,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
         return -EIO;
       }
       // resize page list
-      if(!pagelist.Resize(size, false)){
+      if(!pagelist.Resize(size, false, false)){
         S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
         if(0 < refcnt){
           refcnt--;
@@ -875,13 +918,13 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       // check size, st_size, loading stat file
       if(-1 == size){
         if(st.st_size != pagelist.Size()){
-          pagelist.Resize(st.st_size, false);
+          pagelist.Resize(st.st_size, false, false);
           need_save_csf = true;     // need to update page info
         }
         size = st.st_size;
       }else{
         if(size != pagelist.Size()){
-          pagelist.Resize(size, false);
+          pagelist.Resize(size, false, false);
           need_save_csf = true;     // need to update page info
         }
         if(size != st.st_size){
@@ -898,9 +941,9 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       need_save_csf = true;       // need to update page info
       if(-1 == size){
         size = 0;
-        pagelist.Init(0, false);
+        pagelist.Init(0, false, false);
       }else{
-        pagelist.Resize(size, false);
+        pagelist.Resize(size, false, false);
         is_truncate = true;
       }
     }
@@ -937,9 +980,9 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     }
     if(-1 == size){
       size = 0;
-      pagelist.Init(0, false);
+      pagelist.Init(0, false, false);
     }else{
-      pagelist.Resize(size, false);
+      pagelist.Resize(size, false, false);
       is_truncate = true;
     }
   }
@@ -964,8 +1007,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
   }
 
   // init internal data
-  refcnt    = 1;
-  is_modify = false;
+  refcnt = 1;
 
   // set original headers and size in it.
   if(pmeta){
@@ -1018,9 +1060,6 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
   if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true))){
     S3FS_PRN_ERR("could not download, result(%d)", result);
     return false;
-  }
-  if(is_modify){
-    is_modify = false;
   }
   if(size){
     *size = pagelist.Size();
@@ -1176,7 +1215,7 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     return false;
   }
   // Reinit
-  pagelist.Init(st.st_size, is_loaded);
+  pagelist.Init(st.st_size, is_loaded, false);
 
   return true;
 }
@@ -1208,7 +1247,6 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
         // original file size(on S3) is smaller than request.
         need_load_size = (iter->next() <= size_orgmeta ? iter->bytes : (size_orgmeta - iter->offset));
       }
-      off_t over_size = iter->bytes - need_load_size;
 
       // download
       if(S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){
@@ -1226,19 +1264,8 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
       if(0 != result){
         break;
       }
-
-      // initialize for the area of over original size
-      if(0 < over_size){
-        if(0 != (result = FdEntity::FillFile(fd, 0, over_size, iter->offset + need_load_size))){
-          S3FS_PRN_ERR("failed to fill rest bytes for fd(%d). errno(%d)", fd, result);
-          break;
-        }
-        // set modify flag
-        is_modify = false;
-      }
-
       // Set loaded flag
-      pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, true);
+      pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, true, false);
     }
     PageList::FreeList(unloaded_list);
   }
@@ -1363,8 +1390,6 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
             S3FS_PRN_ERR("failed to fill rest bytes for fd(%d). errno(%d)", tmpfd, result);
             break;
           }
-          // set modify flag
-          is_modify = false;
         }
 
       }else{
@@ -1384,18 +1409,19 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
     // set loaded flag
     if(!iter->loaded){
       if(iter->offset < start){
-        fdpage page(iter->offset, start - iter->offset, iter->loaded);
+        fdpage page(iter->offset, start - iter->offset, iter->loaded, false);
         iter->bytes -= (start - iter->offset);
         iter->offset = start;
         pagelist.pages.insert(iter, page);
       }
       if(0 != size && start + size < iter->next()){
-        fdpage page(iter->offset, start + size - iter->offset, true);
+        fdpage page(iter->offset, start + size - iter->offset, true, false);
         iter->bytes -= (start + size - iter->offset);
         iter->offset = start + size;
         pagelist.pages.insert(iter, page);
       }else{
-        iter->loaded = true;
+        iter->loaded   = true;
+        iter->modified = false;
       }
     }
   }
@@ -1494,7 +1520,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   }
   AutoLock auto_lock(&fdent_data_lock);
 
-  if(!force_sync && !is_modify){
+  if(!force_sync && !pagelist.IsModified()){
     // nothing to update.
     return 0;
   }
@@ -1600,7 +1626,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
   }
 
   if(0 == result){
-    is_modify = false;
+    pagelist.ClearAllModified();
   }
   return result;
 }
@@ -1613,9 +1639,9 @@ bool FdEntity::ReserveDiskSpace(off_t size)
     return true;
   }
 
-  if(!is_modify){
+  if(!pagelist.IsModified()){
     // try to clear all cache for this fd.
-    pagelist.Init(pagelist.Size(), false);
+    pagelist.Init(pagelist.Size(), false, false);
     if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, pagelist.Size())){
       S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
       return false;
@@ -1641,7 +1667,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
   AutoLock auto_lock(&fdent_data_lock);
 
   if(force_load){
-    pagelist.SetPageLoadedStatus(start, size, false);
+    pagelist.SetPageLoadedStatus(start, size, false, false);
   }
 
   ssize_t rsize;
@@ -1711,7 +1737,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
       return -EIO;
     }
     // add new area
-    pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), false);
+    pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), false, true);
   }
 
   int     result = 0;
@@ -1755,11 +1781,8 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
     return -errno;
   }
-  if(!is_modify){
-    is_modify = true;
-  }
   if(0 < wsize){
-    pagelist.SetPageLoadedStatus(start, wsize, true);
+    pagelist.SetPageLoadedStatus(start, wsize, true, true);
   }
 
   // Load uninitialized area which starts from (start + size) to EOF after writing.
@@ -1803,7 +1826,7 @@ void FdEntity::CleanupCache()
     return;
   }
 
-  if (is_modify) {
+  if(pagelist.IsModified()){
     // cache is not committed to s3, cannot cleanup
     return;
   }
@@ -2152,6 +2175,10 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
     // found
     ent = (*iter).second;
     ent->Dup();
+    if(ent->IsModified()){
+      // If the file is being modified, it will not be resized.
+      size = -1;
+    }
     close = true;
 
   }else if(is_create){
