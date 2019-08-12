@@ -5036,6 +5036,21 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
 
+    if(0 == STR2NCMP(arg, "ak_sk=")){
+      std::string ak_sk = strchr(arg, '=') + sizeof(char);
+      size_t npos = ak_sk.find(":");
+      std::string ak = ak_sk.substr(0, npos);
+      std::string sk = ak_sk.substr(npos+1, ak_sk.size()-1);
+
+      printf("ak_sk=%s:%s\r\n", ak.c_str(), sk.c_str());
+      if(!S3fsCurl::SetAccessKey(ak.c_str(), sk.c_str())){
+        S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
+        return -1;
+      }
+      
+      return 0;
+    }
+
     if(0 == STR2NCMP(arg, "accessKeyId=")){
       S3FS_PRN_EXIT("option accessKeyId is no longer supported.");
       return -1;
