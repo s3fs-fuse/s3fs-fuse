@@ -4152,14 +4152,17 @@ int S3fsMultiCurl::MultiRead()
 {
   int result = 0;
 
-  for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ++iter) {
+  for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ){
     S3fsCurl* s3fscurl = *iter;
 
     bool isRetry = false;
-
+    bool isPostpone = false;
     long responseCode = -1;
     if(s3fscurl->GetResponseCode(responseCode, false)){
-      if(400 > responseCode){
+      if(-1 == responseCode){
+        // This is a case where the processing result has not yet been updated (should be very rare).
+        isPostpone = true;
+      }else if(400 > responseCode){
         // add into stat cache
         if(SuccessCallback && !SuccessCallback(s3fscurl)){
           S3FS_PRN_WARN("error from callback function(%s).", s3fscurl->url.c_str());
@@ -4189,29 +4192,35 @@ int S3fsMultiCurl::MultiRead()
       S3FS_PRN_ERR("failed a request(Unknown response code: %s)", s3fscurl->url.c_str());
     }
 
-    if(!isRetry || 0 != result){
-      // If an EIO error has already occurred, it will be terminated
-      // immediately even if retry processing is required. 
-      s3fscurl->DestroyCurlHandle();
-      delete s3fscurl;
-
+    if(isPostpone){
+      clist_req.erase(iter);
+      clist_req.push_back(s3fscurl);    // Re-evaluate at the end
+      iter = clist_req.begin();
     }else{
-      S3fsCurl* retrycurl = NULL;
-
-      // For retry
-      if(RetryCallback){
-        retrycurl = RetryCallback(s3fscurl);
-        if(NULL != retrycurl){
-          clist_all.push_back(retrycurl);
-        }else{
-          // set EIO and wait for other parts.
-          result = -EIO;
-        }
-      }
-      if(s3fscurl != retrycurl){
+      if(!isRetry || 0 != result){
+        // If an EIO error has already occurred, it will be terminated
+        // immediately even if retry processing is required. 
         s3fscurl->DestroyCurlHandle();
         delete s3fscurl;
+      }else{
+        S3fsCurl* retrycurl = NULL;
+
+        // For retry
+        if(RetryCallback){
+          retrycurl = RetryCallback(s3fscurl);
+          if(NULL != retrycurl){
+            clist_all.push_back(retrycurl);
+          }else{
+            // set EIO and wait for other parts.
+            result = -EIO;
+          }
+        }
+        if(s3fscurl != retrycurl){
+          s3fscurl->DestroyCurlHandle();
+          delete s3fscurl;
+        }
       }
+      iter = clist_req.erase(iter);
     }
   }
   clist_req.clear();
@@ -4219,7 +4228,9 @@ int S3fsMultiCurl::MultiRead()
   if(0 != result){
     // If an EIO error has already occurred, clear all retry objects.
     for(s3fscurllist_t::iterator iter = clist_all.begin(); iter != clist_all.end(); ++iter){
-      delete (*iter);
+      S3fsCurl* s3fscurl = *iter;
+      s3fscurl->DestroyCurlHandle();
+      delete s3fscurl;
     }
     clist_all.clear();
   }
