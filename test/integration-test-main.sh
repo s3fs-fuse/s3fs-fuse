@@ -519,14 +519,14 @@ function test_copy_file {
    cp /tmp/simple_file copied_simple_file
    cmp /tmp/simple_file copied_simple_file
 
-   rm /tmp/simple_file
-   rm copied_simple_file
+   rm_test_file /tmp/simple_file
+   rm_test_file copied_simple_file
 }
 
 function test_write_after_seek_ahead {
    describe "Test writes succeed after a seek ahead"
    dd if=/dev/zero of=testfile seek=1 count=1 bs=1024
-   rm testfile
+   rm_test_file testfile
 }
 
 function test_overwrite_existing_file_range {
@@ -538,7 +538,7 @@ function test_overwrite_existing_file_range {
         dd if=/dev/zero count=1 bs=1024
         seq 1000 | tail -c +2049
     )
-    rm -f ${TEST_TEXT_FILE}
+    rm_test_file
 }
 
 function test_concurrency {
@@ -568,12 +568,13 @@ function test_concurrent_writes {
 
 function test_open_second_fd {
     describe "read from an open fd"
-    rm -f ${TEST_TEXT_FILE}
-    RESULT=$( (echo foo ; wc -c < ${TEST_TEXT_FILE} >&2) 2>& 1>${TEST_TEXT_FILE})
+    rm_test_file secound_fd_file
+    RESULT=$( (echo foo ; wc -c < secound_fd_file >&2) 2>& 1>secound_fd_file)
     if [ "$RESULT" -ne 4 ]; then
         echo "size mismatch, expected: 4, was: ${RESULT}"
         return 1
     fi
+    rm_test_file secound_fd_file
 }
 
 function add_all_tests {
