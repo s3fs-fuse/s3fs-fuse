@@ -568,13 +568,13 @@ function test_concurrent_writes {
 
 function test_open_second_fd {
     describe "read from an open fd"
-    rm_test_file secound_fd_file
-    RESULT=$( (echo foo ; wc -c < secound_fd_file >&2) 2>& 1>secound_fd_file)
+    rm_test_file second_fd_file
+    RESULT=$( (echo foo ; wc -c < second_fd_file >&2) 2>& 1>second_fd_file)
     if [ "$RESULT" -ne 4 ]; then
         echo "size mismatch, expected: 4, was: ${RESULT}"
         return 1
     fi
-    rm_test_file secound_fd_file
+    rm_test_file second_fd_file
 }
 
 function add_all_tests {
