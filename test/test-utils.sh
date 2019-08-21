@@ -45,6 +45,35 @@ function del_xattr() {
     fi
 }
 
+function get_size() {
+    if [ `uname` = "Darwin" ]; then
+        stat -f "%z" "$1"
+    else
+        stat -c %s "$1"
+    fi
+}
+
+function check_file_size() {
+    FILE_NAME="$1"
+    EXPECTED_SIZE="$2"
+
+    # Verify file is zero length via metadata
+    size=$(get_size ${FILE_NAME})
+    if [ $size -ne $EXPECTED_SIZE ]
+    then
+        echo "error: expected ${FILE_NAME} to be zero length"
+        return 1
+    fi
+
+    # Verify file is zero length via data
+    size=$(cat ${FILE_NAME} | wc -c)
+    if [ $size -ne $EXPECTED_SIZE ]
+    then
+        echo "error: expected ${FILE_NAME} to be $EXPECTED_SIZE length, got $size"
+        return 1
+    fi
+}
+
 function mk_test_file {
     if [ $# == 0 ]; then
         TEXT=$TEST_TEXT

@@ -7,21 +7,15 @@ source test-utils.sh
 
 function test_append_file {
     describe "Testing append to file ..."
+    TEST_INPUT="echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
 
     # Write a small test file
     for x in `seq 1 $TEST_TEXT_FILE_LENGTH`
     do
-       echo "echo ${TEST_TEXT} to ${TEST_TEXT_FILE}"
+        echo $TEST_INPUT
     done > ${TEST_TEXT_FILE}
 
-    # Verify contents of file
-    echo "Verifying length of test file"
-    FILE_LENGTH=`wc -l $TEST_TEXT_FILE | awk '{print $1}'`
-    if [ "$FILE_LENGTH" -ne "$TEST_TEXT_FILE_LENGTH" ]
-    then
-       echo "error: expected $TEST_TEXT_FILE_LENGTH , got $FILE_LENGTH"
-       return 1
-    fi
+    check_file_size "${TEST_TEXT_FILE}" $(($TEST_TEXT_FILE_LENGTH * $(echo $TEST_INPUT | wc -c)))
 
     rm_test_file
 }
@@ -34,12 +28,8 @@ function test_truncate_file {
     # Truncate file to 0 length.  This should trigger open(path, O_RDWR | O_TRUNC...)
     : > ${TEST_TEXT_FILE}
 
-    # Verify file is zero length
-    if [ -s ${TEST_TEXT_FILE} ]
-    then
-        echo "error: expected ${TEST_TEXT_FILE} to be zero length"
-        return 1
-    fi
+    check_file_size "${TEST_TEXT_FILE}" 0
+
     rm_test_file
 }
 
@@ -52,17 +42,8 @@ function test_truncate_empty_file {
     t_size=1024
     truncate ${TEST_TEXT_FILE} -s $t_size
 
-    # Verify file is zero length
-    if [ `uname` = "Darwin" ]; then
-        size=$(stat -f "%z" ${TEST_TEXT_FILE})
-    else
-        size=$(stat -c %s ${TEST_TEXT_FILE})
-    fi
-    if [ $t_size -ne $size ]
-    then
-        echo "error: expected ${TEST_TEXT_FILE} to be $t_size length, got $size"
-        return 1
-    fi
+    check_file_size "${TEST_TEXT_FILE}" $t_size
+
     rm_test_file
 }
 
