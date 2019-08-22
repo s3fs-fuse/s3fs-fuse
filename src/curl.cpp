@@ -338,6 +338,10 @@ static const std::string IAMCRED_ACCESSKEYID = "AccessKeyId";
 static const std::string IAMCRED_SECRETACCESSKEY = "SecretAccessKey";
 static const std::string IAMCRED_ROLEARN = "RoleArn";
 
+static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
+static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
+static const int  S3FSCURL_PERFORM_RESULT_NOTSET    = 1;
+
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
 #ifndef CURLSHE_NOT_BUILT_IN
@@ -1850,7 +1854,7 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
     hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
-    LastResponseCode(-1), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
+    LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE), op(""), query_string(""),
     sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
@@ -1994,7 +1998,7 @@ bool S3fsCurl::ClearInternalData()
   responseHeaders.clear();
   bodydata.Clear();
   headdata.Clear();
-  LastResponseCode     = -1;
+  LastResponseCode     = S3FSCURL_RESPONSECODE_NOTSET;
   postdata             = NULL;
   postdata_remaining   = 0;
   retry_count          = 0;
@@ -2062,7 +2066,7 @@ bool S3fsCurl::RemakeHandle()
   responseHeaders.clear();
   bodydata.Clear();
   headdata.Clear();
-  LastResponseCode   = -1;
+  LastResponseCode   = S3FSCURL_RESPONSECODE_NOTSET;
 
   // count up(only use for multipart)
   retry_count++;
@@ -2234,8 +2238,15 @@ int S3fsCurl::RequestPerform()
     S3FS_PRN_DBG("connecting to URL %s", SAFESTRPTR(ptr_url));
   }
 
+  LastResponseCode  = S3FSCURL_RESPONSECODE_NOTSET;
+  long responseCode;
+  int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
+
   // 1 attempt + retries...
-  for(int retrycnt = 0; retrycnt < S3fsCurl::retries; ++retrycnt){
+  for(int retrycnt = 0; S3FSCURL_PERFORM_RESULT_NOTSET == result && retrycnt < S3fsCurl::retries; ++retrycnt){
+    // Reset response code
+    responseCode = S3FSCURL_RESPONSECODE_NOTSET;
+
     // Requests
     CURLcode curlCode = curl_easy_perform(hCurl);
 
@@ -2243,40 +2254,48 @@ int S3fsCurl::RequestPerform()
     switch(curlCode){
       case CURLE_OK:
         // Need to look at the HTTP response code
-        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
+        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &responseCode)){
           S3FS_PRN_ERR("curl_easy_getinfo failed while trying to retrieve HTTP response code");
-          return -EIO;
+          responseCode = S3FSCURL_RESPONSECODE_FATAL_ERROR;
+          result       = -EIO;
+          break;
         }
-        if(LastResponseCode >= 200 && LastResponseCode < 300){
-          S3FS_PRN_INFO3("HTTP response code %ld", LastResponseCode);
-          return 0;
+        if(responseCode >= 200 && responseCode < 300){
+          S3FS_PRN_INFO3("HTTP response code %ld", responseCode);
+          result = 0;
+          break;
         }
 
         // Service response codes which are >= 300 && < 500
-        switch(LastResponseCode){
+        switch(responseCode){
           case 301:
           case 307:
             S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", bodydata.str());
             S3FS_PRN_ERR("The options of url and endpoint may be useful for solving, please try to use both options.");
-            return -EIO;
+            result = -EIO;
+            break;
 
           case 400:
-            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", LastResponseCode, bodydata.str());
-            return -EIO;
+            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
+            result = -EIO;
+            break;
 
           case 403:
-            S3FS_PRN_ERR("HTTP response code %ld, returning EPERM. Body Text: %s", LastResponseCode, bodydata.str());
-            return -EPERM;
+            S3FS_PRN_ERR("HTTP response code %ld, returning EPERM. Body Text: %s", responseCode, bodydata.str());
+            result = -EPERM;
+            break;
 
           case 404:
             S3FS_PRN_INFO3("HTTP response code 404 was returned, returning ENOENT");
             S3FS_PRN_DBG("Body Text: %s", bodydata.str());
-            return -ENOENT;
+            result = -ENOENT;
+            break;
 
           case 501:
             S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
             S3FS_PRN_DBG("Body Text: %s", bodydata.str());
-            return -ENOTSUP;
+            result = -ENOTSUP;
+            break;
 
           case 503:
             S3FS_PRN_INFO3("HTTP response code 503 was returned, slowing down");
@@ -2285,8 +2304,9 @@ int S3fsCurl::RequestPerform()
             break;
 
           default:
-            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", LastResponseCode, bodydata.str());
-            return -EIO;
+            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
+            result = -EIO;
+            break;
         }
         break;
 
@@ -2349,12 +2369,13 @@ int S3fsCurl::RequestPerform()
         if(S3fsCurl::curl_ca_bundle.empty()){
           if(!S3fsCurl::LocateBundle()){
             S3FS_PRN_ERR("could not get CURL_CA_BUNDLE.");
-            return -EIO;
+            result = -EIO;
           }
-          break; // retry with CAINFO
+          // retry with CAINFO
+        }else{
+          S3FS_PRN_ERR("curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
+          result = -EIO;
         }
-        S3FS_PRN_ERR("curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        return -EIO;
         break;
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
@@ -2371,7 +2392,7 @@ int S3fsCurl::RequestPerform()
         }else{
           S3FS_PRN_INFO("my_curl_easy_perform: curlCode: %d -- %s", curlCode, curl_easy_strerror(curlCode));
         }
-        return -EIO;
+        result = -EIO;
         break;
 #endif
 
@@ -2379,36 +2400,50 @@ int S3fsCurl::RequestPerform()
       case CURLE_HTTP_RETURNED_ERROR:
         S3FS_PRN_ERR("### CURLE_HTTP_RETURNED_ERROR");
 
-        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
-          return -EIO;
-        }
-        S3FS_PRN_INFO3("HTTP response code =%ld", LastResponseCode);
+        if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &responseCode)){
+          result = -EIO;
+        }else{
+          S3FS_PRN_INFO3("HTTP response code =%ld", responseCode);
 
-        // Let's try to retrieve the 
-        if(404 == LastResponseCode){
-          return -ENOENT;
-        }
-        if(500 > LastResponseCode){
-          return -EIO;
+          // Let's try to retrieve the 
+          if(404 == responseCode){
+            result = -ENOENT;
+          }else if(500 > responseCode){
+            result = -EIO;
+          }
         }
         break;
 
       // Unknown CURL return code
       default:
         S3FS_PRN_ERR("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
-        return -EIO;
+        result = -EIO;
         break;
     }
-    S3FS_PRN_INFO("### retrying...");
 
-    if(!RemakeHandle()){
-      S3FS_PRN_INFO("Failed to reset handle and internal data for retrying.");
-      return -EIO;
+    if(S3FSCURL_PERFORM_RESULT_NOTSET == result){
+      S3FS_PRN_INFO("### retrying...");
+
+      if(!RemakeHandle()){
+        S3FS_PRN_INFO("Failed to reset handle and internal data for retrying.");
+        result = -EIO;
+        break;
+      }
     }
   }
-  S3FS_PRN_ERR("### giving up");
 
-  return -EIO;
+  // set last response code
+  if(S3FSCURL_RESPONSECODE_NOTSET == responseCode){
+    LastResponseCode = S3FSCURL_RESPONSECODE_FATAL_ERROR;
+  }else{
+    LastResponseCode = responseCode;
+  }
+
+  if(S3FSCURL_PERFORM_RESULT_NOTSET == result){
+    S3FS_PRN_ERR("### giving up");
+    result = -EIO;
+  }
+  return result;
 }
 
 //
@@ -4157,9 +4192,9 @@ int S3fsMultiCurl::MultiRead()
 
     bool isRetry = false;
     bool isPostpone = false;
-    long responseCode = -1;
+    long responseCode = S3FSCURL_RESPONSECODE_NOTSET;
     if(s3fscurl->GetResponseCode(responseCode, false)){
-      if(-1 == responseCode){
+      if(S3FSCURL_RESPONSECODE_NOTSET == responseCode){
         // This is a case where the processing result has not yet been updated (should be very rare).
         isPostpone = true;
       }else if(400 > responseCode){
