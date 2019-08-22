@@ -312,7 +312,7 @@ class S3fsCurl
     headers_t            responseHeaders;      // header data by HeaderCallback
     BodyData             bodydata;             // body data by WriteMemoryCallback
     BodyData             headdata;             // header data by WriteMemoryCallback
-    long                 LastResponseCode;
+    volatile long        LastResponseCode;
     const unsigned char* postdata;             // use by post method and read callback function.
     int                  postdata_remaining;   // use by post method and read callback function.
     filepart             partdata;             // use by multipart upload/get object callback
