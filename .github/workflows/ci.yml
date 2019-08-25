@@ -177,7 +177,7 @@ jobs:
           make check -C src
           echo "user_allow_other" | sudo tee -a /etc/fuse.conf >/dev/null
           if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
-          make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
 #
 # Local variables:
