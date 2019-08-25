@@ -203,6 +203,18 @@ enum storage_class_t {
   REDUCED_REDUNDANCY
 };
 
+enum acl_t {
+  PRIVATE,
+  PUBLIC_READ,
+  PUBLIC_READ_WRITE,
+  AWS_EXEC_READ,
+  AUTHENTICATED_READ,
+  BUCKET_OWNER_READ,
+  BUCKET_OWNER_FULL_CONTROL,
+  LOG_DELIVERY_WRITE,
+  INVALID_ACL
+};
+
 // sse type
 enum sse_type_t {
   SSE_DISABLE = 0,      // not use server side encrypting
@@ -258,7 +270,7 @@ class S3fsCurl
     static time_t           readwrite_timeout;
     static int              retries;
     static bool             is_public_bucket;
-    static std::string      default_acl;             // TODO: to enum
+    static acl_t            default_acl;
     static storage_class_t  storage_class;
     static sseckeylist_t    sseckeys;
     static std::string      ssekmsid;
@@ -407,8 +419,8 @@ class S3fsCurl
     static int SetRetries(int count);
     static bool SetPublicBucket(bool flag);
     static bool IsPublicBucket(void) { return S3fsCurl::is_public_bucket; }
-    static std::string SetDefaultAcl(const char* acl);
-    static std::string GetDefaultAcl();
+    static acl_t SetDefaultAcl(acl_t acl);
+    static acl_t GetDefaultAcl();
     static storage_class_t SetStorageClass(storage_class_t storage_class);
     static storage_class_t GetStorageClass() { return S3fsCurl::storage_class; }
     static bool LoadEnvSse(void) { return (S3fsCurl::LoadEnvSseCKeys() && S3fsCurl::LoadEnvSseKmsid()); }
@@ -569,6 +581,8 @@ std::string get_header_value(const struct curl_slist* list, const std::string &k
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
+const char *acl_to_string(acl_t acl);
+acl_t string_to_acl(const char *acl);
 
 #endif // S3FS_CURL_H_
 
