@@ -3881,9 +3881,6 @@ static int s3fs_check_service()
       }else if(responseCode == 404){
         S3FS_PRN_CRIT("bucket not found(host=%s) - result of checking service.", host.c_str());
 
-      }else if(responseCode == CURLE_OPERATION_TIMEDOUT){
-        // unable to connect
-        S3FS_PRN_CRIT("unable to connect bucket and timeout(host=%s) - result of checking service.", host.c_str());
       }else{
         // another error
         S3FS_PRN_CRIT("unable to connect(host=%s) - result of checking service.", host.c_str());
