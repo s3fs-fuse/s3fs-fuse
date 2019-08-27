@@ -74,6 +74,14 @@ function test_mv_file {
        echo "Could not move file"
        return 1
     fi
+    
+    #check the renamed file content-type
+    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1/${ALT_TEST_TEXT_FILE}`
+    if [[ "${INFO_STR}" != *"text/plain"* ]]
+    then
+       echo "moved file content-type is not as expected expected:text/plain got:$INFO_STR"
+       return 1
+    fi
 
     # Check the contents of the alt file
     ALT_FILE_LENGTH=`wc -c $ALT_TEST_TEXT_FILE | awk '{print $1}'`
@@ -282,7 +290,7 @@ function test_external_modification {
     echo "old" > ${TEST_TEXT_FILE}
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     sleep 2
-    echo "new new" | aws_cli cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "new new" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp ${TEST_TEXT_FILE} <(echo "new new")
     rm -f ${TEST_TEXT_FILE}
 }
@@ -291,7 +299,7 @@ function test_read_external_object() {
     describe "create objects via aws CLI and read via s3fs"
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     sleep 3
-    echo "test" | aws_cli cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp ${TEST_TEXT_FILE} <(echo "test")
     rm -f ${TEST_TEXT_FILE}
 }
@@ -340,6 +348,14 @@ function test_multipart_copy {
     echo "Comparing test file"
     if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}-copy"
     then
+       return 1
+    fi
+
+    #check the renamed file content-type
+    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1/${BIG_FILE}-copy`
+    if [[ "${INFO_STR}" != *"application/octet-stream"* ]]
+    then
+       echo "moved file content-type is not as expected expected:application/octet-stream got:$INFO_STR"
        return 1
     fi
 
