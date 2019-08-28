@@ -76,11 +76,9 @@ function test_mv_file {
     fi
     
     #check the renamed file content-type
-    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1/${ALT_TEST_TEXT_FILE}`
-    if [[ "${INFO_STR}" != *"text/plain"* ]]
+    if [ -f "/etc/mime.types" ]
     then
-       echo "moved file content-type is not as expected expected:text/plain got:$INFO_STR"
-       return 1
+      check_content_type "$1/$ALT_TEST_TEXT_FILE" "text/plain"
     fi
 
     # Check the contents of the alt file
@@ -352,12 +350,7 @@ function test_multipart_copy {
     fi
 
     #check the renamed file content-type
-    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1/${BIG_FILE}-copy`
-    if [[ "${INFO_STR}" != *"application/octet-stream"* ]]
-    then
-       echo "moved file content-type is not as expected expected:application/octet-stream got:$INFO_STR"
-       return 1
-    fi
+    check_content_type "$1/${BIG_FILE}-copy" "application/octet-stream"
 
     rm -f "/tmp/${BIG_FILE}"
     rm_test_file "${BIG_FILE}-copy"
