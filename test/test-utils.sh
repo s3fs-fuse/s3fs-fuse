@@ -142,7 +142,8 @@ function cd_run_dir {
         echo "TEST_BUCKET_MOUNT_POINT variable not set"
         exit 1
     fi
-    RUN_DIR=$(mktemp -d ${TEST_BUCKET_MOUNT_POINT_1}/testrun-XXXXXX)
+    RUN_DIR=${TEST_BUCKET_MOUNT_POINT_1}/${1}
+    mkdir -p ${RUN_DIR}
     cd ${RUN_DIR}
 }
 
@@ -191,7 +192,8 @@ function describe {
 # made after the test run.  
 function run_suite {
    orig_dir=$PWD
-   cd_run_dir
+   key_prefix="testrun-$RANDOM"
+   cd_run_dir $key_prefix
    for t in "${TEST_LIST[@]}"; do
        # The following sequence runs tests in a subshell to allow continuation
        # on test failure, but still allowing errexit to be in effect during
@@ -202,7 +204,7 @@ function run_suite {
        # Other ways of trying to capture the return value will also disable
        # errexit in the function due to bash... compliance with POSIX? 
        set +o errexit
-       (set -o errexit; $t)
+       (set -o errexit; $t $key_prefix)
        if [[ $? == 0 ]]; then
            report_pass $t
        else
@@ -247,7 +249,15 @@ function get_mtime() {
         stat -c %Y "$1"
     fi
 }
+function check_content_type() {
+    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1`
+    if [[ "${INFO_STR}" != *"$2"* ]]
+    then
+        echo "moved file content-type is not as expected expected:$2 got:${INFO_STR}"
+        exit 1
+    fi
+}
 
 function aws_cli() {
-    AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws s3 --endpoint-url "${S3_URL}" --no-verify-ssl $*
+    AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws $* --endpoint-url "${S3_URL}" --no-verify-ssl 
 }

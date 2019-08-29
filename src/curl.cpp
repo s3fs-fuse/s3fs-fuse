@@ -2961,13 +2961,14 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   responseHeaders.clear();
   bodydata.Clear();
 
+  string contype       = S3fsCurl::LookupMimeType(string(tpath));
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
+
   // Make request headers
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string key   = lower(iter->first);
     string value = iter->second;
-    if(key == "content-type"){
-      requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key.substr(0, 9) == "x-amz-acl"){
+    if(key.substr(0, 9) == "x-amz-acl"){
       // not set value, but after set it.
     }else if(key.substr(0, 10) == "x-amz-meta"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
@@ -3106,12 +3107,13 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
   }
 
+  string contype       = S3fsCurl::LookupMimeType(string(tpath));
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
+
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string key   = lower(iter->first);
     string value = iter->second;
-    if(key == "content-type"){
-      requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key.substr(0, 9) == "x-amz-acl"){
+    if(key.substr(0, 9) == "x-amz-acl"){
       // not set value, but after set it.
     }else if(key.substr(0, 10) == "x-amz-meta"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
@@ -3714,13 +3716,14 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
   bodydata.Clear();
   headdata.Clear();
 
+  string contype       = S3fsCurl::LookupMimeType(string(to));
+  requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
+
   // Make request headers
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string key   = lower(iter->first);
     string value = iter->second;
-    if(key == "content-type"){
-      requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
-    }else if(key == "x-amz-copy-source"){
+    if(key == "x-amz-copy-source"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-copy-source-range"){
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
