@@ -190,7 +190,7 @@ bool CacheFileStat::Open()
     return false;
   }
   // open
-  if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
+  if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR|O_CLOEXEC, 0600))){
     S3FS_PRN_ERR("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
     return false;
   }
@@ -507,7 +507,7 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t 
   return unloaded_list.size();
 }
 
-bool PageList::IsModified(void) const
+bool PageList::IsModified() const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(iter->modified){
@@ -517,7 +517,7 @@ bool PageList::IsModified(void) const
   return false;
 }
 
-bool PageList::ClearAllModified(void)
+bool PageList::ClearAllModified()
 {
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(iter->modified){
@@ -801,7 +801,7 @@ int FdEntity::OpenMirrorFile()
   // create seed generating mirror file name
   unsigned int seed = static_cast<unsigned int>(time(NULL));
   int urandom_fd;
-  if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
+  if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY|O_CLOEXEC))){
     unsigned int rand_data;
     if(sizeof(rand_data) == read(urandom_fd, &rand_data, sizeof(rand_data))){
       seed ^= rand_data;
@@ -831,7 +831,7 @@ int FdEntity::OpenMirrorFile()
 
   // open mirror file
   int mirrorfd;
-  if(-1 == (mirrorfd = open(mirrorpath.c_str(), O_RDWR))){
+  if(-1 == (mirrorfd = open(mirrorpath.c_str(), O_RDWR|O_CLOEXEC))){
     S3FS_PRN_ERR("could not open mirror file(%s) by errno(%d).", mirrorpath.c_str(), errno);
     return -errno;
   }
@@ -907,7 +907,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     CacheFileStat cfstat(path.c_str());
 
     // try to open cache file
-    if(-1 != (fd = open(cachepath.c_str(), O_RDWR)) && pagelist.Serialize(cfstat, false)){
+    if(-1 != (fd = open(cachepath.c_str(), O_RDWR|O_CLOEXEC)) && pagelist.Serialize(cfstat, false)){
       // succeed to open cache file and to load stats data
       memset(&st, 0, sizeof(struct stat));
       if(-1 == fstat(fd, &st)){
@@ -934,7 +934,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 
     }else{
       // could not open cache file or could not load stats data, so initialize it.
-      if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
+      if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC, 0600))){
         S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
         return (0 == errno ? -EIO : -errno);
       }

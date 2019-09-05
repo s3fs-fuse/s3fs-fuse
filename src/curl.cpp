@@ -1406,7 +1406,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
   // duplicate fd
-  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
+  if(-1 == (fd2 = dup_fd_cloexec(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
     S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
@@ -3071,7 +3071,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
   if(-1 != fd){
     // duplicate fd
     int fd2;
-    if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
+    if(-1 == (fd2 = dup_fd_cloexec(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
       S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
       if(-1 != fd2){
         close(fd2);
@@ -3876,7 +3876,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
   S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
   // duplicate fd
-  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
+  if(-1 == (fd2 = dup_fd_cloexec(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
     S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);
@@ -3930,7 +3930,7 @@ int S3fsCurl::MultipartUploadRequest(const string& upload_id, const char* tpath,
 
   // duplicate fd
   int fd2;
-  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
+  if(-1 == (fd2 = dup_fd_cloexec(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
     S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
     if(-1 != fd2){
       close(fd2);

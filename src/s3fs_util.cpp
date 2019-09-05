@@ -1033,6 +1033,19 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
   return result;
 }
 
+int dup_fd_cloexec(int fd)
+{
+#if defined(__APPLE__)
+  int fd2;
+  if(-1 == (fd2 = dup(fd))){
+    return -1;
+  }
+  return fcntl(fd2, F_SETFD, FD_CLOEXEC);
+#else
+  return fcntl(fd, F_DUPFD_CLOEXEC);
+#endif
+}
+
 //-------------------------------------------------------------------
 // Help
 //-------------------------------------------------------------------

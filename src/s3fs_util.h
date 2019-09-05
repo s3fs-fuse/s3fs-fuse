@@ -141,6 +141,9 @@ time_t get_lastmodified(headers_t& meta);
 bool is_need_check_obj_detail(headers_t& meta);
 bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value);
 
+// wrapper to work around broken macOS F_DUPFD_CLOEXEC behavior
+int dup_fd_cloexec(int fd);
+
 void show_usage(void);
 void show_help(void);
 void show_version(void);
