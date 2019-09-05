@@ -53,11 +53,11 @@ template std::string str(unsigned long long value);
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
 // replacement for C++11 std::stoll
-off_t s3fs_strtoofft(const char* str, bool is_base_16)
+off_t s3fs_strtoofft(const char* str, int base)
 {
   errno = 0;
   char *temp;
-  long long result = strtoll(str, &temp, is_base_16 ? 16 : 10);
+  long long result = strtoll(str, &temp, base);
 
   if(temp == str || *temp != '\0'){
     throw std::invalid_argument("s3fs_strtoofft");
