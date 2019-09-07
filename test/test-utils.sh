@@ -258,6 +258,11 @@ function check_content_type() {
     fi
 }
 
+function get_disk_avail_size() {
+    DISK_AVAIL_SIZE=`BLOCKSIZE=$((1024 * 1024)) df $1 | awk '{print $4}' | tail -n 1`
+    echo ${DISK_AVAIL_SIZE}
+}
+
 function aws_cli() {
     AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws $* --endpoint-url "${S3_URL}" --no-verify-ssl 
 }

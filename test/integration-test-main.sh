@@ -656,7 +656,36 @@ function test_write_multiple_offsets {
     rm_test_file ${TEST_TEXT_FILE}
 }
 
+function test_clean_up_cache() {
+    describe "Test clean up cache"
+
+    dir="many_files"
+    count=256
+    mkdir -p $dir
+
+    for x in $(seq $count); do
+        dd if=/dev/urandom of=$dir/file-$x bs=1048576 count=1
+    done
+
+    file_cnt=$(ls $dir | wc -l)
+    if [ $file_cnt != $count ]; then
+        echo "Expected $count files but got $file_cnt"
+        rm -rf $dir
+        return 1
+    fi
+    CACHE_DISK_AVAIL_SIZE=`get_disk_avail_size $CACHE_DIR`
+    if [ "$CACHE_DISK_AVAIL_SIZE" -lt "$ENSURE_DISKFREE_SIZE" ];then
+        echo "Cache disk avail size:$CACHE_DISK_AVAIL_SIZE less than ensure_diskfree size:$ENSURE_DISKFREE_SIZE"
+        rm -rf $dir
+        return 1
+    fi
+    rm -rf $dir
+}
+
 function add_all_tests {
+    if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree`; then
+        add_tests test_clean_up_cache
+    fi
     add_tests test_append_file 
     add_tests test_truncate_file 
     add_tests test_truncate_empty_file

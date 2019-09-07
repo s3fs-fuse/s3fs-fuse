@@ -2223,22 +2223,6 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   return wsize;
 }
 
-void FdEntity::CleanupCache()
-{
-  AutoLock auto_lock(&fdent_lock, AutoLock::NO_WAIT);
-
-  if (!auto_lock.isLockAcquired()) {
-    return;
-  }
-
-  if(pagelist.IsModified()){
-    // cache is not committed to s3, cannot cleanup
-    return;
-  }
-
-  FdManager::DeleteCacheFile(path.c_str());
-}
-
 //------------------------------------------------
 // FdManager symbol
 //------------------------------------------------
@@ -2794,19 +2778,16 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
     if(S_ISDIR(st.st_mode)){
       CleanupCacheDirInternal(next_path);
     }else{
-      FdEntity* ent;
-      if(NULL == (ent = FdManager::get()->Open(next_path.c_str(), NULL, -1, -1, false, true, true))){
-        S3FS_PRN_DBG("skipping locked file: %s", next_path.c_str());
+      AutoLock auto_lock(&FdManager::fd_manager_lock, AutoLock::NO_WAIT);
+      if (!auto_lock.isLockAcquired()) {
+        S3FS_PRN_ERR("could not get fd_manager_lock when clean up file(%s)", next_path.c_str());
         continue;
       }
-
-      if(ent->IsMultiOpened()){
-        S3FS_PRN_DBG("skipping opened file: %s", next_path.c_str());
-      }else{
-        ent->CleanupCache();
+      fdent_map_t::iterator iter = fent.find(next_path);
+      if(fent.end() == iter) {
         S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
+        FdManager::DeleteCacheFile(next_path.c_str());
       }
-      Close(ent);
     }
   }
   closedir(dp);

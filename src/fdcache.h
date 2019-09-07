@@ -166,7 +166,6 @@ class FdEntity
 
     void Close(void);
     bool IsOpen(void) const { return (-1 != fd); }
-    bool IsMultiOpened(void) const { return refcnt > 1; }
     int Open(headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
     bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
     int Dup(bool lock_already_held = false);
@@ -200,7 +199,6 @@ class FdEntity
     ssize_t Write(const char* bytes, off_t start, size_t size);
 
     bool ReserveDiskSpace(off_t size);
-    void CleanupCache();
 };
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
 
