@@ -2143,7 +2143,8 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
   return NULL;
 }
 
-FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile,
+                          bool is_create, bool no_fd_lock_wait, bool no_manager_lock_wait)
 {
   S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time));
 
@@ -2153,7 +2154,12 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
   bool close = false;
   FdEntity* ent;
 
-  AutoLock auto_lock(&FdManager::fd_manager_lock);
+  AutoLock auto_lock(&FdManager::fd_manager_lock, no_manager_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE);
+
+  if (!auto_lock.isLockAcquired()) {
+    // no need to wait for fd manager lock, return
+    return NULL;
+  }
 
   // search in mapping by key(path)
   fdent_map_t::iterator iter = fent.find(string(path));
@@ -2365,7 +2371,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
       CleanupCacheDirInternal(next_path);
     }else{
       FdEntity* ent;
-      if(NULL == (ent = FdManager::get()->Open(next_path.c_str(), NULL, -1, -1, false, true, true))){
+      if(NULL == (ent = FdManager::get()->Open(next_path.c_str(), NULL, -1, -1, false, true, true, true))){
         S3FS_PRN_DBG("skipping locked file: %s", next_path.c_str());
         continue;
       }
