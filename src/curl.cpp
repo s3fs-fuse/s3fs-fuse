@@ -1344,6 +1344,8 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   newcurl->b_partdata_startpos = s3fscurl->b_partdata_startpos;
   newcurl->b_partdata_size     = s3fscurl->b_partdata_size;
   newcurl->retry_count         = s3fscurl->retry_count + 1;
+  newcurl->op                  = s3fscurl->op;
+  newcurl->type                = s3fscurl->type;
 
   // setup new curl object
   if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
@@ -1383,6 +1385,8 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   newcurl->b_from              = s3fscurl->b_from;
   newcurl->b_meta              = s3fscurl->b_meta;
   newcurl->retry_count         = s3fscurl->retry_count + 1;
+  newcurl->op                  = s3fscurl->op;
+  newcurl->type                = s3fscurl->type;
 
   // setup new curl object
   if(0 != newcurl->CopyMultipartPostSetup(s3fscurl->b_from.c_str(), s3fscurl->path.c_str(), part_num, upload_id, s3fscurl->b_meta)){
