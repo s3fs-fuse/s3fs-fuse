@@ -209,7 +209,7 @@ static int check_passwd_file_perms();
 static int read_aws_credentials_file(const std::string &filename);
 static int read_passwd_file();
 static int get_access_keys();
-static int set_mountpoint_attribute(struct stat& mpst);
+static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 
@@ -4372,7 +4372,7 @@ static int get_access_keys()
 //
 // Check & Set attributes for mount point.
 //
-static int set_mountpoint_attribute(struct stat& mpst)
+static bool set_mountpoint_attribute(struct stat& mpst)
 {
   mp_uid  = geteuid();
   mp_gid  = getegid();

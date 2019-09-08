@@ -438,7 +438,7 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
 
 bool S3fsCurl::DestroyS3fsCurl()
 {
-  int result = true;
+  bool result = true;
 
   if(!S3fsCurl::DestroyCryptMutex()){
     result = false;
