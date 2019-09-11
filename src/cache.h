@@ -110,7 +110,7 @@ class StatCache
     }
 
     // Cache For no object
-    bool IsNoObjectCache(std::string& key, bool overcheck = true);
+    bool IsNoObjectCache(const std::string& key, bool overcheck = true);
     bool AddNoObjectCache(std::string& key);
 
     // Add stat cache

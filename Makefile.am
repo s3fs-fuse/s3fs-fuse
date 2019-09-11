@@ -40,6 +40,7 @@ cppcheck:
             -U P_tmpdir \
             -U ENOATTR \
             --enable=warning,style,information,missingInclude \
+            --suppress=knownConditionTrueFalse \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
             src/ test/

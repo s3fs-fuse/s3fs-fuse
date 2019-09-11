@@ -168,7 +168,7 @@ void AdditionalHeader::Unload()
 {
   is_enable = false;
 
-  for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); iter = addheadlist.erase(iter)){
+  for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
     ADDHEAD *paddhead = *iter;
     if(paddhead){
       if(paddhead->pregex){
@@ -178,6 +178,7 @@ void AdditionalHeader::Unload()
       delete paddhead;
     }
   }
+  addheadlist.clear();
 }
 
 bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
