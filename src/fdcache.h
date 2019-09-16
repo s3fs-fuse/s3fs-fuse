@@ -70,7 +70,6 @@ typedef std::list<struct fdpage> fdpage_list_t;
 
 class FdEntity;
 
-//
 // Management of loading area/modifying
 //
 // cppcheck-suppress copyCtorAndEqOperator

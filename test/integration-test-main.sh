@@ -141,7 +141,6 @@ function test_mv_nonempty_directory {
 
 function test_redirects {
     describe "Testing redirects ..."
-
     mk_test_file ABCDEF
 
     CONTENT=`cat $TEST_TEXT_FILE`
