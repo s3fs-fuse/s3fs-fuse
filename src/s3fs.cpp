@@ -113,6 +113,7 @@ std::string instance_name;
 s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
 std::string aws_profile           = "default";
+symlink_cache_t symlink_cache;
 
 //-------------------------------------------------------------------
 // Static variables
@@ -131,6 +132,7 @@ static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
 static bool load_iamrole          = false;
+static bool use_symlink_cache     = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
 static mode_t s3fs_umask          = 0;
@@ -909,32 +911,52 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
   if(!_path || !buf || 0 == size){
     return 0;
   }
-  WTF8_ENCODE(path)
-  // Open
-  FdEntity*   ent;
-  if(NULL == (ent = get_local_fent(path))){
-    S3FS_PRN_ERR("could not get fent(file=%s)", path);
-    return -EIO;
-  }
-  // Get size
-  off_t readsize;
-  if(!ent->GetSize(readsize)){
-    S3FS_PRN_ERR("could not get file size(file=%s)", path);
-    FdManager::get()->Close(ent);
-    return -EIO;
-  }
-  if(static_cast<off_t>(size) <= readsize){
-    readsize = size - 1;
-  }
-  // Read
-  ssize_t ressize;
-  if(0 > (ressize = ent->Read(buf, 0, readsize))){
-    S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
-    FdManager::get()->Close(ent);
-    return static_cast<int>(ressize);
-  }
-  buf[ressize] = '\0';
 
+  WTF8_ENCODE(path)
+  
+  FdEntity*   ent;
+  bool found_in_cache = false;
+  // Check cache
+  if (use_symlink_cache) {
+    symlink_cache_t::iterator sym_itr = symlink_cache.find(path);
+    if(sym_itr != symlink_cache.end()) {
+      // Found in cache;
+      found_in_cache = true;
+      size_t to_len = strlen(sym_itr->second.c_str());
+      strncpy(buf, sym_itr->second.c_str(), to_len);
+      buf[to_len] = '\0';
+    }
+  }
+  if (!found_in_cache) {
+    // Open
+    if(NULL == (ent = get_local_fent(path))){
+      S3FS_PRN_ERR("could not get fent(file=%s)", path);
+      return -EIO;
+    }
+    // Get size
+    off_t readsize;
+    if(!ent->GetSize(readsize)){
+      S3FS_PRN_ERR("could not get file size(file=%s)", path);
+      FdManager::get()->Close(ent);
+      return -EIO;
+    }
+    if(static_cast<off_t>(size) <= readsize){
+      readsize = size - 1;
+    }
+    // Read
+    ssize_t ressize;
+    if(0 > (ressize = ent->Read(buf, 0, readsize))){
+      S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
+      FdManager::get()->Close(ent);
+      return static_cast<int>(ressize);
+    }
+    buf[ressize] = '\0';
+
+    std::string to(buf);
+    if (use_symlink_cache) {
+      symlink_cache.insert(std::pair<std::string, std::string>(path, to.c_str()));
+    }
+  }
   // check buf if it has space words.
   string strTmp = trim(string(buf));
   // decode wtf8. This will always be shorter
@@ -1150,6 +1172,7 @@ static int s3fs_unlink(const char* _path)
   result = s3fscurl.DeleteRequest(path);
   FdManager::DeleteCacheFile(path);
   StatCache::getStatCacheData()->DelStat(path);
+  symlink_cache.erase(path);
   S3FS_MALLOCTRIM(0);
 
   return result;
@@ -1279,6 +1302,11 @@ static int s3fs_symlink(const char* _from, const char* _to)
   FdManager::get()->Close(ent);
 
   StatCache::getStatCacheData()->DelStat(to);
+
+  if (use_symlink_cache) {
+    symlink_cache.insert(std::pair<std::string, std::string>(to, strFrom));
+  }
+
   S3FS_MALLOCTRIM(0);
 
   return result;
@@ -4966,6 +4994,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == strcmp(arg, "use_path_request_style")){
       pathrequeststyle = true;
+      return 0;
+    }
+    if(0 == strcmp(arg, "use_symlink_cache")){
+      use_symlink_cache = true;
       return 0;
     }
     if(0 == STR2NCMP(arg, "noua")){
