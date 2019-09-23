@@ -87,7 +87,7 @@ inline void InitStatCacheTime(struct timespec& ts)
   ts.tv_nsec = 0;
 }
 
-inline int CompareStatCacheTime(struct timespec& ts1, struct timespec& ts2)
+inline int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
 {
   // return -1:  ts1 < ts2
   //         0:  ts1 == ts2
@@ -304,7 +304,7 @@ bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bo
   return false;
 }
 
-bool StatCache::IsNoObjectCache(string& key, bool overcheck)
+bool StatCache::IsNoObjectCache(const string& key, bool overcheck)
 {
   bool is_delete_cache = false;
   string strpath = key;

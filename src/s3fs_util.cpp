@@ -994,18 +994,18 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
   bool result = false;
 
   if(!data || !key){
-    return result;
+    return false;
   }
   value.clear();
 
   xmlDocPtr doc;
   if(NULL == (doc = xmlReadMemory(data, len, "", NULL, 0))){
-    return result;
+    return false;
   }
 
   if(NULL == doc->children){
     S3FS_XMLFREEDOC(doc);
-    return result;
+    return false;
   }
   for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
     // For DEBUG
