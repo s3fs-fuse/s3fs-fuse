@@ -3420,7 +3420,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
   return 0;
 }
 
-int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, string& upload_id, etaglist_t& parts)
+int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const string& upload_id, etaglist_t& parts)
 {
   S3FS_PRN_INFO3("[tpath=%s][parts=%zu]", SAFESTRPTR(tpath), parts.size());
 
@@ -3530,7 +3530,7 @@ int S3fsCurl::MultipartListRequest(string& body)
   return result;
 }
 
-int S3fsCurl::AbortMultipartUpload(const char* tpath, string& upload_id)
+int S3fsCurl::AbortMultipartUpload(const char* tpath, const string& upload_id)
 {
   S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3662,7 +3662,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
   return result;
 }
 
-int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_num, string& upload_id, headers_t& meta)
+int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_num, const string& upload_id, headers_t& meta)
 {
   S3FS_PRN_INFO3("[from=%s][to=%s][part=%d]", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
 
