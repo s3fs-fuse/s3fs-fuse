@@ -47,6 +47,7 @@
 #include "s3fs_util.h"
 #include "s3fs_auth.h"
 #include "addhead.h"
+#include "fdcache.h"
 #include "psemaphore.h"
 
 using namespace std;
@@ -424,7 +425,7 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
     return false;
   }
   // [NOTE]
-  // sCurlPoolSize must be over parrallel(or multireq) count.
+  // sCurlPoolSize must be over parallel(or multireq) count.
   //
   if(sCurlPoolSize < std::max(GetMaxParallelCount(), GetMaxMultiRequest())){
     sCurlPoolSize = std::max(GetMaxParallelCount(), GetMaxMultiRequest());
@@ -1312,6 +1313,15 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
   return s3fscurl->UploadMultipartPostComplete();
 }
 
+bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl)
+{
+  if(!s3fscurl){
+    return false;
+  }
+
+  return s3fscurl->MixMultipartPostComplete();
+}
+
 S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
   if(!s3fscurl){
@@ -1397,6 +1407,21 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   return newcurl;
 }
 
+S3fsCurl* S3fsCurl::MixMultipartPostRetryCallback(S3fsCurl* s3fscurl)
+{
+  if(!s3fscurl){
+    return NULL;
+  }
+
+  S3fsCurl* pcurl;
+  if(-1 == s3fscurl->partdata.fd){
+    pcurl = S3fsCurl::CopyMultipartPostRetryCallback(s3fscurl);
+  }else{
+    pcurl = S3fsCurl::UploadMultipartPostRetryCallback(s3fscurl);
+  }
+  return pcurl;
+}
+
 int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd)
 {
   int            result;
@@ -1480,6 +1505,136 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
     return result;
   }
 
+  close(fd2);
+
+  if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
+    return result;
+  }
+  return 0;
+}
+
+int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const PageList& pagelist)
+{
+  int            result;
+  string         upload_id;
+  struct stat    st;
+  int            fd2;
+  etaglist_t     list;
+  S3fsCurl       s3fscurl(true);
+
+  S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
+
+  // get upload mixed page list
+  fdpage_list_t fdplist;
+  if(!pagelist.GetMultipartSizeList(fdplist, S3fsCurl::multipart_size)){
+    return -1;
+  }
+
+  // duplicate fd
+  if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
+    S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
+    PageList::FreeList(fdplist);
+    if(-1 != fd2){
+      close(fd2);
+    }
+    return -errno;
+  }
+  if(-1 == fstat(fd2, &st)){
+    S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
+    PageList::FreeList(fdplist);
+    close(fd2);
+    return -errno;
+  }
+
+  if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, true))){
+    PageList::FreeList(fdplist);
+    close(fd2);
+    return result;
+  }
+  s3fscurl.DestroyCurlHandle();
+
+  // for copy multipart
+  string srcresource;
+  string srcurl;
+  MakeUrlResource(get_realpath(tpath).c_str(), srcresource, srcurl);
+  meta["Content-Type"]      = S3fsCurl::LookupMimeType(string(tpath));
+  meta["x-amz-copy-source"] = srcresource;
+
+  // Initialize S3fsMultiCurl
+  S3fsMultiCurl curlmulti(GetMaxParallelCount());
+  curlmulti.SetSuccessCallback(S3fsCurl::MixMultipartPostCallback);
+  curlmulti.SetRetryCallback(S3fsCurl::MixMultipartPostRetryCallback);
+
+  for(fdpage_list_t::const_iterator iter = fdplist.begin(); iter != fdplist.end(); ++iter){
+    // s3fscurl sub object
+    S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
+
+    if(iter->modified){
+      // Multipart upload
+      s3fscurl_para->partdata.fd         = fd2;
+      s3fscurl_para->partdata.startpos   = iter->offset;
+      s3fscurl_para->partdata.size       = iter->bytes;
+      s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
+      s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
+      s3fscurl_para->partdata.add_etag_list(&list);
+
+      S3FS_PRN_INFO3("Upload Part [tpath=%s][start=%jd][size=%jd][part=%jd]", SAFESTRPTR(tpath), (intmax_t)(iter->offset), (intmax_t)(iter->bytes), (intmax_t)(list.size()));
+
+      // initiate upload part for parallel
+      if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
+        S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+        PageList::FreeList(fdplist);
+        close(fd2);
+        delete s3fscurl_para;
+        return result;
+      }
+    }else{
+      // Multipart copy
+      ostringstream  strrange;
+      strrange << "bytes=" << iter->offset << "-" << (iter->offset + iter->bytes - 1);
+      meta["x-amz-copy-source-range"] = strrange.str();
+      strrange.str("");
+      strrange.clear(stringstream::goodbit);
+
+      s3fscurl_para->b_from   = SAFESTRPTR(tpath);
+      s3fscurl_para->b_meta   = meta;
+      s3fscurl_para->partdata.add_etag_list(&list);
+
+      S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%jd][size=%jd][part=%jd]", SAFESTRPTR(tpath), (intmax_t)(iter->offset), (intmax_t)(iter->bytes), (intmax_t)(list.size()));
+
+      // initiate upload part for parallel
+      if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
+        S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+        close(fd2);
+        delete s3fscurl_para;
+        return result;
+      }
+    }
+
+    // set into parallel object
+    if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+      S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
+      PageList::FreeList(fdplist);
+      close(fd2);
+      delete s3fscurl_para;
+      return -1;
+    }
+  }
+  PageList::FreeList(fdplist);
+
+  // Multi request
+  if(0 != (result = curlmulti.Request())){
+    S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+
+    S3fsCurl s3fscurl_abort(true);
+    int result2 = s3fscurl_abort.AbortMultipartUpload(tpath, upload_id);
+    s3fscurl_abort.DestroyCurlHandle();
+    if(result2 != 0){
+      S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+    }
+    close(fd2);
+    return result;
+  }
   close(fd2);
 
   if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
@@ -1940,7 +2095,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
         return false;
       }else{
         // [NOTE]
-        // urther initialization processing is left to lazy processing to be executed later.
+        // Further initialization processing is left to lazy processing to be executed later.
         // (Currently we do not use only_pool=true, but this code is remained for the future)
         return true;
       }
@@ -3757,6 +3912,17 @@ bool S3fsCurl::CopyMultipartPostComplete()
   headdata.Clear();
 
   return true;
+}
+
+bool S3fsCurl::MixMultipartPostComplete()
+{
+  bool result;
+  if(-1 == partdata.fd){
+    result = CopyMultipartPostComplete();
+  }else{
+    result = UploadMultipartPostComplete();
+  }
+  return result;
 }
 
 int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy)
