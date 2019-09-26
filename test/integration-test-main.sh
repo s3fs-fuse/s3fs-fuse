@@ -650,6 +650,12 @@ function test_open_second_fd {
     rm_test_file second_fd_file
 }
 
+function test_write_multiple_offsets {
+    describe "test writing to multiple offsets"
+    ../../write_multiple_offsets.py ${TEST_TEXT_FILE}
+    rm_test_file
+}
+
 function add_all_tests {
     add_tests test_append_file 
     add_tests test_truncate_file 
@@ -681,6 +687,7 @@ function add_all_tests {
     add_tests test_concurrency
     add_tests test_concurrent_writes
     add_tests test_open_second_fd
+    add_tests test_write_multiple_offsets
 }
 
 init_suite
