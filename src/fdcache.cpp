@@ -2178,7 +2178,7 @@ off_t           FdManager::free_disk_space = 0;
 //------------------------------------------------
 bool FdManager::SetCacheDir(const char* dir)
 {
-  if(!dir || '\0' == dir[0]){
+  if(!dir || '\0' == dir[0] || 0 == strcmp(dir, "''") || 0 == strcmp(dir, "\"\"")){
     cache_dir = "";
   }else{
     cache_dir = dir;
