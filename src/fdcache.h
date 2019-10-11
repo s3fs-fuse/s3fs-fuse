@@ -81,6 +81,14 @@ class PageList
   private:
     fdpage_list_t pages;
 
+  public:
+    enum page_status{
+      PAGE_NOT_LOAD_MODIFIED = 0,
+      PAGE_LOADED,
+      PAGE_MODIFIED,
+      PAGE_LOAD_MODIFIED
+    };
+
   private:
     void Clear(void);
     bool Compress(bool force_modified = false);
@@ -99,10 +107,12 @@ class PageList
     bool Resize(off_t size, bool is_loaded, bool is_modified);
 
     bool IsPageLoaded(off_t start = 0, off_t size = 0) const;                  // size=0 is checking to end of list
-    bool SetPageLoadedStatus(off_t start, off_t size, bool is_loaded = true, bool is_modified = false, bool is_compress = true);
+    bool SetPageLoadedStatus(off_t start, off_t size, PageList::page_status pstatus = PAGE_LOADED, bool is_compress = true);
     bool FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const;
     off_t GetTotalUnloadedPageSize(off_t start = 0, off_t size = 0) const;    // size=0 is checking to end of list
     int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
+    bool GetLoadPageListForMultipartUpload(fdpage_list_t& dlpages);
+    bool GetMultipartSizeList(fdpage_list_t& mplist, off_t partsize) const;
 
     bool IsModified(void) const;
     bool ClearAllModified(void);
@@ -117,6 +127,8 @@ class PageList
 class FdEntity
 {
   private:
+    static bool     mixmultipart;   // whether multipart uploading can use copy api.
+
     pthread_mutex_t fdent_lock;
     bool            is_lock_init;
     int             refcnt;         // reference count
@@ -146,6 +158,8 @@ class FdEntity
     bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
 
   public:
+    static bool SetNoMixMultipart(void);
+
     explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
     ~FdEntity();
 

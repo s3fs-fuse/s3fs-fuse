@@ -174,7 +174,7 @@ static int check_parent_object_access(const char* path, int mask);
 static FdEntity* get_local_fent(const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
-static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler);
+static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
 static bool is_truncated(xmlDocPtr doc);
@@ -2468,7 +2468,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
   return newcurl;
 }
 
-static int readdir_multi_head(const char* path, S3ObjList& head, void* buf, fuse_fill_dir_t filler)
+static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
   S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
   s3obj_list_t  headlist;
@@ -2778,7 +2778,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
   bool result = false;
 
   if(!doc){
-    return result;
+    return false;
   }
   if((tmLast + 60) < time(NULL)){
     // refresh
@@ -2905,7 +2905,7 @@ static bool is_truncated(xmlDocPtr doc)
 
   xmlChar* strTruncate = get_base_exp(doc, "IsTruncated");
   if(!strTruncate){
-    return result;
+    return false;
   }
   if(0 == strcasecmp((const char*)strTruncate, "true")){
     result = true;
@@ -4940,6 +4940,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       noxmlns = true;
       return 0;
     }
+    if(0 == strcmp(arg, "nomixupload")){
+      FdEntity::SetNoMixMultipart();
+      return 0;
+    }
     if(0 == strcmp(arg, "nocopyapi")){
       nocopyapi = true;
       return 0;
@@ -5377,6 +5381,11 @@ int main(int argc, char* argv[])
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();
     exit(exitcode);
+  }
+
+  // Check multipart / copy api for mix multipart uploading
+  if(nomultipart || nocopyapi || norenameapi){
+    FdEntity::SetNoMixMultipart();
   }
 
   // check free disk space

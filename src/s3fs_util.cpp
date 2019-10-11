@@ -994,18 +994,18 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
   bool result = false;
 
   if(!data || !key){
-    return result;
+    return false;
   }
   value.clear();
 
   xmlDocPtr doc;
   if(NULL == (doc = xmlReadMemory(data, len, "", NULL, 0))){
-    return result;
+    return false;
   }
 
   if(NULL == doc->children){
     S3FS_XMLFREEDOC(doc);
-    return result;
+    return false;
   }
   for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
     // For DEBUG
@@ -1332,6 +1332,13 @@ void show_help ()
     "        space is looked up from \"http://s3.amazonaws.com/doc/2006-03-01\".\n"
     "        This option should not be specified now, because s3fs looks up\n"
     "        xmlns automatically after v1.66.\n"
+    "\n"
+    "   nomixupload (disable copy in multipart uploads)\n"
+    "        Disable to use PUT (copy api) when multipart uploading large size objects.\n"
+    "        By default, when doing multipart upload, the range of unchanged data\n"
+    "        will use PUT (copy api) whenever possible.\n"
+    "        When nocopyapi or norenameapi is specified, use of PUT (copy api) is\n"
+    "        invalidated even if this option is not specified.\n"
     "\n"
     "   nocopyapi (for other incomplete compatibility object storage)\n"
     "        For a distributed object storage which is compatibility S3\n"
