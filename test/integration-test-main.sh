@@ -652,8 +652,8 @@ function test_open_second_fd {
 
 function test_write_multiple_offsets {
     describe "test writing to multiple offsets"
-    ../../write_multiple_offsets.py ${TEST_TEXT_FILE}
-    rm_test_file
+    ../../write_multiple_offsets.py ${TEST_TEXT_FILE}.multioffset
+    rm_test_file ${TEST_TEXT_FILE}.multioffset
 }
 
 function add_all_tests {
