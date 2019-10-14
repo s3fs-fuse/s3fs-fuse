@@ -44,7 +44,7 @@ matrix:
     - os: osx
       osx_image: xcode9.2
       before_install:
-        - brew tap caskroom/cask
+        - brew tap homebrew/homebrew-cask
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
         - HOMEBREW_NO_AUTO_UPDATE=1 brew install awscli cppcheck truncate
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
