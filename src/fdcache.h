@@ -39,6 +39,7 @@ class CacheFileStat
     static bool DeleteCacheFileStat(const char* path);
     static bool CheckCacheFileStatTopDir(void);
     static bool DeleteCacheFileStatDirectory(void);
+    static bool RenameCacheFileStat(const char* oldpath, const char* newpath);
 
     explicit CacheFileStat(const char* tpath = NULL);
     ~CacheFileStat();
@@ -171,7 +172,7 @@ class FdEntity
     int Dup(bool lock_already_held = false);
 
     const char* GetPath(void) const { return path.c_str(); }
-    void SetPath(const std::string &newpath) { path = newpath; }
+    bool RenamePath(const std::string& newpath, std::string& fentmapkey);
     int GetFd(void) const { return fd; }
     bool IsModified(void) const { return pagelist.IsModified(); }
 
