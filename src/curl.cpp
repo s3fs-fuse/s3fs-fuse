@@ -4689,7 +4689,7 @@ string prepare_url(const char* url)
   string path;
   string url_str = string(url);
   string token = string("/") + bucket;
-  int bucket_pos = url_str.find(token);
+  int bucket_pos;
   int bucket_length = token.size();
   int uri_length = 0;
 
@@ -4699,6 +4699,7 @@ string prepare_url(const char* url)
     uri_length = 7;
   }
   uri  = url_str.substr(0, uri_length);
+  bucket_pos = url_str.find(token, uri_length);
 
   if(!pathrequeststyle){
     hostname = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length);
