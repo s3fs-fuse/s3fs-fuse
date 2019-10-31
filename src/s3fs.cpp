@@ -1581,6 +1581,8 @@ static int s3fs_rename(const char* _from, const char* _to)
       return result;
     }
     StatCache::getStatCacheData()->DelStat(from);
+    FdManager::get()->Close(entity);
+    entity = NULL;
   }
 
   // files larger than 5GB must be modified via the multipart interface

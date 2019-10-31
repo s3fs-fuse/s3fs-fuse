@@ -141,6 +141,48 @@ bool CacheFileStat::DeleteCacheFileStatDirectory()
   return delete_files_in_dir(top_path.c_str(), true);
 }
 
+bool CacheFileStat::RenameCacheFileStat(const char* oldpath, const char* newpath)
+{
+  if(!oldpath || '\0' == oldpath[0] || !newpath || '\0' == newpath[0]){
+    return false;
+  }
+
+  // stat path
+  string old_filestat;
+  string new_filestat;
+  if(!CacheFileStat::MakeCacheFileStatPath(oldpath, old_filestat, false) || !CacheFileStat::MakeCacheFileStatPath(newpath, new_filestat, false)){
+    return false;
+  }
+
+  // check new stat path
+  struct stat st;
+  if(0 == stat(new_filestat.c_str(), &st)){
+    // new stat path is existed, then unlink it.
+    if(-1 == unlink(new_filestat.c_str())){
+      S3FS_PRN_ERR("failed to unlink new cache file stat path(%s) by errno(%d).", new_filestat.c_str(), errno);
+      return false;
+    }
+  }
+
+  // check old stat path
+  if(0 != stat(old_filestat.c_str(), &st)){
+    // old stat path is not existed, then nothing to do any more.
+    return true;
+  }
+
+  // link and unlink
+  if(-1 == link(old_filestat.c_str(), new_filestat.c_str())){
+    S3FS_PRN_ERR("failed to link old cache file stat path(%s) to new cache file stat path(%s) by errno(%d).", old_filestat.c_str(), new_filestat.c_str(), errno);
+    return false;
+  }
+  if(-1 == unlink(old_filestat.c_str())){
+    S3FS_PRN_ERR("failed to unlink old cache file stat path(%s) by errno(%d).", old_filestat.c_str(), errno);
+    return false;
+  }
+
+ return true;
+}
+
 //------------------------------------------------
 // CacheFileStat methods
 //------------------------------------------------
@@ -1337,6 +1379,60 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
   if(size){
     *size = pagelist.Size();
   }
+  return true;
+}
+
+//
+// Rename file path.
+//
+// This method sets the FdManager::fent map registration key to fentmapkey.
+//
+// [NOTE]
+// This method changes the file path of FdEntity.
+// Old file is deleted after linking to the new file path, and this works
+// without problem because the file descriptor is not affected even if the
+// cache file is open.
+// The mirror file descriptor is also the same. The mirror file path does
+// not need to be changed and will remain as it is.
+//
+bool FdEntity::RenamePath(const string& newpath, string& fentmapkey)
+{
+  if(!cachepath.empty()){
+    // has cache path
+
+    // make new cache path
+    string newcachepath;
+    if(!FdManager::MakeCachePath(newpath.c_str(), newcachepath, true)){
+      S3FS_PRN_ERR("failed to make cache path for object(%s).", newpath.c_str());
+      return false;
+    }
+
+    // link and unlink cache file
+    if(-1 == link(cachepath.c_str(), newcachepath.c_str())){
+      S3FS_PRN_ERR("failed to link old cache path(%s) to new cache path(%s) by errno(%d).", cachepath.c_str(), newcachepath.c_str(), errno);
+      return false;
+    }
+    if(-1 == unlink(cachepath.c_str())){
+      S3FS_PRN_ERR("failed to unlink old cache path(%s) by errno(%d).", cachepath.c_str(), errno);
+      return false;
+    }
+
+    // link and unlink cache file stat
+    if(!CacheFileStat::RenameCacheFileStat(path.c_str(), newpath.c_str())){
+      S3FS_PRN_ERR("failed to rename cache file stat(%s to %s).", path.c_str(), newpath.c_str());
+      return false;
+    }
+    fentmapkey = newpath;
+    cachepath  = newcachepath;
+
+  }else{
+    // does not have cache path
+    fentmapkey.erase();
+    FdManager::MakeRandomTempPath(newpath.c_str(), fentmapkey);
+  }
+  // set new path
+  path = newpath;
+
   return true;
 }
 
@@ -2563,14 +2659,39 @@ FdEntity* FdManager::ExistOpen(const char* path, int existfd, bool ignore_existf
 void FdManager::Rename(const std::string &from, const std::string &to)
 {
   AutoLock auto_lock(&FdManager::fd_manager_lock);
+
   fdent_map_t::iterator iter = fent.find(from);
+  if(fent.end() == iter && !FdManager::IsCacheDir()){
+    // If the cache directory is not specified, s3fs opens a temporary file
+    // when the file is opened.
+    // Then if it could not find a entity in map for the file, s3fs should
+    // search a entity in all which opened the temporary file.
+    //
+    for(iter = fent.begin(); iter != fent.end(); ++iter){
+      if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), from.c_str())){
+        break;              // found opened fd in mapping
+      }
+    }
+  }
+
   if(fent.end() != iter){
     // found
     S3FS_PRN_DBG("[from=%s][to=%s]", from.c_str(), to.c_str());
+
     FdEntity* ent = (*iter).second;
+
+    // retrieve old fd entity from map
     fent.erase(iter);
-    ent->SetPath(to);
-    fent[to] = ent;
+
+    // rename path and caches in fd entity
+    string fentmapkey;
+    if(!ent->RenamePath(to, fentmapkey)){
+      S3FS_PRN_ERR("Failed to rename FdEntity obejct for %s to %s", from.c_str(), to.c_str());
+      return;
+    }
+
+    // set new fd entity to map
+    fent[fentmapkey] = ent;
   }
 }
 
