@@ -41,6 +41,12 @@ Many systems provide pre-built packages:
   sudo yum install s3fs-fuse
   ```
 
+* Gentoo:
+
+  ```
+  sudo emerge net-fs/s3fs
+  ```
+
 * RHEL and CentOS 7 or newer through via EPEL:
 
   ```
