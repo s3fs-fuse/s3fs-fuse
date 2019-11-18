@@ -43,11 +43,40 @@ matrix:
 
     - os: osx
       osx_image: xcode9.2
+      cache:
+        directories:
+          - $HOME/Library/Caches/Homebrew
+          - /usr/local/Homebrew
+          - $HOME/.osx_cache
+      before_cache:
+        - brew cleanup
+        - cd /usr/local/Homebrew; find . \! -regex ".+\.git.+" -delete
+        - mkdir -p $HOME/.osx_cache; touch $HOME/.osx_cache/cached
       before_install:
-        - brew tap homebrew/homebrew-cask
+        - TAPS="$(brew --repository)/Library/Taps";
+          if [ -e "$TAPS/caskroom/homebrew-cask" ]; then
+            rm -rf "$TAPS/caskroom/homebrew-cask";
+          fi;
+          if [ ! -f $HOME/.osx_cache/cached ]; then
+            brew tap homebrew/homebrew-cask;
+          else
+            HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask;
+          fi
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
-        - HOMEBREW_NO_AUTO_UPDATE=1 brew install awscli cppcheck truncate
-        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
+        - S3FS_BREW_PACKAGES='awscli cppcheck truncate';
+          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
+            brew list | grep -q ${s3fs_brew_pkg};
+            if [ $? -eq 0 ]; then
+              brew outdated | grep -q ${s3fs_brew_pkg} && HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg};
+            else
+              HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg};
+            fi;
+          done
+        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then
+            sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs;
+          elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then
+            sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse;
+          fi
         - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
       script:
         - ./autogen.sh
