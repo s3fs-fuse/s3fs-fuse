@@ -392,6 +392,7 @@ off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 bool             S3fsCurl::is_sigv4            = true;           // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::is_use_session_token = false;         // default
+bool             S3fsCurl::requester_pays      = false;          // default
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -2755,6 +2756,10 @@ void S3fsCurl::insertV4Headers()
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-content-sha256", contentSHA256.c_str());
   requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-date", date8601.c_str());
 	
+  if (S3fsCurl::IsRequesterPays()) {
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-request-payer", "requester");
+  }
+
   if(!S3fsCurl::IsPublicBucket()){
     string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST || type == REQTYPE_MULTILIST ? "=" : ""), strdate, contentSHA256, date8601);
     string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint +
