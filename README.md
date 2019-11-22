@@ -32,13 +32,13 @@ Many systems provide pre-built packages:
 * Debian 9 and Ubuntu 16.04 or newer:
 
   ```
-  sudo apt-get install s3fs
+  sudo apt install s3fs
   ```
 
 * Fedora 27 or newer:
 
   ```
-  sudo yum install s3fs-fuse
+  sudo dnf install s3fs-fuse
   ```
 
 * Gentoo:
