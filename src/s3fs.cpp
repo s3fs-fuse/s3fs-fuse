@@ -5062,6 +5062,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       use_wtf8 = true;
       return 0;
     }
+    if(0 == strcmp(arg, "requester_pays")){
+      S3fsCurl::SetRequesterPays(true);
+      return 0;
+    }
 
     // [NOTE]
     // following option will be discarding, because these are not for fuse.

@@ -301,6 +301,7 @@ class S3fsCurl
     static off_t            multipart_size;
     static bool             is_sigv4;
     static bool             is_ua;             // User-Agent
+    static bool             requester_pays;
 
     // variables
     CURL*                hCurl;
@@ -477,6 +478,8 @@ class S3fsCurl
     static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
     static bool IsUserAgentFlag(void) { return S3fsCurl::is_ua; }
     static void InitUserAgent(void);
+    static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
+    static bool IsRequesterPays(void) { return S3fsCurl::requester_pays; }
 
     // methods
     bool CreateCurlHandle(bool only_pool = false, bool remake = false);
