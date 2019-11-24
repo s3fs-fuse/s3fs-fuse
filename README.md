@@ -67,7 +67,7 @@ Many systems provide pre-built packages:
   brew install s3fs
   ```
 
-Otherwise consult the [complation instructions](COMPILATION.md).
+Otherwise consult the [compilation instructions](COMPILATION.md).
 
 ## Examples
 
