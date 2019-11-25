@@ -317,6 +317,9 @@ If credentials are provided by environment variables this switch
 forces presence check of AWSSESSIONTOKEN variable.
 Otherwise an error is returned.
 .TP
+\fB\-o\fR requester_pays (default is disable)
+This option instructs s3fs to enable requests involving Requester Pays buckets (It includes the 'x-amz-request-payer=requester' entry in the request header).
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit (critical), err (error), warn (warning), info (information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
