@@ -156,13 +156,13 @@ time to wait between read/write activity before giving up.
 specify the maximum number of keys returned by S3 list object API. The default is 1000. you can set this value to 1000 or more.
 .TP
 \fB\-o\fR max_stat_cache_size (default="100,000" entries (about 40MB))
-maximum number of entries in the stat cache
+maximum number of entries in the stat cache and symbolic link cache.
 .TP
 \fB\-o\fR stat_cache_expire (default is no expire)
-specify expire time (seconds) for entries in the stat cache. This expire time indicates the time since stat cached.
+specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time indicates the time since cached.
 .TP
 \fB\-o\fR stat_cache_interval_expire (default is no expire)
-specify expire time (seconds) for entries in the stat cache. This expire time is based on the time from the last access time of the stat cache.
+specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time is based on the time from the last access time of those cache.
 This option is exclusive with stat_cache_expire, and is left for compatibility with older versions.
 .TP
 \fB\-o\fR enable_noobj_cache (default is disable)

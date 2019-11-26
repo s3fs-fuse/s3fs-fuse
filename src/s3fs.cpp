@@ -910,40 +910,54 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     return 0;
   }
   WTF8_ENCODE(path)
-  // Open
-  FdEntity*   ent;
-  if(NULL == (ent = get_local_fent(path))){
-    S3FS_PRN_ERR("could not get fent(file=%s)", path);
-    return -EIO;
-  }
-  // Get size
-  off_t readsize;
-  if(!ent->GetSize(readsize)){
-    S3FS_PRN_ERR("could not get file size(file=%s)", path);
-    FdManager::get()->Close(ent);
-    return -EIO;
-  }
-  if(static_cast<off_t>(size) <= readsize){
-    readsize = size - 1;
-  }
-  // Read
-  ssize_t ressize;
-  if(0 > (ressize = ent->Read(buf, 0, readsize))){
-    S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
-    FdManager::get()->Close(ent);
-    return static_cast<int>(ressize);
-  }
-  buf[ressize] = '\0';
+  string    strValue;
 
-  // check buf if it has space words.
-  string strTmp = trim(string(buf));
-  // decode wtf8. This will always be shorter
-  if(use_wtf8){
-    strTmp = s3fs_wtf8_decode(strTmp);
-  }
-  strncpy(buf, strTmp.c_str(), size);
+  // check symblic link cache
+  if(!StatCache::getStatCacheData()->GetSymlink(string(path), strValue)){
+    // not found in cache, then open the path
+    FdEntity*   ent;
+    if(NULL == (ent = get_local_fent(path))){
+      S3FS_PRN_ERR("could not get fent(file=%s)", path);
+      return -EIO;
+    }
+    // Get size
+    off_t readsize;
+    if(!ent->GetSize(readsize)){
+      S3FS_PRN_ERR("could not get file size(file=%s)", path);
+      FdManager::get()->Close(ent);
+      return -EIO;
+    }
+    if(static_cast<off_t>(size) <= readsize){
+      readsize = size - 1;
+    }
+    // Read
+    ssize_t ressize;
+    if(0 > (ressize = ent->Read(buf, 0, readsize))){
+      S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
+      FdManager::get()->Close(ent);
+      return static_cast<int>(ressize);
+    }
+    buf[ressize] = '\0';
 
-  FdManager::get()->Close(ent);
+    // close
+    FdManager::get()->Close(ent);
+
+    // check buf if it has space words.
+    strValue = trim(string(buf));
+
+    // decode wtf8. This will always be shorter
+    if(use_wtf8){
+      strValue = s3fs_wtf8_decode(strValue);
+    }
+
+    // add symblic link cache
+    if(!StatCache::getStatCacheData()->AddSymlink(string(path), strValue)){
+      S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
+    }
+  }
+  // copy result
+  strncpy(buf, strValue.c_str(), size);
+
   S3FS_MALLOCTRIM(0);
 
   return 0;
@@ -1150,6 +1164,7 @@ static int s3fs_unlink(const char* _path)
   result = s3fscurl.DeleteRequest(path);
   FdManager::DeleteCacheFile(path);
   StatCache::getStatCacheData()->DelStat(path);
+  StatCache::getStatCacheData()->DelSymlink(path);
   S3FS_MALLOCTRIM(0);
 
   return result;
@@ -1279,6 +1294,9 @@ static int s3fs_symlink(const char* _from, const char* _to)
   FdManager::get()->Close(ent);
 
   StatCache::getStatCacheData()->DelStat(to);
+  if(!StatCache::getStatCacheData()->AddSymlink(string(to), strFrom)){
+    S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
+  }
   S3FS_MALLOCTRIM(0);
 
   return result;
