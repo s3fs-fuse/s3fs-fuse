@@ -247,7 +247,7 @@ class FdManager
     static off_t SetEnsureFreeDiskSpace(off_t size);
     static bool IsSafeDiskSpace(const char* path, off_t size);
     static void FreeReservedDiskSpace(off_t size);
-    bool ReserveDiskSpace(off_t size);
+    static bool ReserveDiskSpace(off_t size);
 
     // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
     FdEntity* GetFdEntity(const char* path, int existfd = -1);

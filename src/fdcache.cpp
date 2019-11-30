@@ -808,7 +808,7 @@ bool PageList::GetMultipartSizeList(fdpage_list_t& mplist, off_t partsize) const
   return true;
 }
 
-bool PageList::IsModified(void) const
+bool PageList::IsModified() const
 {
   for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(iter->modified){
@@ -818,7 +818,7 @@ bool PageList::IsModified(void) const
   return false;
 }
 
-bool PageList::ClearAllModified(void)
+bool PageList::ClearAllModified()
 {
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
     if(iter->modified){
@@ -957,7 +957,7 @@ void PageList::Dump()
 //------------------------------------------------
 bool FdEntity::mixmultipart = true;
 
-bool FdEntity::SetNoMixMultipart(void)
+bool FdEntity::SetNoMixMultipart()
 {
   bool old = mixmultipart;
   mixmultipart = false;
@@ -2035,7 +2035,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
 // Need to lock before calling this method.
 bool FdEntity::ReserveDiskSpace(off_t size)
 {
-  if(FdManager::get()->ReserveDiskSpace(size)){
+  if(FdManager::ReserveDiskSpace(size)){
     return true;
   }
 
@@ -2047,14 +2047,14 @@ bool FdEntity::ReserveDiskSpace(off_t size)
       return false;
     }
 
-    if(FdManager::get()->ReserveDiskSpace(size)){
+    if(FdManager::ReserveDiskSpace(size)){
       return true;
     }
   }
 
   FdManager::get()->CleanupCacheDir();
 
-  return FdManager::get()->ReserveDiskSpace(size);
+  return FdManager::ReserveDiskSpace(size);
 }
 
 ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
