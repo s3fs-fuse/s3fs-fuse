@@ -201,7 +201,8 @@ enum storage_class_t {
   STANDARD,
   STANDARD_IA,
   ONEZONE_IA,
-  REDUCED_REDUNDANCY
+  REDUCED_REDUNDANCY,
+  INTELLIGENT_TIERING
 };
 
 enum acl_t {
