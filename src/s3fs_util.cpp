@@ -1097,7 +1097,7 @@ void show_help ()
     "\n"
     "   storage_class (default=\"standard\")\n"
     "      - store object with specified storage class.  Possible values:\n"
-    "        standard, standard_ia, onezone_ia and reduced_redundancy.\n"
+    "        standard, standard_ia, onezone_ia, reduced_redundancy and intelligent_tiering.\n"
     "\n"
     "   use_rrs (default is disable)\n"
     "      - use Amazon's Reduced Redundancy Storage.\n"

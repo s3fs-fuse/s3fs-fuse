@@ -4599,6 +4599,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         S3fsCurl::SetStorageClass(ONEZONE_IA);
       }else if(0 == strcmp(storage_class, "reduced_redundancy")){
         S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
+      }else if(0 == strcmp(storage_class, "intelligent_tiering")){
+        S3fsCurl::SetStorageClass(INTELLIGENT_TIERING);
       }else{
         S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class);
         return -1;
