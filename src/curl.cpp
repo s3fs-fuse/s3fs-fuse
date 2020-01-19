@@ -2372,7 +2372,7 @@ bool S3fsCurl::RemakeHandle()
 //
 // returns curl return code
 //
-int S3fsCurl::RequestPerform()
+int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
   if(IS_S3FS_LOG_DBG()){
     char* ptr_url = NULL;
@@ -2384,7 +2384,9 @@ int S3fsCurl::RequestPerform()
   long responseCode;
   int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
 
-  insertAuthHeaders();
+  if(!dontAddAuthHeaders)
+     insertAuthHeaders();
+	
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
   // 1 attempt + retries...
