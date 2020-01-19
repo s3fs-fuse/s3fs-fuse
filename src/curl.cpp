@@ -2372,7 +2372,7 @@ bool S3fsCurl::RemakeHandle()
 //
 // returns curl return code
 //
-int S3fsCurl::RequestPerform()
+int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
   if(IS_S3FS_LOG_DBG()){
     char* ptr_url = NULL;
@@ -2384,7 +2384,10 @@ int S3fsCurl::RequestPerform()
   long responseCode;
   int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
 
-  insertAuthHeaders();
+  if(!dontAddAuthHeaders) {
+     insertAuthHeaders();
+  }
+  
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
   // 1 attempt + retries...
@@ -2907,7 +2910,7 @@ int S3fsCurl::GetIAMCredentials()
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
-  int result = RequestPerform();
+  int result = RequestPerform(true);
 
   // analyzing response
   if(0 == result && !S3fsCurl::SetIAMCredentials(bodydata.str())){
@@ -2944,7 +2947,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
-  int result = RequestPerform();
+  int result = RequestPerform(true);
 
   // analyzing response
   if(0 == result && !S3fsCurl::SetIAMRoleFromMetaData(bodydata.str())){

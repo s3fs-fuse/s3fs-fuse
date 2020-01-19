@@ -489,7 +489,7 @@ class S3fsCurl
     bool LoadIAMRoleFromMetaData(void);
     bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
     bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
-    int RequestPerform(void);
+    int RequestPerform(bool dontAddAuthHeaders=false);
     int DeleteRequest(const char* tpath);
     bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, int ssekey_pos = -1);
     bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath, int ssekey_pos = -1) {
