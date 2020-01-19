@@ -2946,7 +2946,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
   S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
-  int result = RequestPerform();
+  int result = RequestPerform(true);
 
   // analyzing response
   if(0 == result && !S3fsCurl::SetIAMRoleFromMetaData(bodydata.str())){
