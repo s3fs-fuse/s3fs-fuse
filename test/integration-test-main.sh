@@ -466,6 +466,8 @@ function test_symlink {
 
     [ -L $ALT_TEST_TEXT_FILE ]
     [ ! -f $ALT_TEST_TEXT_FILE ]
+
+    rm -f $ALT_TEST_TEXT_FILE
 }
 
 function test_extended_attributes {
@@ -487,6 +489,8 @@ function test_extended_attributes {
     del_xattr key1 $TEST_TEXT_FILE
     ! get_xattr key1 $TEST_TEXT_FILE
     get_xattr key2 $TEST_TEXT_FILE | grep -q '^value2$'
+
+    rm_test_file
 }
 
 function test_mtime_file {
@@ -517,6 +521,9 @@ function test_mtime_file {
        echo "File times do not match:  $testmtime != $altmtime"
        return 1
     fi
+
+    rm_test_file
+    rm_test_file $ALT_TEST_TEXT_FILE
 }
 
 function test_update_time() {
@@ -566,6 +573,8 @@ function test_update_time() {
        echo "Expected updated ctime: $ctime4 != $ctime5 and updated mtime: $mtime4 != $mtime5"
        return 1
     fi
+
+    rm_test_file
 }
 
 function test_rm_rf_dir {
