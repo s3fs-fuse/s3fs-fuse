@@ -233,7 +233,14 @@ function test_chown {
         ORIGINAL_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
     fi
 
-    chown 1000:1000 $TEST_TEXT_FILE;
+    # [NOTE]
+    # Prevents test interruptions due to permission errors, etc.
+    # If the chown command fails, an error will occur with the
+    # following judgment statement. So skip the chown command error.
+    # '|| true' was added due to a problem with Travis CI and MacOS
+    # and ensure_diskfree option.
+    #
+    chown 1000:1000 $TEST_TEXT_FILE || true
 
     # if they're the same, we have a problem.
     if [ `uname` = "Darwin" ]; then
