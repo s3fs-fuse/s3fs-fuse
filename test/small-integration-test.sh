@@ -17,7 +17,15 @@ CACHE_DIR="/tmp/s3fs-cache"
 rm -rf "${CACHE_DIR}"
 mkdir "${CACHE_DIR}"
 
+#reserve 200MB for data cache
+source test-utils.sh
+CACHE_DISK_AVAIL_SIZE=`get_disk_avail_size $CACHE_DIR`
+ENSURE_DISKFREE_SIZE=$((CACHE_DISK_AVAIL_SIZE - 200))
+
+export CACHE_DIR
+export ENSURE_DISKFREE_SIZE 
 FLAGS=(
+    "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE}"
     enable_content_md5
     enable_noobj_cache
     nocopyapi
@@ -25,13 +33,12 @@ FLAGS=(
     notsup_compat_dir
     sigv2
     singlepart_copy_limit=$((10 * 1024))  # limit size to exercise multipart code paths
-    use_cache="${CACHE_DIR}"
     #use_sse  # TODO: S3Proxy does not support SSE
 )
 
 start_s3proxy
 
-for flag in ${FLAGS[*]}; do
+for flag in "${FLAGS[@]}"; do
     echo "testing s3fs flag: $flag"
 
     start_s3fs -o $flag
