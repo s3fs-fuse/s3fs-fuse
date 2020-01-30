@@ -2384,9 +2384,10 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
   long responseCode;
   int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
 
-  if(!dontAddAuthHeaders)
+  if(!dontAddAuthHeaders) {
      insertAuthHeaders();
-	
+  }
+  
   curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
   // 1 attempt + retries...
