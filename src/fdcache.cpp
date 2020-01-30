@@ -2732,7 +2732,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 
 void FdManager::CleanupCacheDir()
 {
-  S3FS_PRN_INFO("cache cleanup requested");
+  //S3FS_PRN_DBG("cache cleanup requested");
 
   if(!FdManager::IsCacheDir()){
     return;
@@ -2741,9 +2741,9 @@ void FdManager::CleanupCacheDir()
   AutoLock auto_lock_no_wait(&FdManager::cache_cleanup_lock, AutoLock::NO_WAIT);
 
   if(auto_lock_no_wait.isLockAcquired()){
-    S3FS_PRN_INFO("cache cleanup started");
+    //S3FS_PRN_DBG("cache cleanup started");
     CleanupCacheDirInternal("");
-    S3FS_PRN_INFO("cache cleanup ended");
+    //S3FS_PRN_DBG("cache cleanup ended");
   }else{
     // wait for other thread to finish cache cleanup
     AutoLock auto_lock(&FdManager::cache_cleanup_lock);

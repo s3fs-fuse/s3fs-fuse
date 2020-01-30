@@ -676,11 +676,11 @@ function test_clean_up_cache() {
     describe "Test clean up cache"
 
     dir="many_files"
-    count=256
+    count=25
     mkdir -p $dir
 
     for x in $(seq $count); do
-        dd if=/dev/urandom of=$dir/file-$x bs=1048576 count=1
+        dd if=/dev/urandom of=$dir/file-$x bs=10485760 count=1
     done
 
     file_cnt=$(ls $dir | wc -l)
