@@ -698,6 +698,33 @@ function test_clean_up_cache() {
     rm -rf $dir
 }
 
+function test_content_type() {
+    describe "Test Content-Type detection"
+
+    DIR_NAME="$(basename $PWD)"
+
+    touch "test.txt"
+    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.txt" | grep "ContentType")
+    if ! echo $CONTENT_TYPE | grep -q "text/plain"; then
+        echo "Unexpected Content-Type: $CONTENT_TYPE"
+        return 1;
+    fi
+
+    touch "test.jpg"
+    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.jpg" | grep "ContentType")
+    if ! echo $CONTENT_TYPE | grep -q "image/jpeg"; then
+        echo "Unexpected Content-Type: $CONTENT_TYPE"
+        return 1;
+    fi
+
+    touch "test.bin"
+    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.bin" | grep "ContentType")
+    if ! echo $CONTENT_TYPE | grep -q "application/octet-stream"; then
+        echo "Unexpected Content-Type: $CONTENT_TYPE"
+        return 1;
+    fi
+}
+
 function add_all_tests {
     if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree`; then
         add_tests test_clean_up_cache
@@ -733,6 +760,7 @@ function add_all_tests {
     add_tests test_concurrent_writes
     add_tests test_open_second_fd
     add_tests test_write_multiple_offsets
+    add_tests test_content_type
 }
 
 init_suite
