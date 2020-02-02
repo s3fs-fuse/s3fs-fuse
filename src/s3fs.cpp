@@ -4826,14 +4826,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       }
       return 0;
     }
-    if(0 == STR2NCMP(arg, "host=")){
-      host = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "servicepath=")){
-      service_path = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
     if(0 == strcmp(arg, "no_check_certificate")){
         S3fsCurl::SetCheckCertificate(false);
         return 0;
@@ -4955,6 +4947,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == strcmp(arg, "enable_content_md5")){
       S3fsCurl::SetContentMd5(true);
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "host=")){
+      host = strchr(arg, '=') + sizeof(char);
+      return 0;
+    }
+    if(0 == STR2NCMP(arg, "servicepath=")){
+      service_path = strchr(arg, '=') + sizeof(char);
       return 0;
     }
     if(0 == STR2NCMP(arg, "url=")){

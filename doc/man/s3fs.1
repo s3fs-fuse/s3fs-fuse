@@ -206,6 +206,12 @@ If the disk free space is smaller than this value, s3fs do not use diskspace as 
 maximum size, in MB, of a single-part copy before trying
 multipart copy.
 .TP
+\fB\-o\fR host (default="https://s3.amazonaws.com")
+Set a non-Amazon host, e.g., https://example.com.
+.TP
+\fB\-o\fR sevicepath (default="/")
+Set a service path when the non-Amazon host requires a prefix.
+.TP
 \fB\-o\fR url (default="https://s3.amazonaws.com")
 sets the url to use to access Amazon S3. If you want to use HTTP, then you can set "url=http://s3.amazonaws.com".
 If you do not use https, please specify the URL with the url option.
