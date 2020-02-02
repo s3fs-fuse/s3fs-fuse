@@ -1109,7 +1109,6 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
   }
 
   headers_t meta;
-  meta["Content-Type"]     = string("application/x-directory");
   meta["x-amz-meta-uid"]   = str(uid);
   meta["x-amz-meta-gid"]   = str(gid);
   meta["x-amz-meta-mode"]  = str(mode);

@@ -457,6 +457,8 @@ function test_special_characters {
         ls 'special~' 2>&1 | grep -q 'No such file or directory'
         ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
     )
+
+    mkdir "TOYOTA TRUCK 8.2.2"
 }
 
 function test_symlink {
@@ -720,6 +722,13 @@ function test_content_type() {
     touch "test.bin"
     CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.bin" | grep "ContentType")
     if ! echo $CONTENT_TYPE | grep -q "application/octet-stream"; then
+        echo "Unexpected Content-Type: $CONTENT_TYPE"
+        return 1;
+    fi
+
+    mkdir "test.dir"
+    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.dir/" | grep "ContentType")
+    if ! echo $CONTENT_TYPE | grep -q "application/x-directory"; then
         echo "Unexpected Content-Type: $CONTENT_TYPE"
         return 1;
     fi

@@ -671,6 +671,10 @@ void S3fsCurl::InitUserAgent()
 //
 string S3fsCurl::LookupMimeType(const string& name)
 {
+  if(!name.empty() && name[name.size() - 1] == '/'){
+    return "application/x-directory";
+  }
+
   string result("application/octet-stream");
   string::size_type last_pos = name.find_last_of('.');
   string::size_type first_pos = name.find_first_of('.');
