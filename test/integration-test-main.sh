@@ -749,7 +749,7 @@ function test_content_type() {
 }
 
 function add_all_tests {
-    if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree`; then
+    if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree` && ! `uname | grep -q Darwin`; then
         add_tests test_clean_up_cache
     fi
     add_tests test_append_file 
