@@ -20,7 +20,18 @@ mkdir "${CACHE_DIR}"
 #reserve 200MB for data cache
 source test-utils.sh
 CACHE_DISK_AVAIL_SIZE=`get_disk_avail_size $CACHE_DIR`
-ENSURE_DISKFREE_SIZE=$((CACHE_DISK_AVAIL_SIZE - 200))
+if [ `uname` = "Darwin" ]; then
+    # [FIXME]
+    # Only on MacOS, there are cases where process or system
+    # other than the s3fs cache uses disk space.
+    # We can imagine that this is caused by Timemachine, but
+    # there is no workaround, so s3fs cache size is set +1gb
+    # for error bypass.
+    #
+    ENSURE_DISKFREE_SIZE=$((CACHE_DISK_AVAIL_SIZE - 1200))
+else
+    ENSURE_DISKFREE_SIZE=$((CACHE_DISK_AVAIL_SIZE - 200))
+fi
 
 export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
