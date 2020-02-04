@@ -707,16 +707,30 @@ function test_content_type() {
 
     touch "test.txt"
     CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.txt" | grep "ContentType")
-    if ! echo $CONTENT_TYPE | grep -q "text/plain"; then
-        echo "Unexpected Content-Type: $CONTENT_TYPE"
-        return 1;
+    if [ `uname` = "Darwin" ]; then
+        if ! echo $CONTENT_TYPE | grep -q "application/octet-stream"; then
+            echo "Unexpected Content-Type(MacOS): $CONTENT_TYPE"
+            return 1;
+        fi
+    else
+        if ! echo $CONTENT_TYPE | grep -q "text/plain"; then
+            echo "Unexpected Content-Type: $CONTENT_TYPE"
+            return 1;
+        fi
     fi
 
     touch "test.jpg"
     CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.jpg" | grep "ContentType")
-    if ! echo $CONTENT_TYPE | grep -q "image/jpeg"; then
-        echo "Unexpected Content-Type: $CONTENT_TYPE"
-        return 1;
+    if [ `uname` = "Darwin" ]; then
+        if ! echo $CONTENT_TYPE | grep -q "application/octet-stream"; then
+            echo "Unexpected Content-Type(MacOS): $CONTENT_TYPE"
+            return 1;
+        fi
+    else
+        if ! echo $CONTENT_TYPE | grep -q "image/jpeg"; then
+            echo "Unexpected Content-Type: $CONTENT_TYPE"
+            return 1;
+        fi
     fi
 
     touch "test.bin"
