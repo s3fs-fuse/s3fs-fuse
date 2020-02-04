@@ -1,6 +1,21 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.86 -- 04 Feb, 2020 (major changes only)
+#965 - enable various optimizations when using modern curl
+#1002 - allow SSE-C keys to have NUL bytes
+#1008 - add session token support
+#1039 - allow large files on 32-bit systems like Raspberry Pi
+#1049 - fix data corruption when external modification changes a cached object
+#1063 - fix data corruption when opening a second fd to an unflushed file
+#1066 - fix clock skew errors when writing large files
+#1081 - allow concurrent metadata queries during data operations
+#1098 - use server-side copy for partially modified files
+#1107 - #1108 - fix multiple concurrency issues
+#1199 - add requester_pays support
+#1209 - add symlink cache
+#1224 - add intelligent_ia storage tier
+
 Version 1.85 -- 11 Mar, 2019
 #804 - add Backblaze B2
 #812 - Fix typo s/mutliple/multiple/
