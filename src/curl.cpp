@@ -3629,7 +3629,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const string& uplo
   requestHeaders       = NULL;
   bodydata.Clear();
   responseHeaders.clear();
-  string contype       = S3fsCurl::LookupMimeType(string(tpath));
+  string contype       = "application/xml";
 
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
   requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
