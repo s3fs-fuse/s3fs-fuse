@@ -38,7 +38,7 @@ matrix:
         - make cppcheck
         - make check -C src
         - modprobe fuse
-        - make check -C test
+        - travis_wait 30 make check -C test
         - test/filter-suite-log.sh test/test-suite.log
 
     - os: osx
@@ -85,9 +85,8 @@ matrix:
         - make cppcheck
         - make check -C src
         - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
-        - make check -C test
+        - travis_wait 30 make check -C test
         - test/filter-suite-log.sh test/test-suite.log
-
 
     - os: linux-ppc64le
       sudo: required
@@ -106,7 +105,7 @@ matrix:
         - make cppcheck
         - make check -C src
         - modprobe fuse
-        - make check -C test
+        - travis_wait 30 make check -C test
         - test/filter-suite-log.sh test/test-suite.log
 
 #
