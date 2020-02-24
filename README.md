@@ -10,6 +10,7 @@ tools like [AWS CLI](https://github.com/aws/aws-cli).
 
 * large subset of POSIX including reading/writing files, directories, symlinks, mode, uid/gid, and extended attributes
 * compatible with Amazon S3, Google Cloud Storage, and other S3-based object stores
+* allows random writes and appends
 * large files via multi-part upload
 * renames via server-side copy
 * optional server-side encryption
