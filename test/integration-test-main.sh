@@ -670,7 +670,13 @@ function test_open_second_fd {
 
 function test_write_multiple_offsets {
     describe "test writing to multiple offsets"
-    ../../write_multiple_offsets.py ${TEST_TEXT_FILE}
+    ../../write_multiple_offsets.py ${TEST_TEXT_FILE} 1024 1 $((16 * 1024 * 1024)) 1 $((18 * 1024 * 1024)) 1
+    rm_test_file ${TEST_TEXT_FILE}
+}
+
+function test_write_multiple_offsets_backwards {
+    describe "test writing to multiple offsets"
+    ../../write_multiple_offsets.py ${TEST_TEXT_FILE} $((20 * 1024 * 1024 + 1)) 1 $((10 * 1024 * 1024)) 1
     rm_test_file ${TEST_TEXT_FILE}
 }
 
@@ -780,6 +786,7 @@ function add_all_tests {
     add_tests test_concurrent_writes
     add_tests test_open_second_fd
     add_tests test_write_multiple_offsets
+    add_tests test_write_multiple_offsets_backwards
     add_tests test_content_type
     add_tests test_truncate_cache
 }
