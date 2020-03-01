@@ -360,7 +360,7 @@ bool PageList::Compress(bool force_modified)
 bool PageList::Parse(off_t new_pos)
 {
   for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
-    if(new_pos == iter->offset){
+    if(new_pos >= iter->offset && new_pos < iter->next() && iter->modified){
       // nothing to do
       return true;
     }else if(iter->offset < new_pos && new_pos < iter->next()){

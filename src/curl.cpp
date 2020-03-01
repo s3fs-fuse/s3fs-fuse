@@ -2482,6 +2482,11 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
             result = -ENOENT;
             break;
 
+          case 416:
+            S3FS_PRN_INFO3("HTTP response code 416 was returned, returning EIO");
+            result = -EIO;
+            break;
+
           case 501:
             S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
             S3FS_PRN_DBG("Body Text: %s", bodydata.str());
