@@ -30,6 +30,7 @@
 #include <syslog.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <dirent.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
@@ -745,6 +746,36 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
 }
 
 //-------------------------------------------------------------------
+// Utility for system information
+//-------------------------------------------------------------------
+bool compare_sysname(const char* target)
+{
+  // [NOTE]
+  // The buffer size of sysname member in struct utsname is
+  // OS dependent, but 512 bytes is sufficient for now.
+  //
+  static char* psysname = NULL;
+  static char  sysname[512];
+  if(!psysname){
+    struct utsname sysinfo;
+    if(0 != uname(&sysinfo)){
+      S3FS_PRN_ERR("could not initialize system name to internal buffer(errno:%d), thus use \"Linux\".", errno);
+      strcpy(sysname, "Linux");
+    }else{
+      S3FS_PRN_INFO("system name is %s", sysinfo.sysname);
+      sysname[sizeof(sysname) - 1] = '\0';
+      strncpy(sysname, sysinfo.sysname, sizeof(sysname) - 1);
+    }
+    psysname = &sysname[0];
+  }
+
+  if(!target || 0 != strcmp(psysname, target)){
+    return false;
+  }
+  return true;
+}
+
+//-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
 time_t get_mtime(const char *str)
@@ -1421,13 +1452,20 @@ void show_help ()
     "   use_session_token - indicate that session token should be provided.\n"
     "        If credentials are provided by environment variables this switch\n"
     "        forces presence check of AWSSESSIONTOKEN variable.\n"
-    "        Otherwise an error is returned."
+    "        Otherwise an error is returned.\n"
     "\n"
     "   requester_pays (default is disable)\n"
     "        This option instructs s3fs to enable requests involving\n"
     "        Requester Pays buckets.\n"
     "        It includes the 'x-amz-request-payer=requester' entry in the\n"
-    "        request header."
+    "        request header.\n"
+    "\n"
+    "   mime (default is \"/etc/mime.types\")\n"
+    "        Specify the path of the mime.types file.\n"
+    "        If this option is not specified, the existence of \"/etc/mime.types\"\n"
+    "        is checked, and that file is loaded as mime information.\n"
+    "        If this file does not exist on macOS, then \"/etc/apache2/mime.types\"\n"
+    "        is checked as well.\n"
     "\n"
     "   dbglevel (default=\"crit\")\n"
     "        Set the debug message level. set value as crit (critical), err\n"

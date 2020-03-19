@@ -355,7 +355,6 @@ class S3fsCurl
     static bool DestroyCryptMutex(void);
     static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
 
-    static bool InitMimeType(const char* MimeFile = NULL);
     static bool LocateBundle(void);
     static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
     static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
@@ -408,7 +407,8 @@ class S3fsCurl
 
   public:
     // class methods
-    static bool InitS3fsCurl(const char* MimeFile = NULL);
+    static bool InitS3fsCurl(void);
+    static bool InitMimeType(const std::string& strFile);
     static bool DestroyS3fsCurl(void);
     static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
     static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const PageList& pagelist);
