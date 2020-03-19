@@ -15,6 +15,7 @@ Keep in mind using the pre-built packages when available.
 * libcurl
 * libxml2
 * openssl
+* /etc/mime.types (the package providing depends on the OS)
 * pkg-config (or your OS equivalent)
 
 2. Then compile from master via the following commands:
