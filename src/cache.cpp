@@ -607,7 +607,7 @@ bool StatCache::DelStat(const char* key, bool lock_already_held)
 bool StatCache::GetSymlink(const string& key, string& value)
 {
   bool is_delete_cache = false;
-  string strpath = key;
+  const string& strpath = key;
 
   AutoLock lock(&StatCache::stat_cache_lock);
 
