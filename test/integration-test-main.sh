@@ -734,6 +734,17 @@ function test_content_type() {
     fi
 }
 
+# create more files than -o max_stat_cache_size
+function test_truncate_cache() {
+    for dir in $(seq 2); do
+        mkdir $dir
+        for file in $(seq 75); do
+            touch $dir/$file
+        done
+        ls $dir
+    done
+}
+
 function add_all_tests {
     if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree` && ! `uname | grep -q Darwin`; then
         add_tests test_clean_up_cache
@@ -770,6 +781,7 @@ function add_all_tests {
     add_tests test_open_second_fd
     add_tests test_write_multiple_offsets
     add_tests test_content_type
+    add_tests test_truncate_cache
 }
 
 init_suite

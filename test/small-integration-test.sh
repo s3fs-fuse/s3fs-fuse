@@ -39,6 +39,7 @@ FLAGS=(
     "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE}"
     enable_content_md5
     enable_noobj_cache
+    max_stat_cache_size=100
     nocopyapi
     nomultipart
     notsup_compat_dir
