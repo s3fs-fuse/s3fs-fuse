@@ -326,6 +326,11 @@ Otherwise an error is returned.
 \fB\-o\fR requester_pays (default is disable)
 This option instructs s3fs to enable requests involving Requester Pays buckets (It includes the 'x-amz-request-payer=requester' entry in the request header).
 .TP
+\fB\-o\fR mime (default is "/etc/mime.types")
+Specify the path of the mime.types file.
+If this option is not specified, the existence of "/etc/mime.types" is checked, and that file is loaded as mime information.
+If this file does not exist on macOS, then "/etc/apache2/mime.types" is checked as well.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit (critical), err (error), warn (warning), info (information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.

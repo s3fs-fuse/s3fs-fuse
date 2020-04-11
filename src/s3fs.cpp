@@ -124,6 +124,7 @@ static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file;
+static std::string mimetype_file;
 static utility_incomp_type utility_mode = NO_UTILITY_MODE;
 static bool noxmlns               = false;
 static bool nocopyapi             = false;
@@ -5021,6 +5022,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       instance_name = "[" + instance_name + "]";
       return 0;
     }
+    if(0 == STR2NCMP(arg, "mime=")){
+      mimetype_file = strchr(arg, '=') + sizeof(char);
+      return 0;
+    }
     //
     // debug option for s3fs
     //
@@ -5199,8 +5204,23 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
-  // init curl
-  if(!S3fsCurl::InitS3fsCurl("/etc/mime.types")){
+  // init curl (without mime types)
+  //
+  // [NOTE]
+  // The curl initialization here does not load mime types.
+  // The mime types file parameter are dynamic values according
+  // to the user's environment, and are analyzed by the my_fuse_opt_proc
+  // function.
+  // The my_fuse_opt_proc function is executed after this curl
+  // initialization. Because the curl method is used in the
+  // my_fuse_opt_proc function, then it must be called here to
+  // initialize. Fortunately, the processing using mime types
+  // is only PUT/POST processing, and it is not used until the
+  // call of my_fuse_opt_proc function is completed. Therefore,
+  // the mime type is loaded just after calling the my_fuse_opt_proc
+  // function.
+  // 
+  if(!S3fsCurl::InitS3fsCurl()){
     S3FS_PRN_EXIT("Could not initiate curl library.");
     s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);
@@ -5214,6 +5234,14 @@ int main(int argc, char* argv[])
   // should have been set
   struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
   if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
+    S3fsCurl::DestroyS3fsCurl();
+    s3fs_destroy_global_ssl();
+    exit(EXIT_FAILURE);
+  }
+
+  // init mime types for curl
+  if(!S3fsCurl::InitMimeType(mimetype_file)){
+    S3FS_PRN_EXIT("Could not load mime types for curl library.");
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();
     exit(EXIT_FAILURE);

@@ -343,6 +343,20 @@ static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
 static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
 static const int  S3FSCURL_PERFORM_RESULT_NOTSET    = 1;
 
+// [NOTE] about default mime.types file
+// If no mime.types file is specified in the mime option, s3fs
+// will look for /etc/mime.types on all operating systems and
+// load mime information.
+// However, in the case of macOS, when this file does not exist,
+// it tries to detect the /etc/apache2/mime.types file.
+// The reason for this is that apache2 is preinstalled on macOS,
+// and the mime.types file is expected to exist in this path.
+// If the mime.types file is not found, s3fs will exit with an
+// error.
+//
+static const char* DEFAULT_MIME_FILE        = "/etc/mime.types";
+static const char* SPECIAL_DARWIN_MIME_FILE = "/etc/apache2/mime.types";
+
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
 #ifndef CURLSHE_NOT_BUILT_IN
@@ -397,7 +411,7 @@ bool             S3fsCurl::requester_pays      = false;          // default
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
 //-------------------------------------------------------------------
-bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
+bool S3fsCurl::InitS3fsCurl()
 {
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -411,9 +425,6 @@ bool S3fsCurl::InitS3fsCurl(const char* MimeFile)
     return false;
   }
   if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_SSL_SESSION], &attr)){
-    return false;
-  }
-  if(!S3fsCurl::InitMimeType(MimeFile)){
     return false;
   }
   if(!S3fsCurl::InitGlobalCurl()){
@@ -618,15 +629,39 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
   return 0;
 }
 
-bool S3fsCurl::InitMimeType(const char* MimeFile)
+bool S3fsCurl::InitMimeType(const std::string& strFile)
 {
-  if(!MimeFile){
-    MimeFile = "/etc/mime.types";  // default
+  string MimeFile;
+  if(!strFile.empty()){
+    MimeFile = strFile;
+  }else{
+    // search default mime.types
+    string errPaths = DEFAULT_MIME_FILE;
+    struct stat st;
+    if(0 == stat(DEFAULT_MIME_FILE, &st)){
+      MimeFile = DEFAULT_MIME_FILE;
+    }else if(compare_sysname("Darwin")){
+      // for macos, search another default file.
+      if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
+        MimeFile = SPECIAL_DARWIN_MIME_FILE;
+      }else{
+        errPaths += " and ";
+        errPaths += SPECIAL_DARWIN_MIME_FILE;
+      }
+    }
+    if(MimeFile.empty()){
+      S3FS_PRN_ERR("Could not find miime.types files, you have to create file(%s) or specify mime option for existing mime.types file.", errPaths.c_str());
+      return false;
+    }
   }
+  S3FS_PRN_DBG("Try to load mime types from %s file.", MimeFile.c_str());
 
   string line;
-  ifstream MT(MimeFile);
+  ifstream MT(MimeFile.c_str());
   if(MT.good()){
+    S3FS_PRN_DBG("The old mime types are cleared to load new mime types.");
+    S3fsCurl::mimeTypes.clear();
+
     while(getline(MT, line)){
       if(line[0]=='#'){
         continue;
@@ -647,6 +682,10 @@ bool S3fsCurl::InitMimeType(const char* MimeFile)
         S3fsCurl::mimeTypes[ext] = mimeType;
       }
     }
+    S3FS_PRN_INIT_INFO("Loaded mime information from %s", MimeFile.c_str());
+  }else{
+    S3FS_PRN_ERR("Could not load mime types from %s, please check the existence and permissions of this file.", MimeFile.c_str());
+    return false;
   }
   return true;
 }

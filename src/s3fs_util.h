@@ -123,6 +123,8 @@ std::string get_exist_directory_path(const std::string& path);
 bool check_exist_dir_permission(const char* dirpath);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
+bool compare_sysname(const char* target);
+
 time_t get_mtime(const char *s);
 time_t get_mtime(headers_t& meta, bool overcheck = true);
 time_t get_ctime(headers_t& meta, bool overcheck = true);

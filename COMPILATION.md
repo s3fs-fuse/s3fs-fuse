@@ -15,7 +15,11 @@ Keep in mind using the pre-built packages when available.
 * libcurl
 * libxml2
 * openssl
-* /etc/mime.types (the package providing depends on the OS)
+* mime.types (the package providing depends on the OS)
+	* s3fs tries to detect `/etc/mime.types` as default regardless of the OS
+	* Else s3fs tries to detect `/etc/apache2/mime.types` if OS is macOS
+	* s3fs exits with an error if these files are not exist
+	* Alternatively, you can set mime.types file path with `mime` option without detecting these default files
 * pkg-config (or your OS equivalent)
 
 2. Then compile from master via the following commands:
