@@ -543,20 +543,23 @@ bool StatCache::TruncateCache()
   // 3) erase from the old cache in order
   size_t            erase_count= stat_cache.size() - CacheSize + 1;
   statiterlist_t    erase_iters;
-  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ++iter){
+  for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
     // check no truncate
     stat_cache_entry* ent = iter->second;
     if(ent && 0L < ent->notruncate){
-      // skip for no truncate entry
+      // skip for no truncate entry and keep extra counts for this entity.
       if(0 < erase_count){
         --erase_count;     // decrement
       }
+    }else{
+      // iter is not have notruncate flag
+      erase_iters.push_back(iter);
     }
-    // iter is not have notruncate flag
-    erase_iters.push_back(iter);
-    sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
     if(erase_count < erase_iters.size()){
-      erase_iters.pop_back();
+      sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
+      while(erase_count < erase_iters.size()){
+        erase_iters.pop_back();
+      }
     }
   }
   for(statiterlist_t::iterator iiter = erase_iters.begin(); iiter != erase_iters.end(); ++iiter){
