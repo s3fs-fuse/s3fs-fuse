@@ -76,6 +76,8 @@ matrix:
             sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs;
           elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then
             sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse;
+          else
+            exit 1;
           fi
         - sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf
       script:
@@ -84,7 +86,13 @@ matrix:
         - make
         - make cppcheck
         - make check -C src
-        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ; fi
+        - if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then
+            /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs;
+          elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then
+            /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse;
+          else
+            exit 1;
+          fi
         - travis_wait 30 make check -C test
         - test/filter-suite-log.sh test/test-suite.log
 
