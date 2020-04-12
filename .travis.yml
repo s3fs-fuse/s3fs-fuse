@@ -42,7 +42,7 @@ matrix:
         - test/filter-suite-log.sh test/test-suite.log
 
     - os: osx
-      osx_image: xcode9.2
+      osx_image: xcode9.3
       cache:
         directories:
           - $HOME/Library/Caches/Homebrew
