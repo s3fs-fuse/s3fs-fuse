@@ -207,9 +207,7 @@ bool CacheFileStat::SetPath(const char* tpath, bool is_open)
     // could not close old stat file.
     return false;
   }
-  if(tpath){
-    path = tpath;
-  }
+  path = tpath;
   if(!is_open){
     return true;
   }
