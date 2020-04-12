@@ -63,7 +63,7 @@ matrix:
             HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask;
           fi
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
-        - S3FS_BREW_PACKAGES='awscli cppcheck truncate';
+        - S3FS_BREW_PACKAGES='awscli cppcheck';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
             brew list | grep -q ${s3fs_brew_pkg};
             if [ $? -eq 0 ]; then
