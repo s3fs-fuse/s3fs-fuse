@@ -554,7 +554,7 @@ function test_update_time() {
     fi
 
     sleep 2
-    chown $UID:$UID $TEST_TEXT_FILE;
+    chown $UID $TEST_TEXT_FILE
 
     ctime3=`get_ctime $TEST_TEXT_FILE`
     mtime3=`get_mtime $TEST_TEXT_FILE`
