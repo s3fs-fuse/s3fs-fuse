@@ -23,7 +23,6 @@ language: cpp
 matrix:
   include:
     - os: linux
-      sudo: required
       dist: trusty
       cache: apt
       before_install:
@@ -97,7 +96,6 @@ matrix:
         - test/filter-suite-log.sh test/test-suite.log
 
     - os: linux-ppc64le
-      sudo: required
       dist: trusty
       cache: apt
       before_install:
