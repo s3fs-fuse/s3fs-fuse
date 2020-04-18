@@ -31,6 +31,12 @@ Many systems provide pre-built packages:
   sudo yum install s3fs-fuse
   ```
 
+* Arch Linux:
+
+  ```
+  sudo pacman -S s3fs-fuse
+  ```
+
 * Debian 9 and Ubuntu 16.04 or newer:
 
   ```
