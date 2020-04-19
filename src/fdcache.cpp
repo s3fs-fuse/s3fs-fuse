@@ -63,6 +63,33 @@ static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
 #endif
 
 //------------------------------------------------
+// Local utility function
+//------------------------------------------------
+// Wrapped s3fs_strtoofft()
+//
+// PageList::Serialize method uses s3fs_strtoofft function,
+// but s3fs_strtoofft throws an exception, so wrap it in
+// this function.
+// PageList::Serialize works as 0 when the read data is invalid.
+//
+static off_t wrap_strtoofft(const char* str)
+{
+  off_t result;
+  if(str){
+    try{
+      result = s3fs_strtoofft(str);
+    }catch(std::exception &e){
+      S3FS_PRN_WARN("something error is occurred in convert string to off_t, so return 0 as default.");
+      result = 0;
+    }
+  }else{
+    S3FS_PRN_WARN("parameter is null, so return 0 as default.");
+    result = 0;
+  }
+  return result;
+}
+
+//------------------------------------------------
 // CacheFileStat class methods
 //------------------------------------------------
 bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, bool is_create_dir)
@@ -842,6 +869,10 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
     }
 
+    if(-1 == ftruncate(file.GetFd(), 0)){
+      S3FS_PRN_ERR("failed to truncate file(to 0) for stats(%d)", errno);
+      return false;
+    }
     string strall = ssall.str();
     if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
       S3FS_PRN_ERR("failed to write stats(%d)", errno);
@@ -883,7 +914,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
       delete[] ptmp;
       return false;
     }
-    off_t total = s3fs_strtoofft(oneline.c_str());
+    off_t total = wrap_strtoofft(oneline.c_str());
 
     // load each part
     bool is_err = false;
@@ -895,24 +926,24 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
         is_err = true;
         break;
       }
-      off_t offset = s3fs_strtoofft(part.c_str());
+      off_t offset = wrap_strtoofft(part.c_str());
       // size
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      off_t size = s3fs_strtoofft(part.c_str());
+      off_t size = wrap_strtoofft(part.c_str());
       // loaded
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      bool is_loaded = (1 == s3fs_strtoofft(part.c_str()) ? true : false);
+      bool is_loaded = (1 == wrap_strtoofft(part.c_str()) ? true : false);
       bool is_modified;
       if(!getline(ssparts, part, ':')){
         is_modified = false;        // old version does not have this part.
       }else{
-        is_modified = (1 == s3fs_strtoofft(part.c_str()) ? true : false);
+        is_modified = (1 == wrap_strtoofft(part.c_str()) ? true : false);
       }
       // add new area
       PageList::page_status pstatus = 
