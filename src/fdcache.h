@@ -118,7 +118,7 @@ class PageList
     bool IsModified(void) const;
     bool ClearAllModified(void);
 
-    bool Serialize(CacheFileStat& file, bool is_output);
+    bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
     void Dump(void);
 };
 
@@ -136,6 +136,7 @@ class FdEntity
     std::string     path;           // object path
     int             fd;             // file descriptor(tmp file or cache file)
     FILE*           pfile;          // file pointer(tmp file or cache file)
+    ino_t           inode;          // inode number for cache file
     headers_t       orgmeta;        // original headers at opening
     off_t           size_orgmeta;   // original file size in original headers
 
@@ -151,8 +152,10 @@ class FdEntity
 
   private:
     static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
+    static ino_t GetInode(int fd);
 
     void Clear(void);
+    ino_t GetInode(void);
     int OpenMirrorFile(void);
     bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
     //bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
