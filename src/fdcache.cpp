@@ -853,7 +853,7 @@ bool PageList::ClearAllModified()
   return Compress();
 }
 
-bool PageList::Serialize(CacheFileStat& file, bool is_output)
+bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
 {
   if(!file.Open()){
     return false;
@@ -863,7 +863,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     // put to file
     //
     ostringstream ssall;
-    ssall << Size();
+    ssall << inode << ":" << Size();
 
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
       ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
@@ -908,13 +908,46 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output)
     // loaded
     Clear();
 
-    // load(size)
+    // load head line(for size and inode)
+    off_t total;
+    ino_t cache_inode;                  // if this value is 0, it means old format.
     if(!getline(ssall, oneline, '\n')){
       S3FS_PRN_ERR("failed to parse stats.");
       delete[] ptmp;
       return false;
+    }else{
+      istringstream sshead(oneline);
+      string        strhead1;
+      string        strhead2;
+
+      // get first part in head line.
+      if(!getline(sshead, strhead1, ':')){
+        S3FS_PRN_ERR("failed to parse stats.");
+        delete[] ptmp;
+        return false;
+      }
+      // get second part in head line.
+      if(!getline(sshead, strhead2, ':')){
+        // old head format is "<size>\n"
+        total       = wrap_strtoofft(strhead1.c_str());
+        cache_inode = 0;
+      }else{
+        // current head format is "<inode>:<size>\n"
+        total       = wrap_strtoofft(strhead1.c_str());
+        cache_inode = static_cast<ino_t>(wrap_strtoofft(strhead2.c_str()));
+        if(0 == cache_inode){
+          S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
+          delete[] ptmp;
+          return false;
+        }
+      }
     }
-    off_t total = wrap_strtoofft(oneline.c_str());
+    // check inode number
+    if(0 != cache_inode && cache_inode != inode){
+      S3FS_PRN_ERR("differ inode and inode number in parsed cache stats.");
+      delete[] ptmp;
+      return false;
+    }
 
     // load each part
     bool is_err = false;
@@ -1007,12 +1040,34 @@ int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
   return 0;
 }
 
+// [NOTE]
+// If fd is wrong or something error is occurred, return 0.
+// The ino_t is allowed zero, but inode 0 is not realistic.
+// So this method returns 0 on error assuming the correct
+// inode is never 0.
+// The caller must have exclusive control.
+//
+ino_t FdEntity::GetInode(int fd)
+{
+  if(-1 == fd){
+    S3FS_PRN_ERR("file descriptor is wrong.");
+    return 0;
+  }
+
+  struct stat st;
+  if(0 != fstat(fd, &st)){
+    S3FS_PRN_ERR("could not get stat for file descriptor(%d) by errno(%d).", fd, errno);
+    return 0;
+  }
+  return st.st_ino;
+}
+
 //------------------------------------------------
 // FdEntity methods
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath)
         : is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
-          fd(-1), pfile(NULL), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
+          fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
           cachepath(SAFESTRPTR(cpath)), mirrorpath("")
 {
   try{
@@ -1051,16 +1106,25 @@ void FdEntity::Clear()
 
   if(-1 != fd){
     if(!cachepath.empty()){
-      CacheFileStat cfstat(path.c_str());
-      if(!pagelist.Serialize(cfstat, true)){
-        S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+      // [NOTE]
+      // Compare the inode of the existing cache file with the inode of
+      // the cache file output by this object, and if they are the same,
+      // serialize the pagelist.
+      //
+      ino_t cur_inode = GetInode();
+      if(0 != cur_inode && cur_inode == inode){
+        CacheFileStat cfstat(path.c_str());
+        if(!pagelist.Serialize(cfstat, true, inode)){
+          S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+        }
       }
     }
     if(pfile){
       fclose(pfile);
       pfile = NULL;
     }
-    fd = -1;
+    fd    = -1;
+    inode = 0;
 
     if(!mirrorpath.empty()){
       if(-1 == unlink(mirrorpath.c_str())){
@@ -1073,6 +1137,26 @@ void FdEntity::Clear()
   refcnt        = 0;
   path          = "";
   cachepath     = "";
+}
+
+// [NOTE]
+// This method returns the inode of the file in cachepath.
+// The return value is the same as the class method GetInode().
+// The caller must have exclusive control.
+//
+ino_t FdEntity::GetInode()
+{
+  if(cachepath.empty()){
+    S3FS_PRN_INFO("cache file path is empty, then return inode as 0.");
+    return 0;
+  }
+
+  struct stat st;
+  if(0 != stat(cachepath.c_str(), &st)){
+    S3FS_PRN_INFO("could not get stat for file(%s) by errno(%d).", cachepath.c_str(), errno);
+    return 0;
+  }
+  return st.st_ino;
 }
 
 void FdEntity::Close()
@@ -1092,16 +1176,25 @@ void FdEntity::Close()
     if(0 == refcnt){
       AutoLock auto_data_lock(&fdent_data_lock);
       if(!cachepath.empty()){
-        CacheFileStat cfstat(path.c_str());
-        if(!pagelist.Serialize(cfstat, true)){
-          S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+        // [NOTE]
+        // Compare the inode of the existing cache file with the inode of
+        // the cache file output by this object, and if they are the same,
+        // serialize the pagelist.
+        //
+        ino_t cur_inode = GetInode();
+        if(0 != cur_inode && cur_inode == inode){
+          CacheFileStat cfstat(path.c_str());
+          if(!pagelist.Serialize(cfstat, true, inode)){
+            S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+          }
         }
       }
       if(pfile){
         fclose(pfile);
         pfile = NULL;
       }
-      fd = -1;
+      fd    = -1;
+      inode = 0;
 
       if(!mirrorpath.empty()){
         if(-1 == unlink(mirrorpath.c_str())){
@@ -1251,12 +1344,16 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     CacheFileStat cfstat(path.c_str());
 
     // try to open cache file
-    if(-1 != (fd = open(cachepath.c_str(), O_RDWR)) && pagelist.Serialize(cfstat, false)){
+    if( -1 != (fd = open(cachepath.c_str(), O_RDWR)) &&
+        0 != (inode = FdEntity::GetInode(fd))        &&
+        pagelist.Serialize(cfstat, false, inode)     )
+    {
       // succeed to open cache file and to load stats data
       memset(&st, 0, sizeof(struct stat));
       if(-1 == fstat(fd, &st)){
         S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
-        fd = -1;
+        fd    = -1;
+        inode = 0;
         return (0 == errno ? -EIO : -errno);
       }
       // check size, st_size, loading stat file
@@ -1277,12 +1374,25 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       }
 
     }else{
+      if(-1 != fd){
+        close(fd);
+      }
+      inode = 0;
+
       // could not open cache file or could not load stats data, so initialize it.
       if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
         S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
+
+        // remove cache stat file if it is existed
+        if(!CacheFileStat::DeleteCacheFileStat(path.c_str())){
+          if(ENOENT != errno){
+            S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), errno);
+          }
+        }
         return (0 == errno ? -EIO : -errno);
       }
       need_save_csf = true;       // need to update page info
+      inode         = FdEntity::GetInode(fd);
       if(-1 == size){
         size = 0;
         pagelist.Init(0, false, false);
@@ -1306,12 +1416,14 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
     if(NULL == (pfile = fdopen(fd, "wb"))){
       S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
       close(fd);
-      fd = -1;
+      fd    = -1;
+      inode = 0;
       return (0 == errno ? -EIO : -errno);
     }
 
   }else{
     // not using cache
+    inode = 0;
 
     // open temporary file
     if(NULL == (pfile = tmpfile()) || -1 ==(fd = fileno(pfile))){
@@ -1338,6 +1450,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       fclose(pfile);
       pfile = NULL;
       fd    = -1;
+      inode = 0;
       return (0 == errno ? -EIO : -errno);
     }
   }
@@ -1345,7 +1458,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
   // reset cache stat file
   if(need_save_csf){
     CacheFileStat cfstat(path.c_str());
-    if(!pagelist.Serialize(cfstat, true)){
+    if(!pagelist.Serialize(cfstat, true, inode)){
       S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
     }
   }
@@ -1369,6 +1482,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       fclose(pfile);
       pfile = NULL;
       fd    = -1;
+      inode = 0;
       return (0 == errno ? -EIO : -errno);
     }
   }
