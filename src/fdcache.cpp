@@ -336,8 +336,10 @@ void PageList::Clear()
 bool PageList::Init(off_t size, bool is_loaded, bool is_modified)
 {
   Clear();
-  fdpage page(0, size, is_loaded, is_modified);
-  pages.push_back(page);
+  if(0 < size){
+    fdpage page(0, size, is_loaded, is_modified);
+    pages.push_back(page);
+  }
   return true;
 }
 
@@ -391,7 +393,7 @@ bool PageList::Parse(off_t new_pos)
       // nothing to do
       return true;
     }else if(iter->offset < new_pos && new_pos < iter->next()){
-      fdpage page(iter->offset, new_pos - iter->offset, iter->loaded, false);
+      fdpage page(iter->offset, new_pos - iter->offset, iter->loaded, iter->modified);
       iter->bytes -= (new_pos - iter->offset);
       iter->offset = new_pos;
       pages.insert(iter, page);
@@ -1732,7 +1734,7 @@ bool FdEntity::SetAllStatus(bool is_loaded)
   return true;
 }
 
-int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
+int FdEntity::Load(off_t start, off_t size, bool lock_already_held, bool is_modified_flag)
 {
   AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
@@ -1777,7 +1779,7 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held)
         break;
       }
       // Set loaded flag
-      pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, PageList::PAGE_LOADED);
+      pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, (is_modified_flag ? PageList::PAGE_LOAD_MODIFIED : PageList::PAGE_LOADED));
     }
     PageList::FreeList(unloaded_list);
   }
@@ -2113,7 +2115,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
           return -1;
         }
         for(fdpage_list_t::const_iterator iter = dlpages.begin(); iter != dlpages.end(); ++iter){
-          if(0 != (result = Load(iter->offset, iter->bytes, true))){
+          if(0 != (result = Load(iter->offset, iter->bytes, /*lock_already_held=*/ true, /*is_modified_flag=*/ true))){  // set loaded and modified flag
             S3FS_PRN_ERR("failed to get parts(start=%lld, size=%lld) before uploading.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
             return result;
           }
