@@ -189,7 +189,7 @@ class FdEntity
     bool SetGId(gid_t gid);
     bool SetContentType(const char* path);
 
-    int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false);  // size=0 means loading to end
+    int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false, bool is_modified_flag = false);  // size=0 means loading to end
     int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);   // size=0 means loading to end
     int NoCachePreMultipartPost(void);
     int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
