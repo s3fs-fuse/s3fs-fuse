@@ -21,6 +21,8 @@
 #ifndef S3FS_COMMON_H_
 #define S3FS_COMMON_H_
 
+#include <fcntl.h>
+
 #include "../config.h"
 #include "types.h"
 #include "s3fs_logger.h"

@@ -21,6 +21,7 @@
 #ifndef S3FS_TYPES_H_
 #define S3FS_TYPES_H_
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <map>

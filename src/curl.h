@@ -21,8 +21,14 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
+#include <cassert>
 #include <curl/curl.h>
+#include <list>
+#include <map>
+#include <strings.h>
+#include <vector>
 
+#include "common.h"
 #include "curl_handlerpool.h"
 #include "bodydata.h"
 #include "psemaphore.h"

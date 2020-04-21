@@ -21,6 +21,9 @@
 #ifndef S3FS_FDCACHE_UNTREATED_H_
 #define S3FS_FDCACHE_UNTREATED_H_
 
+#include "common.h"
+#include "types.h"
+
 //------------------------------------------------
 // Class UntreatedParts
 //------------------------------------------------
