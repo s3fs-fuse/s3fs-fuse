@@ -54,7 +54,7 @@ print version
 FUSE foreground option - do not run as daemon.
 .TP
 \fB\-s\fR
-FUSE singlethreaded option (disables multi-threaded operation)
+FUSE single-threaded option (disables multi-threaded operation)
 .SS "mount options"
 .TP
 All s3fs options must given in the form where "opt" is:
@@ -172,17 +172,16 @@ It increases ListBucket request and makes performance bad.
 You can specify this option for performance, s3fs memorizes in stat cache that the object (file or directory) does not exist.
 .TP
 \fB\-o\fR no_check_certificate (by default this option is disabled)
-do not check ssl certificate.
 server certificate won't be checked against the available certificate authorities.
 .TP
 \fB\-o\fR ssl_verify_hostname (default="2")
 When 0, do not verify the SSL certificate against the hostname.
 .TP
-\fB\-o\fR nodnscache - disable dns cache.
-s3fs is always using dns cache, this option make dns cache disable.
+\fB\-o\fR nodnscache - disable DNS cache.
+s3fs is always using DNS cache, this option make DNS cache disable.
 .TP
-\fB\-o\fR nosscache - disable ssl session cache.
-s3fs is always using ssl session cache, this option make ssl session cache disable.
+\fB\-o\fR nosscache - disable SSL session cache.
+s3fs is always using SSL session cache, this option make SSL session cache disable.
 .TP
 \fB\-o\fR multireq_max (default="20")
 maximum number of parallel request for listing objects.
@@ -209,7 +208,7 @@ multipart copy.
 \fB\-o\fR host (default="https://s3.amazonaws.com")
 Set a non-Amazon host, e.g., https://example.com.
 .TP
-\fB\-o\fR sevicepath (default="/")
+\fB\-o\fR servicepath (default="/")
 Set a service path when the non-Amazon host requires a prefix.
 .TP
 \fB\-o\fR url (default="https://s3.amazonaws.com")
@@ -311,12 +310,12 @@ s3fs may not be able to recognize the object correctly if an object created by s
 Please use this option when the directory in the bucket is only "dir/" object.
 .TP
 \fB\-o\fR use_wtf8 - support arbitrary file system encoding.
-S3 requires all object names to be valid utf-8. But some
+S3 requires all object names to be valid UTF-8. But some
 clients, notably Windows NFS clients, use their own encoding.
-This option re-encodes invalid utf-8 object names into valid
-utf-8 by mapping offending codes into a 'private' codepage of the
+This option re-encodes invalid UTF-8 object names into valid
+UTF-8 by mapping offending codes into a 'private' codepage of the
 Unicode set.
-Useful on clients not using utf-8 as their file system encoding.
+Useful on clients not using UTF-8 as their file system encoding.
 .TP
 \fB\-o\fR use_session_token - indicate that session token should be provided.
 If credentials are provided by environment variables this switch
@@ -359,11 +358,11 @@ There are many FUSE specific mount options that can be specified. e.g. allow_oth
 .TP
 The maximum size of objects that s3fs can handle depends on Amazon S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
 .TP
-If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses md5 checksums to minimize downloads from S3.
+If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses MD5 checksums to minimize downloads from S3.
 .TP
 The folder specified by use_cache is just a local cache. It can be deleted at any time. s3fs rebuilds it on demand.
 .TP
-Local file caching works by calculating and comparing md5 checksums (ETag HTTP header).
+Local file caching works by calculating and comparing MD5 checksums (ETag HTTP header).
 .TP
 s3fs leverages /etc/mime.types to "guess" the "correct" content-type based on file name extension. This means that you can copy a website to S3 and serve it up directly from S3 with correct content-types!
 .SH SEE ALSO
