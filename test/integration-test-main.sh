@@ -751,12 +751,107 @@ function test_truncate_cache() {
     done
 }
 
+function test_cache_file_stat() {
+    describe "Test cache file stat"
+
+    dd if=/dev/urandom of="${BIG_FILE}" bs=${BIG_FILE_LENGTH} count=1
+
+    #
+    # get "testrun-xxx" directory name
+    #
+    CACHE_TESTRUN_DIR=$(ls -1 ${CACHE_DIR}/${TEST_BUCKET_1}/ 2>/dev/null | grep testrun 2>/dev/null)
+
+    #
+    # get cache file inode number
+    #
+    CACHE_FILE_INODE=$(ls -i ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE} 2>/dev/null | awk '{print $1}')
+    if [ -z ${CACHE_FILE_INODE} ]; then
+        echo "Not found cache file or failed to get inode: ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
+        return 1;
+    fi
+
+    #
+    # get lines from cache stat file
+    #
+    CACHE_FILE_STAT_LINE_1=$(sed -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    CACHE_FILE_STAT_LINE_2=$(sed -n 2p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    if [ -z ${CACHE_FILE_STAT_LINE_1} ] || [ -z ${CACHE_FILE_STAT_LINE_2} ]; then
+        echo "could not get first or second line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
+        return 1;
+    fi
+
+    #
+    # compare
+    #
+    if [ "${CACHE_FILE_STAT_LINE_1}" != "${CACHE_FILE_INODE}:${BIG_FILE_LENGTH}" ]; then
+        echo "first line(cache file stat) is different: \"${CACHE_FILE_STAT_LINE_1}\" != \"${CACHE_FILE_INODE}:${BIG_FILE_LENGTH}\""
+        return 1;
+    fi
+    if [ "${CACHE_FILE_STAT_LINE_2}" != "0:${BIG_FILE_LENGTH}:1:0" ]; then
+        echo "last line(cache file stat) is different: \"${CACHE_FILE_STAT_LINE_2}\" != \"0:${BIG_FILE_LENGTH}:1:0\""
+        return 1;
+    fi
+
+    #
+    # remove cache files directly
+    #
+    rm -f ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}
+    rm -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}
+
+    #
+    # write a byte into the middle(not the boundary) of the file
+    #
+    CHECK_UPLOAD_OFFSET=$((10 * 1024 * 1024 + 17))
+    dd if=/dev/urandom of="${BIG_FILE}" bs=1 count=1 seek=${CHECK_UPLOAD_OFFSET} conv=notrunc
+
+    #
+    # get cache file inode number
+    #
+    CACHE_FILE_INODE=$(ls -i ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE} 2>/dev/null | awk '{print $1}')
+    if [ -z ${CACHE_FILE_INODE} ]; then
+        echo "Not found cache file or failed to get inode: ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
+        return 1;
+    fi
+
+    #
+    # get lines from cache stat file
+    #
+    CACHE_FILE_STAT_LINE_1=$(sed -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    CACHE_FILE_STAT_LINE_E=$(tail -1 ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE} 2>/dev/null)
+    if [ -z ${CACHE_FILE_STAT_LINE_1} ] || [ -z ${CACHE_FILE_STAT_LINE_E} ]; then
+        echo "could not get first or end line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
+        return 1;
+    fi
+
+    #
+    # check first and cache file length from last line
+    #
+    # we should check all stat lines, but there are cases where the value
+    # differs depending on the processing system etc., then the cache file
+    # size is calculated and compared.
+    #
+    CACHE_LAST_OFFSET=$(echo ${CACHE_FILE_STAT_LINE_E} | cut -d ":" -f1)
+    CACHE_LAST_SIZE=$(echo ${CACHE_FILE_STAT_LINE_E} | cut -d ":" -f2)
+    CACHE_TOTAL_SIZE=$((${CACHE_LAST_OFFSET} + ${CACHE_LAST_SIZE}))
+
+    if [ "${CACHE_FILE_STAT_LINE_1}" != "${CACHE_FILE_INODE}:${BIG_FILE_LENGTH}" ]; then
+        echo "first line(cache file stat) is different: \"${CACHE_FILE_STAT_LINE_1}\" != \"${CACHE_FILE_INODE}:${BIG_FILE_LENGTH}\""
+        return 1;
+    fi
+    if [ ${BIG_FILE_LENGTH} -ne ${CACHE_TOTAL_SIZE} ]; then
+        echo "the file size indicated by the cache stat file is different: \"${BIG_FILE_LENGTH}\" != \"${CACHE_TOTAL_SIZE}\""
+        return 1;
+    fi
+
+    rm_test_file "${BIG_FILE}"
+}
+
 function add_all_tests {
     if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree` && ! `uname | grep -q Darwin`; then
         add_tests test_clean_up_cache
     fi
-    add_tests test_append_file 
-    add_tests test_truncate_file 
+    add_tests test_append_file
+    add_tests test_truncate_file
     add_tests test_truncate_empty_file
     add_tests test_mv_file
     add_tests test_mv_empty_directory
@@ -789,6 +884,9 @@ function add_all_tests {
     add_tests test_write_multiple_offsets_backwards
     add_tests test_content_type
     add_tests test_truncate_cache
+    if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
+        add_tests test_cache_file_stat
+    fi
 }
 
 init_suite
