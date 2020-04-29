@@ -5241,10 +5241,7 @@ int main(int argc, char* argv[])
 
   // init mime types for curl
   if(!S3fsCurl::InitMimeType(mimetype_file)){
-    S3FS_PRN_EXIT("Could not load mime types for curl library.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
+    S3FS_PRN_WARN("Missing MIME types prevents setting Content-Type on uploaded objects.");
   }
 
   // [NOTE]
