@@ -794,7 +794,7 @@ time_t get_mtime(const char *str)
       strmtime = strmtime.substr(0, pos);
     }
   }
-  return static_cast<time_t>(s3fs_strtoofft(strmtime.c_str()));
+  return static_cast<time_t>(cvt_strtoofft(strmtime.c_str()));
 }
 
 static time_t get_time(headers_t& meta, bool overcheck, const char *header)
@@ -821,7 +821,7 @@ time_t get_ctime(headers_t& meta, bool overcheck)
 
 off_t get_size(const char *s)
 {
-  return s3fs_strtoofft(s);
+  return cvt_strtoofft(s);
 }
 
 off_t get_size(headers_t& meta)
@@ -835,7 +835,7 @@ off_t get_size(headers_t& meta)
 
 mode_t get_mode(const char *s)
 {
-  return static_cast<mode_t>(s3fs_strtoofft(s));
+  return static_cast<mode_t>(cvt_strtoofft(s));
 }
 
 mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
@@ -917,7 +917,7 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
 
 uid_t get_uid(const char *s)
 {
-  return static_cast<uid_t>(s3fs_strtoofft(s));
+  return static_cast<uid_t>(cvt_strtoofft(s));
 }
 
 uid_t get_uid(headers_t& meta)
@@ -934,7 +934,7 @@ uid_t get_uid(headers_t& meta)
 
 gid_t get_gid(const char *s)
 {
-  return static_cast<gid_t>(s3fs_strtoofft(s));
+  return static_cast<gid_t>(cvt_strtoofft(s));
 }
 
 gid_t get_gid(headers_t& meta)

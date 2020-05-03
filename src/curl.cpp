@@ -1375,13 +1375,17 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   string upload_id;
   string part_num_str;
   int    part_num;
+  off_t  tmp_part_num = 0;
   if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
     return NULL;
   }
   if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
     return NULL;
   }
-  part_num = s3fs_strtoofft(part_num_str.c_str(), /*base=*/ 10);
+  if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    return NULL;
+  }
+  part_num = static_cast<off_t>(tmp_part_num);
 
   if(s3fscurl->retry_count >= S3fsCurl::retries){
     S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
@@ -1419,13 +1423,17 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
   string upload_id;
   string part_num_str;
   int    part_num;
+  off_t  tmp_part_num = 0;
   if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
     return NULL;
   }
   if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
     return NULL;
   }
-  part_num = s3fs_strtoofft(part_num_str.c_str(), /*base=*/ 10);
+  if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    return NULL;
+  }
+  part_num = static_cast<off_t>(tmp_part_num);
 
   if(s3fscurl->retry_count >= S3fsCurl::retries){
     S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
@@ -1921,7 +1929,11 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
   S3fsCurl::AWSAccessToken       = keyval[string(S3fsCurl::IAM_token_field)];
 
   if(S3fsCurl::is_ibm_iam_auth){
-    S3fsCurl::AWSAccessTokenExpire = s3fs_strtoofft(keyval[string(S3fsCurl::IAM_expiry_field)].c_str(), /*base=*/ 10);
+    off_t tmp_expire = 0;
+    if(!try_strtoofft(keyval[string(S3fsCurl::IAM_expiry_field)].c_str(), tmp_expire, /*base=*/ 10)){
+      return false;
+    }
+    S3fsCurl::AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
   }else{
     S3fsCurl::AWSAccessKeyId       = keyval[string(IAMCRED_ACCESSKEYID)];
     S3fsCurl::AWSSecretAccessKey   = keyval[string(IAMCRED_SECRETACCESSKEY)];

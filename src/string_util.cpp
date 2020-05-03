@@ -68,6 +68,41 @@ off_t s3fs_strtoofft(const char* str, int base)
   return result;
 }
 
+// wrapped s3fs_strtoofft()
+//
+// This function catches the s3fs_strtoofft () exception and returns a boolean value.
+//
+bool try_strtoofft(const char* str, off_t& value, int base)
+{
+  if(str){
+    try{
+      value = s3fs_strtoofft(str, base);
+    }catch(std::exception &e){
+      S3FS_PRN_WARN("something error is occurred in convert string(%s) to off_t.", str);
+      return false;
+    }
+  }else{
+    S3FS_PRN_WARN("parameter string is null.");
+    return false;
+  }
+  return true;
+}
+
+// wrapped try_strtoofft -> s3fs_strtoofft()
+//
+// This function returns 0 if a value that cannot be converted is specified.
+// Only call if 0 is considered an error and the operation can continue.
+//
+off_t cvt_strtoofft(const char* str, int base)
+{
+  off_t result = 0;
+  if(!try_strtoofft(str, result, base)){
+    S3FS_PRN_WARN("something error is occurred in convert string(%s) to off_t, thus return 0 as default.", (str ? str : "null"));
+    return 0;
+  }
+  return result;
+}
+
 string lower(string s)
 {
   // change each character of the string to lower case

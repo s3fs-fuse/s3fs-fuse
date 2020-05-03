@@ -20,10 +20,20 @@
 
 #include <limits>
 #include <stdint.h>
+#include <strings.h>
 #include <string>
+#include <map>
 
+#include "common.h"
 #include "string_util.h"
 #include "test_util.h"
+
+//-------------------------------------------------------------------
+// Global variables for test_string_util
+//-------------------------------------------------------------------
+bool foreground                   = false;
+s3fs_log_level debug_level        = S3FS_LOG_CRIT;
+std::string instance_name;
 
 void test_trim()
 {
