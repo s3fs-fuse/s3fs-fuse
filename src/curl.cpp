@@ -650,7 +650,7 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
       }
     }
     if(MimeFile.empty()){
-      S3FS_PRN_ERR("Could not find miime.types files, you have to create file(%s) or specify mime option for existing mime.types file.", errPaths.c_str());
+      S3FS_PRN_WARN("Could not find mime.types files, you have to create file(%s) or specify mime option for existing mime.types file.", errPaths.c_str());
       return false;
     }
   }
@@ -684,7 +684,7 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
     }
     S3FS_PRN_INIT_INFO("Loaded mime information from %s", MimeFile.c_str());
   }else{
-    S3FS_PRN_ERR("Could not load mime types from %s, please check the existence and permissions of this file.", MimeFile.c_str());
+    S3FS_PRN_WARN("Could not load mime types from %s, please check the existence and permissions of this file.", MimeFile.c_str());
     return false;
   }
   return true;
