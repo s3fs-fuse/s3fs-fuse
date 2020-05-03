@@ -540,8 +540,8 @@ function test_update_time() {
 
     # create the test
     mk_test_file
-    mtime=`get_ctime $TEST_TEXT_FILE`
-    ctime=`get_mtime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
 
     sleep 2
     chmod +x $TEST_TEXT_FILE
