@@ -797,13 +797,10 @@ time_t get_mtime(const char *str)
   return static_cast<time_t>(cvt_strtoofft(strmtime.c_str()));
 }
 
-static time_t get_time(headers_t& meta, bool overcheck, const char *header)
+static time_t get_time(headers_t& meta, const char *header)
 {
   headers_t::const_iterator iter;
   if(meta.end() == (iter = meta.find(header))){
-    if(overcheck){
-      return get_lastmodified(meta);
-    }
     return 0;
   }
   return get_mtime((*iter).second.c_str());
@@ -811,12 +808,30 @@ static time_t get_time(headers_t& meta, bool overcheck, const char *header)
 
 time_t get_mtime(headers_t& meta, bool overcheck)
 {
-  return get_time(meta, overcheck, "x-amz-meta-mtime");
+  time_t t = get_time(meta, "x-amz-meta-mtime");
+  if(t != 0){
+    return t;
+  }
+  t = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
+  if(t != 0){
+    return t;
+  }
+  if(overcheck){
+    return get_lastmodified(meta);
+  }
+  return 0;
 }
 
 time_t get_ctime(headers_t& meta, bool overcheck)
 {
-  return get_time(meta, overcheck, "x-amz-meta-ctime");
+  time_t t = get_time(meta, "x-amz-meta-ctime");
+  if(t != 0){
+    return t;
+  }
+  if(overcheck){
+    return get_lastmodified(meta);
+  }
+  return 0;
 }
 
 off_t get_size(const char *s)
@@ -833,9 +848,9 @@ off_t get_size(headers_t& meta)
   return get_size((*iter).second.c_str());
 }
 
-mode_t get_mode(const char *s)
+mode_t get_mode(const char *s, int base)
 {
-  return static_cast<mode_t>(cvt_strtoofft(s));
+  return static_cast<mode_t>(cvt_strtoofft(s, base));
 }
 
 mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
@@ -849,6 +864,8 @@ mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
   }else if(meta.end() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
     mode = get_mode((*iter).second.c_str());
     isS3sync = true;
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
+    mode = get_mode((*iter).second.c_str(), 8);
   }else{
     // If another tool creates an object without permissions, default to owner
     // read-write and group readable.
@@ -927,6 +944,8 @@ uid_t get_uid(headers_t& meta)
     return get_uid((*iter).second.c_str());
   }else if(meta.end() != (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
     return get_uid((*iter).second.c_str());
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-uid"))){ // for GCS
+    return get_uid((*iter).second.c_str());
   }else{
     return geteuid();
   }
@@ -943,6 +962,8 @@ gid_t get_gid(headers_t& meta)
   if(meta.end() != (iter = meta.find("x-amz-meta-gid"))){
     return get_gid((*iter).second.c_str());
   }else if(meta.end() != (iter = meta.find("x-amz-meta-group"))){ // for s3sync
+    return get_gid((*iter).second.c_str());
+  }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-gid"))){ // for GCS
     return get_gid((*iter).second.c_str());
   }else{
     return getegid();
