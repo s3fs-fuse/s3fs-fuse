@@ -153,7 +153,7 @@ Note2: You may also need to make sure `netfs` service is start on boot
 
 Generally S3 cannot offer the same performance or semantics as a local file system.  More specifically:
 
-* random writes or appends to files require rewriting the entire file
+* random writes or appends to files require rewriting the entire object, optimized with multi-part upload copy
 * metadata operations such as listing directories have poor performance due to network latency
 * [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency) can temporarily yield stale data([Amazon S3 Data Consistency Model](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel))
 * no atomic renames of files or directories
