@@ -264,5 +264,5 @@ function get_disk_avail_size() {
 }
 
 function aws_cli() {
-    AWS_ACCESS_KEY_ID=local-identity AWS_SECRET_ACCESS_KEY=local-credential aws $* --endpoint-url "${S3_URL}" --no-verify-ssl 
+    aws $* --endpoint-url "${S3_URL}" --no-verify-ssl
 }

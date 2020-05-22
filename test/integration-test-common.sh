@@ -62,6 +62,9 @@ then
 fi
 chmod 600 "$S3FS_CREDENTIALS_FILE"
 
+export AWS_ACCESS_KEY_ID=$(cut -d: -f1 ${S3FS_CREDENTIALS_FILE})
+export AWS_SECRET_ACCESS_KEY=$(cut -d: -f2 ${S3FS_CREDENTIALS_FILE})
+
 if [ ! -d $TEST_BUCKET_MOUNT_POINT_1 ]
 then
 	mkdir -p $TEST_BUCKET_MOUNT_POINT_1
