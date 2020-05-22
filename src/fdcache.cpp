@@ -63,33 +63,6 @@ static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
 #endif
 
 //------------------------------------------------
-// Local utility function
-//------------------------------------------------
-// Wrapped s3fs_strtoofft()
-//
-// PageList::Serialize method uses s3fs_strtoofft function,
-// but s3fs_strtoofft throws an exception, so wrap it in
-// this function.
-// PageList::Serialize works as 0 when the read data is invalid.
-//
-static off_t wrap_strtoofft(const char* str)
-{
-  off_t result;
-  if(str){
-    try{
-      result = s3fs_strtoofft(str);
-    }catch(std::exception &e){
-      S3FS_PRN_WARN("something error is occurred in convert string to off_t, so return 0 as default.");
-      result = 0;
-    }
-  }else{
-    S3FS_PRN_WARN("parameter is null, so return 0 as default.");
-    result = 0;
-  }
-  return result;
-}
-
-//------------------------------------------------
 // CacheFileStat class methods
 //------------------------------------------------
 bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, bool is_create_dir)
@@ -931,12 +904,12 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
       // get second part in head line.
       if(!getline(sshead, strhead2, ':')){
         // old head format is "<size>\n"
-        total       = wrap_strtoofft(strhead1.c_str());
+        total       = cvt_strtoofft(strhead1.c_str(), /* base= */10);
         cache_inode = 0;
       }else{
         // current head format is "<inode>:<size>\n"
-        total       = wrap_strtoofft(strhead1.c_str());
-        cache_inode = static_cast<ino_t>(wrap_strtoofft(strhead2.c_str()));
+        total       = cvt_strtoofft(strhead1.c_str(), /* base= */10);
+        cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead2.c_str(), /* base= */10));
         if(0 == cache_inode){
           S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
           delete[] ptmp;
@@ -961,24 +934,24 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         is_err = true;
         break;
       }
-      off_t offset = wrap_strtoofft(part.c_str());
+      off_t offset = cvt_strtoofft(part.c_str(), /* base= */10);
       // size
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      off_t size = wrap_strtoofft(part.c_str());
+      off_t size = cvt_strtoofft(part.c_str(), /* base= */10);
       // loaded
       if(!getline(ssparts, part, ':')){
         is_err = true;
         break;
       }
-      bool is_loaded = (1 == wrap_strtoofft(part.c_str()) ? true : false);
+      bool is_loaded = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
       bool is_modified;
       if(!getline(ssparts, part, ':')){
         is_modified = false;        // old version does not have this part.
       }else{
-        is_modified = (1 == wrap_strtoofft(part.c_str()) ? true : false);
+        is_modified = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
       }
       // add new area
       PageList::page_status pstatus = 

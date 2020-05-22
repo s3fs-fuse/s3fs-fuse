@@ -37,6 +37,8 @@ template <class T> std::string str(T value);
 
 // Convert string to off_t.  Throws std::invalid_argument and std::out_of_range on bad input.
 off_t s3fs_strtoofft(const char* str, int base = 0);
+bool try_strtoofft(const char* str, off_t& value, int base = 0);
+off_t cvt_strtoofft(const char* str, int base = 0);
 
 std::string trim_left(const std::string &s, const std::string &t = SPACES);
 std::string trim_right(const std::string &s, const std::string &t = SPACES);
