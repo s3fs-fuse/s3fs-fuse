@@ -264,5 +264,9 @@ function get_disk_avail_size() {
 }
 
 function aws_cli() {
-    aws $* --endpoint-url "${S3_URL}" --no-verify-ssl
+    FLAGS=""
+    if [ -n "${S3FS_PROFILE}" ]; then
+        FLAGS="--profile ${S3FS_PROFILE}"
+    fi
+    aws $* --endpoint-url "${S3_URL}" --no-verify-ssl $FLAGS
 }
