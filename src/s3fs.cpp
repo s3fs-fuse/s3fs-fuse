@@ -5077,6 +5077,18 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == strcmp(arg, "curldbg")){
       S3fsCurl::SetVerbose(true);
       return 0;
+    }else if(0 == STR2NCMP(arg, "curldbg=")){
+      const char* strlevel = strchr(arg, '=') + sizeof(char);
+      if(0 == strcasecmp(strlevel, "normal")){
+        S3fsCurl::SetVerbose(true);
+      }else if(0 == strcasecmp(strlevel, "body")){
+        S3fsCurl::SetVerbose(true);
+        S3fsCurl::SetDumpBody(true);
+      }else{
+        S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel);
+        return -1;
+      }
+      return 0;
     }
 
     if(0 == STR2NCMP(arg, "accessKeyId=")){

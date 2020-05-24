@@ -97,6 +97,15 @@ enum s3fs_log_level{
        } \
      }while(0)
 
+#define S3FS_LOW_CURLDBG(fmt, ...) \
+     do{ \
+       if(foreground){ \
+         fprintf(stdout, "[CURL DBG] " fmt "%s\n", __VA_ARGS__); \
+       }else{ \
+         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
+       } \
+     }while(0)
+
 #define S3FS_LOW_LOGPRN_EXIT(fmt, ...) \
      do{ \
        if(foreground){ \
@@ -130,7 +139,7 @@ enum s3fs_log_level{
 #define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3FS_LOG_INFO, 1, fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3FS_LOG_INFO, 2, fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3FS_LOG_INFO, 3, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_LOGPRN2(S3FS_LOG_CRIT, 0, fmt, ##__VA_ARGS__, "")
+#define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
 
 //
 // Typedef

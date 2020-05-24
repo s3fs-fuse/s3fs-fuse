@@ -337,6 +337,9 @@ When s3fs catch the signal SIGUSR2, the debug level is bumpup.
 .TP
 \fB\-o\fR curldbg - put curl debug message
 Put the debug message from libcurl when this option is specified.
+Specify "normal" or "body" for the parameter.
+If the parameter is omitted, it is the same as "normal".
+If "body" is specified, some API communication body data will be output in addition to the debug message output as "normal".
 .SS "utility mode options"
 .TP
 \fB\-u\fR or \fB\-\-incomplete\-mpu\-list\fR

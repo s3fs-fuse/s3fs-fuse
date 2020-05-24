@@ -279,6 +279,7 @@ class S3fsCurl
     static sse_type_t       ssetype;
     static bool             is_content_md5;
     static bool             is_verbose;
+    static bool             is_dump_body;
     static std::string      AWSAccessKeyId;
     static std::string      AWSSecretAccessKey;
     static std::string      AWSAccessToken;
@@ -386,6 +387,9 @@ class S3fsCurl
     static bool AddUserAgent(CURL* hCurl);
 
     static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+    static int CurlDebugBodyInFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+    static int CurlDebugBodyOutFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+    static int RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
     // methods
     bool ResetHandle(void);
@@ -448,6 +452,8 @@ class S3fsCurl
     static bool SetContentMd5(bool flag);
     static bool SetVerbose(bool flag);
     static bool GetVerbose(void) { return S3fsCurl::is_verbose; }
+    static bool SetDumpBody(bool flag);
+    static bool IsDumpBody(void) { return S3fsCurl::is_dump_body; }
     static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
     static bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
     static bool IsSetAccessKeyID(void){
