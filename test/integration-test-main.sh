@@ -846,6 +846,12 @@ function test_cache_file_stat() {
     rm_test_file "${BIG_FILE}"
 }
 
+function test_ut_ossfs {
+    echo "Testing ossfs python ut..."
+    export TEST_BUCKET_MOUNT_POINT=$TEST_BUCKET_MOUNT_POINT_1
+    ../../ut_test.py
+}
+
 function add_all_tests {
     if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree` && ! `uname | grep -q Darwin`; then
         add_tests test_clean_up_cache
@@ -884,6 +890,7 @@ function add_all_tests {
     add_tests test_write_multiple_offsets_backwards
     add_tests test_content_type
     add_tests test_truncate_cache
+    add_tests test_ut_ossfs
     if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
         add_tests test_cache_file_stat
     fi
