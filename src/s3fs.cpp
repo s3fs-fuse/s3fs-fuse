@@ -4562,7 +4562,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "retries=")){
-      S3fsCurl::SetRetries(static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))));
+      off_t retries = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+      if(retries == 0){
+        S3FS_PRN_EXIT("retries must be greater than zero");
+        return -1;
+      }
+      S3fsCurl::SetRetries(retries);
       return 0;
     }
     if(0 == STR2NCMP(arg, "use_cache=")){
