@@ -154,6 +154,29 @@ static string tolower_header_name(const char* head)
 }
 #endif
 
+static const char* getCurlDebugHead(curl_infotype type)
+{
+  const char* unknown = "";
+  const char* dataIn  = "BODY <";
+  const char* dataOut = "BODY >";
+  const char* headIn  = "<";
+  const char* headOut = ">";
+
+  switch(type){
+    case CURLINFO_DATA_IN:
+      return dataIn;
+    case CURLINFO_DATA_OUT:
+      return dataOut;
+    case CURLINFO_HEADER_IN:
+      return headIn;
+    case CURLINFO_HEADER_OUT:
+      return headOut;
+    default:
+      break;
+  }
+  return unknown;
+}
+
 //-------------------------------------------------------------------
 // Class BodyData
 //-------------------------------------------------------------------
@@ -383,6 +406,7 @@ std::string      S3fsCurl::ssekmsid;
 sse_type_t       S3fsCurl::ssetype             = SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
+bool             S3fsCurl::is_dump_body        = false;
 string           S3fsCurl::AWSAccessKeyId;
 string           S3fsCurl::AWSSecretAccessKey;
 string           S3fsCurl::AWSAccessToken;
@@ -1240,6 +1264,13 @@ bool S3fsCurl::SetVerbose(bool flag)
   return old;
 }
 
+bool S3fsCurl::SetDumpBody(bool flag)
+{
+  bool old = S3fsCurl::is_dump_body;
+  S3fsCurl::is_dump_body = flag;
+  return old;
+}
+
 bool S3fsCurl::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
 {
   if((!S3fsCurl::is_ibm_iam_auth && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0]){
@@ -2005,6 +2036,21 @@ bool S3fsCurl::AddUserAgent(CURL* hCurl)
 
 int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
 {
+  return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_END);
+}
+
+int S3fsCurl::CurlDebugBodyInFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
+{
+  return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_DATA_IN);
+}
+
+int S3fsCurl::CurlDebugBodyOutFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
+{
+  return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_DATA_OUT);
+}
+
+int S3fsCurl::RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype)
+{
   if(!hcurl){
     // something wrong...
     return 0;
@@ -2019,8 +2065,17 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
         size--;
         data++;
       }
+      if(foreground && 0 < size && '\n' == data[size - 1]){
+        size--;
+      }
       S3FS_PRN_CURL("* %*s%.*s", indent, "", (int)size, data);
       break;
+    case CURLINFO_DATA_IN:
+    case CURLINFO_DATA_OUT:
+      if(type != datatype || !S3fsCurl::is_dump_body){
+        // not put
+        break;
+      }
     case CURLINFO_HEADER_IN:
     case CURLINFO_HEADER_OUT:
       size_t remaining;
@@ -2042,13 +2097,11 @@ int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t 
           eol++;
         }
         size_t length = eol - p;
-        S3FS_PRN_CURL("%c %.*s", CURLINFO_HEADER_IN == type ? '<' : '>', (int)length - newline, p);
+        S3FS_PRN_CURL("%s %.*s", getCurlDebugHead(type), (int)length - newline, p);
         remaining -= length;
         p = eol;
       } while (p != NULL && remaining > 0);
       break;
-    case CURLINFO_DATA_IN:
-    case CURLINFO_DATA_OUT:
     case CURLINFO_SSL_DATA_IN:
     case CURLINFO_SSL_DATA_OUT:
       // not put
@@ -2118,9 +2171,7 @@ bool S3fsCurl::ResetHandle()
   }
   if(S3fsCurl::is_verbose){
     curl_easy_setopt(hCurl, CURLOPT_VERBOSE, true);
-    if(!foreground){
-      curl_easy_setopt(hCurl, CURLOPT_DEBUGFUNCTION, S3fsCurl::CurlDebugFunc);
-    }
+    curl_easy_setopt(hCurl, CURLOPT_DEBUGFUNCTION, S3fsCurl::CurlDebugFunc);
   }
   if(!cipher_suites.empty()) {
     curl_easy_setopt(hCurl, CURLOPT_SSL_CIPHER_LIST, cipher_suites.c_str());
@@ -3529,6 +3580,9 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
   curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
   curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  if(S3fsCurl::is_verbose){
+    curl_easy_setopt(hCurl, CURLOPT_DEBUGFUNCTION, S3fsCurl::CurlDebugBodyInFunc);     // replace debug function
+  }
   S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
   return RequestPerform();
@@ -3708,6 +3762,9 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const string& uplo
   curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining));
   curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
   curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+  if(S3fsCurl::is_verbose){
+    curl_easy_setopt(hCurl, CURLOPT_DEBUGFUNCTION, S3fsCurl::CurlDebugBodyOutFunc);     // replace debug function
+  }
   S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
   // request
