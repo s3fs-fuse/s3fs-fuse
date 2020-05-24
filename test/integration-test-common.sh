@@ -8,9 +8,10 @@
 # environment variables:
 #
 # S3FS_CREDENTIALS_FILE=keyfile      s3fs format key file
+# S3FS_PROFILE=name                  s3fs profile to use (overrides key file)
 # TEST_BUCKET_1=bucketname           Name of bucket to use 
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
-# S3_URL="https://s3.amazonaws.com"   Specify Amazon AWS as the S3 provider
+# S3_URL="https://s3.amazonaws.com"  Specify Amazon AWS as the S3 provider
 #
 # Example of running against Amazon S3 using a bucket named "bucket:
 #
@@ -62,8 +63,10 @@ then
 fi
 chmod 600 "$S3FS_CREDENTIALS_FILE"
 
-export AWS_ACCESS_KEY_ID=$(cut -d: -f1 ${S3FS_CREDENTIALS_FILE})
-export AWS_SECRET_ACCESS_KEY=$(cut -d: -f2 ${S3FS_CREDENTIALS_FILE})
+if [ -z "${S3FS_PROFILE}" ]; then
+    export AWS_ACCESS_KEY_ID=$(cut -d: -f1 ${S3FS_CREDENTIALS_FILE})
+    export AWS_SECRET_ACCESS_KEY=$(cut -d: -f2 ${S3FS_CREDENTIALS_FILE})
+fi
 
 if [ ! -d $TEST_BUCKET_MOUNT_POINT_1 ]
 then
@@ -143,6 +146,8 @@ function start_s3fs {
     # Public bucket if PUBLIC is set
     if [ -n "${PUBLIC}" ]; then
         AUTH_OPT="-o public_bucket=1"
+    elif [ -n "${S3FS_PROFILE}" ]; then
+        AUTH_OPT="-o profile=${S3FS_PROFILE}"
     else
         AUTH_OPT="-o passwd_file=${S3FS_CREDENTIALS_FILE}"
     fi
