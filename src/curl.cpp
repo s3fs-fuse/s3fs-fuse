@@ -1,5 +1,5 @@
 /*
- * s3fs - FUSE-based file system backed by Amazon S3
+ * s3fs - FUSE-based file system backed by S3
  *
  * Copyright(C) 2007 Randy Rizun <rrizun@gmail.com>
  *
@@ -2655,7 +2655,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 }
 
 //
-// Returns the Amazon AWS signature for the given parameters.
+// Returns the AWS signature for the given parameters.
 //
 // @param method e.g., "GET"
 // @param content_type e.g., "application/x-directory"

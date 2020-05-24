@@ -1,6 +1,6 @@
 .TH S3FS "1" "February 2011" "S3FS" "User Commands"
 .SH NAME
-S3FS \- FUSE-based file system backed by Amazon S3
+S3FS \- FUSE-based file system backed by S3
 .SH SYNOPSIS
 .SS mounting
 .TP
@@ -20,7 +20,7 @@ For unprivileged user.
 .TP
 \fBs3fs --incomplete-mpu-abort[=all | =<expire date format>] bucket
 .SH DESCRIPTION
-s3fs is a FUSE filesystem that allows you to mount an Amazon S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
+s3fs is a FUSE filesystem that allows you to mount an S3 bucket as a local filesystem. It stores files natively and transparently in S3 (i.e., you can use other programs to access the same files).
 .SH AUTHENTICATION
 s3fs supports the standard AWS credentials file (https://docs.aws.amazon.com/cli/latest/userguide/cli-config-files.html) stored in `${HOME}/.aws/credentials`.
 Alternatively, s3fs supports a custom passwd file. Only AWS credentials file format can be used when AWS session token is required.
@@ -86,13 +86,13 @@ this option replaces the old option use_rrs.
 Possible values: standard, standard_ia, onezone_ia, reduced_redundancy, and intelligent_tiering.
 .TP
 \fB\-o\fR use_rrs (default is disable)
-use Amazon's Reduced Redundancy Storage.
+use Reduced Redundancy Storage.
 this option can not be specified with use_sse.
 (can specify use_rrs=1 for old version)
 this option has been replaced by new storage_class option.
 .TP
 \fB\-o\fR use_sse (default is disable)
-Specify three type Amazon's Server-Site Encryption: SSE-S3, SSE-C or SSE-KMS. SSE-S3 uses Amazon S3-managed encryption keys, SSE-C uses customer-provided encryption keys, and SSE-KMS uses the master key which you manage in AWS KMS.
+Specify three types of Server-Side Encryption: SSE-S3, SSE-C or SSE-KMS. SSE-S3 uses S3-managed encryption keys, SSE-C uses customer-provided encryption keys, and SSE-KMS uses the master key which you manage in AWS KMS.
 You can specify "use_sse" or "use_sse=1" enables SSE-S3 type (use_sse=1 is old type parameter).
 Case of setting SSE-C, you can specify "use_sse=custom", "use_sse=custom:<custom key file path>" or "use_sse=<custom key file path>" (only <custom key file path> specified is old type parameter).
 You can use "c" for short "custom".
@@ -212,7 +212,7 @@ Set a non-Amazon host, e.g., https://example.com.
 Set a service path when the non-Amazon host requires a prefix.
 .TP
 \fB\-o\fR url (default="https://s3.amazonaws.com")
-sets the url to use to access Amazon S3. If you want to use HTTP, then you can set "url=http://s3.amazonaws.com".
+sets the url to use to access S3. If you want to use HTTP, then you can set "url=http://s3.amazonaws.com".
 If you do not use https, please specify the URL with the url option.
 .TP
 \fB\-o\fR endpoint (default="us-east-1")
@@ -356,7 +356,7 @@ Most of the generic mount options described in 'man mount' are supported (ro, rw
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
 .SH NOTES
 .TP
-The maximum size of objects that s3fs can handle depends on Amazon S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
+The maximum size of objects that s3fs can handle depends on the S3 implementation. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
 .TP
 If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses MD5 checksums to minimize downloads from S3.
 .TP

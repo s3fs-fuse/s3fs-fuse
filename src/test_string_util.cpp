@@ -1,5 +1,5 @@
 /*
- * s3fs - FUSE-based file system backed by Amazon S3
+ * s3fs - FUSE-based file system backed by S3
  *
  * Copyright(C) 2014 Andrew Gaul <andrew@gaul.org>
  *

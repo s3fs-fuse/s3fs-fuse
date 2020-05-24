@@ -1,5 +1,5 @@
 /*
- * s3fs - FUSE-based file system backed by Amazon S3
+ * s3fs - FUSE-based file system backed by S3
  *
  * Copyright(C) 2007 Takeshi Nakatani <ggtakec.com>
  *
@@ -1099,7 +1099,7 @@ void show_help ()
   show_usage();
   printf(
     "\n"
-    "Mount an Amazon S3 bucket as a file system.\n"
+    "Mount an S3 bucket as a file system.\n"
     "\n"
     "Usage:\n"
     "   mounting\n"
@@ -1152,14 +1152,14 @@ void show_help ()
     "        standard, standard_ia, onezone_ia, reduced_redundancy and intelligent_tiering.\n"
     "\n"
     "   use_rrs (default is disable)\n"
-    "      - use Amazon's Reduced Redundancy Storage.\n"
+    "      - use Reduced Redundancy Storage.\n"
     "        this option can not be specified with use_sse.\n"
     "        (can specify use_rrs=1 for old version)\n"
     "        this option has been replaced by new storage_class option.\n"
     "\n"
     "   use_sse (default is disable)\n"
-    "      - Specify three type Amazon's Server-Site Encryption: SSE-S3,\n"
-    "        SSE-C or SSE-KMS. SSE-S3 uses Amazon S3-managed encryption\n"
+    "      - Specify three types of Server-Side Encryption: SSE-S3,\n"
+    "        SSE-C or SSE-KMS. SSE-S3 uses S3-managed encryption\n"
     "        keys, SSE-C uses customer-provided encryption keys, and\n"
     "        SSE-KMS uses the master key which you manage in AWS KMS.\n"
     "        You can specify \"use_sse\" or \"use_sse=1\" enables SSE-S3\n"
@@ -1543,7 +1543,7 @@ void show_help ()
 void show_version()
 {
   printf(
-  "Amazon Simple Storage Service File System V%s (commit:%s) with %s\n"
+  "s3fs V%s (commit:%s) with %s\n"
   "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>\n"
   "License GPL2: GNU GPL version 2 <https://gnu.org/licenses/gpl.html>\n"
   "This is free software: you are free to change and redistribute it.\n"

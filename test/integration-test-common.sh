@@ -4,14 +4,14 @@
 # Common code for starting an s3fs-fuse mountpoint and an S3Proxy instance 
 # to run tests against S3Proxy locally.
 #
-# To run against an Amazon S3 or other S3 provider, specify the following 
+# To run against a hosted S3 provider, specify the following
 # environment variables:
 #
 # S3FS_CREDENTIALS_FILE=keyfile      s3fs format key file
 # S3FS_PROFILE=name                  s3fs profile to use (overrides key file)
 # TEST_BUCKET_1=bucketname           Name of bucket to use 
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
-# S3_URL="https://s3.amazonaws.com"  Specify Amazon AWS as the S3 provider
+# S3_URL="https://s3.amazonaws.com"  Specify the S3 provider
 #
 # Example of running against Amazon S3 using a bucket named "bucket:
 #
