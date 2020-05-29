@@ -459,7 +459,11 @@ bool AutoLock::isLockAcquired() const
 AutoLock::~AutoLock()
 {
   if (is_lock_acquired) {
-    pthread_mutex_unlock(auto_mutex);
+    int res = pthread_mutex_unlock(auto_mutex);
+    if(res != 0){
+      S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+      abort();
+    }
   }
 }
 
