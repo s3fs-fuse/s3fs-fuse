@@ -2788,7 +2788,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
     // rename path and caches in fd entity
     string fentmapkey;
     if(!ent->RenamePath(to, fentmapkey)){
-      S3FS_PRN_ERR("Failed to rename FdEntity obejct for %s to %s", from.c_str(), to.c_str());
+      S3FS_PRN_ERR("Failed to rename FdEntity object for %s to %s", from.c_str(), to.c_str());
       return;
     }
 
