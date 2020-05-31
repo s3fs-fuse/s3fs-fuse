@@ -1531,13 +1531,9 @@ bool FdEntity::RenamePath(const string& newpath, string& fentmapkey)
       return false;
     }
 
-    // link and unlink cache file
-    if(-1 == link(cachepath.c_str(), newcachepath.c_str())){
-      S3FS_PRN_ERR("failed to link old cache path(%s) to new cache path(%s) by errno(%d).", cachepath.c_str(), newcachepath.c_str(), errno);
-      return false;
-    }
-    if(-1 == unlink(cachepath.c_str())){
-      S3FS_PRN_ERR("failed to unlink old cache path(%s) by errno(%d).", cachepath.c_str(), errno);
+    // rename cache file
+    if(-1 == rename(cachepath.c_str(), newcachepath.c_str())){
+      S3FS_PRN_ERR("failed to rename old cache path(%s) to new cache path(%s) by errno(%d).", cachepath.c_str(), newcachepath.c_str(), errno);
       return false;
     }
 
