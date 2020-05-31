@@ -1373,6 +1373,8 @@ static int rename_object_nocopy(const char* from, const char* to)
     FdManager::get()->Close(ent);
     return result;
   }
+
+  FdManager::get()->Rename(from, to);
   FdManager::get()->Close(ent);
 
   // Remove file
