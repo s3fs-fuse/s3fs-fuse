@@ -1045,18 +1045,21 @@ FdEntity::FdEntity(const char* tpath, const char* cpath)
           fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
           cachepath(SAFESTRPTR(cpath)), mirrorpath("")
 {
-  try{
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
 #if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-    pthread_mutex_init(&fdent_lock, &attr);
-    pthread_mutex_init(&fdent_data_lock, &attr);
-    is_lock_init = true;
-  }catch(exception& e){
-    S3FS_PRN_CRIT("failed to init mutex");
+  int res;
+  if(0 != (res = pthread_mutex_init(&fdent_lock, &attr))){
+    S3FS_PRN_CRIT("failed to init fdent_lock: %d", res);
+    abort();
   }
+  if(0 != (res = pthread_mutex_init(&fdent_data_lock, &attr))){
+    S3FS_PRN_CRIT("failed to init fdent_data_lock: %d", res);
+    abort();
+  }
+  is_lock_init = true;
 }
 
 FdEntity::~FdEntity()
@@ -1064,11 +1067,14 @@ FdEntity::~FdEntity()
   Clear();
 
   if(is_lock_init){
-    try{
-      pthread_mutex_destroy(&fdent_data_lock);
-      pthread_mutex_destroy(&fdent_lock);
-    }catch(exception& e){
-      S3FS_PRN_CRIT("failed to destroy mutex");
+    int res;
+    if(0 != (res = pthread_mutex_destroy(&fdent_data_lock))){
+      S3FS_PRN_CRIT("failed to destroy fdent_data_lock: %d", res);
+      abort();
+    }
+    if(0 != (res = pthread_mutex_destroy(&fdent_lock))){
+      S3FS_PRN_CRIT("failed to destroy fdent_lock: %d", res);
+      abort();
     }
     is_lock_init = false;
   }
@@ -2580,15 +2586,20 @@ FdManager::FdManager()
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-    try{
-      pthread_mutex_init(&FdManager::fd_manager_lock, &attr);
-      pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr);
-      pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr);
-      FdManager::is_lock_init = true;
-    }catch(exception& e){
-      FdManager::is_lock_init = false;
-      S3FS_PRN_CRIT("failed to init mutex");
+    int res;
+    if(0 != (res = pthread_mutex_init(&FdManager::fd_manager_lock, &attr))){
+      S3FS_PRN_CRIT("failed to init fd_manager_lock: %d", res);
+      abort();
     }
+    if(0 != (res = pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr))){
+      S3FS_PRN_CRIT("failed to init cache_cleanup_lock: %d", res);
+      abort();
+    }
+    if(0 != (res = pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr))){
+      S3FS_PRN_CRIT("failed to init reserved_diskspace_lock: %d", res);
+      abort();
+    }
+    FdManager::is_lock_init = true;
   }else{
     abort();
   }
@@ -2604,12 +2615,18 @@ FdManager::~FdManager()
     fent.clear();
 
     if(FdManager::is_lock_init){
-      try{
-        pthread_mutex_destroy(&FdManager::fd_manager_lock);
-        pthread_mutex_destroy(&FdManager::cache_cleanup_lock);
-        pthread_mutex_destroy(&FdManager::reserved_diskspace_lock);
-      }catch(exception& e){
-        S3FS_PRN_CRIT("failed to init mutex");
+      int res;
+      if(0 != (res = pthread_mutex_destroy(&FdManager::fd_manager_lock))){
+        S3FS_PRN_CRIT("failed to destroy fd_manager_lock: %d", res);
+        abort();
+      }
+      if(0 != (res = pthread_mutex_destroy(&FdManager::cache_cleanup_lock))){
+        S3FS_PRN_CRIT("failed to destroy cache_cleanup_lock: %d", res);
+        abort();
+      }
+      if(0 != (res = pthread_mutex_destroy(&FdManager::reserved_diskspace_lock))){
+        S3FS_PRN_CRIT("failed to destroy reserved_diskspace_lock: %d", res);
+        abort();
       }
       FdManager::is_lock_init = false;
     }

@@ -86,10 +86,17 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 {
   if(s3fs_crypt_mutex){
+    int res;
     if(mode & CRYPTO_LOCK){
-      pthread_mutex_lock(&s3fs_crypt_mutex[pos]);
+      if(0 != (res = pthread_mutex_lock(&s3fs_crypt_mutex[pos]))){
+        S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+        abort();
+      }
     }else{
-      pthread_mutex_unlock(&s3fs_crypt_mutex[pos]);
+      if(0 != (res = pthread_mutex_unlock(&s3fs_crypt_mutex[pos]))){
+        S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
+        abort();
+      }
     }
   }
 }
@@ -111,7 +118,11 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
 #if S3FS_PTHREAD_ERRORCHECK
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-  pthread_mutex_init(&(dyndata->dyn_mutex), &attr);
+  int res;
+  if(0 != (res = pthread_mutex_init(&(dyndata->dyn_mutex), &attr))){
+    S3FS_PRN_CRIT("pthread_mutex_init returned: %d", res);
+    return NULL;
+  }
   return dyndata;
 }
 
@@ -119,10 +130,17 @@ static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyn
 static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
   if(dyndata){
+    int res;
     if(mode & CRYPTO_LOCK){
-      pthread_mutex_lock(&(dyndata->dyn_mutex));
+      if(0 != (res = pthread_mutex_lock(&(dyndata->dyn_mutex)))){
+        S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+        abort();
+      }
     }else{
-      pthread_mutex_unlock(&(dyndata->dyn_mutex));
+      if(0 != (res = pthread_mutex_unlock(&(dyndata->dyn_mutex)))){
+        S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
+        abort();
+      }
     }
   }
 }
@@ -131,7 +149,11 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
 static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
   if(dyndata){
-    pthread_mutex_destroy(&(dyndata->dyn_mutex));
+    int res = pthread_mutex_destroy(&(dyndata->dyn_mutex));
+    if(res != 0){
+      S3FS_PRN_CRIT("failed to destroy dyn_mutex");
+      abort();
+    }
     delete dyndata;
   }
 }
@@ -152,7 +174,11 @@ bool s3fs_init_crypt_mutex()
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
   for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-    pthread_mutex_init(&s3fs_crypt_mutex[cnt], &attr);
+    int res = pthread_mutex_init(&s3fs_crypt_mutex[cnt], &attr);
+    if(res != 0){
+      S3FS_PRN_CRIT("pthread_mutex_init returned: %d", res);
+      return false;
+    }
   }
   // static lock
   CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
@@ -178,7 +204,11 @@ bool s3fs_destroy_crypt_mutex()
   CRYPTO_set_locking_callback(NULL);
 
   for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-    pthread_mutex_destroy(&s3fs_crypt_mutex[cnt]);
+    int res = pthread_mutex_destroy(&s3fs_crypt_mutex[cnt]);
+    if(res != 0){
+      S3FS_PRN_CRIT("failed to destroy s3fs_crypt_mutex[%d]", cnt);
+      abort();
+    }
   }
   CRYPTO_cleanup_all_ex_data();
   delete[] s3fs_crypt_mutex;

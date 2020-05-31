@@ -169,7 +169,11 @@ StatCache::StatCache() : IsExpireTime(false), IsExpireIntervalType(false), Expir
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-    pthread_mutex_init(&StatCache::stat_cache_lock, &attr);
+    int res;
+    if(0 != (res = pthread_mutex_init(&StatCache::stat_cache_lock, &attr))){
+      S3FS_PRN_CRIT("failed to init stat_cache_lock: %d", res);
+      abort();
+    }
   }else{
     abort();
   }
@@ -179,7 +183,11 @@ StatCache::~StatCache()
 {
   if(this == StatCache::getStatCacheData()){
     Clear();
-    pthread_mutex_destroy(&StatCache::stat_cache_lock);
+    int res = pthread_mutex_destroy(&StatCache::stat_cache_lock);
+    if(res != 0){
+      S3FS_PRN_CRIT("failed to destroy stat_cache_lock: %d", res);
+      abort();
+    }
   }else{
     abort();
   }
