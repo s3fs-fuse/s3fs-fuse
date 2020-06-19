@@ -908,8 +908,8 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         cache_inode = 0;
       }else{
         // current head format is "<inode>:<size>\n"
-        total       = cvt_strtoofft(strhead1.c_str(), /* base= */10);
-        cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead2.c_str(), /* base= */10));
+        total       = cvt_strtoofft(strhead2.c_str(), /* base= */10);
+        cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead1.c_str(), /* base= */10));
         if(0 == cache_inode){
           S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
           delete[] ptmp;
