@@ -21,7 +21,6 @@
 #define FD_CACHE_H_
 
 #include <sys/statvfs.h>
-#include "curl.h"
 
 //------------------------------------------------
 // CacheFileStat
@@ -92,9 +91,8 @@ class PageList
 
   private:
     void Clear(void);
-    bool Compress(bool force_modified = false);
+    bool Compress();
     bool Parse(off_t new_pos);
-    bool RawGetUnloadPageList(fdpage_list_t& dlpages, off_t offset, off_t size);
 
   public:
     static void FreeList(fdpage_list_t& list);
@@ -112,14 +110,13 @@ class PageList
     bool FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const;
     off_t GetTotalUnloadedPageSize(off_t start = 0, off_t size = 0) const;    // size=0 is checking to end of list
     int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
-    bool GetLoadPageListForMultipartUpload(fdpage_list_t& dlpages);
-    bool GetMultipartSizeList(fdpage_list_t& mplist, off_t partsize) const;
+    bool GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize);
 
     bool IsModified(void) const;
     bool ClearAllModified(void);
 
     bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
-    void Dump(void);
+    void Dump(void) const;
 };
 
 //------------------------------------------------
