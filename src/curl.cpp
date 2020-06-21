@@ -1610,7 +1610,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
   return 0;
 }
 
-int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const PageList& pagelist)
+int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages)
 {
   int            result;
   string         upload_id;
@@ -1621,16 +1621,9 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
 
   S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
-  // get upload mixed page list
-  fdpage_list_t fdplist;
-  if(!pagelist.GetMultipartSizeList(fdplist, S3fsCurl::multipart_size)){
-    return -1;
-  }
-
   // duplicate fd
   if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
     S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
-    PageList::FreeList(fdplist);
     if(-1 != fd2){
       close(fd2);
     }
@@ -1638,13 +1631,11 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
   }
   if(-1 == fstat(fd2, &st)){
     S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
-    PageList::FreeList(fdplist);
     close(fd2);
     return -errno;
   }
 
   if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, true))){
-    PageList::FreeList(fdplist);
     close(fd2);
     return result;
   }
@@ -1662,7 +1653,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
   curlmulti.SetSuccessCallback(S3fsCurl::MixMultipartPostCallback);
   curlmulti.SetRetryCallback(S3fsCurl::MixMultipartPostRetryCallback);
 
-  for(fdpage_list_t::const_iterator iter = fdplist.begin(); iter != fdplist.end(); ++iter){
+  for(fdpage_list_t::const_iterator iter = mixuppages.begin(); iter != mixuppages.end(); ++iter){
     // s3fscurl sub object
     S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
@@ -1680,7 +1671,6 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
       // initiate upload part for parallel
       if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
         S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-        PageList::FreeList(fdplist);
         close(fd2);
         delete s3fscurl_para;
         return result;
@@ -1711,13 +1701,11 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     // set into parallel object
     if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
       S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-      PageList::FreeList(fdplist);
       close(fd2);
       delete s3fscurl_para;
       return -1;
     }
   }
-  PageList::FreeList(fdplist);
 
   // Multi request
   if(0 != (result = curlmulti.Request())){

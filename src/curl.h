@@ -186,7 +186,8 @@ private:
 //----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
-class PageList;
+#include "fdcache.h"    // for fdpage_list_t
+
 class S3fsCurl;
 
 // Prototype function for lazy setup options for curl handle
@@ -415,7 +416,7 @@ class S3fsCurl
     static bool InitMimeType(const std::string& strFile);
     static bool DestroyS3fsCurl(void);
     static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
-    static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const PageList& pagelist);
+    static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
     static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
     static bool CheckIAMCredentialUpdate(void);
 

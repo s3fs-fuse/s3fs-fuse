@@ -846,6 +846,34 @@ function test_cache_file_stat() {
     rm_test_file "${BIG_FILE}"
 }
 
+function test_mix_upload_entities() {
+    #
+    # Make test file
+    #
+    dd if=/dev/urandom of=${BIG_FILE} bs=$BIG_FILE_LENGTH count=1
+
+    #
+    # If the cache option is enabled, delete the cache of uploaded files.
+    #
+    if [ -f ${CACHE_DIR}/${TEST_BUCKET_1}/${BIG_FILE} ]; then
+        rm -f ${CACHE_DIR}/${TEST_BUCKET_1}/${BIG_FILE}
+    fi
+    if [ -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${BIG_FILE} ]; then
+        rm -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${BIG_FILE}
+    fi
+
+    #
+    # Do a partial write to the file.
+    #
+    echo -n "0123456789ABCDEF" | dd of=${BIG_FILE} bs=1 count=16 seek=0 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of=${BIG_FILE} bs=1 count=16 seek=8192 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of=${BIG_FILE} bs=1 count=16 seek=1073152 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of=${BIG_FILE} bs=1 count=16 seek=26214400 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of=${BIG_FILE} bs=1 count=16 seek=26222592 conv=notrunc
+
+    rm_test_file "${BIG_FILE}"
+}
+
 function test_ut_ossfs {
     echo "Testing ossfs python ut..."
     export TEST_BUCKET_MOUNT_POINT=$TEST_BUCKET_MOUNT_POINT_1
@@ -890,6 +918,7 @@ function add_all_tests {
     add_tests test_write_multiple_offsets_backwards
     add_tests test_content_type
     add_tests test_truncate_cache
+    add_tests test_mix_upload_entities
     add_tests test_ut_ossfs
     if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
         add_tests test_cache_file_stat
