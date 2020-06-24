@@ -47,6 +47,20 @@ function test_truncate_empty_file {
     rm_test_file
 }
 
+function test_truncate_extend_multipart {
+    describe "Testing truncate extending via multipart ..."
+    # Write an empty test file
+    touch ${TEST_TEXT_FILE}
+
+    # Truncate the file to 10 MB length
+    t_size=$((10 * 1024 * 1024))
+    truncate ${TEST_TEXT_FILE} -s $t_size
+
+    check_file_size "${TEST_TEXT_FILE}" $t_size
+
+    rm_test_file
+}
+
 function test_mv_file {
     describe "Testing mv file function ..."
     # if the rename file exists, delete it
@@ -887,6 +901,7 @@ function add_all_tests {
     add_tests test_append_file
     add_tests test_truncate_file
     add_tests test_truncate_empty_file
+    add_tests test_truncate_extend_multipart
     add_tests test_mv_file
     add_tests test_mv_empty_directory
     add_tests test_mv_nonempty_directory
