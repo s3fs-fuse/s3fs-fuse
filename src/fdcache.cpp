@@ -1212,10 +1212,9 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 
   if (!auto_lock.isLockAcquired()) {
     // had to wait for fd lock, return
+    S3FS_PRN_ERR("Could not get lock.");
     return -EIO;
   }
-
-  S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%lld]", path.c_str(), fd, static_cast<long long>(size), static_cast<long long>(time));
 
   AutoLock auto_data_lock(&fdent_data_lock);
   if(-1 != fd){
@@ -1233,7 +1232,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
         return -EIO;
       }
       // resize page list
-      if(!pagelist.Resize(size, false, false)){
+      if(!pagelist.Resize(size, false, true)){      // Areas with increased size are modified
         S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
         if(0 < refcnt){
           refcnt--;
@@ -1288,13 +1287,13 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       // check size, st_size, loading stat file
       if(-1 == size){
         if(st.st_size != pagelist.Size()){
-          pagelist.Resize(st.st_size, false, false);
+          pagelist.Resize(st.st_size, false, true); // Areas with increased size are modified
           need_save_csf = true;     // need to update page info
         }
         size = st.st_size;
       }else{
         if(size != pagelist.Size()){
-          pagelist.Resize(size, false, false);
+          pagelist.Resize(size, false, true);       // Areas with increased size are modified
           need_save_csf = true;     // need to update page info
         }
         if(size != st.st_size){
@@ -1326,7 +1325,16 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
         size = 0;
         pagelist.Init(0, false, false);
       }else{
-        pagelist.Resize(size, false, false);
+        // [NOTE]
+        // The modify flag must not be set when opening a file,
+        // if the time parameter(mtime) is specified(not -1) and
+        // the cache file does not exist.
+        // If mtime is specified for the file and the cache file
+        // mtime is older than it, the cache file is removed and
+        // the processing comes here.
+        //
+        pagelist.Resize(size, false, (0 <= time ? false : true));
+
         is_truncate = true;
       }
     }
@@ -1367,7 +1375,15 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
       size = 0;
       pagelist.Init(0, false, false);
     }else{
-      pagelist.Resize(size, false, false);
+      // [NOTE]
+      // The modify flag must not be set when opening a file,
+      // if the time parameter(mtime) is specified(not -1) and
+      // the cache file does not exist.
+      // If mtime is specified for the file and the cache file
+      // mtime is older than it, the cache file is removed and
+      // the processing comes here.
+      //
+      pagelist.Resize(size, false, (0 <= time ? false : true));
       is_truncate = true;
     }
   }
