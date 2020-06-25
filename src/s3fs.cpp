@@ -1333,8 +1333,11 @@ static int rename_object(const char* from, const char* to)
 
   FdManager::get()->Rename(from, to);
 
+  // Remove file
   result = s3fs_unlink(from);
+
   StatCache::getStatCacheData()->DelStat(to);
+  FdManager::DeleteCacheFile(to);
 
   return result;
 }
@@ -1382,7 +1385,7 @@ static int rename_object_nocopy(const char* from, const char* to)
 
   // Stats
   StatCache::getStatCacheData()->DelStat(to);
-  StatCache::getStatCacheData()->DelStat(from);
+  FdManager::DeleteCacheFile(to);
 
   return result;
 }
@@ -1412,9 +1415,14 @@ static int rename_large_object(const char* from, const char* to)
     return result;
   }
   s3fscurl.DestroyCurlHandle();
-  StatCache::getStatCacheData()->DelStat(to);
 
-  return s3fs_unlink(from);
+  // Remove file
+  result = s3fs_unlink(from);
+
+  StatCache::getStatCacheData()->DelStat(to);
+  FdManager::DeleteCacheFile(to);
+
+  return result;
 }
 
 static int clone_directory_object(const char* from, const char* to)

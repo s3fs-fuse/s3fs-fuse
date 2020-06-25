@@ -33,6 +33,19 @@ function test_truncate_file {
     rm_test_file
 }
 
+function test_truncate_upload {
+    describe "Testing truncate file for uploading ..."
+
+    # This file size uses multipart, mix upload when uploading.
+    # We will test these cases.
+
+    rm_test_file ${BIG_FILE}
+
+    truncate ${BIG_FILE} -s ${BIG_FILE_LENGTH}
+
+    rm_test_file ${BIG_FILE}
+}
+
 function test_truncate_empty_file {
     describe "Testing truncate empty file ..."
     # Write an empty test file
@@ -180,7 +193,7 @@ function test_redirects {
 }
 
 function test_mkdir_rmdir {
-    describe "Testing creation/removal of a directory"
+    describe "Testing creation/removal of a directory ..."
 
     if [ -e $TEST_DIR ]; then
        echo "Unexpected, this file/directory exists: ${TEST_DIR}"
@@ -264,7 +277,7 @@ function test_chown {
 }
 
 function test_list {
-    describe "Testing list"
+    describe "Testing list ..."
     mk_test_file
     mk_test_dir
 
@@ -279,7 +292,7 @@ function test_list {
 }
 
 function test_remove_nonempty_directory {
-    describe "Testing removing a non-empty directory"
+    describe "Testing removing a non-empty directory ..."
     mk_test_dir
     touch "${TEST_DIR}/file"
     (
@@ -291,7 +304,7 @@ function test_remove_nonempty_directory {
 }
 
 function test_external_modification {
-    describe "Test external modification to an object"
+    describe "Test external modification to an object ..."
     echo "old" > ${TEST_TEXT_FILE}
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     sleep 2
@@ -301,7 +314,7 @@ function test_external_modification {
 }
 
 function test_read_external_object() {
-    describe "create objects via aws CLI and read via s3fs"
+    describe "create objects via aws CLI and read via s3fs ..."
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     sleep 3
     echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
@@ -587,7 +600,7 @@ function test_update_time() {
 }
 
 function test_rm_rf_dir {
-   describe "Test that rm -rf will remove directory with contents"
+   describe "Test that rm -rf will remove directory with contents ..."
    # Create a dir with some files and directories
    mkdir dir1
    mkdir dir1/dir2
@@ -604,7 +617,7 @@ function test_rm_rf_dir {
 }
 
 function test_copy_file {
-   describe "Test simple copy"
+   describe "Test simple copy ..."
 
    dd if=/dev/urandom of=/tmp/simple_file bs=1024 count=1
    cp /tmp/simple_file copied_simple_file
@@ -615,13 +628,13 @@ function test_copy_file {
 }
 
 function test_write_after_seek_ahead {
-   describe "Test writes succeed after a seek ahead"
+   describe "Test writes succeed after a seek ahead ..."
    dd if=/dev/zero of=testfile seek=1 count=1 bs=1024
    rm_test_file testfile
 }
 
 function test_overwrite_existing_file_range {
-    describe "Test overwrite range succeeds"
+    describe "Test overwrite range succeeds ..."
     dd if=<(seq 1000) of=${TEST_TEXT_FILE}
     dd if=/dev/zero of=${TEST_TEXT_FILE} seek=1 count=1 bs=1024 conv=notrunc
     cmp ${TEST_TEXT_FILE} <(
@@ -633,7 +646,7 @@ function test_overwrite_existing_file_range {
 }
 
 function test_concurrency {
-    describe "Test concurrent updates to a directory"
+    describe "Test concurrent updates to a directory ..."
     for i in `seq 5`; do echo foo > $i; done
     for process in `seq 10`; do
         for i in `seq 5`; do
@@ -648,7 +661,7 @@ function test_concurrency {
 }
 
 function test_concurrent_writes {
-    describe "Test concurrent updates to a file"
+    describe "Test concurrent updates to a file ..."
     dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
     for process in `seq 10`; do
         dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=1 bs=1024 conv=notrunc &
@@ -658,7 +671,7 @@ function test_concurrent_writes {
 }
 
 function test_open_second_fd {
-    describe "read from an open fd"
+    describe "read from an open fd ..."
     rm_test_file second_fd_file
     RESULT=$( (echo foo ; wc -c < second_fd_file >&2) 2>& 1>second_fd_file)
     if [ "$RESULT" -ne 4 ]; then
@@ -669,19 +682,19 @@ function test_open_second_fd {
 }
 
 function test_write_multiple_offsets {
-    describe "test writing to multiple offsets"
+    describe "test writing to multiple offsets ..."
     ../../write_multiple_offsets.py ${TEST_TEXT_FILE} 1024 1 $((16 * 1024 * 1024)) 1 $((18 * 1024 * 1024)) 1
     rm_test_file ${TEST_TEXT_FILE}
 }
 
 function test_write_multiple_offsets_backwards {
-    describe "test writing to multiple offsets"
+    describe "test writing to multiple offsets ..."
     ../../write_multiple_offsets.py ${TEST_TEXT_FILE} $((20 * 1024 * 1024 + 1)) 1 $((10 * 1024 * 1024)) 1
     rm_test_file ${TEST_TEXT_FILE}
 }
 
 function test_clean_up_cache() {
-    describe "Test clean up cache"
+    describe "Test clean up cache ..."
 
     dir="many_files"
     count=25
@@ -707,7 +720,7 @@ function test_clean_up_cache() {
 }
 
 function test_content_type() {
-    describe "Test Content-Type detection"
+    describe "Test Content-Type detection ..."
 
     DIR_NAME="$(basename $PWD)"
 
@@ -742,6 +755,8 @@ function test_content_type() {
 
 # create more files than -o max_stat_cache_size
 function test_truncate_cache() {
+    describe "Test make cache files over max cache file size ..."
+
     for dir in $(seq 2); do
         mkdir $dir
         for file in $(seq 75); do
@@ -752,7 +767,7 @@ function test_truncate_cache() {
 }
 
 function test_cache_file_stat() {
-    describe "Test cache file stat"
+    describe "Test cache file stat ..."
 
     dd if=/dev/urandom of="${BIG_FILE}" bs=${BIG_FILE_LENGTH} count=1
 
@@ -846,7 +861,41 @@ function test_cache_file_stat() {
     rm_test_file "${BIG_FILE}"
 }
 
+function test_upload_sparsefile {
+    describe "Testing upload sparse file ..."
+
+    rm_test_file ${BIG_FILE}
+    rm -f /tmp/${BIG_FILE}
+
+    #
+    # Make all HOLE file
+    #
+    truncate ${BIG_FILE} -s ${BIG_FILE_LENGTH}
+
+    #
+    # Write some bytes to ABOUT middle in the file
+    # (Dare to remove the block breaks)
+    #
+    WRITE_POS=$((${BIG_FILE_LENGTH} / 2 - 128))
+    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}" bs=1 count=16 seek=${WRITE_POS} conv=notrunc
+
+    #
+    # copy(upload) the file
+    #
+    cp /tmp/${BIG_FILE} ${BIG_FILE}
+
+    #
+    # check
+    #
+    cmp /tmp/${BIG_FILE} ${BIG_FILE}
+
+    rm_test_file ${BIG_FILE}
+    rm -f /tmp/${BIG_FILE}
+}
+
 function test_mix_upload_entities() {
+    describe "Testing upload sparse files ..."
+
     #
     # Make test file
     #
@@ -886,6 +935,7 @@ function add_all_tests {
     fi
     add_tests test_append_file
     add_tests test_truncate_file
+    add_tests test_truncate_upload
     add_tests test_truncate_empty_file
     add_tests test_mv_file
     add_tests test_mv_empty_directory
@@ -918,6 +968,7 @@ function add_all_tests {
     add_tests test_write_multiple_offsets_backwards
     add_tests test_content_type
     add_tests test_truncate_cache
+    add_tests test_upload_sparsefile
     add_tests test_mix_upload_entities
     add_tests test_ut_ossfs
     if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
