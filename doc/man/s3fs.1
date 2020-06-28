@@ -340,6 +340,12 @@ Put the debug message from libcurl when this option is specified.
 Specify "normal" or "body" for the parameter.
 If the parameter is omitted, it is the same as "normal".
 If "body" is specified, some API communication body data will be output in addition to the debug message output as "normal".
+.TP
+\fB\-o\fR set_check_cache_sigusr1 (default is stdout)
+If the cache is enabled, you can check the integrity of the cache file and the cache file's stats info file.
+This option is specified and when sending the SIGUSR1 signal to the s3fs process checks the cache status at that time.
+This option can take a file path as parameter to output the check result to that file.
+The file path parameter can be omitted. If omitted, the result will be output to stdout or syslog.
 .SS "utility mode options"
 .TP
 \fB\-u\fR or \fB\-\-incomplete\-mpu\-list\fR

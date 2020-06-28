@@ -34,6 +34,8 @@ class CacheFileStat
   private:
     static bool MakeCacheFileStatPath(const char* path, std::string& sfile_path, bool is_create_dir = true);
 
+    bool RawOpen(bool readonly);
+
   public:
     static std::string GetCacheFileStatTopDir(void);
     static bool DeleteCacheFileStat(const char* path);
@@ -45,6 +47,7 @@ class CacheFileStat
     ~CacheFileStat();
 
     bool Open(void);
+    bool ReadOnlyOpen(void);
     bool Release(void);
     bool SetPath(const char* tpath, bool is_open = true);
     int GetFd(void) const { return fd; }
@@ -91,6 +94,10 @@ class PageList
     };
 
   private:
+    static bool GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& sparse_list);
+    static bool CheckZeroAreaInFile(int fd, off_t start, size_t bytes);
+    static bool CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpage_list_t& sparse_list, int fd, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
+
     void Clear(void);
     bool Compress();
     bool Parse(off_t new_pos);
@@ -118,6 +125,7 @@ class PageList
 
     bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
     void Dump(void) const;
+    bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
 };
 
 //------------------------------------------------
@@ -217,12 +225,14 @@ class FdManager
     static std::string     cache_dir;
     static bool            check_cache_dir_exist;
     static off_t           free_disk_space; // limit free disk space
+    static std::string     check_cache_output;
 
     fdent_map_t            fent;
 
   private:
     static off_t GetFreeDiskSpace(const char* path);
     void CleanupCacheDirInternal(const std::string &path = "");
+    bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);
 
   public:
     FdManager();
@@ -234,8 +244,10 @@ class FdManager
     static bool DeleteCacheDirectory(void);
     static int DeleteCacheFile(const char* path);
     static bool SetCacheDir(const char* dir);
-    static bool IsCacheDir(void) { return (0 < FdManager::cache_dir.size()); }
+    static bool IsCacheDir(void) { return !FdManager::cache_dir.empty(); }
     static const char* GetCacheDir(void) { return FdManager::cache_dir.c_str(); }
+    static bool SetCacheCheckOutput(const char* path);
+    static const char* GetCacheCheckOutput(void) { return FdManager::check_cache_output.c_str(); }
     static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true, bool is_mirror_path = false);
     static bool CheckCacheTopDir(void);
     static bool MakeRandomTempPath(const char* path, std::string& tmppath);
@@ -256,6 +268,8 @@ class FdManager
     bool Close(FdEntity* ent);
     bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
     void CleanupCacheDir();
+
+    bool CheckAllCache(void);
 };
 
 #endif // FD_CACHE_H_

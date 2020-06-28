@@ -32,7 +32,8 @@ s3fs_SOURCES = \
   s3fs_util.cpp \
   fdcache.cpp \
   common_auth.cpp \
-  addhead.cpp
+  addhead.cpp \
+  sighandlers.cpp
 if USE_SSL_OPENSSL
   s3fs_SOURCES += openssl_auth.cpp
 endif

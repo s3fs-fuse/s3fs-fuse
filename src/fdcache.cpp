@@ -31,6 +31,7 @@
 #include <cerrno>
 #include <cstring>
 #include <dirent.h>
+#include <stddef.h>
 #include <curl/curl.h>
 #include <string>
 #include <iostream>
@@ -51,7 +52,8 @@ using namespace std;
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
+static const int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max count
+static const int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;	// Buffer size in PageList::CheckZeroAreaInFile()
 
 //
 // For cache directory top path
@@ -61,6 +63,28 @@ static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
 #else
 #define TMPFILE_DIR_0PATH   "/tmp"
 #endif
+
+//
+// The following symbols are used by FdManager::RawCheckAllCache().
+//
+#define CACHEDBG_FMT_DIR_PROB   "Directory: %s"
+#define CACHEDBG_FMT_HEAD       "------------------------------------------------------------\n" \
+                                "Check cache file and its stats file consistency\n" \
+                                "------------------------------------------------------------"
+#define CACHEDBG_FMT_FOOT       "------------------------------------------------------------\n" \
+                                "Summary - Total files:                %d\n" \
+                                "          Detected error files:       %d\n" \
+                                "          Detected error directories: %d\n" \
+                                "------------------------------------------------------------"
+#define CACHEDBG_FMT_FILE_OK    "File:      %s%s    -> [OK] no problem"
+#define CACHEDBG_FMT_FILE_PROB  "File:      %s%s"
+#define CACHEDBG_FMT_DIR_PROB   "Directory: %s"
+#define CACHEDBG_FMT_ERR_HEAD   "           -> [E] there is a mark that data exists in stats, but there is no data in the cache file."
+#define CACHEDBG_FMT_WARN_HEAD  "           -> [W] These show no data in stats, but there is evidence of data in the cache file(no problem)."
+#define CACHEDBG_FMT_WARN_OPEN  "\n           -> [W] This file is currently open and may not provide accurate analysis results."
+#define CACHEDBG_FMT_CRIT_HEAD  "           -> [C] %s"
+#define CACHEDBG_FMT_CRIT_HEAD2 "           -> [C] "
+#define CACHEDBG_FMT_PROB_BLOCK "                  0x%016jx(0x%016jx bytes)"
 
 //------------------------------------------------
 // CacheFileStat class methods
@@ -223,7 +247,7 @@ bool CacheFileStat::SetPath(const char* tpath, bool is_open)
   return Open();
 }
 
-bool CacheFileStat::Open()
+bool CacheFileStat::RawOpen(bool readonly)
 {
   if(path.empty()){
     return false;
@@ -239,9 +263,16 @@ bool CacheFileStat::Open()
     return false;
   }
   // open
-  if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
-    S3FS_PRN_ERR("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
-    return false;
+  if(readonly){
+    if(-1 == (fd = open(sfile_path.c_str(), O_RDONLY))){
+      S3FS_PRN_ERR("failed to read only open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
+      return false;
+    }
+  }else{
+    if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
+      S3FS_PRN_ERR("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
+      return false;
+    }
   }
   // lock
   if(-1 == flock(fd, LOCK_EX)){
@@ -261,6 +292,16 @@ bool CacheFileStat::Open()
   S3FS_PRN_DBG("file locked(%s - %s)", path.c_str(), sfile_path.c_str());
 
   return true;
+}
+
+bool CacheFileStat::Open()
+{
+  return RawOpen(false);
+}
+
+bool CacheFileStat::ReadOnlyOpen()
+{
+  return RawOpen(true);
 }
 
 bool CacheFileStat::Release()
@@ -408,6 +449,181 @@ static fdpage_list_t parse_partsize_fdpage_list(const fdpage_list_t& pages, off_
     }
   }
   return parsed_pages;
+}
+
+//------------------------------------------------
+// PageList class methods
+//------------------------------------------------
+//
+// Examine and return the status of each block in the file.
+//
+// Assuming the file is a sparse file, check the HOLE and DATA areas
+// and return it in fdpage_list_t. The loaded flag of each fdpage is
+// set to false for HOLE blocks and true for DATA blocks.
+//
+bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& sparse_list)
+{
+  // [NOTE]
+  // Express the status of the cache file using fdpage_list_t.
+  // There is a hole in the cache file(sparse file), and the
+  // state of this hole is expressed by the "loaded" member of
+  // struct fdpage. (the "modified" member is not used)
+  //
+  if(0 == file_size){
+    // file is empty
+    return true;
+  }
+
+  bool is_hole   = false;
+  int  hole_pos  = lseek(fd, 0, SEEK_HOLE);
+  int  data_pos  = lseek(fd, 0, SEEK_DATA);
+  if(-1 == hole_pos && -1 == data_pos){
+    S3FS_PRN_ERR("Could not find the first position both HOLE and DATA in the file(fd=%d).", fd);
+    return false;
+  }else if(-1 == hole_pos){
+    is_hole   = false;
+  }else if(-1 == data_pos){
+    is_hole   = true;
+  }else if(hole_pos < data_pos){
+    is_hole   = true;
+  }else{
+    is_hole   = false;
+  }
+
+  for(int cur_pos = 0, next_pos = 0; 0 <= cur_pos; cur_pos = next_pos, is_hole = !is_hole){
+    fdpage page;
+    page.offset   = cur_pos;
+    page.loaded   = !is_hole;
+    page.modified = false;
+
+    next_pos = lseek(fd, cur_pos, (is_hole ? SEEK_DATA : SEEK_HOLE));
+    if(-1 == next_pos){
+      page.bytes = static_cast<off_t>(file_size - cur_pos);
+    }else{
+      page.bytes = next_pos - cur_pos;
+    }
+    sparse_list.push_back(page);
+  }
+  return true;
+}
+
+//
+// Confirm that the specified area is ZERO
+//
+bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
+{
+  char* readbuff = new char[CHECK_CACHEFILE_PART_SIZE];
+
+  for(size_t comp_bytes = 0, check_bytes = 0; comp_bytes < bytes; comp_bytes += check_bytes){
+    if(CHECK_CACHEFILE_PART_SIZE < (bytes - comp_bytes)){
+      check_bytes = CHECK_CACHEFILE_PART_SIZE;
+    }else{
+      check_bytes = bytes - comp_bytes;
+    }
+    bool    found_bad_data = false;
+    ssize_t read_bytes;
+    if(-1 == (read_bytes = pread(fd, readbuff, check_bytes, (start + comp_bytes)))){
+      S3FS_PRN_ERR("Something error is occurred in reading %zu bytes at %lld from file(%d).", check_bytes, static_cast<long long int>(start + comp_bytes), fd);
+      found_bad_data = true;
+    }else{
+      check_bytes = static_cast<size_t>(read_bytes);
+      for(size_t tmppos = 0; tmppos < check_bytes; ++tmppos){
+        if('\0' != readbuff[tmppos]){
+          // found not ZERO data.
+          found_bad_data = true;
+          break;
+        }
+      }
+    }
+    if(found_bad_data){
+      delete[] readbuff;
+      return false;
+    }
+  }
+  delete[] readbuff;
+  return true;
+}
+
+//
+// Checks that the specified area matches the state of the sparse file.
+//
+// [Parameters]
+// checkpage:    This is one state of the cache file, it is loaded from the stats file.
+// sparse_list:  This is a list of the results of directly checking the cache file status(HOLE/DATA).
+//               In the HOLE area, the "loaded" flag of fdpage is false. The DATA area has it set to true.
+// fd:           opened file discriptor to target cache file.
+//
+bool PageList::CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpage_list_t& sparse_list, int fd, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list)
+{
+  // Check the block status of a part(Check Area: checkpage) of the target file.
+  // The elements of sparse_list have 5 patterns that overlap this block area.
+  //
+  // File           |<---...--------------------------------------...--->|
+  // Check Area              (offset)<-------------------->(offset + bytes - 1)
+  // Area case(0)       <------->
+  // Area case(1)                                            <------->
+  // Area case(2)              <-------->
+  // Area case(3)                                 <---------->
+  // Area case(4)                      <----------->
+  // Area case(5)              <----------------------------->
+  //
+  bool result = true;
+
+  for(fdpage_list_t::const_iterator iter = sparse_list.begin(); iter != sparse_list.end(); ++iter){
+    off_t check_start = 0;
+    off_t check_bytes = 0;
+    if((iter->offset + iter->bytes) <= checkpage.offset){
+      // case 0
+      continue;    // next
+
+    }else if((checkpage.offset + checkpage.bytes) <= iter->offset){
+      // case 1
+      break;       // finish
+
+    }else if(iter->offset < checkpage.offset && (iter->offset + iter->bytes) < (checkpage.offset + checkpage.bytes)){
+      // case 2
+      check_start = checkpage.offset;
+      check_bytes = iter->bytes - (checkpage.offset - iter->offset);
+
+    }else if(iter->offset < (checkpage.offset + checkpage.bytes) && (checkpage.offset + checkpage.bytes) < (iter->offset + iter->bytes)){
+      // case 3
+      check_start = iter->offset;
+      check_bytes = checkpage.bytes - (iter->offset - checkpage.offset);
+
+    }else if(checkpage.offset < iter->offset && (iter->offset + iter->bytes) < (checkpage.offset + checkpage.bytes)){
+      // case 4
+      check_start = iter->offset;
+      check_bytes = iter->bytes;
+
+    }else{  // (iter->offset <= checkpage.offset && (checkpage.offset + checkpage.bytes) <= (iter->offset + iter->bytes))
+      // case 5
+      check_start = checkpage.offset;
+      check_bytes = checkpage.bytes;
+    }
+
+    // check target area type
+    if(checkpage.loaded || checkpage.modified){
+      // target area must be not HOLE(DATA) area.
+      if(!iter->loaded){
+        // Found bad area, it is HOLE area.
+        fdpage page(check_start, check_bytes, false, false);
+        err_area_list.push_back(page);
+        result = false;
+      }
+    }else{
+      // target area should be HOLE area.(If it is not a block boundary, it may be a DATA area.)
+      if(iter->loaded){
+        // need to check this area's each data, it should be ZERO.
+        if(!PageList::CheckZeroAreaInFile(fd, check_start, static_cast<size_t>(check_bytes))){
+          // Discovered an area that has un-initial status data but it probably does not effect bad.
+          fdpage page(check_start, check_bytes, true, false);
+          warn_area_list.push_back(page);
+          result = false;
+        }
+      }
+    }
+  }
+  return result;
 }
 
 //------------------------------------------------
@@ -944,6 +1160,49 @@ void PageList::Dump() const
     S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s / %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "loaded" : "unloaded", iter->modified ? "modified" : "not modified");
   }
   S3FS_PRN_DBG("}");
+}
+
+// 
+// Compare the fdpage_list_t pages of the object with the state of the file.
+// 
+// The loaded=true or modified=true area of pages must be a DATA block
+// (not a HOLE block) in the file.
+// The other area is a HOLE block in the file or is a DATA block(but the
+// data of the target area in that block should be ZERO).
+// If it is a bad area in the previous case, it will be reported as an error.
+// If the latter case does not match, it will be reported as a warning.
+// 
+bool PageList::CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list)
+{
+  err_area_list.clear();
+  warn_area_list.clear();
+
+  // First, list the block disk allocation area of the cache file.
+  // The cache file has holes(sparse file) and no disk block areas
+  // are assigned to any holes.
+  fdpage_list_t sparse_list;
+  if(!PageList::GetSparseFilePages(fd, file_size, sparse_list)){
+    S3FS_PRN_ERR("Something error is occurred in parsing hole/data of the cache file(%d).", fd);
+
+    fdpage page(0, static_cast<off_t>(file_size), false, false);
+    err_area_list.push_back(page);
+
+    return false;
+  }
+
+  if(sparse_list.empty() && pages.empty()){
+    // both file and stats information are empty, it means cache file size is ZERO.
+    return true;
+  }
+
+  // Compare each pages and sparse_list
+  bool result = true;
+  for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    if(!PageList::CheckAreaInSparseFile(*iter, sparse_list, fd, err_area_list, warn_area_list)){
+      result = false;
+    }
+  }
+  return result;
 }
 
 //------------------------------------------------
@@ -2347,6 +2606,7 @@ bool            FdManager::is_lock_init(false);
 string          FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
+std::string     FdManager::check_cache_output;
 
 //------------------------------------------------
 // FdManager class methods
@@ -2357,6 +2617,16 @@ bool FdManager::SetCacheDir(const char* dir)
     cache_dir = "";
   }else{
     cache_dir = dir;
+  }
+  return true;
+}
+
+bool FdManager::SetCacheCheckOutput(const char* path)
+{
+  if(!path || '\0' == path[0]){
+    check_cache_output.erase();
+  }else{
+    check_cache_output = path;
   }
   return true;
 }
@@ -2913,6 +3183,227 @@ void FdManager::FreeReservedDiskSpace(off_t size)
 {
   AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
   free_disk_space -= size;
+}
+
+//
+// Inspect all files for stats file for cache file
+// 
+// [NOTE]
+// The minimum sub_path parameter is "/".
+// The sub_path is a directory path starting from "/" and ending with "/".
+//
+// This method produces the following output.
+//
+// * Header
+//    ------------------------------------------------------------
+//    Check cache file and its stats file consistency
+//    ------------------------------------------------------------
+// * When the cache file and its stats information match
+//    File path: <file path> -> [OK] no problem
+//
+// * If there is a problem with the cache file and its stats information
+//    File path: <file path>
+//      -> [P] <If the problem is that parsing is not possible in the first place, the message is output here with this prefix.>
+//      -> [E] there is a mark that data exists in stats, but there is no data in the cache file.
+//             <offset address>(bytes)
+//                 ...
+//                 ...
+//      -> [W] These show no data in stats, but there is evidence of data in the cache file.(no problem.)
+//             <offset address>(bytes)
+//                 ...
+//                 ...
+//
+bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt)
+{
+  if(!cache_stat_top_dir || '\0' == cache_stat_top_dir[0] || !sub_path || '\0' == sub_path[0]){
+    S3FS_PRN_ERR("Parameter cache_stat_top_dir is empty.");
+    return false;
+  }
+
+  // allocate dirent buffer
+  long name_max = pathconf(cache_stat_top_dir, _PC_NAME_MAX);
+  if(-1 == name_max){
+    name_max = 255;     // [NOTE] Is PATH_MAX better?
+  }
+  size_t structlen = offsetof(struct dirent, d_name) + name_max + 1;
+  struct dirent* pdirent;
+  if(NULL == (pdirent = reinterpret_cast<struct dirent*>(malloc(structlen)))){
+    S3FS_PRN_ERR("Could not allocate memory for dirent(length = %zu) by errno(%d)", structlen, errno);
+    return false;
+  }
+
+  // open directory of cache file's stats
+  DIR*   statsdir;
+  string target_dir = cache_stat_top_dir;
+  target_dir       += sub_path;
+  if(NULL == (statsdir = opendir(target_dir.c_str()))){
+    S3FS_PRN_ERR("Could not open directory(%s) by errno(%d)", target_dir.c_str(), errno);
+    free(pdirent);
+    return false;
+  }
+
+  // loop in directory of cache file's stats
+  struct dirent* pdirent_res = NULL;
+  int            result;
+  for(result = readdir_r(statsdir, pdirent, &pdirent_res); 0 == result && pdirent_res; result = readdir_r(statsdir, pdirent, &pdirent_res)){
+    if(DT_DIR == pdirent_res->d_type){
+      // found directory
+      if(0 == strcmp(pdirent_res->d_name, ".") || 0 == strcmp(pdirent_res->d_name, "..")){
+        continue;
+      }
+
+      // reentrant for sub directory
+      string subdir_path = sub_path;
+      subdir_path       += pdirent_res->d_name;
+      subdir_path       += '/';
+      if(!RawCheckAllCache(fp, cache_stat_top_dir, subdir_path.c_str(), total_file_cnt, err_file_cnt, err_dir_cnt)){
+        // put error message for this dir.
+        ++err_dir_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_DIR_PROB, subdir_path.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Something error is occurred in checking this directory");
+      }
+
+    }else{
+      ++total_file_cnt;
+
+      // make cache file path
+      string strOpenedWarn;
+      string cache_path;
+      string object_file_path = sub_path;
+      object_file_path       += pdirent_res->d_name;
+      if(!FdManager::MakeCachePath(object_file_path.c_str(), cache_path, false, false) || cache_path.empty()){
+        ++err_file_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not make cache file path");
+        continue;
+      }
+
+      // check if the target file is currently in operation.
+      {
+        AutoLock auto_lock(&FdManager::fd_manager_lock);
+
+        fdent_map_t::iterator iter = fent.find(object_file_path);
+        if(fent.end() != iter){
+          // This file is opened now, then we need to put warning message.
+          strOpenedWarn = CACHEDBG_FMT_WARN_OPEN;
+        }
+      }
+
+      // open cache file
+      int cache_file_fd;
+      if(-1 == (cache_file_fd = open(cache_path.c_str(), O_RDONLY))){
+        ++err_file_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not open cache file");
+        continue;
+      }
+
+      // get inode number for cache file
+      struct stat st;
+      if(0 != fstat(cache_file_fd, &st)){
+        ++err_file_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not get file inode number for cache file");
+
+        close(cache_file_fd);
+        continue;
+      }
+      ino_t cache_file_inode = st.st_ino;
+
+      // open cache stat file and load page info.
+      PageList      pagelist;
+      CacheFileStat cfstat(object_file_path.c_str());
+      if(!cfstat.ReadOnlyOpen() || !pagelist.Serialize(cfstat, false, cache_file_inode)){
+        ++err_file_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not load cache file stats information");
+
+        close(cache_file_fd);
+        continue;
+      }
+      cfstat.Release();
+
+      // compare cache file size and stats information
+      if(st.st_size != pagelist.Size()){
+        ++err_file_cnt;
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD2 "The cache file size(%lld) and the value(%lld) from cache file stats are different", static_cast<long long int>(st.st_size), static_cast<long long int>(pagelist.Size()));
+
+        close(cache_file_fd);
+        continue;
+      }
+
+      // compare cache file stats and cache file blocks
+      fdpage_list_t err_area_list;
+      fdpage_list_t warn_area_list;
+      if(!pagelist.CompareSparseFile(cache_file_fd, st.st_size, err_area_list, warn_area_list)){
+        // Found some error or warning
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
+        if(!warn_area_list.empty()){
+          S3FS_PRN_CACHE(fp, CACHEDBG_FMT_WARN_HEAD);
+          for(fdpage_list_t::const_iterator witer = warn_area_list.begin(); witer != warn_area_list.end(); ++witer){
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, (intmax_t)(witer->offset), (intmax_t)(witer->bytes));
+          }
+        }
+        if(!err_area_list.empty()){
+          ++err_file_cnt;
+          S3FS_PRN_CACHE(fp, CACHEDBG_FMT_ERR_HEAD);
+          for(fdpage_list_t::const_iterator eiter = err_area_list.begin(); eiter != err_area_list.end(); ++eiter){
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, (intmax_t)(eiter->offset), (intmax_t)(eiter->bytes));
+          }
+        }
+      }else{
+        // There is no problem!
+        if(!strOpenedWarn.empty()){
+          strOpenedWarn += "\n ";
+        }
+        S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_OK, object_file_path.c_str(), strOpenedWarn.c_str());
+      }
+      err_area_list.clear();
+      warn_area_list.clear();
+      close(cache_file_fd);
+    }
+  }
+
+  closedir(statsdir);
+  free(pdirent);
+
+  return true;
+}
+
+bool FdManager::CheckAllCache()
+{
+  FILE* fp;
+  if(FdManager::check_cache_output.empty()){
+    fp = stdout;
+  }else{
+    if(NULL == (fp = fopen(FdManager::check_cache_output.c_str(), "a+"))){
+      S3FS_PRN_ERR("Could not open(create) output file(%s) for checking all cache by errno(%d)", FdManager::check_cache_output.c_str(), errno);
+      return false;
+    }
+  }
+
+  // print head message
+  S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD);
+
+  // Loop in directory of cache file's stats
+  string top_path       = CacheFileStat::GetCacheFileStatTopDir();
+  int    total_file_cnt = 0;
+  int    err_file_cnt   = 0;
+  int    err_dir_cnt    = 0;
+  bool   result         = RawCheckAllCache(fp, top_path.c_str(), "/", total_file_cnt, err_file_cnt, err_dir_cnt);
+  if(!result){
+    S3FS_PRN_ERR("Processing failed due to some problem.");
+  }
+
+  // print foot message
+  S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FOOT, total_file_cnt, err_file_cnt, err_dir_cnt);
+
+  if(stdout != fp){
+    fclose(fp);
+  }
+
+  return result;
 }
 
 /*
