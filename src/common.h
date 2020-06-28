@@ -126,6 +126,16 @@ enum s3fs_log_level{
        } \
      }while(0)
 
+// Special macro for checking cache files
+#define S3FS_LOW_CACHE(fp, fmt, ...) \
+     do{ \
+       if(foreground){ \
+         fprintf(fp, fmt "%s\n", __VA_ARGS__); \
+       }else{ \
+         syslog(S3FS_LOG_LEVEL_TO_SYSLOG(S3FS_LOG_INFO), "%s: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
+       } \
+     }while(0)
+
 // [NOTE]
 // small trick for VA_ARGS
 //
@@ -140,6 +150,7 @@ enum s3fs_log_level{
 #define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3FS_LOG_INFO, 2, fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3FS_LOG_INFO, 3, fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
+#define S3FS_PRN_CACHE(fp, ...)   S3FS_LOW_CACHE(fp, ##__VA_ARGS__, "")
 
 //
 // Typedef

@@ -52,6 +52,7 @@
 #include "fdcache.h"
 #include "s3fs_auth.h"
 #include "addhead.h"
+#include "sighandlers.h"
 
 using namespace std;
 
@@ -3549,12 +3550,22 @@ static void* s3fs_init(struct fuse_conn_info* conn)
      conn->want |= FUSE_CAP_BIG_WRITES;
   }
 
+  // Signal object
+  if(S3fsSignals::Initialize()){
+    S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
+  }
+
   return NULL;
 }
 
 static void s3fs_destroy(void*)
 {
   S3FS_PRN_INFO("destroy");
+
+  // Signal object
+  if(S3fsSignals::Destroy()){
+    S3FS_PRN_WARN("Failed to clean up signal object.");
+  }
 
   // cache(remove at last)
   if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
@@ -5098,6 +5109,23 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         S3fsCurl::SetDumpBody(true);
       }else{
         S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel);
+        return -1;
+      }
+      return 0;
+    }
+    //
+    // Check cache file, using SIGUSR1
+    //
+    if(0 == strcmp(arg, "set_check_cache_sigusr1")){
+      if(!S3fsSignals::SetUsr1Handler(NULL)){
+        S3FS_PRN_EXIT("could not set sigusr1 for checking cache.");
+        return -1;
+      }
+      return 0;
+    }else if(0 == STR2NCMP(arg, "set_check_cache_sigusr1=")){
+      const char* strfilepath = strchr(arg, '=') + sizeof(char);
+      if(!S3fsSignals::SetUsr1Handler(strfilepath)){
+        S3FS_PRN_EXIT("could not set sigusr1 for checking cache and output file(%s).", strfilepath);
         return -1;
       }
       return 0;
