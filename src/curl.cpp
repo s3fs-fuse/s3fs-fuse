@@ -4397,9 +4397,9 @@ int S3fsMultiCurl::MultiPerform()
   for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ++iter) {
     pthread_t   thread;
     S3fsCurl*   s3fscurl = *iter;
-    s3fscurl->sem = &sem;
-    s3fscurl->completed_tids_lock = &completed_tids_lock;
-    s3fscurl->completed_tids = &completed_tids;
+    if(!s3fscurl){
+      continue;
+    }
 
     sem.wait();
 
@@ -4421,6 +4421,9 @@ int S3fsMultiCurl::MultiPerform()
       }
       completed_tids.clear();
     }
+    s3fscurl->sem = &sem;
+    s3fscurl->completed_tids_lock = &completed_tids_lock;
+    s3fscurl->completed_tids = &completed_tids;
 
     isMultiHead |= s3fscurl->GetOp() == "HEAD";
 
@@ -4590,7 +4593,10 @@ void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
 {
   S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
   void*     result  = NULL;
-  if(s3fscurl && s3fscurl->fpLazySetup){
+  if(!s3fscurl){
+    return (void*)(intptr_t)(-EIO);
+  }
+  if(s3fscurl->fpLazySetup){
     if(!s3fscurl->fpLazySetup(s3fscurl)){
       S3FS_PRN_ERR("Failed to lazy setup, then respond EIO.");
       result  = (void*)(intptr_t)(-EIO);
