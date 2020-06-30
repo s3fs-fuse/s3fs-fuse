@@ -924,7 +924,7 @@ function test_mix_upload_entities() {
 }
 
 function test_ut_ossfs {
-    echo "Testing ossfs python ut..."
+    describe "Testing ossfs python ut..."
     export TEST_BUCKET_MOUNT_POINT=$TEST_BUCKET_MOUNT_POINT_1
     ../../ut_test.py
 }
