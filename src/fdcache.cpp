@@ -65,13 +65,28 @@ static const int MAX_MULTIPART_CNT = 10 * 1000;  // S3 multipart max count
 //------------------------------------------------
 // CacheFileStat class methods
 //------------------------------------------------
+string CacheFileStat::GetCacheFileStatTopDir()
+{
+  string top_path("");
+  if(!FdManager::IsCacheDir() || bucket.empty()){
+    return top_path;
+  }
+
+  // stat top dir( "/<cache_dir>/.<bucket_name>.stat" )
+  top_path += FdManager::GetCacheDir();
+  top_path += "/.";
+  top_path += bucket;
+  top_path += ".stat";
+  return top_path;
+}
+
 bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, bool is_create_dir)
 {
-  // make stat dir top path( "/<cache_dir>/.<bucket_name>.stat" )
-  string top_path = FdManager::GetCacheDir();
-  top_path       += "/.";
-  top_path       += bucket;
-  top_path       += ".stat";
+  string top_path = CacheFileStat::GetCacheFileStatTopDir();
+  if(top_path.empty()){
+    S3FS_PRN_ERR("The path to cache top dir is empty.");
+    return false;
+  }
 
   if(is_create_dir){
     int result;
@@ -90,14 +105,11 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
 
 bool CacheFileStat::CheckCacheFileStatTopDir()
 {
-  if(!FdManager::IsCacheDir()){
+  string top_path = CacheFileStat::GetCacheFileStatTopDir();
+  if(top_path.empty()){
+    S3FS_PRN_INFO("The path to cache top dir is empty, thus not need to check permission.");
     return true;
   }
-  // make stat dir top path( "/<cache_dir>/.<bucket_name>.stat" )
-  string top_path = FdManager::GetCacheDir();
-  top_path       += "/.";
-  top_path       += bucket;
-  top_path       += ".stat";
 
   return check_exist_dir_permission(top_path.c_str());
 }
@@ -130,14 +142,11 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
 //
 bool CacheFileStat::DeleteCacheFileStatDirectory()
 {
-  string top_path = FdManager::GetCacheDir();
-
-  if(top_path.empty() || bucket.empty()){
+  string top_path = CacheFileStat::GetCacheFileStatTopDir();
+  if(top_path.empty()){
+    S3FS_PRN_INFO("The path to cache top dir is empty, thus not need to remove it.");
     return true;
   }
-  top_path       += "/.";
-  top_path       += bucket;
-  top_path       += ".stat";
   return delete_files_in_dir(top_path.c_str(), true);
 }
 
