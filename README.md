@@ -111,7 +111,7 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o dbgleve
 You can also mount on boot by entering the following line to `/etc/fstab`:
 
 ```
-s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other 0 0
+mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 ```
 
 or
@@ -129,7 +129,7 @@ s3fs mybucket /path/to/mountpoint -o passwd_file=${HOME}/.passwd-s3fs -o url=htt
 or(fstab)
 
 ```
-s3fs#mybucket /path/to/mountpoint fuse _netdev,allow_other,use_path_request_style,url=https://url.to.s3/ 0 0
+mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other,use_path_request_style,url=https://url.to.s3/ 0 0
 ```
 
 To use IBM IAM Authentication, use the `-o ibm_iam_auth` option, and specify the Service Instance ID and API Key in your credentials file:
