@@ -72,10 +72,8 @@ jobs:
         - HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
         - S3FS_BREW_PACKAGES='cppcheck python3';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
-            brew list | grep -q ${s3fs_brew_pkg};
-            if [ $? -eq 0 ]; then
-              brew outdated | grep -q ${s3fs_brew_pkg};
-              if [ $? -eq 0 ]; then
+            if brew list | grep -q ${s3fs_brew_pkg}; then
+              if brew outdated | grep -q ${s3fs_brew_pkg}; then
                 echo "==> Try to upgrade ${s3fs_brew_pkg}";
                 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg};
               fi
@@ -84,8 +82,7 @@ jobs:
               HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg};
             fi;
           done
-        - pip3 --version;
-          if [ $? -eq 0 ]; then
+        - if pip3 --version; then
             echo "==> Try to install awscli by pip3";
             sudo -H pip3 install awscli;
           else
