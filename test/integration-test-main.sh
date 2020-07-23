@@ -496,6 +496,19 @@ function test_special_characters {
     mkdir "TOYOTA TRUCK 8.2.2"
 }
 
+function test_hardlink {
+    describe "Testing hardlinks ..."
+
+    rm -f $TEST_TEXT_FILE
+    rm -f $ALT_TEST_TEXT_FILE
+    echo foo > $TEST_TEXT_FILE
+
+    (
+        set +o pipefail
+        ln $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE 2>&1 | grep -q 'Operation not supported'
+    )
+}
+
 function test_symlink {
     describe "Testing symlinks ..."
 
@@ -1052,6 +1065,7 @@ function add_all_tests {
     add_tests test_multipart_copy
     add_tests test_multipart_mix
     add_tests test_special_characters
+    add_tests test_hardlink
     add_tests test_symlink
     add_tests test_extended_attributes
     add_tests test_mtime_file
