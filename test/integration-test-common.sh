@@ -207,6 +207,7 @@ function start_s3fs {
             -o retries=3 \
             -f \
             "${@}" | stdbuf -oL -eL sed $SED_BUFFER_FLAG "s/^/s3fs: /" &
+        S3FS_PID=$!
     )
 
     if [ `uname` = "Darwin" ]; then

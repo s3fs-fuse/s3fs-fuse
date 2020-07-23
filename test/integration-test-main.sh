@@ -303,6 +303,17 @@ function test_remove_nonempty_directory {
     rm_test_dir
 }
 
+function test_external_directory_creation {
+    describe "Test external directory creation ..."
+    OBJECT_NAME="$(basename $PWD)/directory/${TEST_TEXT_FILE}"
+    echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    ls | grep directory
+    stat --format=%a directory | grep ^750$
+    ls directory
+    cmp <(echo "data") directory/${TEST_TEXT_FILE}
+    rm -f directory/${TEST_TEXT_FILE}
+}
+
 function test_external_modification {
     describe "Test external modification to an object ..."
     echo "old" > ${TEST_TEXT_FILE}
@@ -930,7 +941,7 @@ function test_ut_ossfs {
 }
 
 function add_all_tests {
-    if `ps -ef | grep -v grep | grep s3fs | grep -q ensure_diskfree` && ! `uname | grep -q Darwin`; then
+    if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
     fi
     add_tests test_append_file
@@ -946,6 +957,10 @@ function add_all_tests {
     add_tests test_chown
     add_tests test_list
     add_tests test_remove_nonempty_directory
+    if ! ps u $S3FS_PID | grep -q notsup_compat_dir; then
+        # TODO: investigate why notsup_compat_dir fails
+        add_tests test_external_directory_creation
+    fi
     add_tests test_external_modification
     add_tests test_read_external_object
     add_tests test_rename_before_close
