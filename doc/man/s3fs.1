@@ -158,10 +158,10 @@ specify the maximum number of keys returned by S3 list object API. The default i
 \fB\-o\fR max_stat_cache_size (default="100,000" entries (about 40MB))
 maximum number of entries in the stat cache and symbolic link cache.
 .TP
-\fB\-o\fR stat_cache_expire (default is no expire)
+\fB\-o\fR stat_cache_expire (default is 900)
 specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time indicates the time since cached.
 .TP
-\fB\-o\fR stat_cache_interval_expire (default is no expire)
+\fB\-o\fR stat_cache_interval_expire (default is 900)
 specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time is based on the time from the last access time of those cache.
 This option is exclusive with stat_cache_expire, and is left for compatibility with older versions.
 .TP
