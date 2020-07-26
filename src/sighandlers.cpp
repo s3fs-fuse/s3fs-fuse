@@ -42,6 +42,12 @@
 using namespace std;
 
 //-------------------------------------------------------------------
+// Global variables
+//-------------------------------------------------------------------
+s3fs_log_level debug_level        = S3FS_LOG_CRIT;
+const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
+
+//-------------------------------------------------------------------
 // Class S3fsSignals
 //-------------------------------------------------------------------
 S3fsSignals* S3fsSignals::pSingleton = NULL;
@@ -129,6 +135,53 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
   return NULL;
 }
 
+void S3fsSignals::HandlerUSR2(int sig)
+{
+  if(SIGUSR2 == sig){
+    S3fsSignals::BumpupLogLevel();
+  }else{
+    S3FS_PRN_ERR("The handler for SIGUSR2 received signal(%d)", sig);
+  }
+}
+
+bool S3fsSignals::InitUsr2Handler()
+{
+  struct sigaction sa;
+
+  memset(&sa, 0, sizeof(struct sigaction));
+  sa.sa_handler = S3fsSignals::HandlerUSR2;
+  sa.sa_flags   = SA_RESTART;
+  if(0 != sigaction(SIGUSR2, &sa, NULL)){
+    return false;
+  }
+  return true;
+}
+
+s3fs_log_level S3fsSignals::SetLogLevel(s3fs_log_level level)
+{
+  if(level == debug_level){
+    return debug_level;
+  }
+  s3fs_log_level old = debug_level;
+  debug_level        = level;
+  setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
+  S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
+  return old;
+}
+
+s3fs_log_level S3fsSignals::BumpupLogLevel()
+{
+  s3fs_log_level old = debug_level;
+  debug_level        = ( S3FS_LOG_CRIT == debug_level ? S3FS_LOG_ERR :
+                         S3FS_LOG_ERR  == debug_level ? S3FS_LOG_WARN :
+                         S3FS_LOG_WARN == debug_level ? S3FS_LOG_INFO :
+                         S3FS_LOG_INFO == debug_level ? S3FS_LOG_DBG :
+                         S3FS_LOG_CRIT );
+  setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
+  S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
+  return old;
+}
+
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
@@ -138,6 +191,9 @@ S3fsSignals::S3fsSignals() : pThreadUsr1(NULL), pSemUsr1(NULL)
     if(!InitUsr1Handler()){
       S3FS_PRN_ERR("failed creating thread for SIGUSR1 handler, but continue...");
     }
+  }
+  if(!S3fsSignals::InitUsr2Handler()){
+    S3FS_PRN_ERR("failed to initialize SIGUSR2 handler for bumping log level, but continue...");
   }
 }
 

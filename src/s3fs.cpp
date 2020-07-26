@@ -111,8 +111,6 @@ std::string bucket;
 std::string endpoint              = "us-east-1";
 std::string cipher_suites;
 std::string instance_name;
-s3fs_log_level debug_level        = S3FS_LOG_CRIT;
-const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX] = {"", "  ", "    ", "      "};
 std::string aws_profile           = "default";
 
 //-------------------------------------------------------------------
@@ -160,10 +158,6 @@ static const std::string aws_secretkey         = "AWSSecretKey";
 //-------------------------------------------------------------------
 // Static functions : prototype
 //-------------------------------------------------------------------
-static void s3fs_usr2_handler(int sig);
-static bool set_s3fs_usr2_handler();
-static s3fs_log_level set_s3fs_log_level(s3fs_log_level level);
-static s3fs_log_level bumpup_s3fs_log_level();
 static bool is_special_name_folder_object(const char* path);
 static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, dirtype* pDirType = NULL);
 static int remove_old_type_dir(const string& path, dirtype type);
@@ -269,50 +263,6 @@ static int s3fs_removexattr(const char* path, const char* name);
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static void s3fs_usr2_handler(int sig)
-{
-  if(SIGUSR2 == sig){
-    bumpup_s3fs_log_level();
-  }
-}
-static bool set_s3fs_usr2_handler()
-{
-  struct sigaction sa;
-
-  memset(&sa, 0, sizeof(struct sigaction));
-  sa.sa_handler = s3fs_usr2_handler;
-  sa.sa_flags   = SA_RESTART;
-  if(0 != sigaction(SIGUSR2, &sa, NULL)){
-    return false;
-  }
-  return true;
-}
-
-static s3fs_log_level set_s3fs_log_level(s3fs_log_level level)
-{
-  if(level == debug_level){
-    return debug_level;
-  }
-  s3fs_log_level old = debug_level;
-  debug_level        = level;
-  setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
-  S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
-  return old;
-}
-
-static s3fs_log_level bumpup_s3fs_log_level()
-{
-  s3fs_log_level old = debug_level;
-  debug_level        = ( S3FS_LOG_CRIT == debug_level ? S3FS_LOG_ERR :
-                         S3FS_LOG_ERR  == debug_level ? S3FS_LOG_WARN :
-                         S3FS_LOG_WARN == debug_level ? S3FS_LOG_INFO :
-                         S3FS_LOG_INFO == debug_level ? S3FS_LOG_DBG :
-                         S3FS_LOG_CRIT );
-  setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
-  S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
-  return old;
-}
-
 static bool is_special_name_folder_object(const char* path)
 {
   if(!support_compat_dir){
@@ -5060,15 +5010,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(0 == STR2NCMP(arg, "dbglevel=")){
       const char* strlevel = strchr(arg, '=') + sizeof(char);
       if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
-        set_s3fs_log_level(S3FS_LOG_CRIT);
+        S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
       }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
-        set_s3fs_log_level(S3FS_LOG_ERR);
+        S3fsSignals::SetLogLevel(S3FS_LOG_ERR);
       }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
-        set_s3fs_log_level(S3FS_LOG_WARN);
+        S3fsSignals::SetLogLevel(S3FS_LOG_WARN);
       }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
-        set_s3fs_log_level(S3FS_LOG_INFO);
+        S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
       }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
-        set_s3fs_log_level(S3FS_LOG_DBG);
+        S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
       }else{
         S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
         return -1;
@@ -5082,7 +5032,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     //
     if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
       if(!IS_S3FS_LOG_INFO() && !IS_S3FS_LOG_DBG()){
-        set_s3fs_log_level(S3FS_LOG_INFO);
+        S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
         return 0;
       }
       if(0 == strcmp(arg, "--debug")){
@@ -5094,7 +5044,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     // "f2" is not used no more.
     // (set S3FS_LOG_DBG)
     if(0 == strcmp(arg, "f2")){
-      set_s3fs_log_level(S3FS_LOG_DBG);
+      S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
       return 0;
     }
     if(0 == strcmp(arg, "curldbg")){
@@ -5184,7 +5134,7 @@ int main(int argc, char* argv[])
 
   // init syslog(default CRIT)
   openlog("s3fs", LOG_PID | LOG_ODELAY | LOG_NOWAIT, LOG_USER);
-  set_s3fs_log_level(debug_level);
+  S3fsSignals::SetLogLevel(debug_level);
 
   // init xml2
   xmlInitParser();
@@ -5509,14 +5459,6 @@ int main(int argc, char* argv[])
     s3fs_oper.getxattr    = s3fs_getxattr;
     s3fs_oper.listxattr   = s3fs_listxattr;
     s3fs_oper.removexattr = s3fs_removexattr;
-  }
-
-  // set signal handler for debugging
-  if(!set_s3fs_usr2_handler()){
-    S3FS_PRN_EXIT("could not set signal handler for SIGUSR2.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
   }
 
   // now passing things off to fuse, fuse will finish evaluating the command line args
