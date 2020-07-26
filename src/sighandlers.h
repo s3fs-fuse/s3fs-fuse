@@ -41,6 +41,9 @@ class S3fsSignals
     static void HandlerUSR1(int sig);
     static void* CheckCacheWorker(void* arg);
 
+    static void HandlerUSR2(int sig);
+    static bool InitUsr2Handler(void);
+
     S3fsSignals();
     ~S3fsSignals();
 
@@ -53,6 +56,9 @@ class S3fsSignals
     static bool Destroy(void);
 
     static bool SetUsr1Handler(const char* path);
+
+    static s3fs_log_level SetLogLevel(s3fs_log_level level);
+    static s3fs_log_level BumpupLogLevel(void);
 };
 
 #endif // S3FS_SIGHANDLERS_H_
