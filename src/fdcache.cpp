@@ -2497,40 +2497,25 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
   int     result = 0;
   ssize_t wsize;
 
-  if(0 == upload_id.length()){
-    // check disk space
-    off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
-    if(ReserveDiskSpace(restsize)){
-      // enough disk space
+  // check disk space
+  off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
+  if(ReserveDiskSpace(restsize)){
+    // enough disk space
 
-      // Load uninitialized area which starts from 0 to (start + size) before writing.
-      if(!FdEntity::mixmultipart){
-        if(0 < start){
-          result = Load(0, start, /*lock_already_held=*/ true);
-        }
+    // Load uninitialized area which starts from 0 to (start + size) before writing.
+    if(!FdEntity::mixmultipart){
+      if(0 < start){
+        result = Load(0, start, /*lock_already_held=*/ true);
       }
+    }
 
-      FdManager::FreeReservedDiskSpace(restsize);
-      if(0 != result){
-        S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
-        return static_cast<ssize_t>(result);
-      }
-    }else{
-      // no enough disk space
-      if(0 != (result = NoCachePreMultipartPost())){
-        S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
-        return static_cast<ssize_t>(result);
-      }
-      // start multipart uploading
-      if(0 != (result = NoCacheLoadAndPost(0, start))){
-        S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
-        return static_cast<ssize_t>(result);
-      }
-      mp_start = start;
-      mp_size  = 0;
+    FdManager::FreeReservedDiskSpace(restsize);
+    if(0 != result){
+      S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
+      return static_cast<ssize_t>(result);
     }
   }else{
-    // already start multipart uploading
+    S3FS_PRN_ERR("failed to reserve disk space for write");
   }
 
   // Writing
