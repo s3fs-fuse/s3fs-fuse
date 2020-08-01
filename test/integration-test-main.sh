@@ -210,20 +210,12 @@ function test_chmod {
     # create the test file again
     mk_test_file
 
-    if [ `uname` = "Darwin" ]; then
-        ORIGINAL_PERMISSIONS=$(stat -f "%p" $TEST_TEXT_FILE)
-    else
-        ORIGINAL_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
-    fi
+    ORIGINAL_PERMISSIONS=$(get_permissions $TEST_TEXT_FILE)
 
     chmod 777 $TEST_TEXT_FILE;
 
     # if they're the same, we have a problem.
-    if [ `uname` = "Darwin" ]; then
-        CHANGED_PERMISSIONS=$(stat -f "%p" $TEST_TEXT_FILE)
-    else
-        CHANGED_PERMISSIONS=$(stat --format=%a $TEST_TEXT_FILE)
-    fi
+    CHANGED_PERMISSIONS=$(get_permissions $TEST_TEXT_FILE)
     if [ $CHANGED_PERMISSIONS == $ORIGINAL_PERMISSIONS ]
     then
       echo "Could not modify $TEST_TEXT_FILE permissions"
@@ -308,7 +300,7 @@ function test_external_directory_creation {
     OBJECT_NAME="$(basename $PWD)/directory/${TEST_TEXT_FILE}"
     echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     ls | grep directory
-    stat --format=%a directory | grep ^750$
+    get_permissions directory | grep ^750$
     ls directory
     cmp <(echo "data") directory/${TEST_TEXT_FILE}
     rm -f directory/${TEST_TEXT_FILE}
