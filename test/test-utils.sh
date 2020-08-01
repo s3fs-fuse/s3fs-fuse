@@ -238,7 +238,7 @@ function get_ctime() {
     if [ `uname` = "Darwin" ]; then
         stat -f "%c" "$1"
     else
-        stat -c %Z "$1"
+        stat -c "%Z" "$1"
     fi
 }
 
@@ -246,9 +246,18 @@ function get_mtime() {
     if [ `uname` = "Darwin" ]; then
         stat -f "%m" "$1"
     else
-        stat -c %Y "$1"
+        stat -c "%Y" "$1"
     fi
 }
+
+function get_permissions() {
+    if [ `uname` = "Darwin" ]; then
+        stat -f "%p" "$1"
+    else
+        stat -c "%a" "$1"
+    fi
+}
+
 function check_content_type() {
     INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1`
     if [[ "${INFO_STR}" != *"$2"* ]]
