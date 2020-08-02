@@ -85,8 +85,8 @@ stored in `${HOME}/.aws/credentials`.  Alternatively, s3fs supports a custom pas
 
 The default location for the s3fs password file can be created:
 
-* using a .passwd-s3fs file in the users home directory (i.e. ${HOME}/.passwd-s3fs)
-* using the system-wide /etc/passwd-s3fs file
+* using a `.passwd-s3fs` file in the users home directory (i.e. `${HOME}/.passwd-s3fs`)
+* using the system-wide `/etc/passwd-s3fs` file
 
 Enter your credentials in a file `${HOME}/.passwd-s3fs` and set
 owner-only permissions:
