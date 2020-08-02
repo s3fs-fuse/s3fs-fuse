@@ -180,7 +180,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp);
 static xmlChar* get_prefix(xmlDocPtr doc);
 static xmlChar* get_next_marker(xmlDocPtr doc);
 static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
-static int put_headers(const char* path, headers_t& meta, bool is_copy);
+int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE] global function because this is called from FdEntity class
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
@@ -771,7 +771,7 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
  * ow_sse_flg is for over writing sse header by use_sse option.
  * @return fuse return code
  */
-static int put_headers(const char* path, headers_t& meta, bool is_copy)
+int put_headers(const char* path, headers_t& meta, bool is_copy)
 {
   int         result;
   S3fsCurl    s3fscurl(true);
@@ -1640,26 +1640,41 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     }
   }else{
     // normal object or directory object of newer version
-    meta["x-amz-meta-ctime"]         = str(time(NULL));
-    meta["x-amz-meta-mode"]          = str(mode);
-    meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    meta["x-amz-metadata-directive"] = "REPLACE";
-
-    if(put_headers(strpath.c_str(), meta, true) != 0){
-      return -EIO;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
+    headers_t updatemeta;
+    updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+    updatemeta["x-amz-meta-mode"]          = str(mode);
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
     // check opened file handle.
     //
-    // If we have already opened file handle, should set mode to it.
-    // And new mode is set when the file handle is closed.
+    // If the file starts uploading by multipart when the disk capacity is insufficient,
+    // we need to put these header after finishing upload.
+    // Or if the file is only open, we must update to FdEntity's internal meta.
     //
     FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path))){
-      ent->UpdateCtime();
-      ent->SetMode(mode);      // Set new mode to opened fd.
-      FdManager::get()->Close(ent);
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+      // the file is opened now.
+      if(ent->MergeOrgMeta(updatemeta)){
+        // now uploading
+        // the meta is pending and accumulated to be put after the upload is complete.
+        S3FS_PRN_INFO("meta pending until upload is complete");
+      }else{
+        // allow to put header
+        // updatemeta already merged the orgmeta of the opened files.
+        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+          return -EIO;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+      }
+
+    }else{
+      // not opened file, then put headers
+      merge_headers(meta, updatemeta, true);
+      if(0 != put_headers(strpath.c_str(), meta, true)){
+        return -EIO;
+      }
+      StatCache::getStatCacheData()->DelStat(nowcache);
     }
   }
   S3FS_MALLOCTRIM(0);
@@ -1802,16 +1817,43 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
       return result;
     }
   }else{
-    meta["x-amz-meta-ctime"]         = str(time(NULL));
-    meta["x-amz-meta-uid"]           = str(uid);
-    meta["x-amz-meta-gid"]           = str(gid);
-    meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    meta["x-amz-metadata-directive"] = "REPLACE";
+    headers_t updatemeta;
+    updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+    updatemeta["x-amz-meta-uid"]           = str(uid);
+    updatemeta["x-amz-meta-gid"]           = str(gid);
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta, true) != 0){
-      return -EIO;
+    // check opened file handle.
+    //
+    // If the file starts uploading by multipart when the disk capacity is insufficient,
+    // we need to put these header after finishing upload.
+    // Or if the file is only open, we must update to FdEntity's internal meta.
+    //
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+      // the file is opened now.
+      if(ent->MergeOrgMeta(updatemeta)){
+        // now uploading
+        // the meta is pending and accumulated to be put after the upload is complete.
+        S3FS_PRN_INFO("meta pending until upload is complete");
+      }else{
+        // allow to put header
+        // updatemeta already merged the orgmeta of the opened files.
+        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+          return -EIO;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+      }
+
+    }else{
+      // not opened file, then put headers
+      merge_headers(meta, updatemeta, true);
+      if(0 != put_headers(strpath.c_str(), meta, true)){
+        return -EIO;
+      }
+      StatCache::getStatCacheData()->DelStat(nowcache);
     }
-    StatCache::getStatCacheData()->DelStat(nowcache);
   }
   S3FS_MALLOCTRIM(0);
 
@@ -1957,14 +1999,41 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
       return result;
     }
   }else{
-    meta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
-    meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    meta["x-amz-metadata-directive"] = "REPLACE";
+    headers_t updatemeta;
+    updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(put_headers(strpath.c_str(), meta, true) != 0){
-      return -EIO;
+    // check opened file handle.
+    //
+    // If the file starts uploading by multipart when the disk capacity is insufficient,
+    // we need to put these header after finishing upload.
+    // Or if the file is only open, we must update to FdEntity's internal meta.
+    //
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+      // the file is opened now.
+      if(ent->MergeOrgMeta(updatemeta)){
+        // now uploading
+        // the meta is pending and accumulated to be put after the upload is complete.
+        S3FS_PRN_INFO("meta pending until upload is complete");
+      }else{
+        // allow to put header
+        // updatemeta already merged the orgmeta of the opened files.
+        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+          return -EIO;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+      }
+
+    }else{
+      // not opened file, then put headers
+      merge_headers(meta, updatemeta, true);
+      if(0 != put_headers(strpath.c_str(), meta, true)){
+        return -EIO;
+      }
+      StatCache::getStatCacheData()->DelStat(nowcache);
     }
-    StatCache::getStatCacheData()->DelStat(nowcache);
   }
   S3FS_MALLOCTRIM(0);
 
@@ -3152,11 +3221,6 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     return result;
   }
 
-  // make new header_t
-  if(0 != (result = set_xattrs_to_header(meta, name, value, size, flags))){
-    return result;
-  }
-
   if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
     // Should rebuild directory object(except new type)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -3178,14 +3242,62 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
   }
 
   // set xattr all object
-  meta["x-amz-meta-ctime"]         = str(time(NULL));
-  meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-  meta["x-amz-metadata-directive"] = "REPLACE";
+  headers_t updatemeta;
+  updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+  updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+  updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-  if(0 != put_headers(strpath.c_str(), meta, true)){
-    return -EIO;
+  // check opened file handle.
+  //
+  // If the file starts uploading by multipart when the disk capacity is insufficient,
+  // we need to put these header after finishing upload.
+  // Or if the file is only open, we must update to FdEntity's internal meta.
+  //
+  FdEntity* ent;
+  if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+    // the file is opened now.
+
+    // get xattr and make new xattr
+    string strxattr;
+    if(ent->GetXattr(strxattr)){
+      updatemeta["x-amz-meta-xattr"] = strxattr;
+    }else{
+      // [NOTE]
+      // Set an empty xattr.
+      // This requires the key to be present in order to add xattr.
+      ent->SetXattr(strxattr);
+    }
+    if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
+      return result;
+    }
+
+    if(ent->MergeOrgMeta(updatemeta)){
+      // now uploading
+      // the meta is pending and accumulated to be put after the upload is complete.
+      S3FS_PRN_INFO("meta pending until upload is complete");
+    }else{
+      // allow to put header
+      // updatemeta already merged the orgmeta of the opened files.
+      if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+        return -EIO;
+      }
+      StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+
+  }else{
+    // not opened file, then put headers
+    merge_headers(meta, updatemeta, true);
+
+    // NOTICE: modify xattr from base meta
+    if(0 != (result = set_xattrs_to_header(meta, name, value, size, flags))){
+      return result;
+    }
+
+    if(0 != put_headers(strpath.c_str(), meta, true)){
+      return -EIO;
+    }
+    StatCache::getStatCacheData()->DelStat(nowcache);
   }
-  StatCache::getStatCacheData()->DelStat(nowcache);
 
   return 0;
 }
@@ -3394,13 +3506,6 @@ static int s3fs_removexattr(const char* path, const char* name)
   delete xiter->second;
   xattrs.erase(xiter);
 
-  // build new xattr
-  if(!xattrs.empty()){
-    meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
-  }else{
-    meta.erase("x-amz-meta-xattr");
-  }
-
   if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
     // Should rebuild directory object(except new type)
     // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -3423,16 +3528,52 @@ static int s3fs_removexattr(const char* path, const char* name)
   }
 
   // set xattr all object
-  meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-  meta["x-amz-metadata-directive"] = "REPLACE";
-
-  if(0 != put_headers(strpath.c_str(), meta, true)){
-    free_xattrs(xattrs);
-    return -EIO;
+  headers_t updatemeta;
+  updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+  updatemeta["x-amz-metadata-directive"] = "REPLACE";
+  if(!xattrs.empty()){
+    updatemeta["x-amz-meta-xattr"]       = build_xattrs(xattrs);
+  }else{
+    updatemeta["x-amz-meta-xattr"]       = string("");      // This is a special case. If empty, this header will eventually be removed.
   }
-  StatCache::getStatCacheData()->DelStat(nowcache);
-
   free_xattrs(xattrs);
+
+  // check opened file handle.
+  //
+  // If the file starts uploading by multipart when the disk capacity is insufficient,
+  // we need to put these header after finishing upload.
+  // Or if the file is only open, we must update to FdEntity's internal meta.
+  //
+  FdEntity* ent;
+  if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+    // the file is opened now.
+    if(ent->MergeOrgMeta(updatemeta)){
+      // now uploading
+      // the meta is pending and accumulated to be put after the upload is complete.
+      S3FS_PRN_INFO("meta pending until upload is complete");
+    }else{
+      // allow to put header
+      // updatemeta already merged the orgmeta of the opened files.
+      if(updatemeta["x-amz-meta-xattr"].empty()){
+        updatemeta.erase("x-amz-meta-xattr");
+      }
+      if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+        return -EIO;
+      }
+      StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+
+  }else{
+    // not opened file, then put headers
+    if(updatemeta["x-amz-meta-xattr"].empty()){
+      updatemeta.erase("x-amz-meta-xattr");
+    }
+    merge_headers(meta, updatemeta, true);
+    if(0 != put_headers(strpath.c_str(), meta, true)){
+      return -EIO;
+    }
+    StatCache::getStatCacheData()->DelStat(nowcache);
+  }
 
   return 0;
 }

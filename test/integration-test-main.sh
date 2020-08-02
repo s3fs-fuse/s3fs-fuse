@@ -933,6 +933,9 @@ function test_ut_ossfs {
 }
 
 function add_all_tests {
+    if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
+        add_tests test_cache_file_stat
+    fi
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
     fi
@@ -978,9 +981,6 @@ function add_all_tests {
     add_tests test_upload_sparsefile
     add_tests test_mix_upload_entities
     add_tests test_ut_ossfs
-    if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
-        add_tests test_cache_file_stat
-    fi
 }
 
 init_suite

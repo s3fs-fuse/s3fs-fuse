@@ -801,7 +801,7 @@ time_t get_mtime(const char *str)
   return static_cast<time_t>(cvt_strtoofft(strmtime.c_str()));
 }
 
-static time_t get_time(headers_t& meta, const char *header)
+static time_t get_time(const headers_t& meta, const char *header)
 {
   headers_t::const_iterator iter;
   if(meta.end() == (iter = meta.find(header))){
@@ -810,7 +810,7 @@ static time_t get_time(headers_t& meta, const char *header)
   return get_mtime((*iter).second.c_str());
 }
 
-time_t get_mtime(headers_t& meta, bool overcheck)
+time_t get_mtime(const headers_t& meta, bool overcheck)
 {
   time_t t = get_time(meta, "x-amz-meta-mtime");
   if(t != 0){
@@ -826,7 +826,7 @@ time_t get_mtime(headers_t& meta, bool overcheck)
   return 0;
 }
 
-time_t get_ctime(headers_t& meta, bool overcheck)
+time_t get_ctime(const headers_t& meta, bool overcheck)
 {
   time_t t = get_time(meta, "x-amz-meta-ctime");
   if(t != 0){
@@ -843,7 +843,7 @@ off_t get_size(const char *s)
   return cvt_strtoofft(s);
 }
 
-off_t get_size(headers_t& meta)
+off_t get_size(const headers_t& meta)
 {
   headers_t::const_iterator iter = meta.find("Content-Length");
   if(meta.end() == iter){
@@ -857,7 +857,7 @@ mode_t get_mode(const char *s, int base)
   return static_cast<mode_t>(cvt_strtoofft(s, base));
 }
 
-mode_t get_mode(headers_t& meta, const char* path, bool checkdir, bool forcedir)
+mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool forcedir)
 {
   mode_t mode = 0;
   bool isS3sync = false;
@@ -941,7 +941,7 @@ uid_t get_uid(const char *s)
   return static_cast<uid_t>(cvt_strtoofft(s));
 }
 
-uid_t get_uid(headers_t& meta)
+uid_t get_uid(const headers_t& meta)
 {
   headers_t::const_iterator iter;
   if(meta.end() != (iter = meta.find("x-amz-meta-uid"))){
@@ -960,7 +960,7 @@ gid_t get_gid(const char *s)
   return static_cast<gid_t>(cvt_strtoofft(s));
 }
 
-gid_t get_gid(headers_t& meta)
+gid_t get_gid(const headers_t& meta)
 {
   headers_t::const_iterator iter;
   if(meta.end() != (iter = meta.find("x-amz-meta-gid"))){
@@ -1001,7 +1001,7 @@ time_t get_lastmodified(const char* s)
   return timegm(&tm); // GMT
 }
 
-time_t get_lastmodified(headers_t& meta)
+time_t get_lastmodified(const headers_t& meta)
 {
   headers_t::const_iterator iter = meta.find("Last-Modified");
   if(meta.end() == iter){
@@ -1015,7 +1015,7 @@ time_t get_lastmodified(headers_t& meta)
 // If this function returns true, the object is possible to be directory
 // and is needed checking detail(searching sub object).
 //
-bool is_need_check_obj_detail(headers_t& meta)
+bool is_need_check_obj_detail(const headers_t& meta)
 {
   headers_t::const_iterator iter;
 
@@ -1043,6 +1043,21 @@ bool is_need_check_obj_detail(headers_t& meta)
     return false;
   }
   return true;
+}
+
+// [NOTE]
+// If add_noexist is false and the key does not exist, it will not be added.
+//
+bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist)
+{
+  bool added = false;
+  for(headers_t::const_iterator iter = additional.begin(); iter != additional.end(); ++iter){
+    if(add_noexist || base.find(iter->first) != base.end()){
+      base[iter->first] = iter->second;
+      added             = true;
+    }
+  }
+  return added;
 }
 
 bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value)

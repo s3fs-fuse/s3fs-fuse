@@ -131,6 +131,8 @@ class PageList
 //------------------------------------------------
 // class FdEntity
 //------------------------------------------------
+typedef std::list<headers_t>    headers_list_t;
+
 class FdEntity
 {
   private:
@@ -155,6 +157,7 @@ class FdEntity
     std::string     cachepath;      // local cache file path
                                     // (if this is empty, does not load/save pagelist.)
     std::string     mirrorpath;     // mirror file path to local cache file path
+    headers_list_t  pending_headers;// pending update headers
 
   private:
     static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -164,8 +167,8 @@ class FdEntity
     ino_t GetInode(void);
     int OpenMirrorFile(void);
     bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
-    //bool SetAllStatusLoaded(void) { return SetAllStatus(true); }
     bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
+	int UploadPendingMeta(void);
 
   public:
     static bool SetNoMixMultipart(void);
@@ -183,13 +186,16 @@ class FdEntity
     bool RenamePath(const std::string& newpath, std::string& fentmapkey);
     int GetFd(void) const { return fd; }
     bool IsModified(void) const { return pagelist.IsModified(); }
+    bool MergeOrgMeta(headers_t& updatemeta);
 
     bool GetStats(struct stat& st, bool lock_already_held = false);
-    int SetCtime(time_t time);
+    int SetCtime(time_t time, bool lock_already_held = false);
     int SetMtime(time_t time, bool lock_already_held = false);
     bool UpdateCtime(void);
     bool UpdateMtime(void);
     bool GetSize(off_t& size);
+    bool GetXattr(std::string& xattr);
+    bool SetXattr(const std::string& xattr);
     bool SetMode(mode_t mode);
     bool SetUId(uid_t uid);
     bool SetGId(gid_t gid);
