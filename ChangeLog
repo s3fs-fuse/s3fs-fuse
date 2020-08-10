@@ -1,6 +1,28 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.87 -- 10 Aug, 2020 (major changes only)
+
+#1244 - use correct content-type when complete multipart upload
+#1265 - Fixed a bug of stats cache compression
+#1271 - Fixed the truncation bug of stat file for cache file
+#1274 - Improved strictness of cache file stats(file)
+#1277 - Fixed insufficient upload size for mix multipart upload
+#1282 - Warn about missing MIME types instead of exiting
+#1285 - Not abort process by exception threw from s3fs_strtoofft
+#1286 - Support Google Cloud Storage headers
+#1295 - Added a parameter to output body to curldbg option
+#1302 - Fix renames of open files with nocopyapi option
+#1303 - Relink cache stats file atomically via rename
+#1305 - Ignore case when comparing ETags
+#1306 - Retry with exponential backoff during 500 error
+#1312 - Fixed a bug about serializing from cache file
+#1313 - Fixed about ParallelMixMultipartUpload
+#1316 - Add support for glacier storage class
+#1319 - Fixed upload error about mixuploading sparse file and truncating file
+#1334 - Added SIGUSR1 option for cache file integrity test
+#1341 - Change default stat_cache_expire
+
 Version 1.86 -- 04 Feb, 2020 (major changes only)
 #965 - enable various optimizations when using modern curl
 #1002 - allow SSE-C keys to have NUL bytes
