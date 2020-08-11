@@ -84,7 +84,7 @@ static const int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;	// Buffer size in PageLi
 #define CACHEDBG_FMT_WARN_OPEN  "\n           -> [W] This file is currently open and may not provide accurate analysis results."
 #define CACHEDBG_FMT_CRIT_HEAD  "           -> [C] %s"
 #define CACHEDBG_FMT_CRIT_HEAD2 "           -> [C] "
-#define CACHEDBG_FMT_PROB_BLOCK "                  0x%016jx(0x%016jx bytes)"
+#define CACHEDBG_FMT_PROB_BLOCK "                  0x%016zx(0x%016zx bytes)"
 
 //------------------------------------------------
 // CacheFileStat class methods
@@ -3342,14 +3342,14 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
         if(!warn_area_list.empty()){
           S3FS_PRN_CACHE(fp, CACHEDBG_FMT_WARN_HEAD);
           for(fdpage_list_t::const_iterator witer = warn_area_list.begin(); witer != warn_area_list.end(); ++witer){
-            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, (intmax_t)(witer->offset), (intmax_t)(witer->bytes));
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, witer->offset, witer->bytes);
           }
         }
         if(!err_area_list.empty()){
           ++err_file_cnt;
           S3FS_PRN_CACHE(fp, CACHEDBG_FMT_ERR_HEAD);
           for(fdpage_list_t::const_iterator eiter = err_area_list.begin(); eiter != err_area_list.end(); ++eiter){
-            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, (intmax_t)(eiter->offset), (intmax_t)(eiter->bytes));
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, eiter->offset, eiter->bytes);
           }
         }
       }else{

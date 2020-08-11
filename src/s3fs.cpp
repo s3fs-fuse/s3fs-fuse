@@ -885,7 +885,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     // Read
     ssize_t ressize;
     if(0 > (ressize = ent->Read(buf, 0, readsize))){
-      S3FS_PRN_ERR("could not read file(file=%s, ressize=%jd)", path, (intmax_t)ressize);
+      S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
       FdManager::get()->Close(ent);
       return static_cast<int>(ressize);
     }
@@ -988,7 +988,7 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
   int       result;
   struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o][dev=%ju]", path, mode, (uintmax_t)rdev);
+  S3FS_PRN_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
 
   if(NULL == (pcxt = fuse_get_context())){
     return -EIO;
@@ -2214,7 +2214,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
   }
 
   if(0 > (res = ent->Read(buf, offset, size, false))){
-    S3FS_PRN_WARN("failed to read file(%s). result=%jd", path, (intmax_t)res);
+    S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
   }
   FdManager::get()->Close(ent);
 
@@ -2237,7 +2237,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
   }
   if(0 > (res = ent->Write(buf, offset, size))){
-    S3FS_PRN_WARN("failed to write file(%s). result=%jd", path, (intmax_t)res);
+    S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
   }
   FdManager::get()->Close(ent);
 
