@@ -3220,41 +3220,27 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
     return false;
   }
 
-  // allocate dirent buffer
-  long name_max = pathconf(cache_stat_top_dir, _PC_NAME_MAX);
-  if(-1 == name_max){
-    name_max = 255;     // [NOTE] Is PATH_MAX better?
-  }
-  size_t structlen = offsetof(struct dirent, d_name) + name_max + 1;
-  struct dirent* pdirent;
-  if(NULL == (pdirent = reinterpret_cast<struct dirent*>(malloc(structlen)))){
-    S3FS_PRN_ERR("Could not allocate memory for dirent(length = %zu) by errno(%d)", structlen, errno);
-    return false;
-  }
-
   // open directory of cache file's stats
   DIR*   statsdir;
   string target_dir = cache_stat_top_dir;
   target_dir       += sub_path;
   if(NULL == (statsdir = opendir(target_dir.c_str()))){
     S3FS_PRN_ERR("Could not open directory(%s) by errno(%d)", target_dir.c_str(), errno);
-    free(pdirent);
     return false;
   }
 
   // loop in directory of cache file's stats
-  struct dirent* pdirent_res = NULL;
-  int            result;
-  for(result = readdir_r(statsdir, pdirent, &pdirent_res); 0 == result && pdirent_res; result = readdir_r(statsdir, pdirent, &pdirent_res)){
-    if(DT_DIR == pdirent_res->d_type){
+  struct dirent* pdirent = NULL;
+  while(NULL != (pdirent = readdir(statsdir))){
+    if(DT_DIR == pdirent->d_type){
       // found directory
-      if(0 == strcmp(pdirent_res->d_name, ".") || 0 == strcmp(pdirent_res->d_name, "..")){
+      if(0 == strcmp(pdirent->d_name, ".") || 0 == strcmp(pdirent->d_name, "..")){
         continue;
       }
 
       // reentrant for sub directory
       string subdir_path = sub_path;
-      subdir_path       += pdirent_res->d_name;
+      subdir_path       += pdirent->d_name;
       subdir_path       += '/';
       if(!RawCheckAllCache(fp, cache_stat_top_dir, subdir_path.c_str(), total_file_cnt, err_file_cnt, err_dir_cnt)){
         // put error message for this dir.
@@ -3270,7 +3256,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
       string strOpenedWarn;
       string cache_path;
       string object_file_path = sub_path;
-      object_file_path       += pdirent_res->d_name;
+      object_file_path       += pdirent->d_name;
       if(!FdManager::MakeCachePath(object_file_path.c_str(), cache_path, false, false) || cache_path.empty()){
         ++err_file_cnt;
         S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
@@ -3366,7 +3352,6 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
   }
 
   closedir(statsdir);
-  free(pdirent);
 
   return true;
 }
