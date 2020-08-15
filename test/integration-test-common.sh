@@ -213,7 +213,7 @@ function start_s3fs {
     if [ `uname` = "Darwin" ]; then
          set +o errexit
          TRYCOUNT=0
-         while [ $TRYCOUNT -le 20 ]; do
+         while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
              df | grep -q $TEST_BUCKET_MOUNT_POINT_1
              if [ $? -eq 0 ]; then
                  break;
@@ -226,7 +226,7 @@ function start_s3fs {
          fi
          set -o errexit
     else
-        retry 20 grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
+        retry ${RETRIES:=20} grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
     fi
 
     # Quick way to start system up for manual testing with options under test
