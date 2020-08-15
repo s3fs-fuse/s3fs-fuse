@@ -97,6 +97,7 @@ class AutoLock
     ~AutoLock();
 
   private:
+    AutoLock(const AutoLock&);
     pthread_mutex_t* const auto_mutex;
     bool is_lock_acquired;
 };
