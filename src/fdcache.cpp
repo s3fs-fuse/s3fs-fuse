@@ -1788,6 +1788,12 @@ bool FdEntity::RenamePath(const string& newpath, string& fentmapkey)
   return true;
 }
 
+bool FdEntity::IsModified(void) const
+{
+  AutoLock auto_data_lock(const_cast<pthread_mutex_t *>(&fdent_data_lock));
+  return pagelist.IsModified();
+}
+
 bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
 {
   AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
@@ -1882,6 +1888,7 @@ bool FdEntity::GetSize(off_t& size)
     return false;
   }
 
+  AutoLock auto_data_lock(&fdent_data_lock);
   size = pagelist.Size();
   return true;
 }

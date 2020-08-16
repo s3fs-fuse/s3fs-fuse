@@ -185,7 +185,7 @@ class FdEntity
     const char* GetPath(void) const { return path.c_str(); }
     bool RenamePath(const std::string& newpath, std::string& fentmapkey);
     int GetFd(void) const { return fd; }
-    bool IsModified(void) const { return pagelist.IsModified(); }
+    bool IsModified(void) const;
     bool MergeOrgMeta(headers_t& updatemeta);
 
     bool GetStats(struct stat& st, bool lock_already_held = false);
