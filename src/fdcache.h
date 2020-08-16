@@ -232,6 +232,8 @@ class FdManager
     static bool            check_cache_dir_exist;
     static off_t           free_disk_space; // limit free disk space
     static std::string     check_cache_output;
+    static bool            checked_lseek;
+    static bool            have_lseek_hole;
 
     fdent_map_t            fent;
 
@@ -265,6 +267,7 @@ class FdManager
     static bool IsSafeDiskSpace(const char* path, off_t size);
     static void FreeReservedDiskSpace(off_t size);
     static bool ReserveDiskSpace(off_t size);
+    static bool HaveLseekHole(void);
 
     // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
     FdEntity* GetFdEntity(const char* path, int existfd = -1);

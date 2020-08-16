@@ -56,6 +56,19 @@ static const int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max coun
 static const int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;	// Buffer size in PageList::CheckZeroAreaInFile()
 
 //
+// [NOTE]
+// If the following symbols in lseek whence are undefined, define them.
+// If it is not supported by lseek, s3fs judges by the processing result of lseek.
+//
+#ifndef SEEK_DATA
+#define SEEK_DATA               3
+#endif
+#ifndef SEEK_HOLE
+#define SEEK_HOLE               4
+#endif
+#define TMPFILE_FOR_CHECK_HOLE  "/tmp/.s3fs_hole_check.tmp"
+
+//
 // For cache directory top path
 //
 #if defined(P_tmpdir)
@@ -2719,6 +2732,8 @@ string          FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
 std::string     FdManager::check_cache_output;
+bool            FdManager::checked_lseek(false);
+bool            FdManager::have_lseek_hole(false);
 
 //------------------------------------------------
 // FdManager class methods
@@ -2926,6 +2941,43 @@ bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
 {
   off_t fsize = FdManager::GetFreeDiskSpace(path);
   return size + FdManager::GetEnsureFreeDiskSpace() <= fsize;
+}
+
+bool FdManager::HaveLseekHole(void)
+{
+  if(FdManager::checked_lseek){
+    return FdManager::have_lseek_hole;
+  }
+
+  // create tempolary file
+  int fd;
+  if(-1 == (fd = open(TMPFILE_FOR_CHECK_HOLE, O_CREAT|O_RDWR, 0600))){
+    S3FS_PRN_ERR("failed to open tempolary file(%s) - errno(%d)", TMPFILE_FOR_CHECK_HOLE, errno);
+    FdManager::checked_lseek   = true;
+    FdManager::have_lseek_hole = false;
+    return FdManager::have_lseek_hole;
+  }
+
+  // check SEEK_DATA/SEEK_HOLE options
+  bool result = true;
+  if(-1 == lseek(fd, 0, SEEK_DATA)){
+    if(EINVAL == errno){
+      S3FS_PRN_ERR("lseek does not support SEEK_DATA");
+      result = false;
+    }
+  }
+  if(result && -1 == lseek(fd, 0, SEEK_HOLE)){
+    if(EINVAL == errno){
+      S3FS_PRN_ERR("lseek does not support SEEK_HOLE");
+      result = false;
+    }
+  }
+  close(fd);
+  unlink(TMPFILE_FOR_CHECK_HOLE);
+
+  FdManager::checked_lseek   = true;
+  FdManager::have_lseek_hole = result;
+  return FdManager::have_lseek_hole;
 }
 
 //------------------------------------------------
@@ -3470,6 +3522,11 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
 bool FdManager::CheckAllCache()
 {
+  if(!FdManager::HaveLseekHole()){
+    S3FS_PRN_ERR("lseek does not support SEEK_DATA/SEEK_HOLE, then could not check cache.");
+    return false;
+  }
+
   FILE* fp;
   if(FdManager::check_cache_output.empty()){
     fp = stdout;

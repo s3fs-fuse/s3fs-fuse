@@ -93,6 +93,11 @@ void S3fsSignals::HandlerUSR1(int sig)
 
 bool S3fsSignals::SetUsr1Handler(const char* path)
 {
+  if(!FdManager::HaveLseekHole()){
+    S3FS_PRN_ERR("Could not set SIGUSR1 for checking cache, because this system does not support SEEK_DATA/SEEK_HOLE in lseek function.");
+    return false;
+  }
+
   // set output file
   if(!FdManager::SetCacheCheckOutput(path)){
     S3FS_PRN_ERR("Could not set output file(%s) for checking cache.", path ? path : "null(stdout)");
