@@ -926,6 +926,76 @@ function test_mix_upload_entities() {
     rm_test_file "${BIG_FILE}"
 }
 
+#
+# [NOTE]
+# This test runs last because it uses up disk space and may not recover.
+# This may be a problem, especially on MacOS. (See the comment near the definition
+# line for the ENSURE_DISKFREE_SIZE variable)
+#
+function test_ensurespace_move_file() {
+    describe "Testing upload(mv) file when diskspace is not enough ..."
+
+    #
+    # Make test file which is not under mountpoint
+    #
+    mkdir -p ${CACHE_DIR}/.s3fs_test_tmpdir
+    dd if=/dev/urandom of="${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+
+    #
+    # Backup file stat
+    #
+    if [ `uname` = "Darwin" ]; then
+        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" ${CACHE_DIR}/.s3fs_test_tmpdir/$BIG_FILE)
+    else
+        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g ${CACHE_DIR}/.s3fs_test_tmpdir/$BIG_FILE)
+    fi
+
+    #
+    # Fill the disk size
+    #
+    NOW_CACHE_DISK_AVAIL_SIZE=`get_disk_avail_size ${CACHE_DIR}`
+    TMP_FILE_NO=0
+    while true; do
+      ALLOWED_USING_SIZE=$((NOW_CACHE_DISK_AVAIL_SIZE - ENSURE_DISKFREE_SIZE))
+      if [ ${ALLOWED_USING_SIZE} -gt ${BIG_FILE_LENGTH} ]; then
+          cp -p ${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE} ${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}_${TMP_FILE_NO}
+          TMP_FILE_NO=$((TMP_FILE_NO + 1))
+      else
+          break;
+      fi
+    done
+
+    #
+    # move file
+    #
+    mv "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" "${BIG_FILE}"
+
+    #
+    # file stat
+    #
+    if [ `uname` = "Darwin" ]; then
+        MOVED_PERMISSIONS=$(stat -f "%u:%g" $BIG_FILE)
+    else
+        MOVED_PERMISSIONS=$(stat --format=%u:%g $BIG_FILE)
+    fi
+    MOVED_FILE_LENGTH=$(ls -l $BIG_FILE | awk '{print $5}')
+
+    #
+    # check
+    #
+    if [ "${MOVED_PERMISSIONS}" != "${ORIGINAL_PERMISSIONS}" ]; then
+        echo "Failed to move file with permission"
+        return 1
+    fi
+    if [ ${MOVED_FILE_LENGTH} -ne ${BIG_FILE_LENGTH} ]; then
+        echo "Failed to move file with file length"
+        return 1
+    fi
+
+    rm_test_file "${BIG_FILE}"
+    rm -rf ${CACHE_DIR}/.s3fs_test_tmpdir
+}
+
 function test_ut_ossfs {
     describe "Testing ossfs python ut..."
     export TEST_BUCKET_MOUNT_POINT=$TEST_BUCKET_MOUNT_POINT_1
@@ -981,6 +1051,9 @@ function add_all_tests {
     add_tests test_upload_sparsefile
     add_tests test_mix_upload_entities
     add_tests test_ut_ossfs
+    if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+        add_tests test_ensurespace_move_file
+    fi
 }
 
 init_suite
