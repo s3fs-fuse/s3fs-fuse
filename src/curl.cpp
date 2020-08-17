@@ -419,8 +419,11 @@ string           S3fsCurl::IAM_token_field     = "Token";
 string           S3fsCurl::IAM_expiry_field    = "Expiration";
 string           S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
+
+// protected by curl_handles_lock
 curltime_t       S3fsCurl::curl_times;
 curlprogress_t   S3fsCurl::curl_progress;
+
 string           S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
 string           S3fsCurl::userAgent;
@@ -2132,7 +2135,7 @@ S3fsCurl::~S3fsCurl()
   DestroyCurlHandle();
 }
 
-bool S3fsCurl::ResetHandle()
+bool S3fsCurl::ResetHandle(bool lock_already_held)
 {
   static volatile bool run_once = false;  // emit older curl warnings only once
   curl_easy_reset(hCurl);
@@ -2179,6 +2182,7 @@ bool S3fsCurl::ResetHandle()
     curl_easy_setopt(hCurl, CURLOPT_SSL_CIPHER_LIST, cipher_suites.c_str());
   }
 
+  AutoLock lock(&S3fsCurl::curl_handles_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
   S3fsCurl::curl_times[hCurl]    = time(0);
   S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
@@ -2211,7 +2215,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
     }
   }
 
-  ResetHandle();
+  ResetHandle(/*lock_already_held=*/ true);
 
   return true;
 }
@@ -2600,7 +2604,10 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
       case CURLE_ABORTED_BY_CALLBACK:
         S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
         sleep(4);
-        S3fsCurl::curl_times[hCurl] = time(0);
+        {
+          AutoLock lock(&S3fsCurl::curl_handles_lock);
+          S3fsCurl::curl_times[hCurl] = time(0);
+        }
         break; 
 
       case CURLE_PARTIAL_FILE:

@@ -394,7 +394,7 @@ class S3fsCurl
     static int RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
     // methods
-    bool ResetHandle(void);
+    bool ResetHandle(bool lock_already_held = false);
     bool RemakeHandle(void);
     bool ClearInternalData(void);
     void insertV4Headers();
