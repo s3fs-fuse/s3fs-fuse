@@ -227,13 +227,6 @@ enum sse_type_t {
   SSE_KMS               // server side encrypting by kms id
 };
 
-// share
-enum {
-  SHARE_MUTEX_DNS = 0,
-  SHARE_MUTEX_SSL_SESSION = 1,
-  SHARE_MUTEX_MAX = 2,
-};
-
 // Class for lapping curl
 //
 class S3fsCurl
@@ -262,7 +255,10 @@ class S3fsCurl
 
     // class variables
     static pthread_mutex_t  curl_handles_lock;
-    static pthread_mutex_t  curl_share_lock[SHARE_MUTEX_MAX];
+    static struct callback_locks_t {
+      pthread_mutex_t dns;
+      pthread_mutex_t ssl_session;
+    } callback_locks;
     static bool             is_initglobal_done;
     static CurlHandlerPool* sCurlPool;
     static int              sCurlPoolSize;

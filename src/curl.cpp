@@ -387,7 +387,7 @@ static const char* SPECIAL_DARWIN_MIME_FILE = "/etc/apache2/mime.types";
 #endif
 
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
-pthread_mutex_t  S3fsCurl::curl_share_lock[SHARE_MUTEX_MAX];
+S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
 CurlHandlerPool* S3fsCurl::sCurlPool           = NULL;
 int              S3fsCurl::sCurlPoolSize       = 32;
@@ -448,10 +448,10 @@ bool S3fsCurl::InitS3fsCurl()
   if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, &attr)){
     return false;
   }
-  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_DNS], &attr)){
+  if(0 != pthread_mutex_init(&S3fsCurl::callback_locks.dns, &attr)){
     return false;
   }
-  if(0 != pthread_mutex_init(&S3fsCurl::curl_share_lock[SHARE_MUTEX_SSL_SESSION], &attr)){
+  if(0 != pthread_mutex_init(&S3fsCurl::callback_locks.ssl_session, &attr)){
     return false;
   }
   if(!S3fsCurl::InitGlobalCurl()){
@@ -494,10 +494,10 @@ bool S3fsCurl::DestroyS3fsCurl()
   if(!S3fsCurl::DestroyGlobalCurl()){
     result = false;
   }
-  if(0 != pthread_mutex_destroy(&S3fsCurl::curl_share_lock[SHARE_MUTEX_DNS])){
+  if(0 != pthread_mutex_destroy(&S3fsCurl::callback_locks.dns)){
     result = false;
   }
-  if(0 != pthread_mutex_destroy(&S3fsCurl::curl_share_lock[SHARE_MUTEX_SSL_SESSION])){
+  if(0 != pthread_mutex_destroy(&S3fsCurl::callback_locks.ssl_session)){
     result = false;
   }
   if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
@@ -571,7 +571,7 @@ bool S3fsCurl::InitShareCurl()
       S3FS_PRN_WARN("curl_share_setopt(SSL SESSION) returns %d(%s), but continue without shared ssl session data.", nSHCode, curl_share_strerror(nSHCode));
     }
   }
-  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_USERDATA, (void*)&S3fsCurl::curl_share_lock[0]))){
+  if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_USERDATA, &S3fsCurl::callback_locks))){
     S3FS_PRN_ERR("curl_share_setopt(USERDATA) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
     return false;
   }
@@ -599,15 +599,15 @@ void S3fsCurl::LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_a
   if(!hCurlShare){
     return;
   }
+  S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
   int res;
-  pthread_mutex_t* lockmutex = static_cast<pthread_mutex_t*>(useptr);
   if(CURL_LOCK_DATA_DNS == nLockData){
-    if(0 != (res = pthread_mutex_lock(&lockmutex[SHARE_MUTEX_DNS]))){
+    if(0 != (res = pthread_mutex_lock(&locks->dns))){
       S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
       abort();
     }
   }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-    if(0 != (res = pthread_mutex_lock(&lockmutex[SHARE_MUTEX_SSL_SESSION]))){
+    if(0 != (res = pthread_mutex_lock(&locks->ssl_session))){
       S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
       abort();
     }
@@ -619,15 +619,15 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
   if(!hCurlShare){
     return;
   }
+  S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
   int res;
-  pthread_mutex_t* lockmutex = static_cast<pthread_mutex_t*>(useptr);
   if(CURL_LOCK_DATA_DNS == nLockData){
-    if(0 != (res = pthread_mutex_unlock(&lockmutex[SHARE_MUTEX_DNS]))){
+    if(0 != (res = pthread_mutex_unlock(&locks->dns))){
       S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
       abort();
     }
   }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-    if(0 != (res = pthread_mutex_unlock(&lockmutex[SHARE_MUTEX_SSL_SESSION]))){
+    if(0 != (res = pthread_mutex_unlock(&locks->ssl_session))){
       S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
       abort();
     }
