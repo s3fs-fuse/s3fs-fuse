@@ -134,3 +134,12 @@ int main(int argc, char *argv[])
   test_wtf8_encoding();
   return 0;
 }
+
+/*
+* Local variables:
+* tab-width: 2
+* c-basic-offset: 2
+* End:
+* vim600: expandtab sw=2 ts=2 fdm=marker
+* vim<600: expandtab sw=2 ts=2
+*/

@@ -204,9 +204,9 @@ extern const char*    s3fs_log_nest[S3FS_LOG_NEST_MAX];
 
 /*
 * Local variables:
-* tab-width: 4
-* c-basic-offset: 4
+* tab-width: 2
+* c-basic-offset: 2
 * End:
-* vim600: noet sw=4 ts=4 fdm=marker
-* vim<600: noet sw=4 ts=4
+* vim600: expandtab sw=2 ts=2 fdm=marker
+* vim<600: expandtab sw=2 ts=2
 */
