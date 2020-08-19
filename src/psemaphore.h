@@ -73,3 +73,11 @@ class Semaphore
 #endif
 
 #endif // S3FS_SEMAPHORE_H_
+/*
+* Local variables:
+* tab-width: 2
+* c-basic-offset: 2
+* End:
+* vim600: expandtab sw=2 ts=2 fdm=marker
+* vim<600: expandtab sw=2 ts=2
+*/

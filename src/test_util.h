@@ -87,3 +87,12 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
 
 #define ASSERT_STREQUALS(x, y) \
   assert_strequals((x), (y), __FILE__, __LINE__)
+
+/*
+* Local variables:
+* tab-width: 2
+* c-basic-offset: 2
+* End:
+* vim600: expandtab sw=2 ts=2 fdm=marker
+* vim<600: expandtab sw=2 ts=2
+*/
