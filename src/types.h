@@ -30,6 +30,7 @@ class storage_class_t{
       REDUCED_REDUNDANCY,
       INTELLIGENT_TIERING,
       GLACIER,
+      DEEP_ARCHIVE,
       UNKNOWN
     };
 
@@ -52,6 +53,8 @@ class storage_class_t{
         return "INTELLIGENT_TIERING";
       case GLACIER:
         return "GLACIER";
+      case DEEP_ARCHIVE:
+        return "DEEP_ARCHIVE";
       case UNKNOWN:
         return NULL;
       }
@@ -71,6 +74,8 @@ class storage_class_t{
         return INTELLIGENT_TIERING;
       }else if(0 == strcmp(str, "glacier")){
         return GLACIER;
+      }else if(0 == strcmp(str, "deep_archive")){
+        return DEEP_ARCHIVE;
       }else{
         return UNKNOWN;
       }
