@@ -720,17 +720,17 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, string& ssevalue
     return false;
   }
 
-  ssetype = SSE_DISABLE;
+  ssetype = sse_type_t::SSE_DISABLE;
   ssevalue.erase();
   for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
     string key = (*iter).first;
     if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
-      ssetype  = SSE_S3;
+      ssetype  = sse_type_t::SSE_S3;
     }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
-      ssetype  = SSE_KMS;
+      ssetype  = sse_type_t::SSE_KMS;
       ssevalue = (*iter).second;
     }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
-      ssetype  = SSE_C;
+      ssetype  = sse_type_t::SSE_C;
       ssevalue = (*iter).second;
     }
   }
@@ -4665,8 +4665,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     }
     if(0 == STR2NCMP(arg, "default_acl=")){
       const char* acl_string = strchr(arg, '=') + sizeof(char);
-      acl_t acl = string_to_acl(acl_string);
-      if(acl == INVALID_ACL){
+      acl_t acl = acl_t::from_str(acl_string);
+      if(acl == acl_t::UNKNOWN){
         S3FS_PRN_EXIT("unknown value for default_acl: %s", acl_string);
         return -1;
       }
@@ -4715,9 +4715,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
       }
       if(0 == rrs){
-        S3fsCurl::SetStorageClass(STANDARD);
+        S3fsCurl::SetStorageClass(storage_class_t::STANDARD);
       }else if(1 == rrs){
-        S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
+        S3fsCurl::SetStorageClass(storage_class_t::REDUCED_REDUNDANCY);
       }else{
         S3FS_PRN_EXIT("poorly formed argument to option: use_rrs");
         return -1;
@@ -4725,23 +4725,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
       return 0;
     }
     if(0 == STR2NCMP(arg, "storage_class=")){
-      const char *storage_class = strchr(arg, '=') + sizeof(char);
-      if(0 == strcmp(storage_class, "standard")){
-        S3fsCurl::SetStorageClass(STANDARD);
-      }else if(0 == strcmp(storage_class, "standard_ia")){
-        S3fsCurl::SetStorageClass(STANDARD_IA);
-      }else if(0 == strcmp(storage_class, "onezone_ia")){
-        S3fsCurl::SetStorageClass(ONEZONE_IA);
-      }else if(0 == strcmp(storage_class, "reduced_redundancy")){
-        S3fsCurl::SetStorageClass(REDUCED_REDUNDANCY);
-      }else if(0 == strcmp(storage_class, "intelligent_tiering")){
-        S3fsCurl::SetStorageClass(INTELLIGENT_TIERING);
-      }else if(0 == strcmp(storage_class, "glacier")){
-          S3fsCurl::SetStorageClass(GLACIER);
-      }else{
-        S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class);
+      const char *storage_class_str = strchr(arg, '=') + sizeof(char);
+      storage_class_t storage_class = storage_class_t::from_str(storage_class_str);
+      if(storage_class == storage_class_t::UNKNOWN){
+        S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class_str);
         return -1;
       }
+      S3fsCurl::SetStorageClass(storage_class);
       return 0;
     }
     //
@@ -4766,7 +4756,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
           return -1;
         }
-        S3fsCurl::SetSseType(SSE_S3);
+        S3fsCurl::SetSseType(sse_type_t::SSE_S3);
 
       }else if(0 == strcmp(arg, "use_sse=kmsid") || 0 == strcmp(arg, "use_sse=k")){
         // sse type is SSE_KMS with out kmsid(expecting id is loaded by environment)
@@ -4778,7 +4768,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           S3FS_PRN_EXIT("use_sse=kms but not loaded kms id by environment.");
           return -1;
         }
-        S3fsCurl::SetSseType(SSE_KMS);
+        S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
 
       }else if(0 == STR2NCMP(arg, "use_sse=kmsid:") || 0 == STR2NCMP(arg, "use_sse=k:")){
         // sse type is SSE_KMS with kmsid
@@ -4796,7 +4786,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           S3FS_PRN_EXIT("failed to load use_sse kms id.");
           return -1;
         }
-        S3fsCurl::SetSseType(SSE_KMS);
+        S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
 
       }else if(0 == strcmp(arg, "use_sse=custom") || 0 == strcmp(arg, "use_sse=c")){
         // sse type is SSE_C with out custom keys(expecting keys are loaded by environment or load_sse_c option)
@@ -4807,7 +4797,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         // [NOTE]
         // do not check ckeys exists here.
         //
-        S3fsCurl::SetSseType(SSE_C);
+        S3fsCurl::SetSseType(sse_type_t::SSE_C);
 
       }else if(0 == STR2NCMP(arg, "use_sse=custom:") || 0 == STR2NCMP(arg, "use_sse=c:")){
         // sse type is SSE_C with custom keys
@@ -4825,7 +4815,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
           return -1;
         }
-        S3fsCurl::SetSseType(SSE_C);
+        S3fsCurl::SetSseType(sse_type_t::SSE_C);
 
       }else if(0 == strcmp(arg, "use_sse=")){    // this type is old style(parameter is custom key file path)
         // SSE_C with custom keys.
@@ -4834,7 +4824,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
           S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
           return -1;
         }
-        S3fsCurl::SetSseType(SSE_C);
+        S3fsCurl::SetSseType(sse_type_t::SSE_C);
 
       }else{
         // never come here.
@@ -5395,7 +5385,7 @@ int main(int argc, char* argv[])
   // [NOTE]
   // exclusive option check here.
   //
-  if(REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
+  if(storage_class_t::REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
     S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
     S3fsCurl::DestroyS3fsCurl();
     s3fs_destroy_global_ssl();
@@ -5497,7 +5487,7 @@ int main(int argc, char* argv[])
 
     // check that default ACL is either public-read or private
     acl_t defaultACL = S3fsCurl::GetDefaultAcl();
-    if(defaultACL != PRIVATE && defaultACL != PUBLIC_READ){
+    if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
       S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
       S3fsCurl::DestroyS3fsCurl();
       s3fs_destroy_global_ssl();

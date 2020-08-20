@@ -399,11 +399,11 @@ long             S3fsCurl::connect_timeout     = 300;  // default
 time_t           S3fsCurl::readwrite_timeout   = 120;  // default
 int              S3fsCurl::retries             = 5;    // default
 bool             S3fsCurl::is_public_bucket    = false;
-acl_t            S3fsCurl::default_acl         = PRIVATE;
-storage_class_t  S3fsCurl::storage_class       = STANDARD;
+acl_t            S3fsCurl::default_acl         = acl_t::PRIVATE;
+storage_class_t  S3fsCurl::storage_class       = storage_class_t::STANDARD;
 sseckeylist_t    S3fsCurl::sseckeys;
 std::string      S3fsCurl::ssekmsid;
-sse_type_t       S3fsCurl::ssetype             = SSE_DISABLE;
+sse_type_t       S3fsCurl::ssetype             = sse_type_t::SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
 bool             S3fsCurl::is_dump_body        = false;
@@ -1172,17 +1172,21 @@ bool S3fsCurl::SetSseKmsid(const char* kmsid)
 // this function check the integrity of the SSE data finally.
 bool S3fsCurl::FinalCheckSse()
 {
-  if(SSE_DISABLE == S3fsCurl::ssetype){
+  switch(S3fsCurl::ssetype){
+  case sse_type_t::SSE_DISABLE:
     S3fsCurl::ssekmsid.erase();
-  }else if(SSE_S3 == S3fsCurl::ssetype){
+    return true;
+  case sse_type_t::SSE_S3:
     S3fsCurl::ssekmsid.erase();
-  }else if(SSE_C == S3fsCurl::ssetype){
+    return true;
+  case sse_type_t::SSE_C:
     if(S3fsCurl::sseckeys.empty()){
       S3FS_PRN_ERR("sse type is SSE-C, but there is no custom key.");
       return false;
     }
     S3fsCurl::ssekmsid.erase();
-  }else if(SSE_KMS == S3fsCurl::ssetype){
+    return true;
+  case sse_type_t::SSE_KMS:
     if(S3fsCurl::ssekmsid.empty()){
       S3FS_PRN_ERR("sse type is SSE-KMS, but there is no specified kms id.");
       return false;
@@ -1191,11 +1195,10 @@ bool S3fsCurl::FinalCheckSse()
       S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
       return false;
     }
-  }else{
-    S3FS_PRN_ERR("sse type is unknown(%d).", S3fsCurl::ssetype);
-    return false;
+    return true;
   }
-  return true;
+  S3FS_PRN_ERR("sse type is unknown(%d).", static_cast<int>(S3fsCurl::ssetype));
+  return false;
 }
                                                                                                                                                    
 bool S3fsCurl::LoadEnvSseCKeys()
@@ -1761,7 +1764,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
 {
   S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
-  sse_type_t ssetype;
+  sse_type_t ssetype = sse_type_t::SSE_DISABLE;
   string     ssevalue;
   if(!get_object_sse_type(tpath, ssetype, ssevalue)){
     S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
@@ -2125,7 +2128,7 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
-    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(SSE_DISABLE), op(""), query_string(""),
+    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(sse_type_t::SSE_DISABLE), op(""), query_string(""),
     sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
 {
 }
@@ -3082,11 +3085,15 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
 
 bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, string& ssevalue, bool is_only_c, bool is_copy)
 {
-  if(SSE_S3 == ssetype){
+  switch(ssetype){
+  case sse_type_t::SSE_DISABLE:
+    return true;
+  case sse_type_t::SSE_S3:
     if(!is_only_c){
       requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "AES256");
     }
-  }else if(SSE_C == ssetype){
+    return true;
+  case sse_type_t::SSE_C: {
     string sseckey;
     if(S3fsCurl::GetSseKey(ssevalue, sseckey)){
       if(is_copy){
@@ -3101,8 +3108,9 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, string& ssevalue, bool is_o
     }else{
       S3FS_PRN_WARN("Failed to insert SSE-C header.");
     }
-
-  }else if(SSE_KMS == ssetype){
+    return true;
+  }
+  case sse_type_t::SSE_KMS:
     if(!is_only_c){
       if(ssevalue.empty()){
         ssevalue = S3fsCurl::GetSseKmsId();
@@ -3110,8 +3118,10 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, string& ssevalue, bool is_o
       requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption", "aws:kms");
       requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-aws-kms-key-id", ssevalue.c_str());
     }
+    return true;
   }
-  return true;
+  S3FS_PRN_ERR("sse type is unknown(%d).", static_cast<int>(S3fsCurl::ssetype));
+  return false;
 }
 
 //
@@ -3143,7 +3153,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
   // requestHeaders
   if(0 <= ssekey_pos){
     string md5;
-    if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(SSE_C, md5, true, false)){
+    if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, true, false)){
       S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%d)(=md5(%s)).", ssekey_pos, md5.c_str());
       return false;
     }
@@ -3245,18 +3255,18 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
       // Only copy mode.
-      if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
+      if(is_copy && !AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
       }
     }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
       // Only copy mode.
-      if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
+      if(is_copy && !value.empty() && !AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
       }
     }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
       if(is_copy){
-        if(!AddSseRequestHead(SSE_C, value, true, true) || !AddSseRequestHead(SSE_C, value, true, false)){
+        if(!AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || !AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
           S3FS_PRN_WARN("Failed to insert SSE-C header.");
         }
       }
@@ -3264,19 +3274,11 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
   }
 
   // "x-amz-acl", storage class, sse
-  if(S3fsCurl::default_acl != PRIVATE){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
+  if(S3fsCurl::default_acl != acl_t::PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
   }
-  if(REDUCED_REDUNDANCY == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
-  } else if(STANDARD_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
-  } else if(ONEZONE_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
-  } else if(INTELLIGENT_TIERING == GetStorageClass()) {
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "INTELLIGENT_TIERING");
-  } else if(GLACIER == GetStorageClass()) {
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "GLACIER");
+  if(GetStorageClass() != storage_class_t::STANDARD){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
   }
   // SSE
   if(!is_copy){
@@ -3397,19 +3399,11 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
   }
   // "x-amz-acl", storage class, sse
-  if(S3fsCurl::default_acl != PRIVATE){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
+  if(S3fsCurl::default_acl != acl_t::PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
   }
-  if(REDUCED_REDUNDANCY == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
-  } else if(STANDARD_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
-  } else if(ONEZONE_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
-  } else if(INTELLIGENT_TIERING == GetStorageClass()) {
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "INTELLIGENT_TIERING");
-  } else if(GLACIER == GetStorageClass()) {
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "GLACIER");
+  if(GetStorageClass() != storage_class_t::STANDARD){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
   }
   // SSE
   string ssevalue;
@@ -3507,7 +3501,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t s
   if(!tpath){
     return -1;
   }
-  sse_type_t ssetype;
+  sse_type_t ssetype = sse_type_t::SSE_DISABLE;
   string     ssevalue;
   if(!get_object_sse_type(tpath, ssetype, ssevalue)){
     S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
@@ -3644,37 +3638,29 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, string
       requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
     }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
       // Only copy mode.
-      if(is_copy && !AddSseRequestHead(SSE_S3, value, false, true)){
+      if(is_copy && !AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
       }
     }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
       // Only copy mode.
-      if(is_copy && !value.empty() && !AddSseRequestHead(SSE_KMS, value, false, true)){
+      if(is_copy && !value.empty() && !AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
         S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
       }
     }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
       // Only copy mode.
       if(is_copy){
-        if(!AddSseRequestHead(SSE_C, value, true, true) || !AddSseRequestHead(SSE_C, value, true, false)){
+        if(!AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || !AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
           S3FS_PRN_WARN("Failed to insert SSE-C header.");
         }
       }
     }
   }
   // "x-amz-acl", storage class, sse
-  if(S3fsCurl::default_acl != PRIVATE){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", acl_to_string(S3fsCurl::default_acl));
+  if(S3fsCurl::default_acl != acl_t::PRIVATE){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
   }
-  if(REDUCED_REDUNDANCY == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "REDUCED_REDUNDANCY");
-  } else if(STANDARD_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "STANDARD_IA");
-  } else if(ONEZONE_IA == GetStorageClass()){
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "ONEZONE_IA");
-  } else if(INTELLIGENT_TIERING == GetStorageClass()) {
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "INTELLIGENT_TIERING");
-  } else if(GLACIER == GetStorageClass()) {
-      requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", "GLACIER");
+  if(GetStorageClass() != storage_class_t::STANDARD){
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
   }
   // SSE
   if(!is_copy){
@@ -3917,7 +3903,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
   responseHeaders.clear();
 
   // SSE
-  if(SSE_C == S3fsCurl::GetSseType()){
+  if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
     string ssevalue;
     if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
       S3FS_PRN_WARN("Failed to set SSE header, but continue...");
@@ -4026,7 +4012,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
   // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
   // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
   //
-  if(S3fsCurl::is_content_md5 && SSE_C != S3fsCurl::GetSseType() && SSE_KMS != S3fsCurl::GetSseType()){
+  if(S3fsCurl::is_content_md5 && sse_type_t::SSE_C != S3fsCurl::GetSseType() && sse_type_t::SSE_KMS != S3fsCurl::GetSseType()){
     if(!etag_equals(it->second, partdata.etag)){
       return false;
     }
@@ -4871,54 +4857,6 @@ string prepare_url(const char* url)
   S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 
   return url_str;
-}
-
-const char *acl_to_string(acl_t acl)
-{
-  switch(acl){
-  case PRIVATE:
-    return "private";
-  case PUBLIC_READ:
-    return "public-read";
-  case PUBLIC_READ_WRITE:
-    return "public-read-write";
-  case AWS_EXEC_READ:
-    return "aws-exec-read";
-  case AUTHENTICATED_READ:
-    return "authenticated-read";
-  case BUCKET_OWNER_READ:
-    return "bucket-owner-read";
-  case BUCKET_OWNER_FULL_CONTROL:
-    return "bucket-owner-full-control";
-  case LOG_DELIVERY_WRITE:
-    return "log-delivery-write";
-  case INVALID_ACL:
-    return NULL;
-  }
-  abort();
-}
-
-acl_t string_to_acl(const char *acl)
-{
-  if(0 == strcmp(acl, "private")){
-    return PRIVATE;
-  }else if(0 == strcmp(acl, "public-read")){
-    return PUBLIC_READ;
-  }else if(0 == strcmp(acl, "public-read-write")){
-    return PUBLIC_READ_WRITE;
-  }else if(0 == strcmp(acl, "aws-exec-read")){
-    return AWS_EXEC_READ;
-  }else if(0 == strcmp(acl, "authenticated-read")){
-    return AUTHENTICATED_READ;
-  }else if(0 == strcmp(acl, "bucket-owner-read")){
-    return BUCKET_OWNER_READ;
-  }else if(0 == strcmp(acl, "bucket-owner-full-control")){
-    return BUCKET_OWNER_FULL_CONTROL;
-  }else if(0 == strcmp(acl, "log-delivery-write")){
-    return LOG_DELIVERY_WRITE;
-  }else{
-    return INVALID_ACL;
-  }
 }
 
 /*

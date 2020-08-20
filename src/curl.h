@@ -24,6 +24,7 @@
 #include <cassert>
 
 #include "psemaphore.h"
+#include "types.h"
 
 //----------------------------------------------
 // Avoid dependency on libcurl version
@@ -196,36 +197,6 @@ typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
 typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
 typedef std::list<sseckeymap_t>            sseckeylist_t;
-
-// storage class(rrs)
-enum storage_class_t {
-  STANDARD,
-  STANDARD_IA,
-  ONEZONE_IA,
-  REDUCED_REDUNDANCY,
-  INTELLIGENT_TIERING,
-  GLACIER
-};
-
-enum acl_t {
-  PRIVATE,
-  PUBLIC_READ,
-  PUBLIC_READ_WRITE,
-  AWS_EXEC_READ,
-  AUTHENTICATED_READ,
-  BUCKET_OWNER_READ,
-  BUCKET_OWNER_FULL_CONTROL,
-  LOG_DELIVERY_WRITE,
-  INVALID_ACL
-};
-
-// sse type
-enum sse_type_t {
-  SSE_DISABLE = 0,      // not use server side encrypting
-  SSE_S3,               // server side encrypting by S3 key
-  SSE_C,                // server side encrypting by custom key
-  SSE_KMS               // server side encrypting by kms id
-};
 
 // Class for lapping curl
 //
@@ -435,10 +406,10 @@ class S3fsCurl
     static bool LoadEnvSse(void) { return (S3fsCurl::LoadEnvSseCKeys() && S3fsCurl::LoadEnvSseKmsid()); }
     static sse_type_t SetSseType(sse_type_t type);
     static sse_type_t GetSseType(void) { return S3fsCurl::ssetype; }
-    static bool IsSseDisable(void) { return (SSE_DISABLE == S3fsCurl::ssetype); }
-    static bool IsSseS3Type(void) { return (SSE_S3 == S3fsCurl::ssetype); }
-    static bool IsSseCType(void) { return (SSE_C == S3fsCurl::ssetype); }
-    static bool IsSseKmsType(void) { return (SSE_KMS == S3fsCurl::ssetype); }
+    static bool IsSseDisable(void) { return (sse_type_t::SSE_DISABLE == S3fsCurl::ssetype); }
+    static bool IsSseS3Type(void) { return (sse_type_t::SSE_S3 == S3fsCurl::ssetype); }
+    static bool IsSseCType(void) { return (sse_type_t::SSE_C == S3fsCurl::ssetype); }
+    static bool IsSseKmsType(void) { return (sse_type_t::SSE_KMS == S3fsCurl::ssetype); }
     static bool FinalCheckSse(void);
     static bool SetSseCKeys(const char* filepath);
     static bool SetSseKmsid(const char* kmsid);
@@ -594,8 +565,6 @@ std::string get_header_value(const struct curl_slist* list, const std::string &k
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
-const char *acl_to_string(acl_t acl);
-acl_t string_to_acl(const char *acl);
 
 #endif // S3FS_CURL_H_
 
