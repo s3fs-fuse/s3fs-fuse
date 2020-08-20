@@ -763,7 +763,7 @@ bool StatCache::DelSymlink(const char* key, bool lock_already_held)
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-bool convert_header_to_stat(const char* path, headers_t& meta, struct stat* pst, bool forcedir)
+bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir)
 {
   if(!path || !pst){
     return false;
