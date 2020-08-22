@@ -20,20 +20,13 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <syslog.h>
-#include <curl/curl.h>
 #include <sstream>
 #include <fstream>
-#include <string>
-#include <map>
-#include <list>
-#include <vector>
 
 #include "common.h"
-#include "addhead.h"
-#include "curl.h"
 #include "s3fs.h"
+#include "addhead.h"
+#include "curl_util.h"
 
 using namespace std;
 
@@ -52,236 +45,236 @@ AdditionalHeader AdditionalHeader::singleton;
 //-------------------------------------------------------------------
 AdditionalHeader::AdditionalHeader()
 {
-  if(this == AdditionalHeader::get()){
-    is_enable = false;
-  }else{
-    abort();
-  }
+    if(this == AdditionalHeader::get()){
+        is_enable = false;
+    }else{
+        abort();
+    }
 }
 
 AdditionalHeader::~AdditionalHeader()
 {
-  if(this == AdditionalHeader::get()){
-    Unload();
-  }else{
-    abort();
-  }
+    if(this == AdditionalHeader::get()){
+        Unload();
+    }else{
+        abort();
+    }
 }
 
 bool AdditionalHeader::Load(const char* file)
 {
-  if(!file){
-    S3FS_PRN_WARN("file is NULL.");
-    return false;
-  }
-  Unload();
+    if(!file){
+        S3FS_PRN_WARN("file is NULL.");
+        return false;
+    }
+    Unload();
 
-  ifstream AH(file);
-  if(!AH.good()){
-    S3FS_PRN_WARN("Could not open file(%s).", file);
-    return false;
-  }
-
-  // read file
-  string   line;
-  ADDHEAD *paddhead;
-  while(getline(AH, line)){
-    if('#' == line[0]){
-      continue;
-    }
-    if(line.empty()){
-      continue;
-    }
-    // load a line
-    istringstream ss(line);
-    string        key;           // suffix(key)
-    string        head;          // additional HTTP header
-    string        value;         // header value
-    if(0 == isblank(line[0])){
-      ss >> key;
-    }
-    if(ss){
-      ss >> head;
-      if(ss && static_cast<size_t>(ss.tellg()) < line.size()){
-        value = line.substr(static_cast<int>(ss.tellg()) + 1);
-      }
+    ifstream AH(file);
+    if(!AH.good()){
+        S3FS_PRN_WARN("Could not open file(%s).", file);
+        return false;
     }
 
-    // check it
-    if(head.empty()){
-      if(key.empty()){
-        continue;
-      }
-      S3FS_PRN_ERR("file format error: %s key(suffix) is no HTTP header value.", key.c_str());
-      Unload();
-      return false;
+    // read file
+    string   line;
+    ADDHEAD *paddhead;
+    while(getline(AH, line)){
+        if('#' == line[0]){
+            continue;
+        }
+        if(line.empty()){
+            continue;
+        }
+        // load a line
+        istringstream ss(line);
+        string        key;           // suffix(key)
+        string        head;          // additional HTTP header
+        string        value;         // header value
+        if(0 == isblank(line[0])){
+            ss >> key;
+        }
+        if(ss){
+            ss >> head;
+            if(ss && static_cast<size_t>(ss.tellg()) < line.size()){
+                value = line.substr(static_cast<int>(ss.tellg()) + 1);
+            }
+        }
+
+        // check it
+        if(head.empty()){
+            if(key.empty()){
+                continue;
+            }
+            S3FS_PRN_ERR("file format error: %s key(suffix) is no HTTP header value.", key.c_str());
+            Unload();
+            return false;
+        }
+
+        paddhead = new ADDHEAD;
+        if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
+            // regex
+            if(key.size() <= strlen(ADD_HEAD_REGEX)){
+                S3FS_PRN_ERR("file format error: %s key(suffix) does not have key string.", key.c_str());
+                delete paddhead;
+                continue;
+            }
+            key = key.substr(strlen(ADD_HEAD_REGEX));
+
+          // compile
+          regex_t*  preg = new regex_t;
+          int       result;
+          if(0 != (result = regcomp(preg, key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
+              char    errbuf[256];
+              regerror(result, preg, errbuf, sizeof(errbuf));
+              S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
+              delete preg;
+              delete paddhead;
+              continue;
+          }
+
+          // set
+          paddhead->pregex     = preg;
+          paddhead->basestring = key;
+          paddhead->headkey    = head;
+          paddhead->headvalue  = value;
+
+        }else{
+            // not regex, directly comparing
+            paddhead->pregex     = NULL;
+            paddhead->basestring = key;
+            paddhead->headkey    = head;
+            paddhead->headvalue  = value;
+        }
+
+        // add list
+        addheadlist.push_back(paddhead);
+
+        // set flag
+        if(!is_enable){
+            is_enable = true;
+        }
     }
-
-    paddhead = new ADDHEAD;
-    if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
-      // regex
-      if(key.size() <= strlen(ADD_HEAD_REGEX)){
-        S3FS_PRN_ERR("file format error: %s key(suffix) does not have key string.", key.c_str());
-        delete paddhead;
-        continue;
-      }
-      key = key.substr(strlen(ADD_HEAD_REGEX));
-
-      // compile
-      regex_t*  preg = new regex_t;
-      int       result;
-      if(0 != (result = regcomp(preg, key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
-        char    errbuf[256];
-        regerror(result, preg, errbuf, sizeof(errbuf));
-        S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
-        delete preg;
-        delete paddhead;
-        continue;
-      }
-
-      // set
-      paddhead->pregex     = preg;
-      paddhead->basestring = key;
-      paddhead->headkey    = head;
-      paddhead->headvalue  = value;
-
-    }else{
-      // not regex, directly comparing
-      paddhead->pregex     = NULL;
-      paddhead->basestring = key;
-      paddhead->headkey    = head;
-      paddhead->headvalue  = value;
-    }
-
-    // add list
-    addheadlist.push_back(paddhead);
-
-    // set flag
-    if(!is_enable){
-      is_enable = true;
-    }
-  }
-  return true;
+    return true;
 }
 
 void AdditionalHeader::Unload()
 {
-  is_enable = false;
+    is_enable = false;
 
-  for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-    ADDHEAD *paddhead = *iter;
-    if(paddhead){
-      if(paddhead->pregex){
-        regfree(paddhead->pregex);
-        delete paddhead->pregex;
-      }
-      delete paddhead;
+    for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
+        ADDHEAD *paddhead = *iter;
+        if(paddhead){
+            if(paddhead->pregex){
+                regfree(paddhead->pregex);
+                delete paddhead->pregex;
+            }
+            delete paddhead;
+        }
     }
-  }
-  addheadlist.clear();
+    addheadlist.clear();
 }
 
 bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
 {
-  if(!is_enable){
-    return true;
-  }
-  if(!path){
-    S3FS_PRN_WARN("path is NULL.");
-    return false;
-  }
-
-  size_t pathlength = strlen(path);
-
-  // loop
-  //
-  // [NOTE]
-  // Because to allow duplicate key, and then scanning the entire table.
-  //
-  for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-    const ADDHEAD *paddhead = *iter;
-    if(!paddhead){
-      continue;
+    if(!is_enable){
+        return true;
+    }
+    if(!path){
+        S3FS_PRN_WARN("path is NULL.");
+        return false;
     }
 
-    if(paddhead->pregex){
-      // regex
-      regmatch_t match;         // not use
-      if(0 == regexec(paddhead->pregex, path, 1, &match, 0)){
-        // match -> adding header
-        meta[paddhead->headkey] = paddhead->headvalue;
-      }
-    }else{
-      // directly comparing
-      if(paddhead->basestring.length() < pathlength){
-        if(0 == paddhead->basestring.length() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
-          // match -> adding header
-          meta[paddhead->headkey] = paddhead->headvalue;
+    size_t pathlength = strlen(path);
+
+    // loop
+    //
+    // [NOTE]
+    // Because to allow duplicate key, and then scanning the entire table.
+    //
+    for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
+        const ADDHEAD *paddhead = *iter;
+        if(!paddhead){
+            continue;
         }
-      }
+
+        if(paddhead->pregex){
+            // regex
+            regmatch_t match;         // not use
+            if(0 == regexec(paddhead->pregex, path, 1, &match, 0)){
+                // match -> adding header
+                meta[paddhead->headkey] = paddhead->headvalue;
+            }
+        }else{
+            // directly comparing
+            if(paddhead->basestring.length() < pathlength){
+                if(0 == paddhead->basestring.length() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
+                    // match -> adding header
+                    meta[paddhead->headkey] = paddhead->headvalue;
+                }
+            }
+        }
     }
-  }
-  return true;
+    return true;
 }
 
 struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const char* path) const
 {
-  headers_t meta;
+    headers_t meta;
 
-  if(!AddHeader(meta, path)){
+    if(!AddHeader(meta, path)){
+        return list;
+    }
+    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+        // Adding header
+        list = curl_slist_sort_insert(list, iter->first.c_str(), iter->second.c_str());
+    }
+    meta.clear();
+    S3FS_MALLOCTRIM(0);
     return list;
-  }
-  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-    // Adding header
-    list = curl_slist_sort_insert(list, iter->first.c_str(), iter->second.c_str());
-  }
-  meta.clear();
-  S3FS_MALLOCTRIM(0);
-  return list;
 }
 
 bool AdditionalHeader::Dump() const
 {
-  if(!IS_S3FS_LOG_DBG()){
-    return true;
-  }
-
-  ostringstream ssdbg;
-  int           cnt = 1;
-
-  ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
-
-  for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
-    const ADDHEAD *paddhead = *iter;
-
-    ssdbg << "    [" << cnt << "] = {" << endl;
-
-    if(paddhead){
-      if(paddhead->pregex){
-        ssdbg << "        type\t\t--->\tregex" << endl;
-      }else{
-        ssdbg << "        type\t\t--->\tsuffix matching" << endl;
-      }
-      ssdbg << "        base string\t--->\t" << paddhead->basestring << endl;
-      ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << endl;
+    if(!IS_S3FS_LOG_DBG()){
+        return true;
     }
-    ssdbg << "    }" << endl;
-  }
+
+    ostringstream ssdbg;
+    int           cnt = 1;
+
+    ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
+
+    for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
+      const ADDHEAD *paddhead = *iter;
+
+      ssdbg << "    [" << cnt << "] = {" << endl;
+
+      if(paddhead){
+          if(paddhead->pregex){
+              ssdbg << "        type\t\t--->\tregex" << endl;
+          }else{
+              ssdbg << "        type\t\t--->\tsuffix matching" << endl;
+          }
+            ssdbg << "        base string\t--->\t" << paddhead->basestring << endl;
+            ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << endl;
+        }
+        ssdbg << "    }" << endl;
+    }
 
 
-  ssdbg << "}" << endl;
+    ssdbg << "}" << endl;
 
-  // print all
-  S3FS_PRN_DBG("%s", ssdbg.str().c_str());
+    // print all
+    S3FS_PRN_DBG("%s", ssdbg.str().c_str());
 
-  return true;
+    return true;
 }
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

@@ -21,29 +21,33 @@
 #ifndef S3FS_SEMAPHORE_H_
 #define S3FS_SEMAPHORE_H_
 
+//-------------------------------------------------------------------
+// Class Semaphore
+//-------------------------------------------------------------------
 // portability wrapper for sem_t since macOS does not implement it
-
 #ifdef __APPLE__
 
 #include <dispatch/dispatch.h>
 
 class Semaphore
 {
-  public:
-    explicit Semaphore(int value) : value(value), sem(dispatch_semaphore_create(value)) {}
-    ~Semaphore() {
-      // macOS cannot destroy a semaphore with posts less than the initializer
-      for(int i = 0; i < get_value(); ++i){
-        post();
-      }
-      dispatch_release(sem);
-    }
-    void wait() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
-    void post() { dispatch_semaphore_signal(sem); }
-    int get_value() const { return value; }
-  private:
-    const int value;
-    dispatch_semaphore_t sem;
+    public:
+        explicit Semaphore(int value) : value(value), sem(dispatch_semaphore_create(value)) {}
+        ~Semaphore()
+        {
+            // macOS cannot destroy a semaphore with posts less than the initializer
+            for(int i = 0; i < get_value(); ++i){
+                post();
+            }
+            dispatch_release(sem);
+        }
+        void wait() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
+        void post() { dispatch_semaphore_signal(sem); }
+        int get_value() const { return value; }
+
+    private:
+        const int value;
+        dispatch_semaphore_t sem;
 };
 
 #else
@@ -53,31 +57,33 @@ class Semaphore
 
 class Semaphore
 {
-  public:
-    explicit Semaphore(int value) : value(value) { sem_init(&mutex, 0, value); }
-    ~Semaphore() { sem_destroy(&mutex); }
-    void wait()
-    {
-      int r;
-      do {
-        r = sem_wait(&mutex);
-      } while (r == -1 && errno == EINTR);
-    }
-    void post() { sem_post(&mutex); }
-    int get_value() const { return value; }
-  private:
-    const int value;
-    sem_t mutex;
+    public:
+        explicit Semaphore(int value) : value(value) { sem_init(&mutex, 0, value); }
+        ~Semaphore() { sem_destroy(&mutex); }
+        void wait()
+        {
+            int r;
+            do {
+                r = sem_wait(&mutex);
+            } while (r == -1 && errno == EINTR);
+        }
+        void post() { sem_post(&mutex); }
+        int get_value() const { return value; }
+
+    private:
+        const int value;
+        sem_t mutex;
 };
 
 #endif
 
 #endif // S3FS_SEMAPHORE_H_
+
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

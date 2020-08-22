@@ -21,26 +21,30 @@
 #ifndef S3FS_CACHE_H_
 #define S3FS_CACHE_H_
 
-#include "common.h"
+#include "metaheader.h"
 
+//-------------------------------------------------------------------
+// Structure
+//-------------------------------------------------------------------
 //
 // Struct for stats cache
 //
 struct stat_cache_entry {
-  struct stat       stbuf;
-  unsigned long     hit_count;
-  struct timespec   cache_date;
-  headers_t         meta;
-  bool              isforce;
-  bool              noobjcache;  // Flag: cache is no object for no listing.
-  unsigned long     notruncate;  // 0<:   not remove automatically at checking truncate
+    struct stat       stbuf;
+    unsigned long     hit_count;
+    struct timespec   cache_date;
+    headers_t         meta;
+    bool              isforce;
+    bool              noobjcache;  // Flag: cache is no object for no listing.
+    unsigned long     notruncate;  // 0<:   not remove automatically at checking truncate
 
-  stat_cache_entry() : hit_count(0), isforce(false), noobjcache(false), notruncate(0L) {
-    memset(&stbuf, 0, sizeof(struct stat));
-    cache_date.tv_sec  = 0;
-    cache_date.tv_nsec = 0;
-    meta.clear();
-  }
+    stat_cache_entry() : hit_count(0), isforce(false), noobjcache(false), notruncate(0L)
+    {
+        memset(&stbuf, 0, sizeof(struct stat));
+        cache_date.tv_sec  = 0;
+        cache_date.tv_nsec = 0;
+        meta.clear();
+    }
 };
 
 typedef std::map<std::string, stat_cache_entry*> stat_cache_t; // key=path
@@ -49,21 +53,22 @@ typedef std::map<std::string, stat_cache_entry*> stat_cache_t; // key=path
 // Struct for symbolic link cache
 //
 struct symlink_cache_entry {
-  std::string       link;
-  unsigned long     hit_count;
-  struct timespec   cache_date;  // The function that operates timespec uses the same as Stats
+    std::string       link;
+    unsigned long     hit_count;
+    struct timespec   cache_date;  // The function that operates timespec uses the same as Stats
 
-  symlink_cache_entry() : link(""), hit_count(0) {
-    cache_date.tv_sec  = 0;
-    cache_date.tv_nsec = 0;
-  }
+    symlink_cache_entry() : link(""), hit_count(0)
+    {
+      cache_date.tv_sec  = 0;
+      cache_date.tv_nsec = 0;
+    }
 };
 
 typedef std::map<std::string, symlink_cache_entry*> symlink_cache_t;
 
-//
-// Class
-//
+//-------------------------------------------------------------------
+// Class StatCache
+//-------------------------------------------------------------------
 // [NOTE] About Symbolic link cache
 // The Stats cache class now also has a symbolic link cache.
 // It is possible to take out the Symbolic link cache in another class,
@@ -75,102 +80,112 @@ typedef std::map<std::string, symlink_cache_entry*> symlink_cache_t;
 //
 class StatCache
 {
-  private:
-    static StatCache       singleton;
-    static pthread_mutex_t stat_cache_lock;
-    stat_cache_t           stat_cache;
-    bool                   IsExpireTime;
-    bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
-    time_t                 ExpireTime;
-    unsigned long          CacheSize;
-    bool                   IsCacheNoObject;
-    symlink_cache_t        symlink_cache;
+    private:
+        static StatCache       singleton;
+        static pthread_mutex_t stat_cache_lock;
+        stat_cache_t           stat_cache;
+        bool                   IsExpireTime;
+        bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
+        time_t                 ExpireTime;
+        unsigned long          CacheSize;
+        bool                   IsCacheNoObject;
+        symlink_cache_t        symlink_cache;
 
-  private:
-    StatCache();
-    ~StatCache();
+    private:
+        StatCache();
+        ~StatCache();
 
-    void Clear(void);
-    bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
-    // Truncate stat cache
-    bool TruncateCache(void);
-    // Truncate symbolic link cache
-    bool TruncateSymlink(void);
+        void Clear(void);
+        bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
+        // Truncate stat cache
+        bool TruncateCache(void);
+        // Truncate symbolic link cache
+        bool TruncateSymlink(void);
 
-  public:
-    // Reference singleton
-    static StatCache* getStatCacheData(void) {
-      return &singleton;
-    }
+    public:
+        // Reference singleton
+        static StatCache* getStatCacheData(void)
+        {
+            return &singleton;
+        }
 
-    // Attribute
-    unsigned long GetCacheSize(void) const;
-    unsigned long SetCacheSize(unsigned long size);
-    time_t GetExpireTime(void) const;
-    time_t SetExpireTime(time_t expire, bool is_interval = false);
-    time_t UnsetExpireTime(void);
-    bool SetCacheNoObject(bool flag);
-    bool EnableCacheNoObject(void) {
-      return SetCacheNoObject(true);
-    }
-    bool DisableCacheNoObject(void) {
-      return SetCacheNoObject(false);
-    }
-    bool GetCacheNoObject(void) const {
-      return IsCacheNoObject;
-    }
+        // Attribute
+        unsigned long GetCacheSize(void) const;
+        unsigned long SetCacheSize(unsigned long size);
+        time_t GetExpireTime(void) const;
+        time_t SetExpireTime(time_t expire, bool is_interval = false);
+        time_t UnsetExpireTime(void);
+        bool SetCacheNoObject(bool flag);
+        bool EnableCacheNoObject(void)
+        {
+            return SetCacheNoObject(true);
+        }
+        bool DisableCacheNoObject(void)
+        {
+            return SetCacheNoObject(false);
+        }
+        bool GetCacheNoObject(void) const
+        {
+            return IsCacheNoObject;
+        }
 
-    // Get stat cache
-    bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL) {
-      return GetStat(key, pst, meta, overcheck, NULL, pisforce);
-    }
-    bool GetStat(const std::string& key, struct stat* pst, bool overcheck = true) {
-      return GetStat(key, pst, NULL, overcheck, NULL, NULL);
-    }
-    bool GetStat(const std::string& key, headers_t* meta, bool overcheck = true) {
-      return GetStat(key, NULL, meta, overcheck, NULL, NULL);
-    }
-    bool HasStat(const std::string& key, bool overcheck = true) {
-      return GetStat(key, NULL, NULL, overcheck, NULL, NULL);
-    }
-    bool HasStat(const std::string& key, const char* etag, bool overcheck = true) {
-      return GetStat(key, NULL, NULL, overcheck, etag, NULL);
-    }
+        // Get stat cache
+        bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL)
+        {
+            return GetStat(key, pst, meta, overcheck, NULL, pisforce);
+        }
+        bool GetStat(const std::string& key, struct stat* pst, bool overcheck = true)
+        {
+            return GetStat(key, pst, NULL, overcheck, NULL, NULL);
+        }
+        bool GetStat(const std::string& key, headers_t* meta, bool overcheck = true)
+        {
+            return GetStat(key, NULL, meta, overcheck, NULL, NULL);
+        }
+        bool HasStat(const std::string& key, bool overcheck = true)
+        {
+            return GetStat(key, NULL, NULL, overcheck, NULL, NULL);
+        }
+        bool HasStat(const std::string& key, const char* etag, bool overcheck = true)
+        {
+            return GetStat(key, NULL, NULL, overcheck, etag, NULL);
+        }
 
-    // Cache For no object
-    bool IsNoObjectCache(const std::string& key, bool overcheck = true);
-    bool AddNoObjectCache(const std::string& key);
+        // Cache For no object
+        bool IsNoObjectCache(const std::string& key, bool overcheck = true);
+        bool AddNoObjectCache(const std::string& key);
 
-    // Add stat cache
-    bool AddStat(const std::string& key, headers_t& meta, bool forcedir = false, bool no_truncate = false);
+        // Add stat cache
+        bool AddStat(const std::string& key, headers_t& meta, bool forcedir = false, bool no_truncate = false);
 
-    // Change no truncate flag
-    void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
+        // Change no truncate flag
+        void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
 
-    // Delete stat cache
-    bool DelStat(const char* key, bool lock_already_held = false);
-    bool DelStat(std::string& key, bool lock_already_held = false) {
-      return DelStat(key.c_str(), lock_already_held);
-    }
+        // Delete stat cache
+        bool DelStat(const char* key, bool lock_already_held = false);
+        bool DelStat(std::string& key, bool lock_already_held = false)
+        {
+            return DelStat(key.c_str(), lock_already_held);
+        }
 
-    // Cache for symbolic link
-    bool GetSymlink(const std::string& key, std::string& value);
-    bool AddSymlink(const std::string& key, const std::string& value);
-    bool DelSymlink(const char* key, bool lock_already_held = false);
+        // Cache for symbolic link
+        bool GetSymlink(const std::string& key, std::string& value);
+        bool AddSymlink(const std::string& key, const std::string& value);
+        bool DelSymlink(const char* key, bool lock_already_held = false);
 };
 
-//
+//-------------------------------------------------------------------
 // Functions
-//
+//-------------------------------------------------------------------
 bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir = false);
 
 #endif // S3FS_CACHE_H_
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

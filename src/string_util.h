@@ -17,49 +17,88 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #ifndef S3FS_STRING_UTIL_H_
 #define S3FS_STRING_UTIL_H_
 
-/*
- * A collection of string utilities for manipulating URLs and HTTP responses.
- */
-#include <string.h>
-#include <syslog.h>
-#include <sys/types.h>
+//
+// A collection of string utilities for manipulating URLs and HTTP responses.
+//
+//-------------------------------------------------------------------
+// Gloval variables
+//-------------------------------------------------------------------
+extern const std::string SPACES;
 
-#include <string>
-
-static const std::string SPACES = " \t\r\n";
-
+//-------------------------------------------------------------------
+// Inline functions
+//-------------------------------------------------------------------
 static inline int STR2NCMP(const char *str1, const char *str2) { return strncmp(str1, str2, strlen(str2)); }
+static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
+//-------------------------------------------------------------------
+// Templates
+//-------------------------------------------------------------------
 template <class T> std::string str(T value);
 
+//-------------------------------------------------------------------
+// Macros(WTF8)
+//-------------------------------------------------------------------
+#define WTF8_ENCODE(ARG)  \
+        std::string ARG##_buf; \
+        const char * ARG = _##ARG; \
+        if (use_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
+            s3fs_wtf8_encode( _##ARG, &ARG##_buf); \
+            ARG = ARG##_buf.c_str(); \
+        }
+
+//-------------------------------------------------------------------
+// Utilities
+//-------------------------------------------------------------------
+//
 // Convert string to off_t.  Throws std::invalid_argument and std::out_of_range on bad input.
+//
 off_t s3fs_strtoofft(const char* str, int base = 0);
 bool try_strtoofft(const char* str, off_t& value, int base = 0);
 off_t cvt_strtoofft(const char* str, int base = 0);
 
+//
+// String Manipulation
+//
 std::string trim_left(const std::string &s, const std::string &t = SPACES);
 std::string trim_right(const std::string &s, const std::string &t = SPACES);
 std::string trim(const std::string &s, const std::string &t = SPACES);
 std::string lower(std::string s);
+
+//
+// Date string
+//
 std::string get_date_rfc850(void);
 void get_date_sigv3(std::string& date, std::string& date8601);
 std::string get_date_string(time_t tm);
 std::string get_date_iso8601(time_t tm);
 bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime);
 bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime);
+
+//
+// For encoding
+//
 std::string urlEncode(const std::string &s);
 std::string urlEncode2(const std::string &s);
 std::string urlDecode(const std::string& s);
+
 bool takeout_str_dquart(std::string& str);
 bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
 
+//
+// For binary string
+//
 std::string s3fs_hex(const unsigned char* input, size_t length);
 char* s3fs_base64(const unsigned char* input, size_t length);
 unsigned char* s3fs_decode64(const char* input, size_t* plength);
 
+//
+// WTF8
+//
 bool s3fs_wtf8_encode(const char *s, std::string *result);
 std::string s3fs_wtf8_encode(const std::string &s);
 bool s3fs_wtf8_decode(const char *s, std::string *result);
@@ -69,9 +108,9 @@ std::string s3fs_wtf8_decode(const std::string &s);
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */
