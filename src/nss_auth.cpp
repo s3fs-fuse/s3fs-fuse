@@ -35,6 +35,7 @@
 #include <map>
 
 #include "common.h"
+#include "s3fs.h"
 #include "s3fs_auth.h"
 
 using namespace std;
@@ -44,9 +45,9 @@ using namespace std;
 //-------------------------------------------------------------------
 const char* s3fs_crypt_lib_name()
 {
-  static const char version[] = "NSS";
+    static const char version[] = "NSS";
 
-  return version;
+    return version;
 }
 
 //-------------------------------------------------------------------
@@ -54,21 +55,21 @@ const char* s3fs_crypt_lib_name()
 //-------------------------------------------------------------------
 bool s3fs_init_global_ssl()
 {
-  PR_Init(PR_USER_THREAD, PR_PRIORITY_NORMAL, 0);
+    PR_Init(PR_USER_THREAD, PR_PRIORITY_NORMAL, 0);
 
-  if(SECSuccess != NSS_NoDB_Init(NULL)){
-    S3FS_PRN_ERR("Failed NSS_NoDB_Init call.");
-    return false;
-  }
-  return true;
+    if(SECSuccess != NSS_NoDB_Init(NULL)){
+        S3FS_PRN_ERR("Failed NSS_NoDB_Init call.");
+        return false;
+    }
+    return true;
 }
 
 bool s3fs_destroy_global_ssl()
 {
-  NSS_Shutdown();
-  PL_ArenaFinish();
-  PR_Cleanup();
-  return true;
+    NSS_Shutdown();
+    PL_ArenaFinish();
+    PR_Cleanup();
+    return true;
 }
 
 //-------------------------------------------------------------------
@@ -76,12 +77,12 @@ bool s3fs_destroy_global_ssl()
 //-------------------------------------------------------------------
 bool s3fs_init_crypt_mutex()
 {
-  return true;
+    return true;
 }
 
 bool s3fs_destroy_crypt_mutex()
 {
-  return true;
+    return true;
 }
 
 //-------------------------------------------------------------------
@@ -89,58 +90,58 @@ bool s3fs_destroy_crypt_mutex()
 //-------------------------------------------------------------------
 static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen, bool is_sha256)
 {
-  if(!key || !data || !digest || !digestlen){
-    return false;
-  }
+    if(!key || !data || !digest || !digestlen){
+        return false;
+    }
 
-  PK11SlotInfo* Slot;
-  PK11SymKey*   pKey;
-  PK11Context*  Context;
-  unsigned char tmpdigest[64];
-  SECItem       KeySecItem   = {siBuffer, reinterpret_cast<unsigned char*>(const_cast<void*>(key)), static_cast<unsigned int>(keylen)};
-  SECItem       NullSecItem  = {siBuffer, NULL, 0};
+    PK11SlotInfo* Slot;
+    PK11SymKey*   pKey;
+    PK11Context*  Context;
+    unsigned char tmpdigest[64];
+    SECItem       KeySecItem   = {siBuffer, reinterpret_cast<unsigned char*>(const_cast<void*>(key)), static_cast<unsigned int>(keylen)};
+    SECItem       NullSecItem  = {siBuffer, NULL, 0};
 
-  if(NULL == (Slot = PK11_GetInternalKeySlot())){
-    return false;
-  }
-  if(NULL == (pKey = PK11_ImportSymKey(Slot, (is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), PK11_OriginUnwrap, CKA_SIGN, &KeySecItem, NULL))){
-    PK11_FreeSlot(Slot);
-    return false;
-  }
-  if(NULL == (Context = PK11_CreateContextBySymKey((is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), CKA_SIGN, pKey, &NullSecItem))){
-    PK11_FreeSymKey(pKey);
-    PK11_FreeSlot(Slot);
-    return false;
-  }
+    if(NULL == (Slot = PK11_GetInternalKeySlot())){
+        return false;
+    }
+    if(NULL == (pKey = PK11_ImportSymKey(Slot, (is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), PK11_OriginUnwrap, CKA_SIGN, &KeySecItem, NULL))){
+        PK11_FreeSlot(Slot);
+        return false;
+    }
+    if(NULL == (Context = PK11_CreateContextBySymKey((is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), CKA_SIGN, pKey, &NullSecItem))){
+        PK11_FreeSymKey(pKey);
+        PK11_FreeSlot(Slot);
+        return false;
+    }
 
-  *digestlen = 0;
-  if(SECSuccess != PK11_DigestBegin(Context) ||
-     SECSuccess != PK11_DigestOp(Context, data, datalen) ||
-     SECSuccess != PK11_DigestFinal(Context, tmpdigest, digestlen, sizeof(tmpdigest)) )
-  {
+    *digestlen = 0;
+    if(SECSuccess != PK11_DigestBegin(Context) ||
+       SECSuccess != PK11_DigestOp(Context, data, datalen) ||
+       SECSuccess != PK11_DigestFinal(Context, tmpdigest, digestlen, sizeof(tmpdigest)) )
+    {
+        PK11_DestroyContext(Context, PR_TRUE);
+        PK11_FreeSymKey(pKey);
+        PK11_FreeSlot(Slot);
+        return false;
+    }
     PK11_DestroyContext(Context, PR_TRUE);
     PK11_FreeSymKey(pKey);
     PK11_FreeSlot(Slot);
-    return false;
-  }
-  PK11_DestroyContext(Context, PR_TRUE);
-  PK11_FreeSymKey(pKey);
-  PK11_FreeSlot(Slot);
 
-  *digest = new unsigned char[*digestlen];
-  memcpy(*digest, tmpdigest, *digestlen);
+    *digest = new unsigned char[*digestlen];
+    memcpy(*digest, tmpdigest, *digestlen);
 
-  return true;
+    return true;
 }
 
 bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, false);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, false);
 }
 
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
 }
 
 //-------------------------------------------------------------------
@@ -148,48 +149,48 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 size_t get_md5_digest_length()
 {
-  return MD5_LENGTH;
+    return MD5_LENGTH;
 }
 
 unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 {
-  PK11Context*	 md5ctx;
-  unsigned char  buf[512];
-  ssize_t        bytes;
-  unsigned char* result;
-  unsigned int   md5outlen;
+    PK11Context*   md5ctx;
+    unsigned char  buf[512];
+    ssize_t        bytes;
+    unsigned char* result;
+    unsigned int   md5outlen;
 
-  if(-1 == size){
-    struct stat st;
-    if(-1 == fstat(fd, &st)){
-      return NULL;
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            return NULL;
+        }
+        size = static_cast<ssize_t>(st.st_size);
     }
-    size = static_cast<ssize_t>(st.st_size);
-  }
 
-  memset(buf, 0, 512);
-  md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
-
-  for(ssize_t total = 0; total < size; total += bytes){
-    bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = pread(fd, buf, bytes, start + total);
-    if(0 == bytes){
-      // end of file
-      break;
-    }else if(-1 == bytes){
-      // error
-      S3FS_PRN_ERR("file read error(%d)", errno);
-      PK11_DestroyContext(md5ctx, PR_TRUE);
-      return NULL;
-    }
-    PK11_DigestOp(md5ctx, buf, bytes);
     memset(buf, 0, 512);
-  }
-  result = new unsigned char[get_md5_digest_length()];
-  PK11_DigestFinal(md5ctx, result, &md5outlen, get_md5_digest_length());
-  PK11_DestroyContext(md5ctx, PR_TRUE);
+    md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 
-  return result;
+    for(ssize_t total = 0; total < size; total += bytes){
+        bytes = 512 < (size - total) ? 512 : (size - total);
+        bytes = pread(fd, buf, bytes, start + total);
+        if(0 == bytes){
+            // end of file
+            break;
+        }else if(-1 == bytes){
+            // error
+            S3FS_PRN_ERR("file read error(%d)", errno);
+            PK11_DestroyContext(md5ctx, PR_TRUE);
+            return NULL;
+        }
+        PK11_DigestOp(md5ctx, buf, bytes);
+        memset(buf, 0, 512);
+    }
+    result = new unsigned char[get_md5_digest_length()];
+    PK11_DigestFinal(md5ctx, result, &md5outlen, get_md5_digest_length());
+    PK11_DestroyContext(md5ctx, PR_TRUE);
+
+    return result;
 }
 
 //-------------------------------------------------------------------
@@ -197,72 +198,72 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 //-------------------------------------------------------------------
 size_t get_sha256_digest_length()
 {
-  return SHA256_LENGTH;
+    return SHA256_LENGTH;
 }
 
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
 {
-  (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
-  *digest = new unsigned char[*digestlen];
+    (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
+    *digest      = new unsigned char[*digestlen];
 
-  PK11Context*	 sha256ctx;
-  unsigned int   sha256outlen;
-  sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
+    PK11Context*   sha256ctx;
+    unsigned int   sha256outlen;
+    sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
-  PK11_DigestOp(sha256ctx, data, datalen);
-  PK11_DigestFinal(sha256ctx, *digest, &sha256outlen, *digestlen);
-  PK11_DestroyContext(sha256ctx, PR_TRUE);
-  *digestlen = sha256outlen;
+    PK11_DigestOp(sha256ctx, data, datalen);
+    PK11_DigestFinal(sha256ctx, *digest, &sha256outlen, *digestlen);
+    PK11_DestroyContext(sha256ctx, PR_TRUE);
+    *digestlen = sha256outlen;
 
-  return true;
+    return true;
 }
 
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
 {
-  PK11Context*	 sha256ctx;
-  unsigned char  buf[512];
-  ssize_t        bytes;
-  unsigned char* result;
-  unsigned int   sha256outlen;
+    PK11Context*   sha256ctx;
+    unsigned char  buf[512];
+    ssize_t        bytes;
+    unsigned char* result;
+    unsigned int   sha256outlen;
 
-  if(-1 == size){
-    struct stat st;
-    if(-1 == fstat(fd, &st)){
-      return NULL;
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            return NULL;
+        }
+        size = static_cast<ssize_t>(st.st_size);
     }
-    size = static_cast<ssize_t>(st.st_size);
-  }
 
-  memset(buf, 0, 512);
-  sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
-
-  for(ssize_t total = 0; total < size; total += bytes){
-    bytes = 512 < (size - total) ? 512 : (size - total);
-    bytes = pread(fd, buf, bytes, start + total);
-    if(0 == bytes){
-      // end of file
-      break;
-    }else if(-1 == bytes){
-      // error
-      S3FS_PRN_ERR("file read error(%d)", errno);
-      PK11_DestroyContext(sha256ctx, PR_TRUE);
-      return NULL;
-    }
-    PK11_DigestOp(sha256ctx, buf, bytes);
     memset(buf, 0, 512);
-  }
-  result = new unsigned char[get_sha256_digest_length()];
-  PK11_DigestFinal(sha256ctx, result, &sha256outlen, get_sha256_digest_length());
-  PK11_DestroyContext(sha256ctx, PR_TRUE);
+    sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
-  return result;
+    for(ssize_t total = 0; total < size; total += bytes){
+        bytes = 512 < (size - total) ? 512 : (size - total);
+        bytes = pread(fd, buf, bytes, start + total);
+        if(0 == bytes){
+            // end of file
+            break;
+        }else if(-1 == bytes){
+            // error
+            S3FS_PRN_ERR("file read error(%d)", errno);
+            PK11_DestroyContext(sha256ctx, PR_TRUE);
+            return NULL;
+        }
+        PK11_DigestOp(sha256ctx, buf, bytes);
+        memset(buf, 0, 512);
+    }
+    result = new unsigned char[get_sha256_digest_length()];
+    PK11_DigestFinal(sha256ctx, result, &sha256outlen, get_sha256_digest_length());
+    PK11_DestroyContext(sha256ctx, PR_TRUE);
+
+    return result;
 }
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

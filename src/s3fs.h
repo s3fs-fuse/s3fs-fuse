@@ -17,22 +17,21 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-#ifndef S3FS_S3_H_
-#define S3FS_S3_H_
+
+#ifndef S3FS_S3FS_H_
+#define S3FS_S3FS_H_
 
 #define FUSE_USE_VERSION      26
-
-static const int64_t FIVE_GB = 5LL * 1024LL * 1024LL * 1024LL;
 
 #include <fuse.h>
 
 #define S3FS_FUSE_EXIT() \
-do{ \
-  struct fuse_context* pcxt = fuse_get_context(); \
-  if(pcxt){ \
-    fuse_exit(pcxt->fuse); \
-  } \
-}while(0)
+        do{ \
+            struct fuse_context* pcxt = fuse_get_context(); \
+            if(pcxt){ \
+                fuse_exit(pcxt->fuse); \
+            } \
+        }while(0)
 
 // [NOTE]
 // s3fs use many small allocated chunk in heap area for stats
@@ -81,13 +80,13 @@ do{ \
           S3FS_MALLOCTRIM(0); \
         }while(0)
 
-#endif // S3FS_S3_H_
+#endif // S3FS_S3FS_H_
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

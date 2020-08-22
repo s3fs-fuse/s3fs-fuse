@@ -23,48 +23,53 @@
 
 #include <regex.h>
 
+#include "metaheader.h"
+
 //----------------------------------------------
-// class AdditionalHeader
+// Structure / Typedef
 //----------------------------------------------
 typedef struct add_header{
-  regex_t*      pregex;         // not NULL means using regex, NULL means comparing suffix directly.
-  std::string   basestring;
-  std::string   headkey;
-  std::string   headvalue;
+    regex_t*      pregex;         // not NULL means using regex, NULL means comparing suffix directly.
+    std::string   basestring;
+    std::string   headkey;
+    std::string   headvalue;
 }ADDHEAD;
 
 typedef std::vector<ADDHEAD *> addheadlist_t;
 
+//----------------------------------------------
+// Class AdditionalHeader
+//----------------------------------------------
 class AdditionalHeader
 {
-  private:
-    static AdditionalHeader singleton;
-    bool                    is_enable;
-    addheadlist_t           addheadlist;
+    private:
+        static AdditionalHeader singleton;
+        bool                    is_enable;
+        addheadlist_t           addheadlist;
 
-  protected:
-    AdditionalHeader();
-    ~AdditionalHeader();
+    protected:
+        AdditionalHeader();
+        ~AdditionalHeader();
 
-  public:
-    // Reference singleton
-    static AdditionalHeader* get(void) { return &singleton; }
+    public:
+        // Reference singleton
+        static AdditionalHeader* get(void) { return &singleton; }
 
-    bool Load(const char* file);
-    void Unload(void);
+        bool Load(const char* file);
+        void Unload(void);
 
-    bool AddHeader(headers_t& meta, const char* path) const;
-    struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
-    bool Dump(void) const;
+        bool AddHeader(headers_t& meta, const char* path) const;
+        struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
+        bool Dump(void) const;
 };
 
 #endif // S3FS_ADDHEAD_H_
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

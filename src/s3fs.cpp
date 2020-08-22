@@ -20,98 +20,48 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <unistd.h>
-#include <stdint.h>
 #include <dirent.h>
-#include <cerrno>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
-#include <libxml/tree.h>
-#include <curl/curl.h>
 #include <pwd.h>
-#include <grp.h>
+#include <sys/types.h>
 #include <getopt.h>
-#include <csignal>
 
 #include <fstream>
-#include <vector>
-#include <algorithm>
-#include <map>
-#include <string>
-#include <list>
 
 #include "common.h"
 #include "s3fs.h"
-#include "curl.h"
-#include "cache.h"
-#include "string_util.h"
-#include "s3fs_util.h"
+#include "metaheader.h"
 #include "fdcache.h"
-#include "s3fs_auth.h"
+#include "curl.h"
+#include "curl_multi.h"
+#include "s3objlist.h"
+#include "cache.h"
+#include "mvnode.h"
 #include "addhead.h"
 #include "sighandlers.h"
+#include "s3fs_xml.h"
+#include "s3fs_util.h"
+#include "string_util.h"
+#include "s3fs_auth.h"
+#include "s3fs_help.h"
+#include "mpu_util.h"
 
 using namespace std;
 
 //-------------------------------------------------------------------
-// Define
+// Symbols
 //-------------------------------------------------------------------
-enum dirtype {
-  DIRTYPE_UNKNOWN = -1,
-  DIRTYPE_NEW = 0,
-  DIRTYPE_OLD = 1,
-  DIRTYPE_FOLDER = 2,
-  DIRTYPE_NOOBJ = 3,
-};
-
-static bool IS_REPLACEDIR(dirtype type) { return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type; }
-static bool IS_RMTYPEDIR(dirtype type) { return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type; }
-
 #if !defined(ENOATTR)
-#define ENOATTR				ENODATA
+#define ENOATTR                   ENODATA
 #endif
 
-//
-// Type of utility process mode
-//
-enum utility_incomp_type{
-  NO_UTILITY_MODE = 0,      // not utility mode
-  INCOMP_TYPE_LIST,         // list of incomplete mpu
-  INCOMP_TYPE_ABORT         // delete incomplete mpu
+enum dirtype {
+    DIRTYPE_UNKNOWN = -1,
+    DIRTYPE_NEW = 0,
+    DIRTYPE_OLD = 1,
+    DIRTYPE_FOLDER = 2,
+    DIRTYPE_NOOBJ = 3,
 };
-
-//-------------------------------------------------------------------
-// Structs
-//-------------------------------------------------------------------
-typedef struct incomplete_multipart_upload_info{
-  string key;
-  string id;
-  string date;
-}INCOMP_MPU_INFO;
-
-typedef std::list<INCOMP_MPU_INFO>         incomp_mpu_list_t;
-typedef std::list<std::string>             readline_t;
-typedef std::map<std::string, std::string> kvmap_t;
-typedef std::map<std::string, kvmap_t>     bucketkvmap_t;
-
-//-------------------------------------------------------------------
-// Global variables
-//-------------------------------------------------------------------
-bool foreground                   = false;
-bool nomultipart                  = false;
-bool pathrequeststyle             = false;
-bool complement_stat              = false;
-std::string program_name;
-std::string service_path          = "/";
-std::string host                  = "https://s3.amazonaws.com";
-std::string bucket;
-std::string endpoint              = "us-east-1";
-std::string cipher_suites;
-std::string instance_name;
-std::string aws_profile           = "default";
 
 //-------------------------------------------------------------------
 // Static variables
@@ -124,8 +74,6 @@ static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file;
 static std::string mimetype_file;
-static utility_incomp_type utility_mode = NO_UTILITY_MODE;
-static bool noxmlns               = false;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
@@ -156,6 +104,11 @@ static const std::string aws_accesskeyid       = "AWSAccessKeyId";
 static const std::string aws_secretkey         = "AWSSecretKey";
 
 //-------------------------------------------------------------------
+// Global functions : prototype
+//-------------------------------------------------------------------
+int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE] global function because this is called from FdEntity class
+
+//-------------------------------------------------------------------
 // Static functions : prototype
 //-------------------------------------------------------------------
 static bool is_special_name_folder_object(const char* path);
@@ -171,16 +124,6 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
-static bool is_truncated(xmlDocPtr doc);
-static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
-              const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head);
-static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
-static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl);
-static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp);
-static xmlChar* get_prefix(xmlDocPtr doc);
-static xmlChar* get_next_marker(xmlDocPtr doc);
-static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path);
-int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE] global function because this is called from FdEntity class
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
@@ -189,15 +132,10 @@ static int rename_object_nocopy(const char* from, const char* to);
 static int clone_directory_object(const char* from, const char* to);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
-static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key);
-static void print_incomp_mpu_list(incomp_mpu_list_t& list);
-static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time);
-static bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list);
 static void free_xattrs(xattrs_t& xattrs);
 static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
-static int s3fs_utility_processing(time_t abort_time);
 static int s3fs_check_service();
 static int parse_passwd_file(bucketkvmap_t& resmap);
 static int check_for_aws_format(const kvmap_t& kvmap);
@@ -209,7 +147,9 @@ static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 
+//-------------------------------------------------------------------
 // fuse interface functions
+//-------------------------------------------------------------------
 static int s3fs_getattr(const char* path, struct stat* stbuf);
 static int s3fs_readlink(const char* path, char* buf, size_t size);
 static int s3fs_mknod(const char* path, mode_t mode, dev_t rdev);
@@ -250,47 +190,46 @@ static int s3fs_listxattr(const char* path, char* list, size_t size);
 static int s3fs_removexattr(const char* path, const char* name);
 
 //-------------------------------------------------------------------
-// WTF8 macros
-//-------------------------------------------------------------------
-#define WTF8_ENCODE(ARG)  \
-  std::string ARG##_buf; \
-  const char * ARG = _##ARG; \
-  if (use_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
-    s3fs_wtf8_encode( _##ARG, &ARG##_buf); \
-    ARG = ARG##_buf.c_str(); \
-  }
-
-//-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
+static bool IS_REPLACEDIR(dirtype type)
+{
+    return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type;
+}
+
+static bool IS_RMTYPEDIR(dirtype type)
+{
+    return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type;
+}
+
 static bool is_special_name_folder_object(const char* path)
 {
-  if(!support_compat_dir){
-    // s3fs does not support compatibility directory type("_$folder$" etc) now,
-    // thus always returns false.
-    return false;
-  }
-
-  if(!path || '\0' == path[0]){
-    return false;
-  }
-
-  string    strpath = path;
-  headers_t header;
-
-  if(string::npos == strpath.find("_$folder$", 0)){
-    if('/' == strpath[strpath.length() - 1]){
-      strpath = strpath.substr(0, strpath.length() - 1);
+    if(!support_compat_dir){
+        // s3fs does not support compatibility directory type("_$folder$" etc) now,
+        // thus always returns false.
+        return false;
     }
-    strpath += "_$folder$";
-  }
-  S3fsCurl s3fscurl;
-  if(0 != s3fscurl.HeadRequest(strpath.c_str(), header)){
-    return false;
-  }
-  header.clear();
-  S3FS_MALLOCTRIM(0);
-  return true;
+
+    if(!path || '\0' == path[0]){
+        return false;
+    }
+
+    string    strpath = path;
+    headers_t header;
+
+    if(string::npos == strpath.find("_$folder$", 0)){
+        if('/' == strpath[strpath.length() - 1]){
+            strpath = strpath.substr(0, strpath.length() - 1);
+        }
+        strpath += "_$folder$";
+    }
+    S3fsCurl s3fscurl;
+    if(0 != s3fscurl.HeadRequest(strpath.c_str(), header)){
+        return false;
+    }
+    header.clear();
+    S3FS_MALLOCTRIM(0);
+    return true;
 }
 
 // [Detail]
@@ -307,95 +246,95 @@ static bool is_special_name_folder_object(const char* path)
 //
 static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta, dirtype* pDirType)
 {
-  dirtype TypeTmp;
-  int  result  = -1;
-  bool isforce = false;
-  dirtype* pType = pDirType ? pDirType : &TypeTmp;
+    dirtype TypeTmp;
+    int  result  = -1;
+    bool isforce = false;
+    dirtype* pType = pDirType ? pDirType : &TypeTmp;
 
-  // Normalize new path.
-  newpath = path;
-  if('/' != newpath[newpath.length() - 1]){
-    string::size_type Pos;
-    if(string::npos != (Pos = newpath.find("_$folder$", 0))){
-      newpath = newpath.substr(0, Pos);
+    // Normalize new path.
+    newpath = path;
+    if('/' != newpath[newpath.length() - 1]){
+        string::size_type Pos;
+        if(string::npos != (Pos = newpath.find("_$folder$", 0))){
+            newpath = newpath.substr(0, Pos);
+        }
+        newpath += "/";
     }
-    newpath += "/";
-  }
 
-  // Always check "dir/" at first.
-  if(0 == (result = get_object_attribute(newpath.c_str(), NULL, pmeta, false, &isforce))){
-    // Found "dir/" cache --> Check for "_$folder$", "no dir object"
-    nowcache = newpath;
-    if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
-      // "_$folder$" type.
-      (*pType) = DIRTYPE_FOLDER;
-      nowpath = newpath.substr(0, newpath.length() - 1) + "_$folder$"; // cut and add
-    }else if(isforce){
-      // "no dir object" type.
-      (*pType) = DIRTYPE_NOOBJ;
-      nowpath  = "";
-    }else{
-      nowpath = newpath;
-      if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
-        // "dir/" type
-        (*pType) = DIRTYPE_NEW;
-      }else{
-        // "dir" type
-        (*pType) = DIRTYPE_OLD;
-      }
+    // Always check "dir/" at first.
+    if(0 == (result = get_object_attribute(newpath.c_str(), NULL, pmeta, false, &isforce))){
+        // Found "dir/" cache --> Check for "_$folder$", "no dir object"
+        nowcache = newpath;
+        if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
+            // "_$folder$" type.
+            (*pType) = DIRTYPE_FOLDER;
+            nowpath = newpath.substr(0, newpath.length() - 1) + "_$folder$"; // cut and add
+        }else if(isforce){
+            // "no dir object" type.
+            (*pType) = DIRTYPE_NOOBJ;
+            nowpath  = "";
+        }else{
+            nowpath = newpath;
+            if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
+                // "dir/" type
+                (*pType) = DIRTYPE_NEW;
+            }else{
+                // "dir" type
+                (*pType) = DIRTYPE_OLD;
+            }
+        }
+    }else if(support_compat_dir){
+        // Check "dir" when support_compat_dir is enabled
+        nowpath = newpath.substr(0, newpath.length() - 1);
+        if(0 == (result = get_object_attribute(nowpath.c_str(), NULL, pmeta, false, &isforce))){
+            // Found "dir" cache --> this case is only "dir" type.
+            // Because, if object is "_$folder$" or "no dir object", the cache is "dir/" type.
+            // (But "no dir object" is checked here.)
+            nowcache = nowpath;
+            if(isforce){
+                (*pType) = DIRTYPE_NOOBJ;
+                nowpath  = "";
+            }else{
+                (*pType) = DIRTYPE_OLD;
+            }
+        }else{
+            // Not found cache --> check for "_$folder$" and "no dir object".
+            // (come here is that support_compat_dir is enabled)
+            nowcache = "";  // This case is no cache.
+            nowpath += "_$folder$";
+            if(is_special_name_folder_object(nowpath.c_str())){
+                // "_$folder$" type.
+                (*pType) = DIRTYPE_FOLDER;
+                result   = 0;             // result is OK.
+            }else if(-ENOTEMPTY == directory_empty(newpath.c_str())){
+                // "no dir object" type.
+                (*pType) = DIRTYPE_NOOBJ;
+                nowpath  = "";            // now path.
+                result   = 0;             // result is OK.
+            }else{
+                // Error: Unknown type.
+                (*pType) = DIRTYPE_UNKNOWN;
+                newpath = "";
+                nowpath = "";
+            }
+        }
     }
-  }else if(support_compat_dir){
-    // Check "dir" when support_compat_dir is enabled
-    nowpath = newpath.substr(0, newpath.length() - 1);
-    if(0 == (result = get_object_attribute(nowpath.c_str(), NULL, pmeta, false, &isforce))){
-      // Found "dir" cache --> this case is only "dir" type.
-      // Because, if object is "_$folder$" or "no dir object", the cache is "dir/" type.
-      // (But "no dir object" is checked here.)
-      nowcache = nowpath;
-      if(isforce){
-        (*pType) = DIRTYPE_NOOBJ;
-        nowpath  = "";
-      }else{
-        (*pType) = DIRTYPE_OLD;
-      }
-    }else{
-      // Not found cache --> check for "_$folder$" and "no dir object".
-      // (come here is that support_compat_dir is enabled)
-      nowcache = "";  // This case is no cache.
-      nowpath += "_$folder$";
-      if(is_special_name_folder_object(nowpath.c_str())){
-        // "_$folder$" type.
-        (*pType) = DIRTYPE_FOLDER;
-        result   = 0;             // result is OK.
-      }else if(-ENOTEMPTY == directory_empty(newpath.c_str())){
-        // "no dir object" type.
-        (*pType) = DIRTYPE_NOOBJ;
-        nowpath  = "";            // now path.
-        result   = 0;             // result is OK.
-      }else{
-        // Error: Unknown type.
-        (*pType) = DIRTYPE_UNKNOWN;
-        newpath = "";
-        nowpath = "";
-      }
-    }
-  }
-  return result;
+    return result;
 }
 
 static int remove_old_type_dir(const string& path, dirtype type)
 {
-  if(IS_RMTYPEDIR(type)){
-    S3fsCurl s3fscurl;
-    int      result = s3fscurl.DeleteRequest(path.c_str());
-    if(0 != result && -ENOENT != result){
-      return result;
+    if(IS_RMTYPEDIR(type)){
+        S3fsCurl s3fscurl;
+        int      result = s3fscurl.DeleteRequest(path.c_str());
+        if(0 != result && -ENOENT != result){
+            return result;
+        }
+        // succeed removing or not found the directory
+    }else{
+        // nothing to do
     }
-    // succeed removing or not found the directory
-  }else{
-    // nothing to do
-  }
-  return 0;
+    return 0;
 }
 
 //
@@ -410,144 +349,144 @@ static int remove_old_type_dir(const string& path, dirtype type)
 //
 static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce, bool add_no_truncate_cache)
 {
-  int          result = -1;
-  struct stat  tmpstbuf;
-  struct stat* pstat = pstbuf ? pstbuf : &tmpstbuf;
-  headers_t    tmpHead;
-  headers_t*   pheader = pmeta ? pmeta : &tmpHead;
-  string       strpath;
-  S3fsCurl     s3fscurl;
-  bool         forcedir = false;
-  string::size_type Pos;
+    int          result = -1;
+    struct stat  tmpstbuf;
+    struct stat* pstat = pstbuf ? pstbuf : &tmpstbuf;
+    headers_t    tmpHead;
+    headers_t*   pheader = pmeta ? pmeta : &tmpHead;
+    string       strpath;
+    S3fsCurl     s3fscurl;
+    bool         forcedir = false;
+    string::size_type Pos;
 
-  S3FS_PRN_DBG("[path=%s]", path);
+    S3FS_PRN_DBG("[path=%s]", path);
 
-  if(!path || '\0' == path[0]){
-    return -ENOENT;
-  }
-
-  memset(pstat, 0, sizeof(struct stat));
-  if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
-    pstat->st_nlink = 1; // see fuse faq
-    pstat->st_mode  = mp_mode;
-    pstat->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
-    pstat->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
-    return 0;
-  }
-
-  // Check cache.
-  pisforce    = (NULL != pisforce ? pisforce : &forcedir);
-  (*pisforce) = false;
-  strpath     = path;
-  if(support_compat_dir && overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
-    strpath = strpath.substr(0, Pos);
-    strpath += "/";
-  }
-  if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
-    StatCache::getStatCacheData()->ChangeNoTruncateFlag(strpath, add_no_truncate_cache);
-    return 0;
-  }
-  if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
-    // there is the path in the cache for no object, it is no object.
-    return -ENOENT;
-  }
-
-  // At first, check path
-  strpath     = path;
-  result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-  s3fscurl.DestroyCurlHandle();
-
-  // if not found target path object, do over checking
-  if(0 != result){
-    if(overcheck){
-      // when support_compat_dir is disabled, strpath maybe have "_$folder$".
-      if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
-        // now path is "object", do check "object/" for over checking
-        strpath    += "/";
-        result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-        s3fscurl.DestroyCurlHandle();
-      }
-      if(support_compat_dir && 0 != result){
-        // now path is "object/", do check "object_$folder$" for over checking
-        strpath     = strpath.substr(0, strpath.length() - 1);
-        strpath    += "_$folder$";
-        result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-        s3fscurl.DestroyCurlHandle();
-
-        if(0 != result){
-          // cut "_$folder$" for over checking "no dir object" after here
-          if(string::npos != (Pos = strpath.find("_$folder$", 0))){
-            strpath  = strpath.substr(0, Pos);
-          }
-        }
-      }
-    }
-    if(support_compat_dir && 0 != result && string::npos == strpath.find("_$folder$", 0)){
-      // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
-      if('/' == strpath[strpath.length() - 1]){
-        strpath = strpath.substr(0, strpath.length() - 1);
-      }
-      if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-        // found "no dir object".
-        strpath  += "/";
-        *pisforce = true;
-        result    = 0;
-      }
-    }
-  }else{
-    if(support_compat_dir && '/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
-      // check a case of that "object" does not have attribute and "object" is possible to be directory.
-      if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-        // found "no dir object".
-        strpath  += "/";
-        *pisforce = true;
-        result    = 0;
-      }
-    }
-  }
-
-  if(0 != result){
-    // finally, "path" object did not find. Add no object cache.
-    strpath = path;  // reset original
-    StatCache::getStatCacheData()->AddNoObjectCache(strpath);
-    return result;
-  }
-
-  // if path has "_$folder$", need to cut it.
-  if(string::npos != (Pos = strpath.find("_$folder$", 0))){
-    strpath = strpath.substr(0, Pos);
-    strpath += "/";
-  }
-
-  // Set into cache
-  //
-  // [NOTE]
-  // When add_no_truncate_cache is true, the stats is always cached.
-  // This cached stats is only removed by DelStat().
-  // This is necessary for the case to access the attribute of opened file.
-  // (ex. getxattr() is called while writing to the opened file.)
-  //
-  if(add_no_truncate_cache || 0 != StatCache::getStatCacheData()->GetCacheSize()){
-    // add into stat cache
-    if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir, add_no_truncate_cache)){
-      S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
-      return -ENOENT;
-    }
-    if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
-      // There is not in cache.(why?) -> retry to convert.
-      if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-        S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
+    if(!path || '\0' == path[0]){
         return -ENOENT;
-      }
     }
-  }else{
-    // cache size is Zero -> only convert.
-    if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-      S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
-      return -ENOENT;
+
+    memset(pstat, 0, sizeof(struct stat));
+    if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+        pstat->st_nlink = 1; // see fuse faq
+        pstat->st_mode  = mp_mode;
+        pstat->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
+        pstat->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
+        return 0;
     }
-  }
-  return 0;
+
+    // Check cache.
+    pisforce    = (NULL != pisforce ? pisforce : &forcedir);
+    (*pisforce) = false;
+    strpath     = path;
+    if(support_compat_dir && overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
+        strpath = strpath.substr(0, Pos);
+        strpath += "/";
+    }
+    if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
+        StatCache::getStatCacheData()->ChangeNoTruncateFlag(strpath, add_no_truncate_cache);
+        return 0;
+    }
+    if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
+        // there is the path in the cache for no object, it is no object.
+        return -ENOENT;
+    }
+
+    // At first, check path
+    strpath     = path;
+    result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
+    s3fscurl.DestroyCurlHandle();
+
+    // if not found target path object, do over checking
+    if(0 != result){
+        if(overcheck){
+            // when support_compat_dir is disabled, strpath maybe have "_$folder$".
+            if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
+                // now path is "object", do check "object/" for over checking
+                strpath    += "/";
+                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
+                s3fscurl.DestroyCurlHandle();
+            }
+            if(support_compat_dir && 0 != result){
+                // now path is "object/", do check "object_$folder$" for over checking
+                strpath     = strpath.substr(0, strpath.length() - 1);
+                strpath    += "_$folder$";
+                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
+                s3fscurl.DestroyCurlHandle();
+
+              if(0 != result){
+                  // cut "_$folder$" for over checking "no dir object" after here
+                  if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+                      strpath  = strpath.substr(0, Pos);
+                  }
+              }
+            }
+        }
+        if(support_compat_dir && 0 != result && string::npos == strpath.find("_$folder$", 0)){
+            // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
+            if('/' == strpath[strpath.length() - 1]){
+                strpath = strpath.substr(0, strpath.length() - 1);
+            }
+            if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+                // found "no dir object".
+                strpath  += "/";
+                *pisforce = true;
+                result    = 0;
+            }
+        }
+    }else{
+        if(support_compat_dir && '/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
+            // check a case of that "object" does not have attribute and "object" is possible to be directory.
+            if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+                // found "no dir object".
+                strpath  += "/";
+                *pisforce = true;
+                result    = 0;
+            }
+        }
+    }
+
+    if(0 != result){
+        // finally, "path" object did not find. Add no object cache.
+        strpath = path;  // reset original
+        StatCache::getStatCacheData()->AddNoObjectCache(strpath);
+        return result;
+    }
+
+    // if path has "_$folder$", need to cut it.
+    if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+        strpath = strpath.substr(0, Pos);
+        strpath += "/";
+    }
+
+    // Set into cache
+    //
+    // [NOTE]
+    // When add_no_truncate_cache is true, the stats is always cached.
+    // This cached stats is only removed by DelStat().
+    // This is necessary for the case to access the attribute of opened file.
+    // (ex. getxattr() is called while writing to the opened file.)
+    //
+    if(add_no_truncate_cache || 0 != StatCache::getStatCacheData()->GetCacheSize()){
+        // add into stat cache
+        if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir, add_no_truncate_cache)){
+            S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
+            return -ENOENT;
+        }
+        if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
+            // There is not in cache.(why?) -> retry to convert.
+            if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
+                return -ENOENT;
+            }
+        }
+    }else{
+        // cache size is Zero -> only convert.
+        if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
+            return -ENOENT;
+        }
+    }
+    return 0;
 }
 
 //
@@ -562,107 +501,107 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 //
 static int check_object_access(const char* path, int mask, struct stat* pstbuf)
 {
-  int result;
-  struct stat st;
-  struct stat* pst = (pstbuf ? pstbuf : &st);
-  struct fuse_context* pcxt;
+    int result;
+    struct stat st;
+    struct stat* pst = (pstbuf ? pstbuf : &st);
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_DBG("[path=%s]", path);
+    S3FS_PRN_DBG("[path=%s]", path);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
-  if(0 != (result = get_object_attribute(path, pst))){
-    // If there is not the target file(object), result is -ENOENT.
-    return result;
-  }
-  if(0 == pcxt->uid){
-    // root is allowed all accessing.
-    return 0;
-  }
-  if(is_s3fs_uid && s3fs_uid == pcxt->uid){
-    // "uid" user is allowed all accessing.
-    return 0;
-  }
-  if(F_OK == mask){
-    // if there is a file, always return allowed.
-    return 0;
-  }
-
-  // for "uid", "gid" option
-  uid_t  obj_uid = (is_s3fs_uid ? s3fs_uid : pst->st_uid);
-  gid_t  obj_gid = (is_s3fs_gid ? s3fs_gid : pst->st_gid);
-
-  // compare file mode and uid/gid + mask.
-  mode_t mode;
-  mode_t base_mask = S_IRWXO;
-  if(is_s3fs_umask){
-    // If umask is set, all object attributes set ~umask.
-    mode = ((S_IRWXU | S_IRWXG | S_IRWXO) & ~s3fs_umask);
-  }else{
-    mode = pst->st_mode;
-  }
-  if(pcxt->uid == obj_uid){
-    base_mask |= S_IRWXU;
-  }
-  if(pcxt->gid == obj_gid){
-    base_mask |= S_IRWXG;
-  }
-  if(1 == is_uid_include_group(pcxt->uid, obj_gid)){
-    base_mask |= S_IRWXG;
-  }
-  mode &= base_mask;
-
-  if(X_OK == (mask & X_OK)){
-    if(0 == (mode & (S_IXUSR | S_IXGRP | S_IXOTH))){
-      return -EPERM;
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
     }
-  }
-  if(W_OK == (mask & W_OK)){
-    if(0 == (mode & (S_IWUSR | S_IWGRP | S_IWOTH))){
-      return -EACCES;
+    if(0 != (result = get_object_attribute(path, pst))){
+        // If there is not the target file(object), result is -ENOENT.
+        return result;
     }
-  }
-  if(R_OK == (mask & R_OK)){
-    if(0 == (mode & (S_IRUSR | S_IRGRP | S_IROTH))){
-      return -EACCES;
+    if(0 == pcxt->uid){
+        // root is allowed all accessing.
+        return 0;
     }
-  }
-  if(0 == mode){
-    return -EACCES;
-  }
-  return 0;
+    if(is_s3fs_uid && s3fs_uid == pcxt->uid){
+        // "uid" user is allowed all accessing.
+        return 0;
+    }
+    if(F_OK == mask){
+        // if there is a file, always return allowed.
+        return 0;
+    }
+
+    // for "uid", "gid" option
+    uid_t  obj_uid = (is_s3fs_uid ? s3fs_uid : pst->st_uid);
+    gid_t  obj_gid = (is_s3fs_gid ? s3fs_gid : pst->st_gid);
+
+    // compare file mode and uid/gid + mask.
+    mode_t mode;
+    mode_t base_mask = S_IRWXO;
+    if(is_s3fs_umask){
+        // If umask is set, all object attributes set ~umask.
+        mode = ((S_IRWXU | S_IRWXG | S_IRWXO) & ~s3fs_umask);
+    }else{
+        mode = pst->st_mode;
+    }
+    if(pcxt->uid == obj_uid){
+        base_mask |= S_IRWXU;
+    }
+    if(pcxt->gid == obj_gid){
+        base_mask |= S_IRWXG;
+    }
+    if(1 == is_uid_include_group(pcxt->uid, obj_gid)){
+        base_mask |= S_IRWXG;
+    }
+    mode &= base_mask;
+
+    if(X_OK == (mask & X_OK)){
+        if(0 == (mode & (S_IXUSR | S_IXGRP | S_IXOTH))){
+            return -EPERM;
+        }
+    }
+    if(W_OK == (mask & W_OK)){
+        if(0 == (mode & (S_IWUSR | S_IWGRP | S_IWOTH))){
+            return -EACCES;
+        }
+    }
+    if(R_OK == (mask & R_OK)){
+        if(0 == (mode & (S_IRUSR | S_IRGRP | S_IROTH))){
+            return -EACCES;
+        }
+    }
+    if(0 == mode){
+        return -EACCES;
+    }
+    return 0;
 }
 
 static int check_object_owner(const char* path, struct stat* pstbuf)
 {
-  int result;
-  struct stat st;
-  struct stat* pst = (pstbuf ? pstbuf : &st);
-  struct fuse_context* pcxt;
+    int result;
+    struct stat st;
+    struct stat* pst = (pstbuf ? pstbuf : &st);
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_DBG("[path=%s]", path);
+    S3FS_PRN_DBG("[path=%s]", path);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
-  if(0 != (result = get_object_attribute(path, pst))){
-    // If there is not the target file(object), result is -ENOENT.
-    return result;
-  }
-  // check owner
-  if(0 == pcxt->uid){
-    // root is allowed all accessing.
-    return 0;
-  }
-  if(is_s3fs_uid && s3fs_uid == pcxt->uid){
-    // "uid" user is allowed all accessing.
-    return 0;
-  }
-  if(pcxt->uid == pst->st_uid){
-    return 0;
-  }
-  return -EPERM;
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
+    }
+    if(0 != (result = get_object_attribute(path, pst))){
+        // If there is not the target file(object), result is -ENOENT.
+        return result;
+    }
+    // check owner
+    if(0 == pcxt->uid){
+        // root is allowed all accessing.
+        return 0;
+    }
+    if(is_s3fs_uid && s3fs_uid == pcxt->uid){
+        // "uid" user is allowed all accessing.
+        return 0;
+    }
+    if(pcxt->uid == pst->st_uid){
+        return 0;
+    }
+    return -EPERM;
 }
 
 //
@@ -670,39 +609,39 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
 //
 static int check_parent_object_access(const char* path, int mask)
 {
-  string parent;
-  int result;
+    string parent;
+    int result;
 
-  S3FS_PRN_DBG("[path=%s]", path);
+    S3FS_PRN_DBG("[path=%s]", path);
 
-  if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
-    // path is mount point.
+    if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+        // path is mount point.
+        return 0;
+    }
+    if(X_OK == (mask & X_OK)){
+        for(parent = mydirname(path); !parent.empty(); parent = mydirname(parent)){
+            if(parent == "."){
+                parent = "/";
+            }
+            if(0 != (result = check_object_access(parent.c_str(), X_OK, NULL))){
+                return result;
+            }
+            if(parent == "/" || parent == "."){
+                break;
+            }
+        }
+    }
+    mask = (mask & ~X_OK);
+    if(0 != mask){
+        parent = mydirname(path);
+        if(parent == "."){
+            parent = "/";
+        }
+        if(0 != (result = check_object_access(parent.c_str(), mask, NULL))){
+            return result;
+        }
+    }
     return 0;
-  }
-  if(X_OK == (mask & X_OK)){
-    for(parent = mydirname(path); !parent.empty(); parent = mydirname(parent)){
-      if(parent == "."){
-        parent = "/";
-      }
-      if(0 != (result = check_object_access(parent.c_str(), X_OK, NULL))){
-        return result;
-      }
-      if(parent == "/" || parent == "."){
-        break;
-      }
-    }
-  }
-  mask = (mask & ~X_OK);
-  if(0 != mask){
-    parent = mydirname(path);
-    if(parent == "."){
-      parent = "/";
-    }
-    if(0 != (result = check_object_access(parent.c_str(), mask, NULL))){
-      return result;
-    }
-  }
-  return 0;
 }
 
 //
@@ -710,1650 +649,1646 @@ static int check_parent_object_access(const char* path, int mask)
 //
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, string& ssevalue)
 {
-  if(!path){
-    return false;
-  }
-
-  headers_t meta;
-  if(0 != get_object_attribute(path, NULL, &meta)){
-    S3FS_PRN_ERR("Failed to get object(%s) headers", path);
-    return false;
-  }
-
-  ssetype = sse_type_t::SSE_DISABLE;
-  ssevalue.erase();
-  for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-    string key = (*iter).first;
-    if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
-      ssetype  = sse_type_t::SSE_S3;
-    }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
-      ssetype  = sse_type_t::SSE_KMS;
-      ssevalue = (*iter).second;
-    }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
-      ssetype  = sse_type_t::SSE_C;
-      ssevalue = (*iter).second;
+    if(!path){
+        return false;
     }
-  }
-  return true;
+
+    headers_t meta;
+    if(0 != get_object_attribute(path, NULL, &meta)){
+        S3FS_PRN_ERR("Failed to get object(%s) headers", path);
+        return false;
+    }
+
+    ssetype = sse_type_t::SSE_DISABLE;
+    ssevalue.erase();
+    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+        string key = (*iter).first;
+        if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
+            ssetype  = sse_type_t::SSE_S3;
+        }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
+            ssetype  = sse_type_t::SSE_KMS;
+            ssevalue = (*iter).second;
+        }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
+            ssetype  = sse_type_t::SSE_C;
+            ssevalue = (*iter).second;
+        }
+    }
+    return true;
 }
 
 static FdEntity* get_local_fent(const char* path, bool is_load)
 {
-  struct stat stobj;
-  FdEntity*   ent;
-  headers_t   meta;
+    struct stat stobj;
+    FdEntity*   ent;
+    headers_t   meta;
 
-  S3FS_PRN_INFO2("[path=%s]", path);
+    S3FS_PRN_INFO2("[path=%s]", path);
 
-  if(0 != get_object_attribute(path, &stobj, &meta)){
-    return NULL;
-  }
+    if(0 != get_object_attribute(path, &stobj, &meta)){
+        return NULL;
+    }
 
-  // open
-  time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
-  bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
+    // open
+    time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
+    bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-  if(NULL == (ent = FdManager::get()->Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
-    S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
-    return NULL;
-  }
-  // load
-  if(is_load && !ent->OpenAndLoadAll(&meta)){
-    S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
-    FdManager::get()->Close(ent);
-    return NULL;
-  }
-  return ent;
+    if(NULL == (ent = FdManager::get()->Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
+        S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
+        return NULL;
+    }
+    // load
+    if(is_load && !ent->OpenAndLoadAll(&meta)){
+        S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
+        FdManager::get()->Close(ent);
+        return NULL;
+    }
+    return ent;
 }
 
-/**
- * create or update s3 meta
- * ow_sse_flg is for over writing sse header by use_sse option.
- * @return fuse return code
- */
+//
+// create or update s3 meta
+// ow_sse_flg is for over writing sse header by use_sse option.
+// @return fuse return code
+//
 int put_headers(const char* path, headers_t& meta, bool is_copy)
 {
-  int         result;
-  S3fsCurl    s3fscurl(true);
-  struct stat buf;
+    int         result;
+    S3fsCurl    s3fscurl(true);
+    struct stat buf;
 
-  S3FS_PRN_INFO2("[path=%s]", path);
+    S3FS_PRN_INFO2("[path=%s]", path);
 
-  // files larger than 5GB must be modified via the multipart interface
-  // *** If there is not target object(a case of move command),
-  //     get_object_attribute() returns error with initializing buf.
-  (void)get_object_attribute(path, &buf);
+    // files larger than 5GB must be modified via the multipart interface
+    // *** If there is not target object(a case of move command),
+    //     get_object_attribute() returns error with initializing buf.
+    (void)get_object_attribute(path, &buf);
 
-  if(buf.st_size >= FIVE_GB){
-    // multipart
-    if(nocopyapi || nomultipart){
-      return -EFBIG;    // File too large
+    if(buf.st_size >= FIVE_GB){
+        // multipart
+        if(nocopyapi || nomultipart){
+            return -EFBIG;    // File too large
+        }
+        if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
+            return result;
+        }
+    }else{
+        if(0 != (result = s3fscurl.PutHeadRequest(path, meta, is_copy))){
+            return result;
+        }
     }
-    if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
-      return result;
-    }
-  }else{
-    if(0 != (result = s3fscurl.PutHeadRequest(path, meta, is_copy))){
-      return result;
-    }
-  }
 
-  // [NOTE]
-  // if path is 'dir/', it does not have cache(could not open file for directory stat)
-  //
-  if('/' != path[strlen(path) - 1]){
-    FdEntity* ent = NULL;
-    if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
-      // no opened fd
-      if(FdManager::IsCacheDir()){
-        // create cache file if be needed
-        ent = FdManager::get()->Open(path, &meta, buf.st_size, -1, false, true);
-      }
+    // [NOTE]
+    // if path is 'dir/', it does not have cache(could not open file for directory stat)
+    //
+    if('/' != path[strlen(path) - 1]){
+        FdEntity* ent = NULL;
+        if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
+            // no opened fd
+            if(FdManager::IsCacheDir()){
+                // create cache file if be needed
+                ent = FdManager::get()->Open(path, &meta, buf.st_size, -1, false, true);
+            }
+        }
+        if(ent){
+            time_t mtime = get_mtime(meta);
+            ent->SetMtime(mtime);
+            FdManager::get()->Close(ent);
+        }
     }
-    if(ent){
-      time_t mtime = get_mtime(meta);
-      ent->SetMtime(mtime);
-      FdManager::get()->Close(ent);
-    }
-  }
-
-  return 0;
+    return 0;
 }
 
 static int s3fs_getattr(const char* _path, struct stat* stbuf)
 {
-  WTF8_ENCODE(path)
-  int result;
+    WTF8_ENCODE(path)
+    int result;
 
-  S3FS_PRN_INFO("[path=%s]", path);
+    S3FS_PRN_INFO("[path=%s]", path);
 
-  // check parent directory attribute.
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_access(path, F_OK, stbuf))){
-    return result;
-  }
-  // If has already opened fd, the st_size should be instead.
-  // (See: Issue 241)
-  if(stbuf){
-    FdEntity*   ent;
-
-    if(NULL != (ent = FdManager::get()->ExistOpen(path))){
-      struct stat tmpstbuf;
-      if(ent->GetStats(tmpstbuf)){
-        stbuf->st_size = tmpstbuf.st_size;
-      }
-      FdManager::get()->Close(ent);
+    // check parent directory attribute.
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-    stbuf->st_blksize = 4096;
-    stbuf->st_blocks  = get_blocks(stbuf->st_size);
+    if(0 != (result = check_object_access(path, F_OK, stbuf))){
+        return result;
+    }
+    // If has already opened fd, the st_size should be instead.
+    // (See: Issue 241)
+    if(stbuf){
+        FdEntity*   ent;
 
-    S3FS_PRN_DBG("[path=%s] uid=%u, gid=%u, mode=%04o", path, (unsigned int)(stbuf->st_uid), (unsigned int)(stbuf->st_gid), stbuf->st_mode);
-  }
-  S3FS_MALLOCTRIM(0);
+        if(NULL != (ent = FdManager::get()->ExistOpen(path))){
+            struct stat tmpstbuf;
+            if(ent->GetStats(tmpstbuf)){
+                stbuf->st_size = tmpstbuf.st_size;
+            }
+            FdManager::get()->Close(ent);
+        }
+        stbuf->st_blksize = 4096;
+        stbuf->st_blocks  = get_blocks(stbuf->st_size);
 
-  return result;
+        S3FS_PRN_DBG("[path=%s] uid=%u, gid=%u, mode=%04o", path, (unsigned int)(stbuf->st_uid), (unsigned int)(stbuf->st_gid), stbuf->st_mode);
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return result;
 }
 
 static int s3fs_readlink(const char* _path, char* buf, size_t size)
 {
-  if(!_path || !buf || 0 == size){
+    if(!_path || !buf || 0 == size){
+        return 0;
+    }
+    WTF8_ENCODE(path)
+    string    strValue;
+
+    // check symblic link cache
+    if(!StatCache::getStatCacheData()->GetSymlink(string(path), strValue)){
+        // not found in cache, then open the path
+        FdEntity*   ent;
+        if(NULL == (ent = get_local_fent(path))){
+            S3FS_PRN_ERR("could not get fent(file=%s)", path);
+            return -EIO;
+        }
+        // Get size
+        off_t readsize;
+        if(!ent->GetSize(readsize)){
+            S3FS_PRN_ERR("could not get file size(file=%s)", path);
+            FdManager::get()->Close(ent);
+            return -EIO;
+        }
+        if(static_cast<off_t>(size) <= readsize){
+            readsize = size - 1;
+        }
+        // Read
+        ssize_t ressize;
+        if(0 > (ressize = ent->Read(buf, 0, readsize))){
+            S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
+            FdManager::get()->Close(ent);
+            return static_cast<int>(ressize);
+        }
+        buf[ressize] = '\0';
+
+        // close
+        FdManager::get()->Close(ent);
+
+        // check buf if it has space words.
+        strValue = trim(string(buf));
+
+        // decode wtf8. This will always be shorter
+        if(use_wtf8){
+          strValue = s3fs_wtf8_decode(strValue);
+        }
+
+        // add symblic link cache
+        if(!StatCache::getStatCacheData()->AddSymlink(string(path), strValue)){
+          S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
+        }
+    }
+    // copy result
+    strncpy(buf, strValue.c_str(), size);
+
+    S3FS_MALLOCTRIM(0);
+
     return 0;
-  }
-  WTF8_ENCODE(path)
-  string    strValue;
-
-  // check symblic link cache
-  if(!StatCache::getStatCacheData()->GetSymlink(string(path), strValue)){
-    // not found in cache, then open the path
-    FdEntity*   ent;
-    if(NULL == (ent = get_local_fent(path))){
-      S3FS_PRN_ERR("could not get fent(file=%s)", path);
-      return -EIO;
-    }
-    // Get size
-    off_t readsize;
-    if(!ent->GetSize(readsize)){
-      S3FS_PRN_ERR("could not get file size(file=%s)", path);
-      FdManager::get()->Close(ent);
-      return -EIO;
-    }
-    if(static_cast<off_t>(size) <= readsize){
-      readsize = size - 1;
-    }
-    // Read
-    ssize_t ressize;
-    if(0 > (ressize = ent->Read(buf, 0, readsize))){
-      S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
-      FdManager::get()->Close(ent);
-      return static_cast<int>(ressize);
-    }
-    buf[ressize] = '\0';
-
-    // close
-    FdManager::get()->Close(ent);
-
-    // check buf if it has space words.
-    strValue = trim(string(buf));
-
-    // decode wtf8. This will always be shorter
-    if(use_wtf8){
-      strValue = s3fs_wtf8_decode(strValue);
-    }
-
-    // add symblic link cache
-    if(!StatCache::getStatCacheData()->AddSymlink(string(path), strValue)){
-      S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
-    }
-  }
-  // copy result
-  strncpy(buf, strValue.c_str(), size);
-
-  S3FS_MALLOCTRIM(0);
-
-  return 0;
 }
 
 static int do_create_bucket()
 {
-  S3FS_PRN_INFO2("/");
+    S3FS_PRN_INFO2("/");
 
-  FILE* ptmpfp;
-  int   tmpfd;
-  if(endpoint == "us-east-1"){
-    ptmpfp = NULL;
-    tmpfd = -1;
-  }else{
-    if(NULL == (ptmpfp = tmpfile()) ||
-       -1 == (tmpfd = fileno(ptmpfp)) ||
-       0 >= fprintf(ptmpfp, "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n"
-        "  <LocationConstraint>%s</LocationConstraint>\n"
-        "</CreateBucketConfiguration>", endpoint.c_str()) ||
-       0 != fflush(ptmpfp) ||
-       -1 == fseek(ptmpfp, 0L, SEEK_SET)){
-      S3FS_PRN_ERR("failed to create temporary file. err(%d)", errno);
-      if(ptmpfp){
+    FILE* ptmpfp;
+    int   tmpfd;
+    if(endpoint == "us-east-1"){
+        ptmpfp = NULL;
+        tmpfd = -1;
+    }else{
+        if(NULL == (ptmpfp = tmpfile())   ||
+           -1 == (tmpfd = fileno(ptmpfp)) ||
+           0 >= fprintf(ptmpfp, "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n"
+                                "  <LocationConstraint>%s</LocationConstraint>\n"
+                                "</CreateBucketConfiguration>", endpoint.c_str()) ||
+           0 != fflush(ptmpfp) ||
+           -1 == fseek(ptmpfp, 0L, SEEK_SET))
+        {
+            S3FS_PRN_ERR("failed to create temporary file. err(%d)", errno);
+            if(ptmpfp){
+              fclose(ptmpfp);
+            }
+            return (0 == errno ? -EIO : -errno);
+        }
+    }
+
+    headers_t meta;
+
+    S3fsCurl s3fscurl(true);
+    int      res = s3fscurl.PutRequest("/", meta, tmpfd);
+    if(res < 0){
+        long responseCode = s3fscurl.GetLastResponseCode();
+        if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+            S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
+            S3fsCurl::SetSignatureV4(false);
+
+            // retry to check
+            s3fscurl.DestroyCurlHandle();
+            res = s3fscurl.PutRequest("/", meta, tmpfd);
+        }else if(responseCode == 409){
+            // bucket already exists
+            res = 0;
+        }
+    }
+    if(ptmpfp != NULL){
         fclose(ptmpfp);
-      }
-      return (0 == errno ? -EIO : -errno);
     }
-  }
-
-  headers_t meta;
-
-  S3fsCurl s3fscurl(true);
-  int      res = s3fscurl.PutRequest("/", meta, tmpfd);
-  if(res < 0){
-    long responseCode = s3fscurl.GetLastResponseCode();
-    if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
-      S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
-      S3fsCurl::SetSignatureV4(false);
-
-      // retry to check
-      s3fscurl.DestroyCurlHandle();
-      res = s3fscurl.PutRequest("/", meta, tmpfd);
-    }else if(responseCode == 409){
-      // bucket already exists
-      res = 0;
-    }
-  }
-  if(ptmpfp != NULL){
-    fclose(ptmpfp);
-  }
-  return res;
+    return res;
 }
 
 // common function for creation of a plain object
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid)
 {
-  S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
+    S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
 
-  time_t now = time(NULL);
-  headers_t meta;
-  meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
-  meta["x-amz-meta-uid"]   = str(uid);
-  meta["x-amz-meta-gid"]   = str(gid);
-  meta["x-amz-meta-mode"]  = str(mode);
-  meta["x-amz-meta-ctime"] = str(now);
-  meta["x-amz-meta-mtime"] = str(now);
+    time_t now = time(NULL);
+    headers_t meta;
+    meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
+    meta["x-amz-meta-uid"]   = str(uid);
+    meta["x-amz-meta-gid"]   = str(gid);
+    meta["x-amz-meta-mode"]  = str(mode);
+    meta["x-amz-meta-ctime"] = str(now);
+    meta["x-amz-meta-mtime"] = str(now);
 
-  S3fsCurl s3fscurl(true);
-  return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
+    S3fsCurl s3fscurl(true);
+    return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
 static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 {
-  WTF8_ENCODE(path)
-  int       result;
-  struct fuse_context* pcxt;
+    WTF8_ENCODE(path)
+    int       result;
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
+    S3FS_PRN_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
+    }
 
-  if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid))){
-    S3FS_PRN_ERR("could not create object for special file(result=%d)", result);
+    if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid))){
+        S3FS_PRN_ERR("could not create object for special file(result=%d)", result);
+        return result;
+    }
+    StatCache::getStatCacheData()->DelStat(path);
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-  StatCache::getStatCacheData()->DelStat(path);
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  int result;
-  struct fuse_context* pcxt;
+    WTF8_ENCODE(path)
+    int result;
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
+    S3FS_PRN_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
-
-  // check parent directory attribute.
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  result = check_object_access(path, W_OK, NULL);
-  if(-ENOENT == result){
-    if(0 != (result = check_parent_object_access(path, W_OK))){
-      return result;
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
     }
-  }else if(0 != result){
-    return result;
-  }
-  result = create_file_object(path, mode, pcxt->uid, pcxt->gid);
-  StatCache::getStatCacheData()->DelStat(path);
-  if(result != 0){
-    return result;
-  }
 
-
-  FdEntity*   ent;
-  headers_t   meta;
-  get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-  if(NULL == (ent = FdManager::get()->Open(path, &meta, 0, -1, false, true))){
+    // check parent directory attribute.
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    result = check_object_access(path, W_OK, NULL);
+    if(-ENOENT == result){
+        if(0 != (result = check_parent_object_access(path, W_OK))){
+            return result;
+        }
+    }else if(0 != result){
+        return result;
+    }
+    result = create_file_object(path, mode, pcxt->uid, pcxt->gid);
     StatCache::getStatCacheData()->DelStat(path);
-    return -EIO;
-  }
-  fi->fh = ent->GetFd();
-  S3FS_MALLOCTRIM(0);
+    if(result != 0){
+        return result;
+    }
 
-  return 0;
+    FdEntity*   ent;
+    headers_t   meta;
+    get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
+    if(NULL == (ent = FdManager::get()->Open(path, &meta, 0, -1, false, true))){
+        StatCache::getStatCacheData()->DelStat(path);
+        return -EIO;
+    }
+    fi->fh = ent->GetFd();
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
 {
-  S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(time), (unsigned int)uid, (unsigned int)gid);
+    S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(time), (unsigned int)uid, (unsigned int)gid);
 
-  if(!path || '\0' == path[0]){
-    return -1;
-  }
-  string tpath = path;
-  if('/' != tpath[tpath.length() - 1]){
-    tpath += "/";
-  }
+    if(!path || '\0' == path[0]){
+        return -1;
+    }
+    string tpath = path;
+    if('/' != tpath[tpath.length() - 1]){
+        tpath += "/";
+    }
 
-  headers_t meta;
-  meta["x-amz-meta-uid"]   = str(uid);
-  meta["x-amz-meta-gid"]   = str(gid);
-  meta["x-amz-meta-mode"]  = str(mode);
-  meta["x-amz-meta-ctime"] = str(time);
-  meta["x-amz-meta-mtime"] = str(time);
+    headers_t meta;
+    meta["x-amz-meta-uid"]   = str(uid);
+    meta["x-amz-meta-gid"]   = str(gid);
+    meta["x-amz-meta-mode"]  = str(mode);
+    meta["x-amz-meta-ctime"] = str(time);
+    meta["x-amz-meta-mtime"] = str(time);
 
-  S3fsCurl s3fscurl;
-  return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
+    S3fsCurl s3fscurl;
+    return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
 static int s3fs_mkdir(const char* _path, mode_t mode)
 {
-  WTF8_ENCODE(path)
-  int result;
-  struct fuse_context* pcxt;
+    WTF8_ENCODE(path)
+    int result;
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
+    S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
-
-  // check parent directory attribute.
-  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
-    return result;
-  }
-  if(-ENOENT != (result = check_object_access(path, F_OK, NULL))){
-    if(0 == result){
-      result = -EEXIST;
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
     }
+
+    // check parent directory attribute.
+    if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+        return result;
+    }
+    if(-ENOENT != (result = check_object_access(path, F_OK, NULL))){
+        if(0 == result){
+            result = -EEXIST;
+        }
+        return result;
+    }
+
+    result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
+    StatCache::getStatCacheData()->DelStat(path);
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-
-  result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
-  StatCache::getStatCacheData()->DelStat(path);
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_unlink(const char* _path)
 {
-  WTF8_ENCODE(path)
-  int result;
+    WTF8_ENCODE(path)
+    int result;
 
-  S3FS_PRN_INFO("[path=%s]", path);
+    S3FS_PRN_INFO("[path=%s]", path);
 
-  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+        return result;
+    }
+    S3fsCurl s3fscurl;
+    result = s3fscurl.DeleteRequest(path);
+    FdManager::DeleteCacheFile(path);
+    StatCache::getStatCacheData()->DelStat(path);
+    StatCache::getStatCacheData()->DelSymlink(path);
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-  S3fsCurl s3fscurl;
-  result = s3fscurl.DeleteRequest(path);
-  FdManager::DeleteCacheFile(path);
-  StatCache::getStatCacheData()->DelStat(path);
-  StatCache::getStatCacheData()->DelSymlink(path);
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int directory_empty(const char* path)
 {
-  int result;
-  S3ObjList head;
+    int result;
+    S3ObjList head;
 
-  if((result = list_bucket(path, head, "/", true)) != 0){
-    S3FS_PRN_ERR("list_bucket returns error.");
-    return result;
-  }
-  if(!head.IsEmpty()){
-    return -ENOTEMPTY;
-  }
-  return 0;
+    if((result = list_bucket(path, head, "/", true)) != 0){
+        S3FS_PRN_ERR("list_bucket returns error.");
+        return result;
+    }
+    if(!head.IsEmpty()){
+        return -ENOTEMPTY;
+    }
+    return 0;
 }
 
 static int s3fs_rmdir(const char* _path)
 {
-  WTF8_ENCODE(path)
-  int result;
-  string strpath;
-  struct stat stbuf;
+    WTF8_ENCODE(path)
+    int result;
+    string strpath;
+    struct stat stbuf;
 
-  S3FS_PRN_INFO("[path=%s]", path);
+    S3FS_PRN_INFO("[path=%s]", path);
 
-  if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
-    return result;
-  }
-
-  // directory must be empty
-  if(directory_empty(path) != 0){
-    return -ENOTEMPTY;
-  }
-
-  strpath = path;
-  if('/' != strpath[strpath.length() - 1]){
-    strpath += "/";
-  }
-  S3fsCurl s3fscurl;
-  result = s3fscurl.DeleteRequest(strpath.c_str());
-  s3fscurl.DestroyCurlHandle();
-  StatCache::getStatCacheData()->DelStat(strpath.c_str());
-
-  // double check for old version(before 1.63)
-  // The old version makes "dir" object, newer version makes "dir/".
-  // A case, there is only "dir", the first removing object is "dir/".
-  // Then "dir/" is not exists, but curl_delete returns 0.
-  // So need to check "dir" and should be removed it.
-  if('/' == strpath[strpath.length() - 1]){
-    strpath = strpath.substr(0, strpath.length() - 1);
-  }
-  if(0 == get_object_attribute(strpath.c_str(), &stbuf, NULL, false)){
-    if(S_ISDIR(stbuf.st_mode)){
-      // Found "dir" object.
-      result = s3fscurl.DeleteRequest(strpath.c_str());
-      s3fscurl.DestroyCurlHandle();
-      StatCache::getStatCacheData()->DelStat(strpath.c_str());
+    if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+        return result;
     }
-  }
-  // If there is no "dir" and "dir/" object(this case is made by s3cmd/s3sync),
-  // the cache key is "dir/". So we get error only once(delete "dir/").
 
-  // check for "_$folder$" object.
-  // This processing is necessary for other S3 clients compatibility.
-  if(is_special_name_folder_object(strpath.c_str())){
-    strpath += "_$folder$";
-    result   = s3fscurl.DeleteRequest(strpath.c_str());
-  }
-  S3FS_MALLOCTRIM(0);
+    // directory must be empty
+    if(directory_empty(path) != 0){
+        return -ENOTEMPTY;
+    }
 
-  return result;
+    strpath = path;
+    if('/' != strpath[strpath.length() - 1]){
+        strpath += "/";
+    }
+    S3fsCurl s3fscurl;
+    result = s3fscurl.DeleteRequest(strpath.c_str());
+    s3fscurl.DestroyCurlHandle();
+    StatCache::getStatCacheData()->DelStat(strpath.c_str());
+
+    // double check for old version(before 1.63)
+    // The old version makes "dir" object, newer version makes "dir/".
+    // A case, there is only "dir", the first removing object is "dir/".
+    // Then "dir/" is not exists, but curl_delete returns 0.
+    // So need to check "dir" and should be removed it.
+    if('/' == strpath[strpath.length() - 1]){
+        strpath = strpath.substr(0, strpath.length() - 1);
+    }
+    if(0 == get_object_attribute(strpath.c_str(), &stbuf, NULL, false)){
+        if(S_ISDIR(stbuf.st_mode)){
+            // Found "dir" object.
+            result = s3fscurl.DeleteRequest(strpath.c_str());
+            s3fscurl.DestroyCurlHandle();
+            StatCache::getStatCacheData()->DelStat(strpath.c_str());
+        }
+    }
+    // If there is no "dir" and "dir/" object(this case is made by s3cmd/s3sync),
+    // the cache key is "dir/". So we get error only once(delete "dir/").
+
+    // check for "_$folder$" object.
+    // This processing is necessary for other S3 clients compatibility.
+    if(is_special_name_folder_object(strpath.c_str())){
+        strpath += "_$folder$";
+        result   = s3fscurl.DeleteRequest(strpath.c_str());
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return result;
 }
 
 static int s3fs_symlink(const char* _from, const char* _to)
 {
-  WTF8_ENCODE(from)
-  WTF8_ENCODE(to)
-  int result;
-  struct fuse_context* pcxt;
+    WTF8_ENCODE(from)
+    WTF8_ENCODE(to)
+    int result;
+    struct fuse_context* pcxt;
 
-  S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
 
-  if(NULL == (pcxt = fuse_get_context())){
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
-    return result;
-  }
-  if(-ENOENT != (result = check_object_access(to, F_OK, NULL))){
-    if(0 == result){
-      result = -EEXIST;
+    if(NULL == (pcxt = fuse_get_context())){
+        return -EIO;
     }
-    return result;
-  }
+    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+        return result;
+    }
+    if(-ENOENT != (result = check_object_access(to, F_OK, NULL))){
+        if(0 == result){
+            result = -EEXIST;
+        }
+        return result;
+    }
 
-  time_t now = time(NULL);
-  headers_t headers;
-  headers["Content-Type"]     = string("application/octet-stream"); // Static
-  headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
-  headers["x-amz-meta-ctime"] = str(now);
-  headers["x-amz-meta-mtime"] = str(now);
-  headers["x-amz-meta-uid"]   = str(pcxt->uid);
-  headers["x-amz-meta-gid"]   = str(pcxt->gid);
+    time_t now = time(NULL);
+    headers_t headers;
+    headers["Content-Type"]     = string("application/octet-stream"); // Static
+    headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+    headers["x-amz-meta-ctime"] = str(now);
+    headers["x-amz-meta-mtime"] = str(now);
+    headers["x-amz-meta-uid"]   = str(pcxt->uid);
+    headers["x-amz-meta-gid"]   = str(pcxt->gid);
 
-  // open tmpfile
-  FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->Open(to, &headers, 0, -1, true, true))){
-    S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
-    return -errno;
-  }
-  // write(without space words)
-  string  strFrom   = trim(string(from));
-  ssize_t from_size = static_cast<ssize_t>(strFrom.length());
-  if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
-    S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
+    // open tmpfile
+    FdEntity* ent;
+    if(NULL == (ent = FdManager::get()->Open(to, &headers, 0, -1, true, true))){
+        S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
+        return -errno;
+    }
+    // write(without space words)
+    string  strFrom   = trim(string(from));
+    ssize_t from_size = static_cast<ssize_t>(strFrom.length());
+    if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
+        S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
+        FdManager::get()->Close(ent);
+        return -errno;
+    }
+    // upload
+    if(0 != (result = ent->Flush(true))){
+        S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
+    }
     FdManager::get()->Close(ent);
-    return -errno;
-  }
-  // upload
-  if(0 != (result = ent->Flush(true))){
-    S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
-  }
-  FdManager::get()->Close(ent);
 
-  StatCache::getStatCacheData()->DelStat(to);
-  if(!StatCache::getStatCacheData()->AddSymlink(string(to), strFrom)){
-    S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
-  }
-  S3FS_MALLOCTRIM(0);
+    StatCache::getStatCacheData()->DelStat(to);
+    if(!StatCache::getStatCacheData()->AddSymlink(string(to), strFrom)){
+        S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
+    }
+    S3FS_MALLOCTRIM(0);
 
-  return result;
+    return result;
 }
 
 static int rename_object(const char* from, const char* to)
 {
-  int result;
-  string s3_realpath;
-  headers_t meta;
+    int result;
+    string s3_realpath;
+    headers_t meta;
 
-  S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
+    S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
-  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
-    // not permit writing "to" object parent dir.
+    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+        // not permit writing "to" object parent dir.
+        return result;
+    }
+    if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+        // not permit removing "from" object parent dir.
+        return result;
+    }
+    if(0 != (result = get_object_attribute(from, NULL, &meta))){
+        return result;
+    }
+    s3_realpath = get_realpath(from);
+
+    meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
+    meta["Content-Type"]             = S3fsCurl::LookupMimeType(string(to));
+    meta["x-amz-metadata-directive"] = "REPLACE";
+
+    if(0 != (result = put_headers(to, meta, true))){
+        return result;
+    }
+
+    FdManager::get()->Rename(from, to);
+
+    // Remove file
+    result = s3fs_unlink(from);
+
+    StatCache::getStatCacheData()->DelStat(to);
+    FdManager::DeleteCacheFile(to);
+
     return result;
-  }
-  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
-    // not permit removing "from" object parent dir.
-    return result;
-  }
-  if(0 != (result = get_object_attribute(from, NULL, &meta))){
-    return result;
-  }
-  s3_realpath = get_realpath(from);
-
-  meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
-  meta["Content-Type"]             = S3fsCurl::LookupMimeType(string(to));
-  meta["x-amz-metadata-directive"] = "REPLACE";
-
-  if(0 != (result = put_headers(to, meta, true))){
-    return result;
-  }
-
-  FdManager::get()->Rename(from, to);
-
-  // Remove file
-  result = s3fs_unlink(from);
-
-  StatCache::getStatCacheData()->DelStat(to);
-  FdManager::DeleteCacheFile(to);
-
-  return result;
 }
 
 static int rename_object_nocopy(const char* from, const char* to)
 {
-  int result;
+    int result;
 
-  S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
+    S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
-  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
-    // not permit writing "to" object parent dir.
-    return result;
-  }
-  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
-    // not permit removing "from" object parent dir.
-    return result;
-  }
+    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+        // not permit writing "to" object parent dir.
+        return result;
+    }
+    if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+        // not permit removing "from" object parent dir.
+        return result;
+    }
 
-  // open & load
-  FdEntity* ent;
-  if(NULL == (ent = get_local_fent(from, true))){
-    S3FS_PRN_ERR("could not open and read file(%s)", from);
-    return -EIO;
-  }
+    // open & load
+    FdEntity* ent;
+    if(NULL == (ent = get_local_fent(from, true))){
+        S3FS_PRN_ERR("could not open and read file(%s)", from);
+        return -EIO;
+    }
 
-  // Set header
-  if(!ent->SetContentType(to)){
-    S3FS_PRN_ERR("could not set content-type for %s", to);
-    return -EIO;
-  }
+    // Set header
+    if(!ent->SetContentType(to)){
+        S3FS_PRN_ERR("could not set content-type for %s", to);
+        return -EIO;
+    }
 
-  // upload
-  if(0 != (result = ent->RowFlush(to, true))){
-    S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+    // upload
+    if(0 != (result = ent->RowFlush(to, true))){
+        S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+        FdManager::get()->Close(ent);
+        return result;
+    }
+
+    FdManager::get()->Rename(from, to);
     FdManager::get()->Close(ent);
+
+    // Remove file
+    result = s3fs_unlink(from);
+
+    // Stats
+    StatCache::getStatCacheData()->DelStat(to);
+    FdManager::DeleteCacheFile(to);
+
     return result;
-  }
-
-  FdManager::get()->Rename(from, to);
-  FdManager::get()->Close(ent);
-
-  // Remove file
-  result = s3fs_unlink(from);
-
-  // Stats
-  StatCache::getStatCacheData()->DelStat(to);
-  FdManager::DeleteCacheFile(to);
-
-  return result;
 }
 
 static int rename_large_object(const char* from, const char* to)
 {
-  int         result;
-  struct stat buf;
-  headers_t   meta;
+    int         result;
+    struct stat buf;
+    headers_t   meta;
 
-  S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
+    S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
-  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
-    // not permit writing "to" object parent dir.
+    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+        // not permit writing "to" object parent dir.
+        return result;
+    }
+    if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+        // not permit removing "from" object parent dir.
+        return result;
+    }
+    if(0 != (result = get_object_attribute(from, &buf, &meta, false))){
+        return result;
+    }
+
+    S3fsCurl s3fscurl(true);
+    if(0 != (result = s3fscurl.MultipartRenameRequest(from, to, meta, buf.st_size))){
+        return result;
+    }
+    s3fscurl.DestroyCurlHandle();
+
+    // Remove file
+    result = s3fs_unlink(from);
+
+    StatCache::getStatCacheData()->DelStat(to);
+    FdManager::DeleteCacheFile(to);
+
     return result;
-  }
-  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
-    // not permit removing "from" object parent dir.
-    return result;
-  }
-  if(0 != (result = get_object_attribute(from, &buf, &meta, false))){
-    return result;
-  }
-
-  S3fsCurl s3fscurl(true);
-  if(0 != (result = s3fscurl.MultipartRenameRequest(from, to, meta, buf.st_size))){
-    return result;
-  }
-  s3fscurl.DestroyCurlHandle();
-
-  // Remove file
-  result = s3fs_unlink(from);
-
-  StatCache::getStatCacheData()->DelStat(to);
-  FdManager::DeleteCacheFile(to);
-
-  return result;
 }
 
 static int clone_directory_object(const char* from, const char* to)
 {
-  int result = -1;
-  struct stat stbuf;
+    int result = -1;
+    struct stat stbuf;
 
-  S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
+    S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
 
-  // get target's attributes
-  if(0 != (result = get_object_attribute(from, &stbuf))){
+    // get target's attributes
+    if(0 != (result = get_object_attribute(from, &stbuf))){
+        return result;
+    }
+    result = create_directory_object(to, stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid);
+    StatCache::getStatCacheData()->DelStat(to);
+
     return result;
-  }
-  result = create_directory_object(to, stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid);
-  StatCache::getStatCacheData()->DelStat(to);
-
-  return result;
 }
 
 static int rename_directory(const char* from, const char* to)
 {
-  S3ObjList head;
-  s3obj_list_t headlist;
-  string strfrom  = from ? from : "";	// from is without "/".
-  string strto    = to ? to : "";	// to is without "/" too.
-  string basepath = strfrom + "/";
-  string newpath;                       // should be from name(not used)
-  string nowcache;                      // now cache path(not used)
-  dirtype DirType;
-  bool normdir; 
-  MVNODE* mn_head = NULL;
-  MVNODE* mn_tail = NULL;
-  MVNODE* mn_cur;
-  struct stat stbuf;
-  int result;
-  bool is_dir;
+    S3ObjList head;
+    s3obj_list_t headlist;
+    string strfrom  = from ? from : "";   // from is without "/".
+    string strto    = to ? to : "";       // to is without "/" too.
+    string basepath = strfrom + "/";
+    string newpath;                       // should be from name(not used)
+    string nowcache;                      // now cache path(not used)
+    dirtype DirType;
+    bool normdir; 
+    MVNODE* mn_head = NULL;
+    MVNODE* mn_tail = NULL;
+    MVNODE* mn_cur;
+    struct stat stbuf;
+    int result;
+    bool is_dir;
 
-  S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
+    S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
 
-  //
-  // Initiate and Add base directory into MVNODE struct.
-  //
-  strto += "/";	
-  if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, NULL, &DirType) && DIRTYPE_UNKNOWN != DirType){
-    if(DIRTYPE_NOOBJ != DirType){
-      normdir = false;
-    }else{
-      normdir = true;
-      strfrom = from;	// from directory is not removed, but from directory attr is needed.
-    }
-    if(NULL == (add_mvnode(&mn_head, &mn_tail, strfrom.c_str(), strto.c_str(), true, normdir))){
-      return -ENOMEM;
-    }
-  }else{
-    // Something wrong about "from" directory.
-  }
-
-  //
-  // get a list of all the objects
-  //
-  // No delimiter is specified, the result(head) is all object keys.
-  // (CommonPrefixes is empty, but all object is listed in Key.)
-  if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
-    S3FS_PRN_ERR("list_bucket returns error.");
-    return result; 
-  }
-  head.GetNameList(headlist);                       // get name without "/".
-  S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
-
-  s3obj_list_t::const_iterator liter;
-  for(liter = headlist.begin(); headlist.end() != liter; ++liter){
-    // make "from" and "to" object name.
-    string from_name = basepath + (*liter);
-    string to_name   = strto + (*liter);
-    string etag      = head.GetETag((*liter).c_str());
-
-    // Check subdirectory.
-    StatCache::getStatCacheData()->HasStat(from_name, etag.c_str()); // Check ETag
-    if(0 != get_object_attribute(from_name.c_str(), &stbuf, NULL)){
-      S3FS_PRN_WARN("failed to get %s object attribute.", from_name.c_str());
-      continue;
-    }
-    if(S_ISDIR(stbuf.st_mode)){
-      is_dir = true;
-      if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, NULL, &DirType) || DIRTYPE_UNKNOWN == DirType){
-        S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
-        continue;
-      }
-      if(DIRTYPE_NOOBJ != DirType){
-        normdir = false;
-      }else{
-        normdir = true;
-        from_name = basepath + (*liter);  // from directory is not removed, but from directory attr is needed.
-      }
-    }else{
-      is_dir  = false;
-      normdir = false;
-    }
-    
-    // push this one onto the stack
-    if(NULL == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir, normdir)){
-      return -ENOMEM;
-    }
-  }
-
-  //
-  // rename
-  //
-  // rename directory objects.
-  for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
-    if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
-      if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
-        S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
-        free_mvnodes(mn_head);
-        return -EIO;
-      }
-    }
-  }
-
-  // iterate over the list - copy the files with rename_object
-  // does a safe copy - copies first and then deletes old
-  for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
-    if(!mn_cur->is_dir){
-      // TODO: call s3fs_rename instead?
-      if(!nocopyapi && !norenameapi){
-        result = rename_object(mn_cur->old_path, mn_cur->new_path);
-      }else{
-        result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
-      }
-      if(0 != result){
-        S3FS_PRN_ERR("rename_object returned an error(%d)", result);
-        free_mvnodes(mn_head);
-        return -EIO;
-      }
-    }
-  }
-
-  // Iterate over old the directories, bottoms up and remove
-  for(mn_cur = mn_tail; mn_cur; mn_cur = mn_cur->prev){
-    if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
-      if(!(mn_cur->is_normdir)){
-        if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
-          S3FS_PRN_ERR("s3fs_rmdir returned an error(%d)", result);
-          free_mvnodes(mn_head);
-          return -EIO;
+    //
+    // Initiate and Add base directory into MVNODE struct.
+    //
+    strto += "/";
+    if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, NULL, &DirType) && DIRTYPE_UNKNOWN != DirType){
+        if(DIRTYPE_NOOBJ != DirType){
+            normdir = false;
+        }else{
+            normdir = true;
+            strfrom = from;               // from directory is not removed, but from directory attr is needed.
         }
-      }else{
-        // cache clear.
-        StatCache::getStatCacheData()->DelStat(mn_cur->old_path);
-      }
+        if(NULL == (add_mvnode(&mn_head, &mn_tail, strfrom.c_str(), strto.c_str(), true, normdir))){
+            return -ENOMEM;
+        }
+    }else{
+        // Something wrong about "from" directory.
     }
-  }
-  free_mvnodes(mn_head);
 
-  return 0;
+    //
+    // get a list of all the objects
+    //
+    // No delimiter is specified, the result(head) is all object keys.
+    // (CommonPrefixes is empty, but all object is listed in Key.)
+    if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
+        S3FS_PRN_ERR("list_bucket returns error.");
+        return result; 
+    }
+    head.GetNameList(headlist);                       // get name without "/".
+    S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
+
+    s3obj_list_t::const_iterator liter;
+    for(liter = headlist.begin(); headlist.end() != liter; ++liter){
+        // make "from" and "to" object name.
+        string from_name = basepath + (*liter);
+        string to_name   = strto + (*liter);
+        string etag      = head.GetETag((*liter).c_str());
+
+        // Check subdirectory.
+        StatCache::getStatCacheData()->HasStat(from_name, etag.c_str()); // Check ETag
+        if(0 != get_object_attribute(from_name.c_str(), &stbuf, NULL)){
+            S3FS_PRN_WARN("failed to get %s object attribute.", from_name.c_str());
+            continue;
+        }
+        if(S_ISDIR(stbuf.st_mode)){
+            is_dir = true;
+            if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, NULL, &DirType) || DIRTYPE_UNKNOWN == DirType){
+                S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
+                continue;
+            }
+            if(DIRTYPE_NOOBJ != DirType){
+                normdir = false;
+            }else{
+                normdir = true;
+                from_name = basepath + (*liter);  // from directory is not removed, but from directory attr is needed.
+            }
+        }else{
+            is_dir  = false;
+            normdir = false;
+        }
+        
+        // push this one onto the stack
+        if(NULL == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir, normdir)){
+            return -ENOMEM;
+        }
+    }
+
+    //
+    // rename
+    //
+    // rename directory objects.
+    for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
+        if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
+                S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
+                free_mvnodes(mn_head);
+                return -EIO;
+            }
+        }
+    }
+
+    // iterate over the list - copy the files with rename_object
+    // does a safe copy - copies first and then deletes old
+    for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
+        if(!mn_cur->is_dir){
+            // TODO: call s3fs_rename instead?
+            if(!nocopyapi && !norenameapi){
+                result = rename_object(mn_cur->old_path, mn_cur->new_path);
+            }else{
+                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
+            }
+            if(0 != result){
+                S3FS_PRN_ERR("rename_object returned an error(%d)", result);
+                free_mvnodes(mn_head);
+                return -EIO;
+            }
+        }
+    }
+
+    // Iterate over old the directories, bottoms up and remove
+    for(mn_cur = mn_tail; mn_cur; mn_cur = mn_cur->prev){
+        if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+            if(!(mn_cur->is_normdir)){
+                if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
+                    S3FS_PRN_ERR("s3fs_rmdir returned an error(%d)", result);
+                    free_mvnodes(mn_head);
+                    return -EIO;
+                }
+            }else{
+                // cache clear.
+                StatCache::getStatCacheData()->DelStat(mn_cur->old_path);
+            }
+        }
+    }
+    free_mvnodes(mn_head);
+
+    return 0;
 }
 
 static int s3fs_rename(const char* _from, const char* _to)
 {
-  WTF8_ENCODE(from)
-  WTF8_ENCODE(to)
-  struct stat buf;
-  int result;
+    WTF8_ENCODE(from)
+    WTF8_ENCODE(to)
+    struct stat buf;
+    int result;
 
-  S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
 
-  if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
-    // not permit writing "to" object parent dir.
-    return result;
-  }
-  if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
-    // not permit removing "from" object parent dir.
-    return result;
-  }
-  if(0 != (result = get_object_attribute(from, &buf, NULL))){
-    return result;
-  }
-
-  // flush pending writes if file is open
-  FdEntity *entity = FdManager::get()->ExistOpen(from);
-  if(entity != NULL){
-    if(0 != (result = entity->Flush(true))){
-      S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
-      return result;
+    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+        // not permit writing "to" object parent dir.
+        return result;
     }
-    StatCache::getStatCacheData()->DelStat(from);
-    FdManager::get()->Close(entity);
-    entity = NULL;
-  }
+    if(0 != (result = check_parent_object_access(from, W_OK | X_OK))){
+        // not permit removing "from" object parent dir.
+        return result;
+    }
+    if(0 != (result = get_object_attribute(from, &buf, NULL))){
+        return result;
+    }
 
-  // files larger than 5GB must be modified via the multipart interface
-  if(S_ISDIR(buf.st_mode)){
-    result = rename_directory(from, to);
-  }else if(!nomultipart && buf.st_size >= singlepart_copy_limit){
-    result = rename_large_object(from, to);
-  }else{
-    if(!nocopyapi && !norenameapi){
-      result = rename_object(from, to);
+    // flush pending writes if file is open
+    FdEntity *entity = FdManager::get()->ExistOpen(from);
+    if(entity != NULL){
+        if(0 != (result = entity->Flush(true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(from);
+        FdManager::get()->Close(entity);
+        entity = NULL;
+    }
+
+    // files larger than 5GB must be modified via the multipart interface
+    if(S_ISDIR(buf.st_mode)){
+        result = rename_directory(from, to);
+    }else if(!nomultipart && buf.st_size >= singlepart_copy_limit){
+        result = rename_large_object(from, to);
     }else{
-      result = rename_object_nocopy(from, to);
+        if(!nocopyapi && !norenameapi){
+            result = rename_object(from, to);
+        }else{
+            result = rename_object_nocopy(from, to);
+        }
     }
-  }
-  S3FS_MALLOCTRIM(0);
+    S3FS_MALLOCTRIM(0);
 
-  return result;
+    return result;
 }
 
 static int s3fs_link(const char* _from, const char* _to)
 {
-  WTF8_ENCODE(from)
-  WTF8_ENCODE(to)
-  S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
-  return -ENOTSUP;
+    WTF8_ENCODE(from)
+    WTF8_ENCODE(to)
+    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    return -ENOTSUP;
 }
 
 static int s3fs_chmod(const char* _path, mode_t mode)
 {
-  WTF8_ENCODE(path)
-  int result;
-  string strpath;
-  string newpath;
-  string nowcache;
-  headers_t meta;
-  struct stat stbuf;
-  dirtype nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int result;
+    string strpath;
+    string newpath;
+    string nowcache;
+    headers_t meta;
+    struct stat stbuf;
+    dirtype nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
+    S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mode for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, &meta);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-    // Should rebuild directory object(except new type)
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mode for mount point.");
+        return -EIO;
     }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-      return result;
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-  }else{
-    // normal object or directory object of newer version
-    headers_t updatemeta;
-    updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
-    updatemeta["x-amz-meta-mode"]          = str(mode);
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    updatemeta["x-amz-metadata-directive"] = "REPLACE";
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
+    }
 
-    // check opened file handle.
-    //
-    // If the file starts uploading by multipart when the disk capacity is insufficient,
-    // we need to put these header after finishing upload.
-    // Or if the file is only open, we must update to FdEntity's internal meta.
-    //
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
-      // the file is opened now.
-      if(ent->MergeOrgMeta(updatemeta)){
-        // now uploading
-        // the meta is pending and accumulated to be put after the upload is complete.
-        S3FS_PRN_INFO("meta pending until upload is complete");
-      }else{
-        // allow to put header
-        // updatemeta already merged the orgmeta of the opened files.
-        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-          return -EIO;
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, &meta);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+        // Should rebuild directory object(except new type)
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
-      }
 
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+            return result;
+        }
     }else{
-      // not opened file, then put headers
-      merge_headers(meta, updatemeta, true);
-      if(0 != put_headers(strpath.c_str(), meta, true)){
-        return -EIO;
-      }
-      StatCache::getStatCacheData()->DelStat(nowcache);
-    }
-  }
-  S3FS_MALLOCTRIM(0);
+        // normal object or directory object of newer version
+        headers_t updatemeta;
+        updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+        updatemeta["x-amz-meta-mode"]          = str(mode);
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-  return 0;
+        // check opened file handle.
+        //
+        // If the file starts uploading by multipart when the disk capacity is insufficient,
+        // we need to put these header after finishing upload.
+        // Or if the file is only open, we must update to FdEntity's internal meta.
+        //
+        FdEntity* ent;
+        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+            // the file is opened now.
+            if(ent->MergeOrgMeta(updatemeta)){
+                // now uploading
+                // the meta is pending and accumulated to be put after the upload is complete.
+                S3FS_PRN_INFO("meta pending until upload is complete");
+            }else{
+                // allow to put header
+                // updatemeta already merged the orgmeta of the opened files.
+                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    return -EIO;
+                }
+                StatCache::getStatCacheData()->DelStat(nowcache);
+            }
+        }else{
+            // not opened file, then put headers
+            merge_headers(meta, updatemeta, true);
+            if(0 != put_headers(strpath.c_str(), meta, true)){
+                return -EIO;
+            }
+            StatCache::getStatCacheData()->DelStat(nowcache);
+        }
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 {
-  WTF8_ENCODE(path)
-  int         result;
-  string      strpath;
-  string      newpath;
-  string      nowcache;
-  struct stat stbuf;
-  dirtype     nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int         result;
+    string      strpath;
+    string      newpath;
+    string      nowcache;
+    struct stat stbuf;
+    dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
+    S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mode for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mode for mount point.");
+        return -EIO;
+    }
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
+    }
+
+    // Get attributes
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, NULL);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode)){
+        // Should rebuild all directory object
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+            return result;
+        }
+    }else{
+        // normal object or directory object of newer version
+
+        // open & load
+        FdEntity* ent;
+        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+            return -EIO;
+        }
+
+        ent->SetCtime(time(NULL));
+
+        // Change file mode
+        ent->SetMode(mode);
+
+        // upload
+        if(0 != (result = ent->Flush(true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            FdManager::get()->Close(ent);
+            return result;
+        }
+        FdManager::get()->Close(ent);
+
+        StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+    S3FS_MALLOCTRIM(0);
+  
     return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  // Get attributes
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, NULL);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    // Should rebuild all directory object
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-      return result;
-    }
-  }else{
-    // normal object or directory object of newer version
-
-    // open & load
-    FdEntity* ent;
-    if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-      return -EIO;
-    }
-
-    ent->SetCtime(time(NULL));
-
-    // Change file mode
-    ent->SetMode(mode);
-
-    // upload
-    if(0 != (result = ent->Flush(true))){
-      S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-      FdManager::get()->Close(ent);
-      return result;
-    }
-    FdManager::get()->Close(ent);
-
-    StatCache::getStatCacheData()->DelStat(nowcache);
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 {
-  WTF8_ENCODE(path)
-  int result;
-  string strpath;
-  string newpath;
-  string nowcache;
-  headers_t meta;
-  struct stat stbuf;
-  dirtype nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int result;
+    string strpath;
+    string newpath;
+    string nowcache;
+    headers_t meta;
+    struct stat stbuf;
+    dirtype nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
+    S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change owner for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  if((uid_t)(-1) == uid){
-    uid = stbuf.st_uid;
-  }
-  if((gid_t)(-1) == gid){
-    gid = stbuf.st_gid;
-  }
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, &meta);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-    // Should rebuild directory object(except new type)
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change owner for mount point.");
+        return -EIO;
     }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
-      return result;
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-  }else{
-    headers_t updatemeta;
-    updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
-    updatemeta["x-amz-meta-uid"]           = str(uid);
-    updatemeta["x-amz-meta-gid"]           = str(gid);
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    updatemeta["x-amz-metadata-directive"] = "REPLACE";
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
+    }
 
-    // check opened file handle.
-    //
-    // If the file starts uploading by multipart when the disk capacity is insufficient,
-    // we need to put these header after finishing upload.
-    // Or if the file is only open, we must update to FdEntity's internal meta.
-    //
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
-      // the file is opened now.
-      if(ent->MergeOrgMeta(updatemeta)){
-        // now uploading
-        // the meta is pending and accumulated to be put after the upload is complete.
-        S3FS_PRN_INFO("meta pending until upload is complete");
-      }else{
-        // allow to put header
-        // updatemeta already merged the orgmeta of the opened files.
-        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-          return -EIO;
+    if((uid_t)(-1) == uid){
+        uid = stbuf.st_uid;
+    }
+    if((gid_t)(-1) == gid){
+        gid = stbuf.st_gid;
+    }
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, &meta);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+        // Should rebuild directory object(except new type)
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
-      }
 
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+            return result;
+        }
     }else{
-      // not opened file, then put headers
-      merge_headers(meta, updatemeta, true);
-      if(0 != put_headers(strpath.c_str(), meta, true)){
-        return -EIO;
-      }
-      StatCache::getStatCacheData()->DelStat(nowcache);
-    }
-  }
-  S3FS_MALLOCTRIM(0);
+        headers_t updatemeta;
+        updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+        updatemeta["x-amz-meta-uid"]           = str(uid);
+        updatemeta["x-amz-meta-gid"]           = str(gid);
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-  return 0;
+        // check opened file handle.
+        //
+        // If the file starts uploading by multipart when the disk capacity is insufficient,
+        // we need to put these header after finishing upload.
+        // Or if the file is only open, we must update to FdEntity's internal meta.
+        //
+        FdEntity* ent;
+        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+            // the file is opened now.
+            if(ent->MergeOrgMeta(updatemeta)){
+                // now uploading
+                // the meta is pending and accumulated to be put after the upload is complete.
+                S3FS_PRN_INFO("meta pending until upload is complete");
+            }else{
+                // allow to put header
+                // updatemeta already merged the orgmeta of the opened files.
+                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    return -EIO;
+                }
+                StatCache::getStatCacheData()->DelStat(nowcache);
+            }
+        }else{
+            // not opened file, then put headers
+            merge_headers(meta, updatemeta, true);
+            if(0 != put_headers(strpath.c_str(), meta, true)){
+                return -EIO;
+            }
+            StatCache::getStatCacheData()->DelStat(nowcache);
+        }
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 {
-  WTF8_ENCODE(path)
-  int         result;
-  string      strpath;
-  string      newpath;
-  string      nowcache;
-  struct stat stbuf;
-  dirtype     nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int         result;
+    string      strpath;
+    string      newpath;
+    string      nowcache;
+    struct stat stbuf;
+    dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
+    S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change owner for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change owner for mount point.");
+        return -EIO;
+    }
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
+    }
+
+    if((uid_t)(-1) == uid){
+        uid = stbuf.st_uid;
+    }
+    if((gid_t)(-1) == gid){
+        gid = stbuf.st_gid;
+    }
+
+    // Get attributes
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, NULL);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode)){
+        // Should rebuild all directory object
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+            return result;
+        }
+    }else{
+        // normal object or directory object of newer version
+
+        // open & load
+        FdEntity* ent;
+        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+            return -EIO;
+        }
+
+        ent->SetCtime(time(NULL));
+
+        // Change owner
+        ent->SetUId(uid);
+        ent->SetGId(gid);
+  
+        // upload
+        if(0 != (result = ent->Flush(true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            FdManager::get()->Close(ent);
+            return result;
+        }
+        FdManager::get()->Close(ent);
+
+        StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+    S3FS_MALLOCTRIM(0);
+  
     return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  if((uid_t)(-1) == uid){
-    uid = stbuf.st_uid;
-  }
-  if((gid_t)(-1) == gid){
-    gid = stbuf.st_gid;
-  }
-
-  // Get attributes
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, NULL);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    // Should rebuild all directory object
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
-      return result;
-    }
-  }else{
-    // normal object or directory object of newer version
-
-    // open & load
-    FdEntity* ent;
-    if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-      return -EIO;
-    }
-
-    ent->SetCtime(time(NULL));
-
-    // Change owner
-    ent->SetUId(uid);
-    ent->SetGId(gid);
-
-    // upload
-    if(0 != (result = ent->Flush(true))){
-      S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-      FdManager::get()->Close(ent);
-      return result;
-    }
-    FdManager::get()->Close(ent);
-
-    StatCache::getStatCacheData()->DelStat(nowcache);
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 {
-  WTF8_ENCODE(path)
-  int result;
-  string strpath;
-  string newpath;
-  string nowcache;
-  headers_t meta;
-  struct stat stbuf;
-  dirtype nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int result;
+    string strpath;
+    string newpath;
+    string nowcache;
+    headers_t meta;
+    struct stat stbuf;
+    dirtype nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mtime for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
-    if(0 != check_object_owner(path, &stbuf)){
-      return result;
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mtime for mount point.");
+        return -EIO;
     }
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, &meta);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-    // Should rebuild directory object(except new type)
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
-      return result;
+    if(0 != (result = check_object_access(path, W_OK, &stbuf))){
+        if(0 != check_object_owner(path, &stbuf)){
+            return result;
+        }
     }
-  }else{
-    headers_t updatemeta;
-    updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-    updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-    // check opened file handle.
-    //
-    // If the file starts uploading by multipart when the disk capacity is insufficient,
-    // we need to put these header after finishing upload.
-    // Or if the file is only open, we must update to FdEntity's internal meta.
-    //
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
-      // the file is opened now.
-      if(ent->MergeOrgMeta(updatemeta)){
-        // now uploading
-        // the meta is pending and accumulated to be put after the upload is complete.
-        S3FS_PRN_INFO("meta pending until upload is complete");
-      }else{
-        // allow to put header
-        // updatemeta already merged the orgmeta of the opened files.
-        if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-          return -EIO;
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, &meta);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+        // Should rebuild directory object(except new type)
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
-      }
 
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+            return result;
+        }
     }else{
-      // not opened file, then put headers
-      merge_headers(meta, updatemeta, true);
-      if(0 != put_headers(strpath.c_str(), meta, true)){
-        return -EIO;
-      }
-      StatCache::getStatCacheData()->DelStat(nowcache);
-    }
-  }
-  S3FS_MALLOCTRIM(0);
+        headers_t updatemeta;
+        updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
-  return 0;
+        // check opened file handle.
+        //
+        // If the file starts uploading by multipart when the disk capacity is insufficient,
+        // we need to put these header after finishing upload.
+        // Or if the file is only open, we must update to FdEntity's internal meta.
+        //
+        FdEntity* ent;
+        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+            // the file is opened now.
+            if(ent->MergeOrgMeta(updatemeta)){
+                // now uploading
+                // the meta is pending and accumulated to be put after the upload is complete.
+                S3FS_PRN_INFO("meta pending until upload is complete");
+            }else{
+                // allow to put header
+                // updatemeta already merged the orgmeta of the opened files.
+                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    return -EIO;
+                }
+                StatCache::getStatCacheData()->DelStat(nowcache);
+            }
+        }else{
+            // not opened file, then put headers
+            merge_headers(meta, updatemeta, true);
+            if(0 != put_headers(strpath.c_str(), meta, true)){
+                return -EIO;
+            }
+            StatCache::getStatCacheData()->DelStat(nowcache);
+        }
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 {
-  WTF8_ENCODE(path)
-  int         result;
-  string      strpath;
-  string      newpath;
-  string      nowcache;
-  struct stat stbuf;
-  dirtype     nDirType = DIRTYPE_UNKNOWN;
+    WTF8_ENCODE(path)
+    int         result;
+    string      strpath;
+    string      newpath;
+    string      nowcache;
+    struct stat stbuf;
+    dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  S3FS_PRN_INFO1("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO1("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mtime for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mtime for mount point.");
+        return -EIO;
+    }
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    if(0 != (result = check_object_access(path, W_OK, &stbuf))){
+        if(0 != check_object_owner(path, &stbuf)){
+            return result;
+        }
+    }
+
+    // Get attributes
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, NULL);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode)){
+        // Should rebuild all directory object
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+            return result;
+        }
+    }else{
+        // normal object or directory object of newer version
+
+        // open & load
+        FdEntity* ent;
+        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+            return -EIO;
+        }
+
+        // set mtime
+        if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
+            S3FS_PRN_ERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
+            FdManager::get()->Close(ent);
+            return result;
+        }
+
+        // upload
+        if(0 != (result = ent->Flush(true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            FdManager::get()->Close(ent);
+            return result;
+        }
+        FdManager::get()->Close(ent);
+
+        StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-  if(0 != (result = check_object_access(path, W_OK, &stbuf))){
-    if(0 != check_object_owner(path, &stbuf)){
-      return result;
-    }
-  }
-
-  // Get attributes
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, NULL);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    // Should rebuild all directory object
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
-      return result;
-    }
-  }else{
-    // normal object or directory object of newer version
-
-    // open & load
-    FdEntity* ent;
-    if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
-      S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-      return -EIO;
-    }
-
-    // set mtime
-    if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
-      S3FS_PRN_ERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
-      FdManager::get()->Close(ent);
-      return result;
-    }
-
-    // upload
-    if(0 != (result = ent->Flush(true))){
-      S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-      FdManager::get()->Close(ent);
-      return result;
-    }
-    FdManager::get()->Close(ent);
-
-    StatCache::getStatCacheData()->DelStat(nowcache);
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_truncate(const char* _path, off_t size)
 {
-  WTF8_ENCODE(path)
-  int result;
-  headers_t meta;
-  FdEntity* ent = NULL;
+    WTF8_ENCODE(path)
+    int result;
+    headers_t meta;
+    FdEntity* ent = NULL;
 
-  S3FS_PRN_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
+    S3FS_PRN_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
 
-  if(size < 0){
-    size = 0;
-  }
-
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_access(path, W_OK, NULL))){
-    return result;
-  }
-
-  // Get file information
-  if(0 == (result = get_object_attribute(path, NULL, &meta))){
-    // Exists -> Get file(with size)
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, false, true))){
-      S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
-      return -EIO;
-    }
-    if(0 != (result = ent->Load(0, size))){
-      S3FS_PRN_ERR("could not download file(%s): result=%d", path, result);
-      FdManager::get()->Close(ent);
-      return result;
+    if(size < 0){
+        size = 0;
     }
 
-  }else{
-    // Not found -> Make tmpfile(with size)
-
-    struct fuse_context* pcxt;
-    if(NULL == (pcxt = fuse_get_context())){
-      return -EIO;
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-    time_t now = time(NULL);
-    meta["Content-Type"]     = string("application/octet-stream"); // Static
-    meta["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
-    meta["x-amz-meta-ctime"] = str(now);
-    meta["x-amz-meta-mtime"] = str(now);
-    meta["x-amz-meta-uid"]   = str(pcxt->uid);
-    meta["x-amz-meta-gid"]   = str(pcxt->gid);
-
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, true, true))){
-      S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
-      return -EIO;
+    if(0 != (result = check_object_access(path, W_OK, NULL))){
+        return result;
     }
-  }
 
-  // upload
-  if(0 != (result = ent->Flush(true))){
-    S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+    // Get file information
+    if(0 == (result = get_object_attribute(path, NULL, &meta))){
+        // Exists -> Get file(with size)
+        if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, false, true))){
+            S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
+            return -EIO;
+        }
+        if(0 != (result = ent->Load(0, size))){
+            S3FS_PRN_ERR("could not download file(%s): result=%d", path, result);
+            FdManager::get()->Close(ent);
+            return result;
+        }
+
+    }else{
+        // Not found -> Make tmpfile(with size)
+
+        struct fuse_context* pcxt;
+        if(NULL == (pcxt = fuse_get_context())){
+            return -EIO;
+        }
+        time_t now = time(NULL);
+        meta["Content-Type"]     = string("application/octet-stream"); // Static
+        meta["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+        meta["x-amz-meta-ctime"] = str(now);
+        meta["x-amz-meta-mtime"] = str(now);
+        meta["x-amz-meta-uid"]   = str(pcxt->uid);
+        meta["x-amz-meta-gid"]   = str(pcxt->gid);
+
+        if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, true, true))){
+            S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
+            return -EIO;
+        }
+    }
+
+    // upload
+    if(0 != (result = ent->Flush(true))){
+        S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+        FdManager::get()->Close(ent);
+        return result;
+    }
     FdManager::get()->Close(ent);
+
+    StatCache::getStatCacheData()->DelStat(path);
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-  FdManager::get()->Close(ent);
-
-  StatCache::getStatCacheData()->DelStat(path);
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  int result;
-  struct stat st;
-  bool needs_flush = false;
+    WTF8_ENCODE(path)
+    int result;
+    struct stat st;
+    bool needs_flush = false;
 
-  S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
+    S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
-  // clear stat for reading fresh stat.
-  // (if object stat is changed, we refresh it. then s3fs gets always
-  // stat when s3fs open the object).
-  if(StatCache::getStatCacheData()->HasStat(path)){
-    // flush any dirty data so that subsequent stat gets correct size
-    if((result = s3fs_flush(_path, fi)) != 0){
-      S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
+    // clear stat for reading fresh stat.
+    // (if object stat is changed, we refresh it. then s3fs gets always
+    // stat when s3fs open the object).
+    if(StatCache::getStatCacheData()->HasStat(path)){
+        // flush any dirty data so that subsequent stat gets correct size
+        if((result = s3fs_flush(_path, fi)) != 0){
+            S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
+        }
+        StatCache::getStatCacheData()->DelStat(path);
     }
-    StatCache::getStatCacheData()->DelStat(path);
-  }
 
-  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-
-  result = check_object_access(path, mask, &st);
-  if(-ENOENT == result){
-    if(0 != (result = check_parent_object_access(path, W_OK))){
-      return result;
+    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-  }else if(0 != result){
-    return result;
-  }
 
-  if((unsigned int)fi->flags & O_TRUNC){
-    if(0 != st.st_size){
-      st.st_size = 0;
-      needs_flush = true;
+    result = check_object_access(path, mask, &st);
+    if(-ENOENT == result){
+        if(0 != (result = check_parent_object_access(path, W_OK))){
+            return result;
+        }
+    }else if(0 != result){
+        return result;
     }
-  }
-  if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
-    st.st_mtime = -1;
-  }
 
-  FdEntity*   ent;
-  headers_t   meta;
-  get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-  if(NULL == (ent = FdManager::get()->Open(path, &meta, st.st_size, st.st_mtime, false, true))){
-    StatCache::getStatCacheData()->DelStat(path);
-    return -EIO;
-  }
-  
-  if (needs_flush){
-    if(0 != (result = ent->RowFlush(path, true))){
-      S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
-      FdManager::get()->Close(ent);
-      StatCache::getStatCacheData()->DelStat(path);
-      return result;
+    if((unsigned int)fi->flags & O_TRUNC){
+        if(0 != st.st_size){
+            st.st_size = 0;
+            needs_flush = true;
+        }
     }
-  }
+    if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
+        st.st_mtime = -1;
+    }
 
-  fi->fh = ent->GetFd();
-  S3FS_MALLOCTRIM(0);
+    FdEntity*   ent;
+    headers_t   meta;
+    get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
+    if(NULL == (ent = FdManager::get()->Open(path, &meta, st.st_size, st.st_mtime, false, true))){
+        StatCache::getStatCacheData()->DelStat(path);
+        return -EIO;
+    }
 
-  return 0;
+    if (needs_flush){
+        if(0 != (result = ent->RowFlush(path, true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+            FdManager::get()->Close(ent);
+            StatCache::getStatCacheData()->DelStat(path);
+            return result;
+        }
+    }
+
+    fi->fh = ent->GetFd();
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  ssize_t res;
+    WTF8_ENCODE(path)
+    ssize_t res;
 
-  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
-  FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
-    S3FS_PRN_ERR("could not find opened fd(%s)", path);
-    return -EIO;
-  }
-  if(ent->GetFd() != static_cast<int>(fi->fh)){
-    S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
-  }
+    FdEntity* ent;
+    if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        return -EIO;
+    }
+    if(ent->GetFd() != static_cast<int>(fi->fh)){
+        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
+    }
 
-  // check real file size
-  off_t realsize = 0;
-  if(!ent->GetSize(realsize) || 0 == realsize){
-    S3FS_PRN_DBG("file size is 0, so break to read.");
+    // check real file size
+    off_t realsize = 0;
+    if(!ent->GetSize(realsize) || 0 == realsize){
+        S3FS_PRN_DBG("file size is 0, so break to read.");
+        FdManager::get()->Close(ent);
+        return 0;
+    }
+
+    if(0 > (res = ent->Read(buf, offset, size, false))){
+        S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
+    }
     FdManager::get()->Close(ent);
-    return 0;
-  }
 
-  if(0 > (res = ent->Read(buf, offset, size, false))){
-    S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
-  }
-  FdManager::get()->Close(ent);
-
-  return static_cast<int>(res);
+    return static_cast<int>(res);
 }
 
 static int s3fs_write(const char* _path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  ssize_t res;
+    WTF8_ENCODE(path)
+    ssize_t res;
 
-  S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
-  FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
-    S3FS_PRN_ERR("could not find opened fd(%s)", path);
-    return -EIO;
-  }
-  if(ent->GetFd() != static_cast<int>(fi->fh)){
-    S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
-  }
-  if(0 > (res = ent->Write(buf, offset, size))){
-    S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
-  }
-  FdManager::get()->Close(ent);
+    FdEntity* ent;
+    if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        return -EIO;
+    }
+    if(ent->GetFd() != static_cast<int>(fi->fh)){
+        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
+    }
+    if(0 > (res = ent->Write(buf, offset, size))){
+        S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
+    }
+    FdManager::get()->Close(ent);
 
-  return static_cast<int>(res);
+    return static_cast<int>(res);
 }
 
 static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 {
-  // WTF8_ENCODE(path)
-  // 256T
-  stbuf->f_bsize  = 0X1000000;
-  stbuf->f_blocks = 0X1000000;
-  stbuf->f_bfree  = 0x1000000;
-  stbuf->f_bavail = 0x1000000;
-  stbuf->f_namemax = NAME_MAX;
-  return 0;
+    // WTF8_ENCODE(path)
+    // 256T
+    stbuf->f_bsize  = 0X1000000;
+    stbuf->f_blocks = 0X1000000;
+    stbuf->f_bfree  = 0x1000000;
+    stbuf->f_bavail = 0x1000000;
+    stbuf->f_namemax = NAME_MAX;
+    return 0;
 }
 
 static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  int result;
+    WTF8_ENCODE(path)
+    int result;
 
-  S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
-  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  result = check_object_access(path, mask, NULL);
-  if(-ENOENT == result){
-    if(0 != (result = check_parent_object_access(path, W_OK))){
-      return result;
+    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
     }
-  }else if(0 != result){
+    result = check_object_access(path, mask, NULL);
+    if(-ENOENT == result){
+        if(0 != (result = check_parent_object_access(path, W_OK))){
+            return result;
+        }
+    }else if(0 != result){
+        return result;
+    }
+
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+        ent->UpdateMtime();
+        result = ent->Flush(false);
+        FdManager::get()->Close(ent);
+    }
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-
-  FdEntity* ent;
-  if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
-    ent->UpdateMtime();
-    result = ent->Flush(false);
-    FdManager::get()->Close(ent);
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 // [NOTICE]
@@ -2361,814 +2296,521 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 //
 static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  int result = 0;
+    WTF8_ENCODE(path)
+    int result = 0;
 
-  S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
-  FdEntity* ent;
-  if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
-    if(0 == datasync){
-      ent->UpdateMtime();
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+        if(0 == datasync){
+            ent->UpdateMtime();
+        }
+        result = ent->Flush(false);
+        FdManager::get()->Close(ent);
     }
-    result = ent->Flush(false);
-    FdManager::get()->Close(ent);
-  }
-  S3FS_MALLOCTRIM(0);
+    S3FS_MALLOCTRIM(0);
 
-  // Issue 320: Delete stat cache entry because st_size may have changed.
-  StatCache::getStatCacheData()->DelStat(path);
+    // Issue 320: Delete stat cache entry because st_size may have changed.
+    StatCache::getStatCacheData()->DelStat(path);
 
-  return result;
+    return result;
 }
 
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    WTF8_ENCODE(path)
+    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
-  // [NOTE]
-  // All opened file's stats is cached with no truncate flag.
-  // Thus we unset it here.
-  StatCache::getStatCacheData()->ChangeNoTruncateFlag(string(path), false);
+    // [NOTE]
+    // All opened file's stats is cached with no truncate flag.
+    // Thus we unset it here.
+    StatCache::getStatCacheData()->ChangeNoTruncateFlag(string(path), false);
 
-  // [NOTICE]
-  // At first, we remove stats cache.
-  // Because fuse does not wait for response from "release" function. :-(
-  // And fuse runs next command before this function returns.
-  // Thus we call deleting stats function ASSAP.
-  //
-  if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
-    StatCache::getStatCacheData()->DelStat(path);
-  }
-
-  FdEntity* ent;
-  if(NULL == (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
-    S3FS_PRN_ERR("could not find fd(file=%s)", path);
-    return -EIO;
-  }
-  if(ent->GetFd() != static_cast<int>(fi->fh)){
-    S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
-  }
-
-  // Once for the implicit refcnt from GetFdEntity and again for release
-  ent->Close();
-  FdManager::get()->Close(ent);
-
-  // check - for debug
-  if(IS_S3FS_LOG_DBG()){
-    if(NULL != (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
-      S3FS_PRN_WARN("file(%s),fd(%d) is still opened.", path, ent->GetFd());
+    // [NOTICE]
+    // At first, we remove stats cache.
+    // Because fuse does not wait for response from "release" function. :-(
+    // And fuse runs next command before this function returns.
+    // Thus we call deleting stats function ASSAP.
+    //
+    if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
+        StatCache::getStatCacheData()->DelStat(path);
     }
-  }
-  S3FS_MALLOCTRIM(0);
 
-  return 0;
+    FdEntity* ent;
+    if(NULL == (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
+        S3FS_PRN_ERR("could not find fd(file=%s)", path);
+        return -EIO;
+    }
+    if(ent->GetFd() != static_cast<int>(fi->fh)){
+        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
+    }
+
+    // Once for the implicit refcnt from GetFdEntity and again for release
+    ent->Close();
+    FdManager::get()->Close(ent);
+
+    // check - for debug
+    if(IS_S3FS_LOG_DBG()){
+        if(NULL != (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
+            S3FS_PRN_WARN("file(%s),fd(%d) is still opened.", path, ent->GetFd());
+        }
+    }
+    S3FS_MALLOCTRIM(0);
+
+    return 0;
 }
 
 static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  int result;
-  int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
+    WTF8_ENCODE(path)
+    int result;
+    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
 
-  S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
+    S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
-  if(0 == (result = check_object_access(path, mask, NULL))){
-    result = check_parent_object_access(path, mask);
-  }
-  S3FS_MALLOCTRIM(0);
+    if(0 == (result = check_object_access(path, mask, NULL))){
+        result = check_parent_object_access(path, mask);
+    }
+    S3FS_MALLOCTRIM(0);
 
-  return result;
+    return result;
 }
 
 static bool multi_head_callback(S3fsCurl* s3fscurl)
 {
-  if(!s3fscurl){
-    return false;
-  }
-  string saved_path = s3fscurl->GetSpacialSavedPath();
-  if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
-    S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
-    return false;
-  }
-  return true;
+    if(!s3fscurl){
+        return false;
+    }
+    string saved_path = s3fscurl->GetSpacialSavedPath();
+    if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
+        S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
+        return false;
+    }
+    return true;
 }
 
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
 {
-  if(!s3fscurl){
-    return NULL;
-  }
-  int ssec_key_pos= s3fscurl->GetLastPreHeadSeecKeyPos();
-  int retry_count = s3fscurl->GetMultipartRetryCount();
-
-  // retry next sse key.
-  // if end of sse key, set retry master count is up.
-  ssec_key_pos = (ssec_key_pos < 0 ? 0 : ssec_key_pos + 1);
-  if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
-    if(s3fscurl->IsOverMultipartRetryCount()){
-      S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
-      return NULL;
+    if(!s3fscurl){
+        return NULL;
     }
-    ssec_key_pos= -1;
-    retry_count++;
-  }
+    int ssec_key_pos= s3fscurl->GetLastPreHeadSeecKeyPos();
+    int retry_count = s3fscurl->GetMultipartRetryCount();
 
-  S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
-  string path       = s3fscurl->GetPath();
-  string base_path  = s3fscurl->GetBasePath();
-  string saved_path = s3fscurl->GetSpacialSavedPath();
+    // retry next sse key.
+    // if end of sse key, set retry master count is up.
+    ssec_key_pos = (ssec_key_pos < 0 ? 0 : ssec_key_pos + 1);
+    if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
+        if(s3fscurl->IsOverMultipartRetryCount()){
+            S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+            return NULL;
+        }
+        ssec_key_pos= -1;
+        retry_count++;
+    }
 
-  if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
-    S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
-    delete newcurl;
-    return NULL;
-  }
-  newcurl->SetMultipartRetryCount(retry_count);
+    S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
+    string path       = s3fscurl->GetPath();
+    string base_path  = s3fscurl->GetBasePath();
+    string saved_path = s3fscurl->GetSpacialSavedPath();
 
-  return newcurl;
+    if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
+        S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
+        delete newcurl;
+        return NULL;
+    }
+    newcurl->SetMultipartRetryCount(retry_count);
+
+    return newcurl;
 }
 
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
-  S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
-  s3obj_list_t  headlist;
-  s3obj_list_t  fillerlist;
-  int           result = 0;
+    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
+    s3obj_list_t  headlist;
+    s3obj_list_t  fillerlist;
+    int           result = 0;
 
-  S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
+    S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
 
-  // Make base path list.
-  head.GetNameList(headlist, true, false);  // get name with "/".
+    // Make base path list.
+    head.GetNameList(headlist, true, false);  // get name with "/".
 
-  // Initialize S3fsMultiCurl
-  curlmulti.SetSuccessCallback(multi_head_callback);
-  curlmulti.SetRetryCallback(multi_head_retry_callback);
+    // Initialize S3fsMultiCurl
+    curlmulti.SetSuccessCallback(multi_head_callback);
+    curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-  s3obj_list_t::iterator iter;
+    s3obj_list_t::iterator iter;
 
-  fillerlist.clear();
-  // Make single head request(with max).
-  for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
-    string disppath = path + (*iter);
-    string etag     = head.GetETag((*iter).c_str());
+    fillerlist.clear();
+    // Make single head request(with max).
+    for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+        string disppath = path + (*iter);
+        string etag     = head.GetETag((*iter).c_str());
 
-    string fillpath = disppath;
-    if('/' == disppath[disppath.length() - 1]){
-      fillpath = fillpath.substr(0, fillpath.length() -1);
+        string fillpath = disppath;
+        if('/' == disppath[disppath.length() - 1]){
+            fillpath = fillpath.substr(0, fillpath.length() -1);
+        }
+        fillerlist.push_back(fillpath);
+
+        if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
+            continue;
+        }
+
+        // First check for directory, start checking "not SSE-C".
+        // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
+        S3fsCurl* s3fscurl = new S3fsCurl();
+        if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
+            S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
+            delete s3fscurl;
+            continue;
+        }
+
+        if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
+            S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
+            delete s3fscurl;
+            continue;
+        }
     }
-    fillerlist.push_back(fillpath);
 
-    if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
-      continue;
+    // Multi request
+    if(0 != (result = curlmulti.Request())){
+        // If result is -EIO, it is something error occurred.
+        // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
+        // So s3fs set result to 0 in order to continue the process.
+        if(-EIO == result){
+            S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
+            result = 0;
+        }else{
+            S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
+            return result;
+        }
     }
 
-    // First check for directory, start checking "not SSE-C".
-    // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
-    S3fsCurl* s3fscurl = new S3fsCurl();
-    if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
-      S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
-      delete s3fscurl;
-      continue;
+    // populate fuse buffer
+    // here is best position, because a case is cache size < files in directory
+    //
+    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
+        struct stat st;
+        bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
+        string bpath = mybasename((*iter));
+        if(use_wtf8){
+            bpath = s3fs_wtf8_decode(bpath);
+        }
+        if(in_cache){
+            filler(buf, bpath.c_str(), &st, 0);
+        }else{
+            S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
+            filler(buf, bpath.c_str(), 0, 0);
+        }
     }
 
-    if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
-      S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
-      delete s3fscurl;
-      continue;
-    }
-  }
-
-  // Multi request
-  if(0 != (result = curlmulti.Request())){
-    // If result is -EIO, it is something error occurred.
-    // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
-    // So s3fs set result to 0 in order to continue the process.
-    if(-EIO == result){
-      S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
-      result = 0;
-    }else{
-      S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
-      return result;
-    }
-  }
-
-  // populate fuse buffer
-  // here is best position, because a case is cache size < files in directory
-  //
-  for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
-    struct stat st;
-    bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
-    string bpath = mybasename((*iter));
-    if(use_wtf8){
-      bpath = s3fs_wtf8_decode(bpath);
-    }
-    if(in_cache){
-      filler(buf, bpath.c_str(), &st, 0);
-    }else{
-      S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
-      filler(buf, bpath.c_str(), 0, 0);
-    }
-  }
-
-  return result;
+    return result;
 }
 
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
 {
-  WTF8_ENCODE(path)
-  S3ObjList head;
-  int result;
+    WTF8_ENCODE(path)
+    S3ObjList head;
+    int result;
 
-  S3FS_PRN_INFO("[path=%s]", path);
+    S3FS_PRN_INFO("[path=%s]", path);
 
-  if(0 != (result = check_object_access(path, X_OK, NULL))){
+    if(0 != (result = check_object_access(path, X_OK, NULL))){
+        return result;
+    }
+
+    // get a list of all the objects
+    if((result = list_bucket(path, head, "/")) != 0){
+        S3FS_PRN_ERR("list_bucket returns error(%d).", result);
+        return result;
+    }
+
+    // force to add "." and ".." name.
+    filler(buf, ".", 0, 0);
+    filler(buf, "..", 0, 0);
+    if(head.IsEmpty()){
+        return 0;
+    }
+
+    // Send multi head request for stats caching.
+    string strpath = path;
+    if(strcmp(path, "/") != 0){
+        strpath += "/";
+    }
+    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
+        S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
+    }
+    S3FS_MALLOCTRIM(0);
+
     return result;
-  }
-
-  // get a list of all the objects
-  if((result = list_bucket(path, head, "/")) != 0){
-    S3FS_PRN_ERR("list_bucket returns error(%d).", result);
-    return result;
-  }
-
-  // force to add "." and ".." name.
-  filler(buf, ".", 0, 0);
-  filler(buf, "..", 0, 0);
-  if(head.IsEmpty()){
-    return 0;
-  }
-
-  // Send multi head request for stats caching.
-  string strpath = path;
-  if(strcmp(path, "/") != 0){
-    strpath += "/";
-  }
-  if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
-    S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return result;
 }
 
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
 {
-  string    s3_realpath;
-  string    query_delimiter;;
-  string    query_prefix;;
-  string    query_maxkey;;
-  string    next_marker;
-  bool      truncated = true;
-  S3fsCurl  s3fscurl;
-  xmlDocPtr doc;
+    string    s3_realpath;
+    string    query_delimiter;;
+    string    query_prefix;;
+    string    query_maxkey;;
+    string    next_marker;
+    bool      truncated = true;
+    S3fsCurl  s3fscurl;
+    xmlDocPtr doc;
 
-  S3FS_PRN_INFO1("[path=%s]", path);
+    S3FS_PRN_INFO1("[path=%s]", path);
 
-  if(delimiter && 0 < strlen(delimiter)){
-    query_delimiter += "delimiter=";
-    query_delimiter += delimiter;
-    query_delimiter += "&";
-  }
-
-  query_prefix += "&prefix=";
-  s3_realpath = get_realpath(path);
-  if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
-    // last word must be "/"
-    query_prefix += urlEncode(s3_realpath.substr(1) + "/");
-  }else{
-    query_prefix += urlEncode(s3_realpath.substr(1));
-  }
-  if (check_content_only){
-    // Just need to know if there are child objects in dir
-    // For dir with children, expect "dir/" and "dir/child"
-    query_maxkey += "max-keys=2";
-  }else{
-    query_maxkey += "max-keys=" + str(max_keys_list_object);
-  }
-
-  while(truncated){
-    string each_query = query_delimiter;
-    if(!next_marker.empty()){
-      each_query += "marker=" + urlEncode(next_marker) + "&";
-      next_marker = "";
+    if(delimiter && 0 < strlen(delimiter)){
+        query_delimiter += "delimiter=";
+        query_delimiter += delimiter;
+        query_delimiter += "&";
     }
-    each_query += query_maxkey;
-    each_query += query_prefix;
 
-    // request
-    int result; 
-    if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
-      S3FS_PRN_ERR("ListBucketRequest returns with error.");
-      return result;
+    query_prefix += "&prefix=";
+    s3_realpath = get_realpath(path);
+    if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+        // last word must be "/"
+        query_prefix += urlEncode(s3_realpath.substr(1) + "/");
+    }else{
+        query_prefix += urlEncode(s3_realpath.substr(1));
     }
-    BodyData* body = s3fscurl.GetBodyData();
+    if (check_content_only){
+        // Just need to know if there are child objects in dir
+        // For dir with children, expect "dir/" and "dir/child"
+        query_maxkey += "max-keys=2";
+    }else{
+        query_maxkey += "max-keys=" + str(max_keys_list_object);
+    }
 
-    // xmlDocPtr
-    if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
-      S3FS_PRN_ERR("xmlReadMemory returns with error.");
-      return -1;
-    }
-    if(0 != append_objects_from_xml(path, doc, head)){
-      S3FS_PRN_ERR("append_objects_from_xml returns with error.");
-      xmlFreeDoc(doc);
-      return -1;
-    }
-    if(true == (truncated = is_truncated(doc))){
-      xmlChar*	tmpch = get_next_marker(doc);
-      if(tmpch){
-        next_marker = (char*)tmpch;
-        xmlFree(tmpch);
-      }else{
-        // If did not specify "delimiter", s3 did not return "NextMarker".
-        // On this case, can use last name for next marker.
-        //
-        string lastname;
-        if(!head.GetLastName(lastname)){
-          S3FS_PRN_WARN("Could not find next marker, thus break loop.");
-          truncated = false;
-        }else{
-          next_marker = s3_realpath.substr(1);
-          if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
-            next_marker += "/";
-          }
-          next_marker += lastname;
+    while(truncated){
+        string each_query = query_delimiter;
+        if(!next_marker.empty()){
+            each_query += "marker=" + urlEncode(next_marker) + "&";
+            next_marker = "";
         }
-      }
-    }
-    S3FS_XMLFREEDOC(doc);
+        each_query += query_maxkey;
+        each_query += query_prefix;
 
-    // reset(initialize) curl object
-    s3fscurl.DestroyCurlHandle();
+        // request
+        int result; 
+        if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
+            S3FS_PRN_ERR("ListBucketRequest returns with error.");
+            return result;
+        }
+        BodyData* body = s3fscurl.GetBodyData();
 
-    if(check_content_only){
-      break;
-    }
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return 0;
-}
-
-static const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
-
-static int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, 
-       const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head)
-{
-  xmlXPathObjectPtr contents_xp;
-  xmlNodeSetPtr content_nodes;
-
-  if(NULL == (contents_xp = xmlXPathEvalExpression((xmlChar*)ex_contents, ctx))){
-    S3FS_PRN_ERR("xmlXPathEvalExpression returns null.");
-    return -1;
-  }
-  if(xmlXPathNodeSetIsEmpty(contents_xp->nodesetval)){
-    S3FS_PRN_DBG("contents_xp->nodesetval is empty.");
-    S3FS_XMLXPATHFREEOBJECT(contents_xp);
-    return 0;
-  }
-  content_nodes = contents_xp->nodesetval;
-
-  bool   is_dir;
-  string stretag;
-  int    i;
-  for(i = 0; i < content_nodes->nodeNr; i++){
-    ctx->node = content_nodes->nodeTab[i];
-
-    // object name
-    xmlXPathObjectPtr key;
-    if(NULL == (key = xmlXPathEvalExpression((xmlChar*)ex_key, ctx))){
-      S3FS_PRN_WARN("key is null. but continue.");
-      continue;
-    }
-    if(xmlXPathNodeSetIsEmpty(key->nodesetval)){
-      S3FS_PRN_WARN("node is empty. but continue.");
-      xmlXPathFreeObject(key);
-      continue;
-    }
-    xmlNodeSetPtr key_nodes = key->nodesetval;
-    char* name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
-
-    if(!name){
-      S3FS_PRN_WARN("name is something wrong. but continue.");
-
-    }else if((const char*)name != c_strErrorObjectName){
-      is_dir  = isCPrefix ? true : false;
-      stretag = "";
-
-      if(!isCPrefix && ex_etag){
-        // Get ETag
-        xmlXPathObjectPtr ETag;
-        if(NULL != (ETag = xmlXPathEvalExpression((xmlChar*)ex_etag, ctx))){
-          if(xmlXPathNodeSetIsEmpty(ETag->nodesetval)){
-            S3FS_PRN_INFO("ETag->nodesetval is empty.");
-          }else{
-            xmlNodeSetPtr etag_nodes = ETag->nodesetval;
-            xmlChar* petag = xmlNodeListGetString(doc, etag_nodes->nodeTab[0]->xmlChildrenNode, 1);
-            if(petag){
-              stretag = (char*)petag;
-              xmlFree(petag);
+        // xmlDocPtr
+        if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
+            S3FS_PRN_ERR("xmlReadMemory returns with error.");
+            return -1;
+        }
+        if(0 != append_objects_from_xml(path, doc, head)){
+            S3FS_PRN_ERR("append_objects_from_xml returns with error.");
+            xmlFreeDoc(doc);
+            return -1;
+        }
+        if(true == (truncated = is_truncated(doc))){
+            xmlChar* tmpch = get_next_marker(doc);
+            if(tmpch){
+                next_marker = (char*)tmpch;
+                xmlFree(tmpch);
+            }else{
+                // If did not specify "delimiter", s3 did not return "NextMarker".
+                // On this case, can use last name for next marker.
+                //
+                string lastname;
+                if(!head.GetLastName(lastname)){
+                    S3FS_PRN_WARN("Could not find next marker, thus break loop.");
+                    truncated = false;
+                }else{
+                    next_marker = s3_realpath.substr(1);
+                    if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+                        next_marker += "/";
+                    }
+                    next_marker += lastname;
+                }
             }
-          }
-          xmlXPathFreeObject(ETag);
         }
-      }
-      if(!head.insert(name, (0 < stretag.length() ? stretag.c_str() : NULL), is_dir)){
-        S3FS_PRN_ERR("insert_object returns with error.");
-        xmlXPathFreeObject(key);
-        xmlXPathFreeObject(contents_xp);
-        free(name);
-        S3FS_MALLOCTRIM(0);
-        return -1;
-      }
-      free(name);
-    }else{
-      S3FS_PRN_DBG("name is file or subdir in dir. but continue.");
-    }
-    xmlXPathFreeObject(key);
-  }
-  S3FS_XMLXPATHFREEOBJECT(contents_xp);
+        S3FS_XMLFREEDOC(doc);
 
-  return 0;
-}
+        // reset(initialize) curl object
+        s3fscurl.DestroyCurlHandle();
 
-static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
-{
-  static time_t tmLast = 0;  // cache for 60 sec.
-  static string strNs;
-  bool result = false;
-
-  if(!doc){
-    return false;
-  }
-  if((tmLast + 60) < time(NULL)){
-    // refresh
-    tmLast = time(NULL);
-    strNs  = "";
-    xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
-    if(pRootNode){
-      xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
-      if(nslist){
-        if(nslist[0] && nslist[0]->href){
-          strNs  = (const char*)(nslist[0]->href);
+        if(check_content_only){
+            break;
         }
-        S3FS_XMLFREE(nslist);
-      }
     }
-  }
-  if(!strNs.empty()){
-    nsurl  = strNs;
-    result = true;
-  }
-  return result;
-}
+    S3FS_MALLOCTRIM(0);
 
-static int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
-{
-  string xmlnsurl;
-  string ex_contents = "//";
-  string ex_key;
-  string ex_cprefix  = "//";
-  string ex_prefix;
-  string ex_etag;
-
-  if(!doc){
-    return -1;
-  }
-
-  // If there is not <Prefix>, use path instead of it.
-  xmlChar* pprefix = get_prefix(doc);
-  string   prefix  = (pprefix ? (char*)pprefix : path ? path : "");
-  if(pprefix){
-    xmlFree(pprefix);
-  }
-
-  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
-
-  if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-    xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
-    ex_contents+= "s3:";
-    ex_key     += "s3:";
-    ex_cprefix += "s3:";
-    ex_prefix  += "s3:";
-    ex_etag    += "s3:";
-  }
-  ex_contents+= "Contents";
-  ex_key     += "Key";
-  ex_cprefix += "CommonPrefixes";
-  ex_prefix  += "Prefix";
-  ex_etag    += "ETag";
-
-  if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), 0, head) ||
-     -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), NULL, 1, head) )
-  {
-    S3FS_PRN_ERR("append_objects_from_xml_ex returns with error.");
-    S3FS_XMLXPATHFREECONTEXT(ctx);
-    return -1;
-  }
-  S3FS_XMLXPATHFREECONTEXT(ctx);
-
-  return 0;
-}
-
-static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
-{
-  xmlXPathObjectPtr  marker_xp;
-  string xmlnsurl;
-  string exp_string;
-
-  if(!doc){
-    return NULL;
-  }
-  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
-
-  if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-    xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
-    exp_string = "/s3:ListBucketResult/s3:";
-  } else {
-    exp_string = "/ListBucketResult/";
-  }
-  
-  exp_string += exp;
-
-  if(NULL == (marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx))){
-    xmlXPathFreeContext(ctx);
-    return NULL;
-  }
-  if(xmlXPathNodeSetIsEmpty(marker_xp->nodesetval)){
-    S3FS_PRN_ERR("marker_xp->nodesetval is empty.");
-    xmlXPathFreeObject(marker_xp);
-    xmlXPathFreeContext(ctx);
-    return NULL;
-  }
-  xmlNodeSetPtr nodes  = marker_xp->nodesetval;
-  xmlChar*      result = xmlNodeListGetString(doc, nodes->nodeTab[0]->xmlChildrenNode, 1);
-
-  xmlXPathFreeObject(marker_xp);
-  xmlXPathFreeContext(ctx);
-
-  return result;
-}
-
-static xmlChar* get_prefix(xmlDocPtr doc)
-{
-  return get_base_exp(doc, "Prefix");
-}
-
-static xmlChar* get_next_marker(xmlDocPtr doc)
-{
-  return get_base_exp(doc, "NextMarker");
-}
-
-static bool is_truncated(xmlDocPtr doc)
-{
-  bool result = false;
-
-  xmlChar* strTruncate = get_base_exp(doc, "IsTruncated");
-  if(!strTruncate){
-    return false;
-  }
-  if(0 == strcasecmp((const char*)strTruncate, "true")){
-    result = true;
-  }
-  xmlFree(strTruncate);
-  return result;
-}
-
-// return: the pointer to object name on allocated memory.
-//         the pointer to "c_strErrorObjectName".(not allocated)
-//         NULL(a case of something error occurred)
-static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
-{
-  // Get full path
-  xmlChar* fullpath = xmlNodeListGetString(doc, node, 1);
-  if(!fullpath){
-    S3FS_PRN_ERR("could not get object full path name..");
-    return NULL;
-  }
-  // basepath(path) is as same as fullpath.
-  if(0 == strcmp((char*)fullpath, path)){
-    xmlFree(fullpath);
-    return (char*)c_strErrorObjectName;
-  }
-
-  // Make dir path and filename
-  string   strdirpath = mydirname(string((char*)fullpath));
-  string   strmybpath = mybasename(string((char*)fullpath));
-  const char* dirpath = strdirpath.c_str();
-  const char* mybname = strmybpath.c_str();
-  const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
-  xmlFree(fullpath);
-
-  if(!mybname || '\0' == mybname[0]){
-    return NULL;
-  }
-
-  // check subdir & file in subdir
-  if(dirpath && 0 < strlen(dirpath)){
-    // case of "/"
-    if(0 == strcmp(mybname, "/") && 0 == strcmp(dirpath, "/")){
-      return (char*)c_strErrorObjectName;
-    }
-    // case of "."
-    if(0 == strcmp(mybname, ".") && 0 == strcmp(dirpath, ".")){
-      return (char*)c_strErrorObjectName;
-    }
-    // case of ".."
-    if(0 == strcmp(mybname, "..") && 0 == strcmp(dirpath, ".")){
-      return (char*)c_strErrorObjectName;
-    }
-    // case of "name"
-    if(0 == strcmp(dirpath, ".")){
-      // OK
-      return strdup(mybname);
-    }else{
-      if(basepath && 0 == strcmp(dirpath, basepath)){
-        // OK
-        return strdup(mybname);
-      }else if(basepath && 0 < strlen(basepath) && '/' == basepath[strlen(basepath) - 1] && 0 == strncmp(dirpath, basepath, strlen(basepath) - 1)){
-        string withdirname;
-        if(strlen(dirpath) > strlen(basepath)){
-          withdirname = &dirpath[strlen(basepath)];
-        }
-        if(0 < withdirname.length() && '/' != withdirname[withdirname.length() - 1]){
-          withdirname += "/";
-        }
-        withdirname += mybname;
-        return strdup(withdirname.c_str());
-      }
-    }
-  }
-  // case of something wrong
-  return (char*)c_strErrorObjectName;
+    return 0;
 }
 
 static int remote_mountpath_exists(const char* path)
 {
-  struct stat stbuf;
+    struct stat stbuf;
 
-  S3FS_PRN_INFO1("[path=%s]", path);
+    S3FS_PRN_INFO1("[path=%s]", path);
 
-  // getattr will prefix the path with the remote mountpoint
-  if(0 != get_object_attribute("/", &stbuf, NULL)){
-    return -1;
-  }
-  if(!S_ISDIR(stbuf.st_mode)){
-    return -1;
-  }
-  return 0;
+    // getattr will prefix the path with the remote mountpoint
+    if(0 != get_object_attribute("/", &stbuf, NULL)){
+        return -1;
+    }
+    if(!S_ISDIR(stbuf.st_mode)){
+        return -1;
+    }
+    return 0;
 }
 
 
 static void free_xattrs(xattrs_t& xattrs)
 {
-  for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    delete iter->second;
-  }
-  xattrs.clear();
+    for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
+        delete iter->second;
+    }
+    xattrs.clear();
 }
 
 static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval)
 {
-  // parse key and value
-  size_t pos;
-  string tmpval;
-  if(string::npos == (pos = xattrpair.find_first_of(':'))){
-    S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
-    return false;
-  }
-  key    = xattrpair.substr(0, pos);
-  tmpval = xattrpair.substr(pos + 1);
+    // parse key and value
+    size_t pos;
+    string tmpval;
+    if(string::npos == (pos = xattrpair.find_first_of(':'))){
+        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
+        return false;
+    }
+    key    = xattrpair.substr(0, pos);
+    tmpval = xattrpair.substr(pos + 1);
 
-  if(!takeout_str_dquart(key) || !takeout_str_dquart(tmpval)){
-    S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
-    return false;
-  }
+    if(!takeout_str_dquart(key) || !takeout_str_dquart(tmpval)){
+        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
+        return false;
+    }
 
-  pval = new XATTRVAL;
-  pval->length = 0;
-  pval->pvalue = s3fs_decode64(tmpval.c_str(), &pval->length);
+    pval = new XATTRVAL;
+    pval->length = 0;
+    pval->pvalue = s3fs_decode64(tmpval.c_str(), &pval->length);
 
-  return true;
+    return true;
 }
 
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
 {
-  xattrs.clear();
+    xattrs.clear();
 
-  // decode
-  string jsonxattrs = urlDecode(strxattrs);
+    // decode
+    string jsonxattrs = urlDecode(strxattrs);
 
-  // get from "{" to "}"
-  string restxattrs;
-  {
-    size_t startpos;
-    size_t endpos   = string::npos;
-    if(string::npos != (startpos = jsonxattrs.find_first_of('{'))){
-      endpos = jsonxattrs.find_last_of('}');
+    // get from "{" to "}"
+    string restxattrs;
+    {
+        size_t startpos;
+        size_t endpos   = string::npos;
+        if(string::npos != (startpos = jsonxattrs.find_first_of('{'))){
+            endpos = jsonxattrs.find_last_of('}');
+        }
+        if(startpos == string::npos || endpos == string::npos || endpos <= startpos){
+            S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
+            return 0;
+        }
+        restxattrs = jsonxattrs.substr(startpos + 1, endpos - (startpos + 1));
     }
-    if(startpos == string::npos || endpos == string::npos || endpos <= startpos){
-      S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
-      return 0;
-    }
-    restxattrs = jsonxattrs.substr(startpos + 1, endpos - (startpos + 1));
-  }
 
-  // parse each key:val
-  for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(',')){
-    string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
-    string    key;
-    PXATTRVAL pval = NULL;
-    if(!parse_xattr_keyval(pair, key, pval)){
-      // something format error, so skip this.
-      continue;
+    // parse each key:val
+    for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(',')){
+        string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
+        string    key;
+        PXATTRVAL pval = NULL;
+        if(!parse_xattr_keyval(pair, key, pval)){
+            // something format error, so skip this.
+            continue;
+        }
+        xattrs[key] = pval;
     }
-    xattrs[key] = pval;
-  }
-  return xattrs.size();
+    return xattrs.size();
 }
 
 static std::string build_xattrs(const xattrs_t& xattrs)
 {
-  string strxattrs("{");
+    string strxattrs("{");
 
-  bool is_set = false;
-  for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-    if(is_set){
-      strxattrs += ',';
-    }else{
-      is_set = true;
+    bool is_set = false;
+    for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
+        if(is_set){
+            strxattrs += ',';
+        }else{
+            is_set = true;
+        }
+        strxattrs += '\"';
+        strxattrs += iter->first;
+        strxattrs += "\":\"";
+
+        if(iter->second){
+            char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
+            if(base64val){
+                strxattrs += base64val;
+                delete[] base64val;
+            }
+        }
+        strxattrs += '\"';
     }
-    strxattrs += '\"';
-    strxattrs += iter->first;
-    strxattrs += "\":\"";
+    strxattrs += '}';
 
-    if(iter->second){
-      char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
-      if(base64val){
-        strxattrs += base64val;
-        delete[] base64val;
-      }
-    }
-    strxattrs += '\"';
-  }
-  strxattrs += '}';
+    strxattrs = urlEncode(strxattrs);
 
-  strxattrs = urlEncode(strxattrs);
-
-  return strxattrs;
+    return strxattrs;
 }
 
 static int set_xattrs_to_header(headers_t& meta, const char* name, const char* value, size_t size, int flags)
 {
-  string   strxattrs;
-  xattrs_t xattrs;
+    string   strxattrs;
+    xattrs_t xattrs;
 
-  headers_t::iterator iter;
-  if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+    headers_t::iterator iter;
+    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
 #if defined(XATTR_REPLACE)
-    if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
-      // there is no xattr header but flags is replace, so failure.
-      return -ENOATTR;
-    }
+        if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
+            // there is no xattr header but flags is replace, so failure.
+            return -ENOATTR;
+        }
 #endif
-  }else{
+    }else{
 #if defined(XATTR_CREATE)
-    if(XATTR_CREATE == (flags & XATTR_CREATE)){
-      // found xattr header but flags is only creating, so failure.
-      return -EEXIST;
-    }
+        if(XATTR_CREATE == (flags & XATTR_CREATE)){
+            // found xattr header but flags is only creating, so failure.
+            return -EEXIST;
+        }
 #endif
-    strxattrs = iter->second;
-  }
+      strxattrs = iter->second;
+    }
 
-  // get map as xattrs_t
-  parse_xattrs(strxattrs, xattrs);
+    // get map as xattrs_t
+    parse_xattrs(strxattrs, xattrs);
 
-  // add name(do not care overwrite and empty name/value)
-  xattrs_t::iterator xiter;
-  if(xattrs.end() != (xiter = xattrs.find(string(name)))){
-    // found same head. free value.
-    delete xiter->second;
-  }
+    // add name(do not care overwrite and empty name/value)
+    xattrs_t::iterator xiter;
+    if(xattrs.end() != (xiter = xattrs.find(string(name)))){
+        // found same head. free value.
+        delete xiter->second;
+    }
 
-  PXATTRVAL pval = new XATTRVAL;
-  pval->length = size;
-  if(0 < size){
-    pval->pvalue = new unsigned char[size];
-    memcpy(pval->pvalue, value, size);
-  }else{
-    pval->pvalue = NULL;
-  }
-  xattrs[string(name)] = pval;
+    PXATTRVAL pval = new XATTRVAL;
+    pval->length = size;
+    if(0 < size){
+        pval->pvalue = new unsigned char[size];
+        memcpy(pval->pvalue, value, size);
+    }else{
+        pval->pvalue = NULL;
+    }
+    xattrs[string(name)] = pval;
 
-  // build new strxattrs(not encoded) and set it to headers_t
-  meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
+    // build new strxattrs(not encoded) and set it to headers_t
+    meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
 
-  free_xattrs(xattrs);
+    free_xattrs(xattrs);
 
-  return 0;
+    return 0;
 }
 
 #if defined(__APPLE__)
@@ -3177,129 +2819,128 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
 #endif
 {
-  S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
+    S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
 
-  if((value && 0 == size) || (!value && 0 < size)){
-    S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
-    return 0;
-  }
+    if((value && 0 == size) || (!value && 0 < size)){
+        S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
+        return 0;
+    }
 
 #if defined(__APPLE__)
-  if (position != 0) {
-    // No resource fork support
-    return -EINVAL;
-  }
+    if (position != 0) {
+        // No resource fork support
+        return -EINVAL;
+    }
 #endif
 
-  int         result;
-  string      strpath;
-  string      newpath;
-  string      nowcache;
-  headers_t   meta;
-  struct stat stbuf;
-  dirtype     nDirType = DIRTYPE_UNKNOWN;
+    int         result;
+    string      strpath;
+    string      newpath;
+    string      nowcache;
+    headers_t   meta;
+    struct stat stbuf;
+    dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mode for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, &meta);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-    // Should rebuild directory object(except new type)
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-      return result;
-    }
-
-    // need to set xattr header for directory.
-    strpath  = newpath;
-    nowcache = strpath;
-  }
-
-  // set xattr all object
-  headers_t updatemeta;
-  updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
-  updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-  updatemeta["x-amz-metadata-directive"] = "REPLACE";
-
-  // check opened file handle.
-  //
-  // If the file starts uploading by multipart when the disk capacity is insufficient,
-  // we need to put these header after finishing upload.
-  // Or if the file is only open, we must update to FdEntity's internal meta.
-  //
-  FdEntity* ent;
-  if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
-    // the file is opened now.
-
-    // get xattr and make new xattr
-    string strxattr;
-    if(ent->GetXattr(strxattr)){
-      updatemeta["x-amz-meta-xattr"] = strxattr;
-    }else{
-      // [NOTE]
-      // Set an empty xattr.
-      // This requires the key to be present in order to add xattr.
-      ent->SetXattr(strxattr);
-    }
-    if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
-      return result;
-    }
-
-    if(ent->MergeOrgMeta(updatemeta)){
-      // now uploading
-      // the meta is pending and accumulated to be put after the upload is complete.
-      S3FS_PRN_INFO("meta pending until upload is complete");
-    }else{
-      // allow to put header
-      // updatemeta already merged the orgmeta of the opened files.
-      if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mode for mount point.");
         return -EIO;
-      }
-      StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
     }
 
-  }else{
-    // not opened file, then put headers
-    merge_headers(meta, updatemeta, true);
-
-    // NOTICE: modify xattr from base meta
-    if(0 != (result = set_xattrs_to_header(meta, name, value, size, flags))){
-      return result;
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, &meta);
+    }
+    if(0 != result){
+        return result;
     }
 
-    if(0 != put_headers(strpath.c_str(), meta, true)){
-      return -EIO;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-  }
+    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+        // Should rebuild directory object(except new type)
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-  return 0;
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+          return result;
+        }
+
+        // need to set xattr header for directory.
+        strpath  = newpath;
+        nowcache = strpath;
+    }
+
+    // set xattr all object
+    headers_t updatemeta;
+    updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
+
+    // check opened file handle.
+    //
+    // If the file starts uploading by multipart when the disk capacity is insufficient,
+    // we need to put these header after finishing upload.
+    // Or if the file is only open, we must update to FdEntity's internal meta.
+    //
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+        // the file is opened now.
+
+        // get xattr and make new xattr
+        string strxattr;
+        if(ent->GetXattr(strxattr)){
+            updatemeta["x-amz-meta-xattr"] = strxattr;
+        }else{
+            // [NOTE]
+            // Set an empty xattr.
+            // This requires the key to be present in order to add xattr.
+            ent->SetXattr(strxattr);
+        }
+        if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
+            return result;
+        }
+
+        if(ent->MergeOrgMeta(updatemeta)){
+            // now uploading
+            // the meta is pending and accumulated to be put after the upload is complete.
+            S3FS_PRN_INFO("meta pending until upload is complete");
+        }else{
+            // allow to put header
+            // updatemeta already merged the orgmeta of the opened files.
+            if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                return -EIO;
+            }
+            StatCache::getStatCacheData()->DelStat(nowcache);
+        }
+
+    }else{
+        // not opened file, then put headers
+        merge_headers(meta, updatemeta, true);
+
+        // NOTICE: modify xattr from base meta
+        if(0 != (result = set_xattrs_to_header(meta, name, value, size, flags))){
+            return result;
+        }
+
+        if(0 != put_headers(strpath.c_str(), meta, true)){
+            return -EIO;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+    return 0;
 }
 
 #if defined(__APPLE__)
@@ -3308,602 +2949,374 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
 #endif
 {
-  S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
+    S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
 
-  if(!path || !name){
-    return -EIO;
-  }
+    if(!path || !name){
+        return -EIO;
+    }
 
 #if defined(__APPLE__)
-  if (position != 0) {
-    // No resource fork support
-    return -EINVAL;
-  }
+    if (position != 0) {
+        // No resource fork support
+        return -EINVAL;
+    }
 #endif
 
-  int       result;
-  headers_t meta;
-  xattrs_t  xattrs;
+    int       result;
+    headers_t meta;
+    xattrs_t  xattrs;
 
-  // check parent directory attribute.
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
+    // check parent directory attribute.
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
 
-  // get headers
-  if(0 != (result = get_object_attribute(path, NULL, &meta))){
-    return result;
-  }
+    // get headers
+    if(0 != (result = get_object_attribute(path, NULL, &meta))){
+        return result;
+    }
 
-  // get xattrs
-  headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
-  if(meta.end() == hiter){
-    // object does not have xattrs
-    return -ENOATTR;
-  }
-  string strxattrs = hiter->second;
+    // get xattrs
+    headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
+    if(meta.end() == hiter){
+        // object does not have xattrs
+        return -ENOATTR;
+    }
+    string strxattrs = hiter->second;
 
-  parse_xattrs(strxattrs, xattrs);
+    parse_xattrs(strxattrs, xattrs);
 
-  // search name
-  string             strname = name;
-  xattrs_t::iterator xiter   = xattrs.find(strname);
-  if(xattrs.end() == xiter){
-    // not found name in xattrs
+    // search name
+    string             strname = name;
+    xattrs_t::iterator xiter   = xattrs.find(strname);
+    if(xattrs.end() == xiter){
+        // not found name in xattrs
+        free_xattrs(xattrs);
+        return -ENOATTR;
+    }
+
+    // decode
+    size_t         length = 0;
+    unsigned char* pvalue = NULL;
+    if(NULL != xiter->second){
+        length = xiter->second->length;
+        pvalue = xiter->second->pvalue;
+    }
+
+    if(0 < size){
+        if(static_cast<size_t>(size) < length){
+            // over buffer size
+            free_xattrs(xattrs);
+            return -ERANGE;
+        }
+        if(pvalue){
+            memcpy(value, pvalue, length);
+        }
+    }
     free_xattrs(xattrs);
-    return -ENOATTR;
-  }
 
-  // decode
-  size_t         length = 0;
-  unsigned char* pvalue = NULL;
-  if(NULL != xiter->second){
-    length = xiter->second->length;
-    pvalue = xiter->second->pvalue;
-  }
-
-  if(0 < size){
-    if(static_cast<size_t>(size) < length){
-      // over buffer size
-      free_xattrs(xattrs);
-      return -ERANGE;
-    }
-    if(pvalue){
-      memcpy(value, pvalue, length);
-    }
-  }
-  free_xattrs(xattrs);
-
-  return static_cast<int>(length);
+    return static_cast<int>(length);
 }
 
 static int s3fs_listxattr(const char* path, char* list, size_t size)
 {
-  S3FS_PRN_INFO("[path=%s][list=%p][size=%zu]", path, list, size);
+    S3FS_PRN_INFO("[path=%s][list=%p][size=%zu]", path, list, size);
 
-  if(!path){
-    return -EIO;
-  }
-
-  int       result;
-  headers_t meta;
-  xattrs_t  xattrs;
-
-  // check parent directory attribute.
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-
-  // get headers
-  if(0 != (result = get_object_attribute(path, NULL, &meta))){
-    return result;
-  }
-
-  // get xattrs
-  headers_t::iterator iter;
-  if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
-    // object does not have xattrs
-    return 0;
-  }
-  string strxattrs = iter->second;
-
-  parse_xattrs(strxattrs, xattrs);
-
-  // calculate total name length
-  size_t total = 0;
-  for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
-    if(0 < xiter->first.length()){
-      total += xiter->first.length() + 1;
+    if(!path){
+        return -EIO;
     }
-  }
 
-  if(0 == total){
-    free_xattrs(xattrs);
-    return 0;
-  }
+    int       result;
+    headers_t meta;
+    xattrs_t  xattrs;
 
-  // check parameters
-  if(0 == size){
+    // check parent directory attribute.
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+
+    // get headers
+    if(0 != (result = get_object_attribute(path, NULL, &meta))){
+        return result;
+    }
+
+    // get xattrs
+    headers_t::iterator iter;
+    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+        // object does not have xattrs
+        return 0;
+    }
+    string strxattrs = iter->second;
+
+    parse_xattrs(strxattrs, xattrs);
+
+    // calculate total name length
+    size_t total = 0;
+    for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+        if(0 < xiter->first.length()){
+            total += xiter->first.length() + 1;
+        }
+    }
+
+    if(0 == total){
+        free_xattrs(xattrs);
+        return 0;
+    }
+
+    // check parameters
+    if(0 == size){
+        free_xattrs(xattrs);
+        return total;
+    }
+    if(!list || size < total){
+        free_xattrs(xattrs);
+        return -ERANGE;
+    }
+
+    // copy to list
+    char* setpos = list;
+    for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+        if(0 < xiter->first.length()){
+            strcpy(setpos, xiter->first.c_str());
+            setpos = &setpos[strlen(setpos) + 1];
+        }
+    }
     free_xattrs(xattrs);
+
     return total;
-  }
-  if(!list || size < total){
-    free_xattrs(xattrs);
-    return -ERANGE;
-  }
-
-  // copy to list
-  char* setpos = list;
-  for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
-    if(0 < xiter->first.length()){
-      strcpy(setpos, xiter->first.c_str());
-      setpos = &setpos[strlen(setpos) + 1];
-    }
-  }
-  free_xattrs(xattrs);
-
-  return total;
 }
 
 static int s3fs_removexattr(const char* path, const char* name)
 {
-  S3FS_PRN_INFO("[path=%s][name=%s]", path, name);
+    S3FS_PRN_INFO("[path=%s][name=%s]", path, name);
 
-  if(!path || !name){
-    return -EIO;
-  }
-
-  int         result;
-  string      strpath;
-  string      newpath;
-  string      nowcache;
-  headers_t   meta;
-  xattrs_t    xattrs;
-  struct stat stbuf;
-  dirtype     nDirType = DIRTYPE_UNKNOWN;
-
-  if(0 == strcmp(path, "/")){
-    S3FS_PRN_ERR("Could not change mode for mount point.");
-    return -EIO;
-  }
-  if(0 != (result = check_parent_object_access(path, X_OK))){
-    return result;
-  }
-  if(0 != (result = check_object_owner(path, &stbuf))){
-    return result;
-  }
-
-  if(S_ISDIR(stbuf.st_mode)){
-    result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
-  }else{
-    strpath  = path;
-    nowcache = strpath;
-    result   = get_object_attribute(strpath.c_str(), NULL, &meta);
-  }
-  if(0 != result){
-    return result;
-  }
-
-  // get xattrs
-  headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
-  if(meta.end() == hiter){
-    // object does not have xattrs
-    return -ENOATTR;
-  }
-  string strxattrs = hiter->second;
-
-  parse_xattrs(strxattrs, xattrs);
-
-  // check name xattrs
-  string             strname = name;
-  xattrs_t::iterator xiter   = xattrs.find(strname);
-  if(xattrs.end() == xiter){
-    free_xattrs(xattrs);
-    return -ENOATTR;
-  }
-
-  // make new header_t after deleting name xattr
-  delete xiter->second;
-  xattrs.erase(xiter);
-
-  if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-    // Should rebuild directory object(except new type)
-    // Need to remove old dir("dir" etc) and make new dir("dir/")
-
-    // At first, remove directory old object
-    if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-      return result;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-
-    // Make new directory object("dir/")
-    if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
-      free_xattrs(xattrs);
-      return result;
-    }
-
-    // need to set xattr header for directory.
-    strpath  = newpath;
-    nowcache = strpath;
-  }
-
-  // set xattr all object
-  headers_t updatemeta;
-  updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
-  updatemeta["x-amz-metadata-directive"] = "REPLACE";
-  if(!xattrs.empty()){
-    updatemeta["x-amz-meta-xattr"]       = build_xattrs(xattrs);
-  }else{
-    updatemeta["x-amz-meta-xattr"]       = string("");      // This is a special case. If empty, this header will eventually be removed.
-  }
-  free_xattrs(xattrs);
-
-  // check opened file handle.
-  //
-  // If the file starts uploading by multipart when the disk capacity is insufficient,
-  // we need to put these header after finishing upload.
-  // Or if the file is only open, we must update to FdEntity's internal meta.
-  //
-  FdEntity* ent;
-  if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
-    // the file is opened now.
-    if(ent->MergeOrgMeta(updatemeta)){
-      // now uploading
-      // the meta is pending and accumulated to be put after the upload is complete.
-      S3FS_PRN_INFO("meta pending until upload is complete");
-    }else{
-      // allow to put header
-      // updatemeta already merged the orgmeta of the opened files.
-      if(updatemeta["x-amz-meta-xattr"].empty()){
-        updatemeta.erase("x-amz-meta-xattr");
-      }
-      if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+    if(!path || !name){
         return -EIO;
-      }
-      StatCache::getStatCacheData()->DelStat(nowcache);
     }
 
-  }else{
-    // not opened file, then put headers
-    if(updatemeta["x-amz-meta-xattr"].empty()){
-      updatemeta.erase("x-amz-meta-xattr");
-    }
-    merge_headers(meta, updatemeta, true);
-    if(0 != put_headers(strpath.c_str(), meta, true)){
-      return -EIO;
-    }
-    StatCache::getStatCacheData()->DelStat(nowcache);
-  }
+    int         result;
+    string      strpath;
+    string      newpath;
+    string      nowcache;
+    headers_t   meta;
+    xattrs_t    xattrs;
+    struct stat stbuf;
+    dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-  return 0;
+    if(0 == strcmp(path, "/")){
+        S3FS_PRN_ERR("Could not change mode for mount point.");
+        return -EIO;
+    }
+    if(0 != (result = check_parent_object_access(path, X_OK))){
+        return result;
+    }
+    if(0 != (result = check_object_owner(path, &stbuf))){
+        return result;
+    }
+
+    if(S_ISDIR(stbuf.st_mode)){
+        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+    }else{
+        strpath  = path;
+        nowcache = strpath;
+        result   = get_object_attribute(strpath.c_str(), NULL, &meta);
+    }
+    if(0 != result){
+        return result;
+    }
+
+    // get xattrs
+    headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
+    if(meta.end() == hiter){
+        // object does not have xattrs
+        return -ENOATTR;
+    }
+    string strxattrs = hiter->second;
+
+    parse_xattrs(strxattrs, xattrs);
+
+    // check name xattrs
+    string             strname = name;
+    xattrs_t::iterator xiter   = xattrs.find(strname);
+    if(xattrs.end() == xiter){
+        free_xattrs(xattrs);
+        return -ENOATTR;
+    }
+
+    // make new header_t after deleting name xattr
+    delete xiter->second;
+    xattrs.erase(xiter);
+
+    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+        // Should rebuild directory object(except new type)
+        // Need to remove old dir("dir" etc) and make new dir("dir/")
+
+        // At first, remove directory old object
+        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+            free_xattrs(xattrs);
+            return result;
+        }
+
+        // need to set xattr header for directory.
+        strpath  = newpath;
+        nowcache = strpath;
+    }
+
+    // set xattr all object
+    headers_t updatemeta;
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
+    if(!xattrs.empty()){
+        updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);
+    }else{
+        updatemeta["x-amz-meta-xattr"]     = string("");      // This is a special case. If empty, this header will eventually be removed.
+    }
+    free_xattrs(xattrs);
+
+    // check opened file handle.
+    //
+    // If the file starts uploading by multipart when the disk capacity is insufficient,
+    // we need to put these header after finishing upload.
+    // Or if the file is only open, we must update to FdEntity's internal meta.
+    //
+    FdEntity* ent;
+    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+        // the file is opened now.
+        if(ent->MergeOrgMeta(updatemeta)){
+            // now uploading
+            // the meta is pending and accumulated to be put after the upload is complete.
+            S3FS_PRN_INFO("meta pending until upload is complete");
+        }else{
+            // allow to put header
+            // updatemeta already merged the orgmeta of the opened files.
+            if(updatemeta["x-amz-meta-xattr"].empty()){
+                updatemeta.erase("x-amz-meta-xattr");
+            }
+            if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                return -EIO;
+            }
+            StatCache::getStatCacheData()->DelStat(nowcache);
+        }
+
+    }else{
+        // not opened file, then put headers
+        if(updatemeta["x-amz-meta-xattr"].empty()){
+            updatemeta.erase("x-amz-meta-xattr");
+        }
+        merge_headers(meta, updatemeta, true);
+        if(0 != put_headers(strpath.c_str(), meta, true)){
+            return -EIO;
+        }
+        StatCache::getStatCacheData()->DelStat(nowcache);
+    }
+
+    return 0;
 }
    
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
 // There's no way to pass an exit status to the high-level event loop API, so 
 // this function stores the exit value in a global for main()
-static void s3fs_exit_fuseloop(int exit_status) {
-    S3FS_PRN_ERR("Exiting FUSE event loop due to errors\n");
-    s3fs_init_deferred_exit_status = exit_status;
-    struct fuse_context *ctx = fuse_get_context();
-    if (NULL != ctx) {
-        fuse_exit(ctx->fuse);
-    }
+static void s3fs_exit_fuseloop(int exit_status)
+{
+      S3FS_PRN_ERR("Exiting FUSE event loop due to errors\n");
+      s3fs_init_deferred_exit_status = exit_status;
+      struct fuse_context *ctx = fuse_get_context();
+      if (NULL != ctx) {
+            fuse_exit(ctx->fuse);
+      }
 }
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-  S3FS_PRN_INIT_INFO("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
+    S3FS_PRN_INIT_INFO("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
 
-  // cache(remove cache dirs at first)
-  if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
-    S3FS_PRN_DBG("Could not initialize cache directory.");
-  }
-
-  // check loading IAM role name
-  if(load_iamrole){
-    // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
-    //
-    S3fsCurl s3fscurl;
-    if(!s3fscurl.LoadIAMRoleFromMetaData()){
-      S3FS_PRN_CRIT("could not load IAM role name from meta data.");
-      s3fs_exit_fuseloop(EXIT_FAILURE);
-      return NULL;
+    // cache(remove cache dirs at first)
+    if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
+        S3FS_PRN_DBG("Could not initialize cache directory.");
     }
-    S3FS_PRN_INFO("loaded IAM role name = %s", S3fsCurl::GetIAMRole());
-  }
 
-  if (create_bucket){
-    int result = do_create_bucket();
-    if(result != 0){
-      s3fs_exit_fuseloop(result);
-      return NULL;
+    // check loading IAM role name
+    if(load_iamrole){
+      // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
+      //
+      S3fsCurl s3fscurl;
+      if(!s3fscurl.LoadIAMRoleFromMetaData()){
+          S3FS_PRN_CRIT("could not load IAM role name from meta data.");
+          s3fs_exit_fuseloop(EXIT_FAILURE);
+          return NULL;
+      }
+      S3FS_PRN_INFO("loaded IAM role name = %s", S3fsCurl::GetIAMRole());
     }
-  }
 
-  // Check Bucket
-  {
-    int result;
-    if(EXIT_SUCCESS != (result = s3fs_check_service())){
-      s3fs_exit_fuseloop(result);
-      return NULL;
+    if (create_bucket){
+        int result = do_create_bucket();
+        if(result != 0){
+            s3fs_exit_fuseloop(result);
+            return NULL;
+        }
     }
-  }
 
-  // Investigate system capabilities
-  #ifndef __APPLE__
-  if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
-     conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
-  }
-  #endif
+    // Check Bucket
+    {
+        int result;
+        if(EXIT_SUCCESS != (result = s3fs_check_service())){
+            s3fs_exit_fuseloop(result);
+            return NULL;
+        }
+    }
 
-  if((unsigned int)conn->capable & FUSE_CAP_BIG_WRITES){
-     conn->want |= FUSE_CAP_BIG_WRITES;
-  }
+    // Investigate system capabilities
+    #ifndef __APPLE__
+    if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
+         conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
+    }
+    #endif
 
-  // Signal object
-  if(S3fsSignals::Initialize()){
-    S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
-  }
+    if((unsigned int)conn->capable & FUSE_CAP_BIG_WRITES){
+         conn->want |= FUSE_CAP_BIG_WRITES;
+    }
 
-  return NULL;
+    // Signal object
+    if(S3fsSignals::Initialize()){
+        S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
+    }
+
+    return NULL;
 }
 
 static void s3fs_destroy(void*)
 {
-  S3FS_PRN_INFO("destroy");
+    S3FS_PRN_INFO("destroy");
 
-  // Signal object
-  if(S3fsSignals::Destroy()){
-    S3FS_PRN_WARN("Failed to clean up signal object.");
-  }
+    // Signal object
+    if(S3fsSignals::Destroy()){
+        S3FS_PRN_WARN("Failed to clean up signal object.");
+    }
 
-  // cache(remove at last)
-  if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
-    S3FS_PRN_WARN("Could not remove cache directory.");
-  }
+    // cache(remove at last)
+    if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
+        S3FS_PRN_WARN("Could not remove cache directory.");
+    }
 }
 
 static int s3fs_access(const char* path, int mask)
 {
-  S3FS_PRN_INFO("[path=%s][mask=%s%s%s%s]", path,
-          ((mask & R_OK) == R_OK) ? "R_OK " : "",
-          ((mask & W_OK) == W_OK) ? "W_OK " : "",
-          ((mask & X_OK) == X_OK) ? "X_OK " : "",
-          (mask == F_OK) ? "F_OK" : "");
+    S3FS_PRN_INFO("[path=%s][mask=%s%s%s%s]", path,
+            ((mask & R_OK) == R_OK) ? "R_OK " : "",
+            ((mask & W_OK) == W_OK) ? "W_OK " : "",
+            ((mask & X_OK) == X_OK) ? "X_OK " : "",
+            (mask == F_OK) ? "F_OK" : "");
 
-  int result = check_object_access(path, mask, NULL);
-  S3FS_MALLOCTRIM(0);
-  return result;
-}
-
-static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key)
-{
-  if(!doc || !ctx || !exp_key){
-    return NULL;
-  }
-
-  xmlXPathObjectPtr exp;
-  xmlNodeSetPtr     exp_nodes;
-  xmlChar*          exp_value;
-
-  // search exp_key tag
-  if(NULL == (exp = xmlXPathEvalExpression((xmlChar*)exp_key, ctx))){
-    S3FS_PRN_ERR("Could not find key(%s).", exp_key);
-    return NULL;
-  }
-  if(xmlXPathNodeSetIsEmpty(exp->nodesetval)){
-    S3FS_PRN_ERR("Key(%s) node is empty.", exp_key);
-    S3FS_XMLXPATHFREEOBJECT(exp);
-    return NULL;
-  }
-  // get exp_key value & set in struct
-  exp_nodes = exp->nodesetval;
-  if(NULL == (exp_value = xmlNodeListGetString(doc, exp_nodes->nodeTab[0]->xmlChildrenNode, 1))){
-    S3FS_PRN_ERR("Key(%s) value is empty.", exp_key);
-    S3FS_XMLXPATHFREEOBJECT(exp);
-    return NULL;
-  }
-
-  S3FS_XMLXPATHFREEOBJECT(exp);
-  return exp_value;
-}
-
-static void print_incomp_mpu_list(incomp_mpu_list_t& list)
-{
-  printf("\n");
-  printf("Lists the parts that have been uploaded for a specific multipart upload.\n");
-  printf("\n");
-
-  if(!list.empty()){
-    printf("---------------------------------------------------------------\n");
-
-    int cnt = 0;
-    for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
-      printf(" Path     : %s\n", (*iter).key.c_str());
-      printf(" UploadId : %s\n", (*iter).id.c_str());
-      printf(" Date     : %s\n", (*iter).date.c_str());
-      printf("\n");
-    }
-    printf("---------------------------------------------------------------\n");
-
-  }else{
-    printf("There is no list.\n");
-  }
-}
-
-static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
-{
-  if(list.empty()){
-    return true;
-  }
-  time_t now_time = time(NULL);
-
-  // do removing.
-  S3fsCurl s3fscurl;
-  bool     result = true;
-  for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
-    const char* tpath     = (*iter).key.c_str();
-    string      upload_id = (*iter).id;
-
-    if(0 != abort_time){    // abort_time is 0, it means all.
-      time_t    date = 0;
-      if(!get_unixtime_from_iso8601((*iter).date.c_str(), date)){
-        S3FS_PRN_DBG("date format is not ISO 8601 for %s multipart uploading object, skip this.", tpath);
-        continue;
-      }
-      if(now_time <= (date + abort_time)){
-        continue;
-      }
-    }
-
-    if(0 != s3fscurl.AbortMultipartUpload(tpath, upload_id)){
-      S3FS_PRN_EXIT("Failed to remove %s multipart uploading object.", tpath);
-      result = false;
-    }else{
-      printf("Succeed to remove %s multipart uploading object.\n", tpath);
-    }
-
-    // reset(initialize) curl object
-    s3fscurl.DestroyCurlHandle();
-  }
-
-  return result;
-}
-
-static bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
-{
-  if(!doc){
-    return false;
-  }
-
-  xmlXPathContextPtr ctx = xmlXPathNewContext(doc);;
-
-  string xmlnsurl;
-  string ex_upload = "//";
-  string ex_key;
-  string ex_id;
-  string ex_date;
-
-  if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-    xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
-    ex_upload += "s3:";
-    ex_key    += "s3:";
-    ex_id     += "s3:";
-    ex_date   += "s3:";
-  }
-  ex_upload += "Upload";
-  ex_key    += "Key";
-  ex_id     += "UploadId";
-  ex_date   += "Initiated";
-
-  // get "Upload" Tags
-  xmlXPathObjectPtr  upload_xp;
-  if(NULL == (upload_xp = xmlXPathEvalExpression((xmlChar*)ex_upload.c_str(), ctx))){
-    S3FS_PRN_ERR("xmlXPathEvalExpression returns null.");
-    return false;
-  }
-  if(xmlXPathNodeSetIsEmpty(upload_xp->nodesetval)){
-    S3FS_PRN_INFO("upload_xp->nodesetval is empty.");
-    S3FS_XMLXPATHFREEOBJECT(upload_xp);
-    S3FS_XMLXPATHFREECONTEXT(ctx);
-    return true;
-  }
-
-  // Make list
-  int           cnt;
-  xmlNodeSetPtr upload_nodes;
-  list.clear();
-  for(cnt = 0, upload_nodes = upload_xp->nodesetval; cnt < upload_nodes->nodeNr; cnt++){
-    ctx->node = upload_nodes->nodeTab[cnt];
-
-    INCOMP_MPU_INFO part;
-    xmlChar*        ex_value;
-
-    // search "Key" tag
-    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_key.c_str()))){
-      continue;
-    }
-    if('/' != *((char*)ex_value)){
-      part.key = "/";
-    }else{
-      part.key = "";
-    }
-    part.key += (char*)ex_value;
-    S3FS_XMLFREE(ex_value);
-
-    // search "UploadId" tag
-    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_id.c_str()))){
-      continue;
-    }
-    part.id = (char*)ex_value;
-    S3FS_XMLFREE(ex_value);
-
-    // search "Initiated" tag
-    if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_date.c_str()))){
-      continue;
-    }
-    part.date = (char*)ex_value;
-    S3FS_XMLFREE(ex_value);
-
-    list.push_back(part);
-  }
-
-  S3FS_XMLXPATHFREEOBJECT(upload_xp);
-  S3FS_XMLXPATHFREECONTEXT(ctx);
-
-  return true;
-}
-
-static int s3fs_utility_processing(time_t abort_time)
-{
-  if(NO_UTILITY_MODE == utility_mode){
-    return EXIT_FAILURE;
-  }
-  printf("\n*** s3fs run as utility mode.\n\n");
-
-  S3fsCurl s3fscurl;
-  string   body;
-  int      result = EXIT_SUCCESS;
-  if(0 != s3fscurl.MultipartListRequest(body)){
-    S3FS_PRN_EXIT("Could not get list multipart upload.\nThere is no incomplete multipart uploaded object in bucket.\n");
-    result = EXIT_FAILURE;
-  }else{
-    // parse result(incomplete multipart upload information)
-    S3FS_PRN_DBG("response body = {\n%s\n}", body.c_str());
-
-    xmlDocPtr doc;
-    if(NULL == (doc = xmlReadMemory(body.c_str(), static_cast<int>(body.size()), "", NULL, 0))){
-      S3FS_PRN_DBG("xmlReadMemory exited with error.");
-      result = EXIT_FAILURE;
-
-    }else{
-      // make incomplete uploads list
-      incomp_mpu_list_t list;
-      if(!get_incomp_mpu_list(doc, list)){
-        S3FS_PRN_DBG("get_incomp_mpu_list exited with error.");
-        result = EXIT_FAILURE;
-
-      }else{
-        if(INCOMP_TYPE_LIST == utility_mode){
-          // print list
-          print_incomp_mpu_list(list);
-        }else if(INCOMP_TYPE_ABORT == utility_mode){
-          // remove
-          if(!abort_incomp_mpu_list(list, abort_time)){
-            S3FS_PRN_DBG("an error occurred during removal process.");
-            result = EXIT_FAILURE;
-          }
-        }
-      }
-      S3FS_XMLFREEDOC(doc);
-    }
-  }
-
-  // ssl
-  s3fs_destroy_global_ssl();
-
-  return result;
+    int result = check_object_access(path, mask, NULL);
+    S3FS_MALLOCTRIM(0);
+    return result;
 }
 
 //
@@ -3920,118 +3333,117 @@ static int s3fs_utility_processing(time_t abort_time)
 //
 static bool check_region_error(const char* pbody, size_t len, string& expectregion)
 {
-  if(!pbody){
-    return false;
-  }
+    if(!pbody){
+        return false;
+    }
 
-  std::string code;
-  if(!simple_parse_xml(pbody, len, "Code", code) || code != "AuthorizationHeaderMalformed"){
-    return false;
-  }
+    std::string code;
+    if(!simple_parse_xml(pbody, len, "Code", code) || code != "AuthorizationHeaderMalformed"){
+        return false;
+    }
 
-  if(!simple_parse_xml(pbody, len, "Region", expectregion)){
-    return false;
-  }
+    if(!simple_parse_xml(pbody, len, "Region", expectregion)){
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 static int s3fs_check_service()
 {
-  S3FS_PRN_INFO("check services.");
+    S3FS_PRN_INFO("check services.");
 
-  // At first time for access S3, we check IAM role if it sets.
-  if(!S3fsCurl::CheckIAMCredentialUpdate()){
-    S3FS_PRN_CRIT("Failed to check IAM role name(%s).", S3fsCurl::GetIAMRole());
-    return EXIT_FAILURE;
-  }
+    // At first time for access S3, we check IAM role if it sets.
+    if(!S3fsCurl::CheckIAMCredentialUpdate()){
+        S3FS_PRN_CRIT("Failed to check IAM role name(%s).", S3fsCurl::GetIAMRole());
+        return EXIT_FAILURE;
+    }
 
-  S3fsCurl s3fscurl;
-  int      res;
-  if(0 > (res = s3fscurl.CheckBucket())){
-    // get response code
-    long responseCode = s3fscurl.GetLastResponseCode();
+    S3fsCurl s3fscurl;
+    int      res;
+    if(0 > (res = s3fscurl.CheckBucket())){
+        // get response code
+        long responseCode = s3fscurl.GetLastResponseCode();
 
-    // check wrong endpoint, and automatically switch endpoint
-    if(300 <= responseCode && responseCode < 500){
+        // check wrong endpoint, and automatically switch endpoint
+        if(300 <= responseCode && responseCode < 500){
 
-      // check region error(for putting message or retrying)
-      BodyData* body = s3fscurl.GetBodyData();
-      string    expectregion;
-      if(check_region_error(body->str(), body->size(), expectregion)){
-        // [NOTE]
-        // If endpoint is not specified(using us-east-1 region) and
-        // an error is encountered accessing a different region, we
-        // will retry the check on the expected region.
-        // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
-        //
-        if(is_specified_endpoint){
-          const char* tmp_expect_ep = expectregion.c_str();
-          S3FS_PRN_CRIT("The bucket region is not '%s', it is correctly '%s'. You should specify 'endpoint=%s' option.", 
-            endpoint.c_str(), tmp_expect_ep, tmp_expect_ep);
+            // check region error(for putting message or retrying)
+            BodyData* body = s3fscurl.GetBodyData();
+            string    expectregion;
+            if(check_region_error(body->str(), body->size(), expectregion)){
+                // [NOTE]
+                // If endpoint is not specified(using us-east-1 region) and
+                // an error is encountered accessing a different region, we
+                // will retry the check on the expected region.
+                // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
+                //
+                if(is_specified_endpoint){
+                    const char* tmp_expect_ep = expectregion.c_str();
+                    S3FS_PRN_CRIT("The bucket region is not '%s', it is correctly '%s'. You should specify 'endpoint=%s' option.", endpoint.c_str(), tmp_expect_ep, tmp_expect_ep);
 
-        }else{
-          // current endpoint is wrong, so try to connect to expected region.
-          S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
-          endpoint = expectregion;
-          if(S3fsCurl::IsSignatureV4()){
-              if(host == "http://s3.amazonaws.com"){
-                  host = "http://s3-" + endpoint + ".amazonaws.com";
-              }else if(host == "https://s3.amazonaws.com"){
-                  host = "https://s3-" + endpoint + ".amazonaws.com";
-              }
-          }
+                }else{
+                    // current endpoint is wrong, so try to connect to expected region.
+                    S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
+                    endpoint = expectregion;
+                    if(S3fsCurl::IsSignatureV4()){
+                        if(s3host == "http://s3.amazonaws.com"){
+                            s3host = "http://s3-" + endpoint + ".amazonaws.com";
+                        }else if(s3host == "https://s3.amazonaws.com"){
+                            s3host = "https://s3-" + endpoint + ".amazonaws.com";
+                        }
+                    }
 
-          // retry to check with new endpoint
-          s3fscurl.DestroyCurlHandle();
-          res          = s3fscurl.CheckBucket();
-          responseCode = s3fscurl.GetLastResponseCode();
+                    // retry to check with new endpoint
+                    s3fscurl.DestroyCurlHandle();
+                    res          = s3fscurl.CheckBucket();
+                    responseCode = s3fscurl.GetLastResponseCode();
+                }
+            }
         }
-      }
+
+        // try signature v2
+        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+            // switch sigv2
+            S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
+            S3fsCurl::SetSignatureV4(false);
+
+            // retry to check with sigv2
+            s3fscurl.DestroyCurlHandle();
+            res          = s3fscurl.CheckBucket();
+            responseCode = s3fscurl.GetLastResponseCode();
+        }
+
+        // check errors(after retrying)
+        if(0 > res && responseCode != 200 && responseCode != 301){
+            if(responseCode == 400){
+                S3FS_PRN_CRIT("Bad Request(host=%s) - result of checking service.", s3host.c_str());
+
+            }else if(responseCode == 403){
+                S3FS_PRN_CRIT("invalid credentials(host=%s) - result of checking service.", s3host.c_str());
+
+            }else if(responseCode == 404){
+                S3FS_PRN_CRIT("bucket not found(host=%s) - result of checking service.", s3host.c_str());
+
+            }else{
+                // another error
+                S3FS_PRN_CRIT("unable to connect(host=%s) - result of checking service.", s3host.c_str());
+            }
+            return EXIT_FAILURE;
+        }
     }
+    s3fscurl.DestroyCurlHandle();
 
-    // try signature v2
-    if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
-      // switch sigv2
-      S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
-      S3fsCurl::SetSignatureV4(false);
-
-      // retry to check with sigv2
-      s3fscurl.DestroyCurlHandle();
-      res          = s3fscurl.CheckBucket();
-      responseCode = s3fscurl.GetLastResponseCode();
+    // make sure remote mountpath exists and is a directory
+    if(!mount_prefix.empty()){
+        if(remote_mountpath_exists(mount_prefix.c_str()) != 0){
+            S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
+            return EXIT_FAILURE;
+        }
     }
+    S3FS_MALLOCTRIM(0);
 
-    // check errors(after retrying)
-    if(0 > res && responseCode != 200 && responseCode != 301){
-      if(responseCode == 400){
-        S3FS_PRN_CRIT("Bad Request(host=%s) - result of checking service.", host.c_str());
-
-      }else if(responseCode == 403){
-        S3FS_PRN_CRIT("invalid credentials(host=%s) - result of checking service.", host.c_str());
-
-      }else if(responseCode == 404){
-        S3FS_PRN_CRIT("bucket not found(host=%s) - result of checking service.", host.c_str());
-
-      }else{
-        // another error
-        S3FS_PRN_CRIT("unable to connect(host=%s) - result of checking service.", host.c_str());
-      }
-      return EXIT_FAILURE;
-    }
-  }
-  s3fscurl.DestroyCurlHandle();
-
-  // make sure remote mountpath exists and is a directory
-  if(!mount_prefix.empty()){
-    if(remote_mountpath_exists(mount_prefix.c_str()) != 0){
-      S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
-      return EXIT_FAILURE;
-    }
-  }
-  S3FS_MALLOCTRIM(0);
-
-  return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 //
@@ -4051,91 +3463,91 @@ static int s3fs_check_service()
 //
 static int parse_passwd_file(bucketkvmap_t& resmap)
 {
-  string line;
-  size_t first_pos;
-  readline_t linelist;
-  readline_t::iterator iter;
+    string               line;
+    size_t               first_pos;
+    readline_t           linelist;
+    readline_t::iterator iter;
 
-  // open passwd file
-  ifstream PF(passwd_file.c_str());
-  if(!PF.good()){
-    S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
-    return -1;
-  }
+    // open passwd file
+    ifstream PF(passwd_file.c_str());
+    if(!PF.good()){
+        S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
+        return -1;
+    }
 
-  // read each line
-  while(getline(PF, line)){
-    line = trim(line);
-    if(line.empty()){
-      continue;
+    // read each line
+    while(getline(PF, line)){
+        line = trim(line);
+        if(line.empty()){
+            continue;
+        }
+        if('#' == line[0]){
+            continue;
+        }
+        if(string::npos != line.find_first_of(" \t")){
+            S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
+            return -1;
+        }
+        if('[' == line[0]){
+            S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
+            return -1;
+        }
+        linelist.push_back(line);
     }
-    if('#' == line[0]){
-      continue;
-    }
-    if(string::npos != line.find_first_of(" \t")){
-      S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
-      return -1;
-    }
-    if('[' == line[0]){
-      S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
-      return -1;
-    }
-    linelist.push_back(line);
-  }
 
-  // read '=' type
-  kvmap_t kv;
-  for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-    first_pos = iter->find_first_of("=");
-    if(first_pos == string::npos){
-      continue;
+    // read '=' type
+    kvmap_t kv;
+    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+        first_pos = iter->find_first_of("=");
+        if(first_pos == string::npos){
+            continue;
+        }
+        // formatted by "key=val"
+        string key = trim(iter->substr(0, first_pos));
+        string val = trim(iter->substr(first_pos + 1, string::npos));
+        if(key.empty()){
+            continue;
+        }
+        if(kv.end() != kv.find(key)){
+            S3FS_PRN_WARN("same key name(%s) found in passwd file, skip this.", key.c_str());
+            continue;
+        }
+        kv[key] = val;
     }
-    // formatted by "key=val"
-    string key = trim(iter->substr(0, first_pos));
-    string val = trim(iter->substr(first_pos + 1, string::npos));
-    if(key.empty()){
-      continue;
-    }
-    if(kv.end() != kv.find(key)){
-      S3FS_PRN_WARN("same key name(%s) found in passwd file, skip this.", key.c_str());
-      continue;
-    }
-    kv[key] = val;
-  }
-  // set special key name
-  resmap[string(keyval_fields_type)] = kv;
+    // set special key name
+    resmap[string(keyval_fields_type)] = kv;
 
-  // read ':' type
-  for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-    first_pos       = iter->find_first_of(":");
-    size_t last_pos = iter->find_last_of(":");
-    if(first_pos == string::npos){
-      continue;
+    // read ':' type
+    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+        first_pos       = iter->find_first_of(":");
+        size_t last_pos = iter->find_last_of(":");
+        if(first_pos == string::npos){
+            continue;
+        }
+        string bucketname;
+        string accesskey;
+        string secret;
+        if(first_pos != last_pos){
+            // formatted by "bucket:accesskey:secretkey"
+            bucketname    = trim(iter->substr(0, first_pos));
+            accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
+            secret    = trim(iter->substr(last_pos + 1, string::npos));
+        }else{
+            // formatted by "accesskey:secretkey"
+            bucketname    = allbucket_fields_type;
+            accesskey = trim(iter->substr(0, first_pos));
+            secret    = trim(iter->substr(first_pos + 1, string::npos));
+        }
+        if(resmap.end() != resmap.find(bucketname)){
+            S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
+            return -1;
+        }
+        kv.clear();
+        kv[string(aws_accesskeyid)] = accesskey;
+        kv[string(aws_secretkey)]   = secret;
+        resmap[bucketname]          = kv;
     }
-    string bucketname;
-    string accesskey;
-    string secret;
-    if(first_pos != last_pos){
-      // formatted by "bucket:accesskey:secretkey"
-      bucketname    = trim(iter->substr(0, first_pos));
-      accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
-      secret    = trim(iter->substr(last_pos + 1, string::npos));
-    }else{
-      // formatted by "accesskey:secretkey"
-      bucketname    = allbucket_fields_type;
-      accesskey = trim(iter->substr(0, first_pos));
-      secret    = trim(iter->substr(first_pos + 1, string::npos));
-    }
-    if(resmap.end() != resmap.find(bucketname)){
-      S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
-      return -1;
-    }
-    kv.clear();
-    kv[string(aws_accesskeyid)] = accesskey;
-    kv[string(aws_secretkey)]   = secret;
-    resmap[bucketname]          = kv;
-  }
-  return (resmap.empty() ? 0 : 1);
+    return (resmap.empty() ? 0 : 1);
 }
 
 //
@@ -4145,26 +3557,26 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 //
 static int check_for_aws_format(const kvmap_t& kvmap)
 {
-  string str1(aws_accesskeyid);
-  string str2(aws_secretkey);
+    string str1(aws_accesskeyid);
+    string str2(aws_secretkey);
 
-  if(kvmap.empty()){
-    return 0;
-  }
-  kvmap_t::const_iterator str1_it = kvmap.find(str1);
-  kvmap_t::const_iterator str2_it = kvmap.find(str2);
-  if(kvmap.end() == str1_it && kvmap.end() == str2_it){
-    return 0;
-  }
-  if(kvmap.end() == str1_it || kvmap.end() == str2_it){
-    S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
-    return -1;
-  }
-  if(!S3fsCurl::SetAccessKey(str1_it->second.c_str(), str2_it->second.c_str())){
-    S3FS_PRN_EXIT("failed to set access key/secret key.");
-    return -1;
-  }
-  return 1;
+    if(kvmap.empty()){
+        return 0;
+    }
+    kvmap_t::const_iterator str1_it = kvmap.find(str1);
+    kvmap_t::const_iterator str2_it = kvmap.find(str2);
+    if(kvmap.end() == str1_it && kvmap.end() == str2_it){
+        return 0;
+    }
+    if(kvmap.end() == str1_it || kvmap.end() == str2_it){
+        S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
+        return -1;
+    }
+    if(!S3fsCurl::SetAccessKey(str1_it->second.c_str(), str2_it->second.c_str())){
+        S3FS_PRN_EXIT("failed to set access key/secret key.");
+        return -1;
+    }
+    return 1;
 }
 
 //
@@ -4180,114 +3592,114 @@ static int check_for_aws_format(const kvmap_t& kvmap)
 //
 static int check_passwd_file_perms()
 {
-  struct stat info;
+    struct stat info;
 
-  // let's get the file info
-  if(stat(passwd_file.c_str(), &info) != 0){
-    S3FS_PRN_EXIT("unexpected error from stat(%s).", passwd_file.c_str());
-    return EXIT_FAILURE;
-  }
-
-  // return error if any file has others permissions 
-  if( (info.st_mode & S_IROTH) ||
-      (info.st_mode & S_IWOTH) || 
-      (info.st_mode & S_IXOTH)) {
-    S3FS_PRN_EXIT("credentials file %s should not have others permissions.", passwd_file.c_str());
-    return EXIT_FAILURE;
-  }
-
-  // Any local file should not have any group permissions 
-  // /etc/passwd-s3fs can have group permissions 
-  if(passwd_file != "/etc/passwd-s3fs"){
-    if( (info.st_mode & S_IRGRP) ||
-        (info.st_mode & S_IWGRP) || 
-        (info.st_mode & S_IXGRP)) {
-      S3FS_PRN_EXIT("credentials file %s should not have group permissions.", passwd_file.c_str());
-      return EXIT_FAILURE;
+    // let's get the file info
+    if(stat(passwd_file.c_str(), &info) != 0){
+        S3FS_PRN_EXIT("unexpected error from stat(%s).", passwd_file.c_str());
+        return EXIT_FAILURE;
     }
-  }else{
-    // "/etc/passwd-s3fs" does not allow group write.
-    if((info.st_mode & S_IWGRP)){
-      S3FS_PRN_EXIT("credentials file %s should not have group writable permissions.", passwd_file.c_str());
-      return EXIT_FAILURE;
+
+    // return error if any file has others permissions 
+    if( (info.st_mode & S_IROTH) ||
+        (info.st_mode & S_IWOTH) || 
+        (info.st_mode & S_IXOTH)) {
+        S3FS_PRN_EXIT("credentials file %s should not have others permissions.", passwd_file.c_str());
+        return EXIT_FAILURE;
     }
-  }
-  if((info.st_mode & S_IXUSR) || (info.st_mode & S_IXGRP)){
-    S3FS_PRN_EXIT("credentials file %s should not have executable permissions.", passwd_file.c_str());
-    return EXIT_FAILURE;
-  }
-  return EXIT_SUCCESS;
+
+    // Any local file should not have any group permissions 
+    // /etc/passwd-s3fs can have group permissions 
+    if(passwd_file != "/etc/passwd-s3fs"){
+        if( (info.st_mode & S_IRGRP) ||
+            (info.st_mode & S_IWGRP) || 
+            (info.st_mode & S_IXGRP)) {
+            S3FS_PRN_EXIT("credentials file %s should not have group permissions.", passwd_file.c_str());
+            return EXIT_FAILURE;
+        }
+    }else{
+        // "/etc/passwd-s3fs" does not allow group write.
+        if((info.st_mode & S_IWGRP)){
+            S3FS_PRN_EXIT("credentials file %s should not have group writable permissions.", passwd_file.c_str());
+            return EXIT_FAILURE;
+        }
+    }
+    if((info.st_mode & S_IXUSR) || (info.st_mode & S_IXGRP)){
+        S3FS_PRN_EXIT("credentials file %s should not have executable permissions.", passwd_file.c_str());
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
 
 static int read_aws_credentials_file(const std::string &filename)
 {
-  // open passwd file
-  ifstream PF(filename.c_str());
-  if(!PF.good()){
-    return -1;
-  }
-
-  string profile;
-  string accesskey;
-  string secret;
-  string session_token;
-
-  // read each line
-  string line;
-  while(getline(PF, line)){
-    line = trim(line);
-    if(line.empty()){
-      continue;
-    }
-    if('#' == line[0]){
-      continue;
+    // open passwd file
+    ifstream PF(filename.c_str());
+    if(!PF.good()){
+        return -1;
     }
 
-    if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
-      if(profile == aws_profile){
-        break;
-      }
-      profile = line.substr(1, line.size() - 2);
-      accesskey.clear();
-      secret.clear();
-      session_token.clear();
+    string profile;
+    string accesskey;
+    string secret;
+    string session_token;
+
+    // read each line
+    string line;
+    while(getline(PF, line)){
+        line = trim(line);
+        if(line.empty()){
+            continue;
+        }
+        if('#' == line[0]){
+            continue;
+        }
+
+        if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
+            if(profile == aws_profile){
+                break;
+            }
+            profile = line.substr(1, line.size() - 2);
+            accesskey.clear();
+            secret.clear();
+            session_token.clear();
+        }
+    
+        size_t pos = line.find_first_of('=');
+        if(pos == string::npos){
+            continue;
+        }
+        string key   = trim(line.substr(0, pos));
+        string value = trim(line.substr(pos + 1, string::npos));
+        if(key == "aws_access_key_id"){
+            accesskey = value;
+        }else if(key == "aws_secret_access_key"){
+            secret = value;
+        }else if(key == "aws_session_token"){
+            session_token = value;
+        }
     }
 
-    size_t pos = line.find_first_of('=');
-    if(pos == string::npos){
-      continue;
-    }
-    string key   = trim(line.substr(0, pos));
-    string value = trim(line.substr(pos + 1, string::npos));
-    if(key == "aws_access_key_id"){
-      accesskey = value;
-    }else if(key == "aws_secret_access_key"){
-      secret = value;
-    }else if(key == "aws_session_token"){
-      session_token = value;
-    }
-  }
-
-  if(profile != aws_profile){
-    return EXIT_FAILURE;
-  }
-  if (session_token.empty()) {
-    if (is_use_session_token) {
-      S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/credentials file for profile: %s.", aws_profile.c_str());
+    if(profile != aws_profile){
       return EXIT_FAILURE;
     }
-    if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
-      S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
-      return EXIT_FAILURE;
+    if (session_token.empty()) {
+        if (is_use_session_token) {
+            S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/credentials file for profile: %s.", aws_profile.c_str());
+            return EXIT_FAILURE;
+        }
+        if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
+            S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
+            return EXIT_FAILURE;
+        }
+    } else {
+        if (!S3fsCurl::SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str())) {
+            S3FS_PRN_EXIT("session token is invalid.");
+            return EXIT_FAILURE;
+        }
     }
-  } else {
-    if (!S3fsCurl::SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str())) {
-      S3FS_PRN_EXIT("session token is invalid.");
-      return EXIT_FAILURE;
-    }
-  }
 
-  return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 //
@@ -4308,61 +3720,61 @@ static int read_aws_credentials_file(const std::string &filename)
 //
 static int read_passwd_file()
 {
-  bucketkvmap_t bucketmap;
-  kvmap_t       keyval;
-  int           result;
+    bucketkvmap_t bucketmap;
+    kvmap_t       keyval;
+    int           result;
 
-  // if you got here, the password file
-  // exists and is readable by the
-  // current user, check for permissions
-  if(EXIT_SUCCESS != check_passwd_file_perms()){
-    return EXIT_FAILURE;
-  }
-
-  //
-  // parse passwd file
-  //
-  result = parse_passwd_file(bucketmap);
-  if(-1 == result){
-     return EXIT_FAILURE;
-  }
-
-  //
-  // check key=value type format.
-  //
-  bucketkvmap_t::iterator it = bucketmap.find(keyval_fields_type);
-  if(bucketmap.end() != it){
-    // aws format
-    result = check_for_aws_format(it->second);
-    if(-1 == result){
-       return EXIT_FAILURE;
-    }else if(1 == result){
-       // success to set
-       return EXIT_SUCCESS;
+    // if you got here, the password file
+    // exists and is readable by the
+    // current user, check for permissions
+    if(EXIT_SUCCESS != check_passwd_file_perms()){
+        return EXIT_FAILURE;
     }
-  }
 
-  string bucket_key = allbucket_fields_type;
-  if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
-    bucket_key = bucket;
-  }
-  it = bucketmap.find(bucket_key);
-  if(bucketmap.end() == it){
-    S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
-    return EXIT_FAILURE;
-  }
-  keyval = it->second;
-  kvmap_t::iterator aws_accesskeyid_it = keyval.find(aws_accesskeyid);
-  kvmap_t::iterator aws_secretkey_it = keyval.find(aws_secretkey);
-  if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
-    S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
-    return EXIT_FAILURE;
-  }
-  if(!S3fsCurl::SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str())){
-    S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
-    return EXIT_FAILURE;
-  }
-  return EXIT_SUCCESS;
+    //
+    // parse passwd file
+    //
+    result = parse_passwd_file(bucketmap);
+    if(-1 == result){
+         return EXIT_FAILURE;
+    }
+
+    //
+    // check key=value type format.
+    //
+    bucketkvmap_t::iterator it = bucketmap.find(keyval_fields_type);
+    if(bucketmap.end() != it){
+        // aws format
+        result = check_for_aws_format(it->second);
+        if(-1 == result){
+            return EXIT_FAILURE;
+        }else if(1 == result){
+            // success to set
+            return EXIT_SUCCESS;
+        }
+    }
+
+    string bucket_key = allbucket_fields_type;
+    if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
+        bucket_key = bucket;
+    }
+    it = bucketmap.find(bucket_key);
+    if(bucketmap.end() == it){
+        S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
+        return EXIT_FAILURE;
+    }
+    keyval = it->second;
+    kvmap_t::iterator aws_accesskeyid_it = keyval.find(aws_accesskeyid);
+    kvmap_t::iterator aws_secretkey_it = keyval.find(aws_secretkey);
+    if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
+        S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
+        return EXIT_FAILURE;
+    }
+    if(!S3fsCurl::SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str())){
+        S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
 
 //
@@ -4384,121 +3796,121 @@ static int read_passwd_file()
 //
 static int get_access_keys()
 {
-  // should be redundant
-  if(S3fsCurl::IsPublicBucket()){
-     return EXIT_SUCCESS;
-  }
+    // should be redundant
+    if(S3fsCurl::IsPublicBucket()){
+        return EXIT_SUCCESS;
+    }
 
-  // access key loading is deferred
-  if(load_iamrole || is_ecs){
-     return EXIT_SUCCESS;
-  }
+    // access key loading is deferred
+    if(load_iamrole || is_ecs){
+        return EXIT_SUCCESS;
+    }
 
-  // 1 - keys specified on the command line
-  if(S3fsCurl::IsSetAccessKeys()){
-     return EXIT_SUCCESS;
-  }
+    // 1 - keys specified on the command line
+    if(S3fsCurl::IsSetAccessKeys()){
+        return EXIT_SUCCESS;
+    }
 
-  // 2 - was specified on the command line
-  if(!passwd_file.empty()){
+    // 2 - was specified on the command line
+    if(!passwd_file.empty()){
+        ifstream PF(passwd_file.c_str());
+        if(PF.good()){
+             PF.close();
+             return read_passwd_file();
+        }else{
+            S3FS_PRN_EXIT("specified passwd_file is not readable.");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // 3  - environment variables
+    char* AWSACCESSKEYID     = getenv("AWSACCESSKEYID");
+    char* AWSSECRETACCESSKEY = getenv("AWSSECRETACCESSKEY");
+    char* AWSSESSIONTOKEN    = getenv("AWSSESSIONTOKEN");
+    if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
+        if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
+            (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
+            S3FS_PRN_EXIT("if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too.");
+            return EXIT_FAILURE;
+        }
+        S3FS_PRN_INFO2("access key from env variables");
+        if (AWSSESSIONTOKEN != NULL) {
+            S3FS_PRN_INFO2("session token is available");
+            if (!S3fsCurl::SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)) {
+                 S3FS_PRN_EXIT("session token is invalid.");
+                 return EXIT_FAILURE;
+            }
+        } else {
+            S3FS_PRN_INFO2("session token is not available");
+            if (is_use_session_token) {
+                S3FS_PRN_EXIT("environment variable AWSSESSIONTOKEN is expected to be set.");
+                return EXIT_FAILURE;
+            }
+        }
+        if(!S3fsCurl::SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
+            S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // 3a - from the AWS_CREDENTIAL_FILE environment variable
+    char * AWS_CREDENTIAL_FILE;
+    AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
+    if(AWS_CREDENTIAL_FILE != NULL){
+        passwd_file.assign(AWS_CREDENTIAL_FILE);
+        if(!passwd_file.empty()){
+            ifstream PF(passwd_file.c_str());
+            if(PF.good()){
+                 PF.close();
+                 return read_passwd_file();
+            }else{
+                S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
+                return EXIT_FAILURE;
+            }
+        }
+    }
+
+    // 3b - check ${HOME}/.aws/credentials
+    std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
+    if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
+        return EXIT_SUCCESS;
+    }else if(aws_profile != "default"){
+        S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
+        return EXIT_FAILURE;
+    }
+
+    // 4 - from the default location in the users home directory
+    char * HOME;
+    HOME = getenv ("HOME");
+    if(HOME != NULL){
+         passwd_file.assign(HOME);
+         passwd_file.append("/.passwd-s3fs");
+         ifstream PF(passwd_file.c_str());
+         if(PF.good()){
+             PF.close();
+             if(EXIT_SUCCESS != read_passwd_file()){
+                 return EXIT_FAILURE;
+             }
+             // It is possible that the user's file was there but
+             // contained no key pairs i.e. commented out
+             // in that case, go look in the final location
+             if(S3fsCurl::IsSetAccessKeys()){
+                  return EXIT_SUCCESS;
+             }
+         }
+     }
+
+    // 5 - from the system default location
+    passwd_file.assign("/etc/passwd-s3fs"); 
     ifstream PF(passwd_file.c_str());
     if(PF.good()){
-       PF.close();
-       return read_passwd_file();
-    }else{
-      S3FS_PRN_EXIT("specified passwd_file is not readable.");
-      return EXIT_FAILURE;
+        PF.close();
+        return read_passwd_file();
     }
-  }
+    S3FS_PRN_EXIT("could not determine how to establish security credentials.");
 
-  // 3  - environment variables
-  char* AWSACCESSKEYID     = getenv("AWSACCESSKEYID");
-  char* AWSSECRETACCESSKEY = getenv("AWSSECRETACCESSKEY");
-  char* AWSSESSIONTOKEN    = getenv("AWSSESSIONTOKEN");
-  if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
-    if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
-        (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
-      S3FS_PRN_EXIT("if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too.");
-      return EXIT_FAILURE;
-    }
-    S3FS_PRN_INFO2("access key from env variables");
-    if (AWSSESSIONTOKEN != NULL) {
-      S3FS_PRN_INFO2("session token is available");
-      if (!S3fsCurl::SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)) {
-         S3FS_PRN_EXIT("session token is invalid.");
-         return EXIT_FAILURE;
-      }
-    } else {
-      S3FS_PRN_INFO2("session token is not available");
-      if (is_use_session_token) {
-        S3FS_PRN_EXIT("environment variable AWSSESSIONTOKEN is expected to be set.");
-        return EXIT_FAILURE;
-      }
-    }
-    if(!S3fsCurl::SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
-      S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-      return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-  }
-
-  // 3a - from the AWS_CREDENTIAL_FILE environment variable
-  char * AWS_CREDENTIAL_FILE;
-  AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
-  if(AWS_CREDENTIAL_FILE != NULL){
-    passwd_file.assign(AWS_CREDENTIAL_FILE);
-    if(!passwd_file.empty()){
-      ifstream PF(passwd_file.c_str());
-      if(PF.good()){
-         PF.close();
-         return read_passwd_file();
-      }else{
-        S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
-        return EXIT_FAILURE;
-      }
-    }
-  }
-
-  // 3b - check ${HOME}/.aws/credentials
-  std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
-  if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }else if(aws_profile != "default"){
-    S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
     return EXIT_FAILURE;
-  }
-
-  // 4 - from the default location in the users home directory
-  char * HOME;
-  HOME = getenv ("HOME");
-  if(HOME != NULL){
-     passwd_file.assign(HOME);
-     passwd_file.append("/.passwd-s3fs");
-     ifstream PF(passwd_file.c_str());
-     if(PF.good()){
-       PF.close();
-       if(EXIT_SUCCESS != read_passwd_file()){
-         return EXIT_FAILURE;
-       }
-       // It is possible that the user's file was there but
-       // contained no key pairs i.e. commented out
-       // in that case, go look in the final location
-       if(S3fsCurl::IsSetAccessKeys()){
-          return EXIT_SUCCESS;
-       }
-     }
-   }
-
-  // 5 - from the system default location
-  passwd_file.assign("/etc/passwd-s3fs"); 
-  ifstream PF(passwd_file.c_str());
-  if(PF.good()){
-    PF.close();
-    return read_passwd_file();
-  }
-  S3FS_PRN_EXIT("could not determine how to establish security credentials.");
-
-  return EXIT_FAILURE;
 }
 
 //
@@ -4506,28 +3918,28 @@ static int get_access_keys()
 //
 static bool set_mountpoint_attribute(struct stat& mpst)
 {
-  mp_uid  = geteuid();
-  mp_gid  = getegid();
-  mp_mode = S_IFDIR | (allow_other ? (is_mp_umask ? (~mp_umask & (S_IRWXU | S_IRWXG | S_IRWXO)) : (S_IRWXU | S_IRWXG | S_IRWXO)) : S_IRWXU);
+    mp_uid  = geteuid();
+    mp_gid  = getegid();
+    mp_mode = S_IFDIR | (allow_other ? (is_mp_umask ? (~mp_umask & (S_IRWXU | S_IRWXG | S_IRWXO)) : (S_IRWXU | S_IRWXG | S_IRWXO)) : S_IRWXU);
 
-  S3FS_PRN_INFO2("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
-         (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
+    S3FS_PRN_INFO2("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
+           (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
 
-  // check owner
-  if(0 == mp_uid || mpst.st_uid == mp_uid){
-    return true;
-  }
-  // check group permission
-  if(mpst.st_gid == mp_gid || 1 == is_uid_include_group(mp_uid, mpst.st_gid)){
-    if(S_IRWXG == (mpst.st_mode & S_IRWXG)){
-      return true;
+    // check owner
+    if(0 == mp_uid || mpst.st_uid == mp_uid){
+        return true;
     }
-  }
-  // check other permission
-  if(S_IRWXO == (mpst.st_mode & S_IRWXO)){
-    return true;
-  }
-  return false;
+    // check group permission
+    if(mpst.st_gid == mp_gid || 1 == is_uid_include_group(mp_uid, mpst.st_gid)){
+        if(S_IRWXG == (mpst.st_mode & S_IRWXG)){
+            return true;
+        }
+    }
+    // check other permission
+    if(S_IRWXO == (mpst.st_mode & S_IRWXO)){
+        return true;
+    }
+    return false;
 }
 
 //
@@ -4535,31 +3947,30 @@ static bool set_mountpoint_attribute(struct stat& mpst)
 //
 static int set_bucket(const char* arg)
 {
-  char *bucket_name = (char*)arg;
-  if(strstr(arg, ":")){
-    if(strstr(arg, "://")){
-      S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
-      return -1;
+    char *bucket_name = (char*)arg;
+    if(strstr(arg, ":")){
+        if(strstr(arg, "://")){
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            return -1;
+        }
+        bucket = strtok(bucket_name, ":");
+        char* pmount_prefix = strtok(NULL, "");
+        if(pmount_prefix){
+            if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
+                S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
+                return -1;
+            }
+            mount_prefix = pmount_prefix;
+            // remove trailing slash
+            if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
+                mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
+            }
+        }
+    }else{
+        bucket = arg;
     }
-    bucket = strtok(bucket_name, ":");
-    char* pmount_prefix = strtok(NULL, "");
-    if(pmount_prefix){
-      if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
-        S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
-        return -1;
-      }
-      mount_prefix = pmount_prefix;
-      // remove trailing slash
-      if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
-        mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
-      }
-    }
-  }else{
-    bucket = arg;
-  }
-  return 0;
+    return 0;
 }
-
 
 // This is repeatedly called by the fuse option parser
 // if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
@@ -4569,1051 +3980,1047 @@ static int set_bucket(const char* arg)
 //  or the mountpoint. The bucket name will always come before the mountpoint
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
-  int ret;
-  if(key == FUSE_OPT_KEY_NONOPT){
-    // the first NONOPT option is the bucket name
-    if(bucket.empty()){
-      if ((ret = set_bucket(arg))){
-        return ret;
-      }
-      return 0;
-    }
-    else if (!strcmp(arg, "s3fs")) {
-      return 0;
-    }
-
-    // the second NONOPT option is the mountpoint(not utility mode)
-    if(mountpoint.empty() && NO_UTILITY_MODE == utility_mode){
-      // save the mountpoint and do some basic error checking
-      mountpoint = arg;
-      struct stat stbuf;
-
-      if(stat(arg, &stbuf) == -1){
-        S3FS_PRN_EXIT("unable to access MOUNTPOINT %s: %s", mountpoint.c_str(), strerror(errno));
-        return -1;
-      }
-      if(!(S_ISDIR(stbuf.st_mode))){
-        S3FS_PRN_EXIT("MOUNTPOINT: %s is not a directory.", mountpoint.c_str());
-        return -1;
-      }
-      if(!set_mountpoint_attribute(stbuf)){
-        S3FS_PRN_EXIT("MOUNTPOINT: %s permission denied.", mountpoint.c_str());
-        return -1;
-      }
-
-      if(!nonempty){
-        struct dirent *ent;
-        DIR *dp = opendir(mountpoint.c_str());
-        if(dp == NULL){
-          S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
-          return -1;
+    int ret;
+    if(key == FUSE_OPT_KEY_NONOPT){
+        // the first NONOPT option is the bucket name
+        if(bucket.empty()){
+            if ((ret = set_bucket(arg))){
+                return ret;
+            }
+            return 0;
+        }else if (!strcmp(arg, "s3fs")) {
+            return 0;
         }
-        while((ent = readdir(dp)) != NULL){
-          if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
-            closedir(dp);
-            S3FS_PRN_EXIT("MOUNTPOINT directory %s is not empty. if you are sure this is safe, can use the 'nonempty' mount option.", mountpoint.c_str());
+
+        // the second NONOPT option is the mountpoint(not utility mode)
+        if(mountpoint.empty() && NO_UTILITY_MODE == utility_mode){
+            // save the mountpoint and do some basic error checking
+            mountpoint = arg;
+            struct stat stbuf;
+
+            if(stat(arg, &stbuf) == -1){
+                S3FS_PRN_EXIT("unable to access MOUNTPOINT %s: %s", mountpoint.c_str(), strerror(errno));
+                return -1;
+            }
+            if(!(S_ISDIR(stbuf.st_mode))){
+                S3FS_PRN_EXIT("MOUNTPOINT: %s is not a directory.", mountpoint.c_str());
+                return -1;
+            }
+            if(!set_mountpoint_attribute(stbuf)){
+                S3FS_PRN_EXIT("MOUNTPOINT: %s permission denied.", mountpoint.c_str());
+                return -1;
+            }
+
+            if(!nonempty){
+                struct dirent *ent;
+                DIR *dp = opendir(mountpoint.c_str());
+                if(dp == NULL){
+                    S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
+                    return -1;
+                }
+                while((ent = readdir(dp)) != NULL){
+                    if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
+                        closedir(dp);
+                        S3FS_PRN_EXIT("MOUNTPOINT directory %s is not empty. if you are sure this is safe, can use the 'nonempty' mount option.", mountpoint.c_str());
+                        return -1;
+                    }
+                }
+                closedir(dp);
+            }
+            return 1;
+        }
+
+        // Unknown option
+        if(NO_UTILITY_MODE == utility_mode){
+            S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
+        }else{
+            S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
+        }
+        return -1;
+
+    }else if(key == FUSE_OPT_KEY_OPT){
+        if(0 == STR2NCMP(arg, "uid=")){
+            s3fs_uid = get_uid(strchr(arg, '=') + sizeof(char));
+            if(0 != geteuid() && 0 == s3fs_uid){
+                S3FS_PRN_EXIT("root user can only specify uid=0.");
+                return -1;
+            }
+            is_s3fs_uid = true;
+            return 1; // continue for fuse option
+        }
+        if(0 == STR2NCMP(arg, "gid=")){
+            s3fs_gid = get_gid(strchr(arg, '=') + sizeof(char));
+            if(0 != getegid() && 0 == s3fs_gid){
+                S3FS_PRN_EXIT("root user can only specify gid=0.");
+                return -1;
+            }
+            is_s3fs_gid = true;
+            return 1; // continue for fuse option
+        }
+        if(0 == STR2NCMP(arg, "umask=")){
+            s3fs_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
+            s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+            is_s3fs_umask = true;
+            return 1; // continue for fuse option
+        }
+        if(0 == strcmp(arg, "allow_other")){
+            allow_other = true;
+            return 1; // continue for fuse option
+        }
+        if(0 == STR2NCMP(arg, "mp_umask=")){
+            mp_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
+            mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+            is_mp_umask = true;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "default_acl=")){
+            const char* acl_string = strchr(arg, '=') + sizeof(char);
+            acl_t acl = acl_t::from_str(acl_string);
+            if(acl == acl_t::UNKNOWN){
+                S3FS_PRN_EXIT("unknown value for default_acl: %s", acl_string);
+                return -1;
+            }
+            S3fsCurl::SetDefaultAcl(acl);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "retries=")){
+            off_t retries = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(retries == 0){
+                S3FS_PRN_EXIT("retries must be greater than zero");
+                return -1;
+            }
+            S3fsCurl::SetRetries(retries);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "use_cache=")){
+            FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char));
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "check_cache_dir_exist")){
+            FdManager::SetCheckCacheDirExist(true);
+            return 0;
+        }
+        if(0 == strcmp(arg, "del_cache")){
+            is_remove_cache = true;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "multireq_max=")){
+            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            S3fsCurl::SetMaxMultiRequest(maxreq);
+            return 0;
+        }
+        if(0 == strcmp(arg, "nonempty")){
+            nonempty = true;
+            return 1; // need to continue for fuse.
+        }
+        if(0 == strcmp(arg, "nomultipart")){
+            nomultipart = true;
+            return 0;
+        }
+        // old format for storage_class
+        if(0 == strcmp(arg, "use_rrs") || 0 == STR2NCMP(arg, "use_rrs=")){
+            off_t rrs = 1;
+            // for an old format.
+            if(0 == STR2NCMP(arg, "use_rrs=")){
+                rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            }
+            if(0 == rrs){
+                S3fsCurl::SetStorageClass(storage_class_t::STANDARD);
+            }else if(1 == rrs){
+                S3fsCurl::SetStorageClass(storage_class_t::REDUCED_REDUNDANCY);
+            }else{
+                S3FS_PRN_EXIT("poorly formed argument to option: use_rrs");
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "storage_class=")){
+            const char *storage_class_str = strchr(arg, '=') + sizeof(char);
+            storage_class_t storage_class = storage_class_t::from_str(storage_class_str);
+            if(storage_class == storage_class_t::UNKNOWN){
+                S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class_str);
+                return -1;
+            }
+            S3fsCurl::SetStorageClass(storage_class);
+            return 0;
+        }
+        //
+        // [NOTE]
+        // use_sse                        Set Server Side Encrypting type to SSE-S3
+        // use_sse=1
+        // use_sse=file                   Set Server Side Encrypting type to Custom key(SSE-C) and load custom keys
+        // use_sse=custom(c):file
+        // use_sse=custom(c)              Set Server Side Encrypting type to Custom key(SSE-C)
+        // use_sse=kmsid(k):kms-key-id    Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS) and load KMS id
+        // use_sse=kmsid(k)               Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS)
+        //
+        // load_sse_c=file                Load Server Side Encrypting custom keys
+        //
+        // AWSSSECKEYS                    Loading Environment for Server Side Encrypting custom keys
+        // AWSSSEKMSID                    Loading Environment for Server Side Encrypting Key id
+        //
+        if(0 == STR2NCMP(arg, "use_sse")){
+            if(0 == strcmp(arg, "use_sse") || 0 == strcmp(arg, "use_sse=1")){ // use_sse=1 is old type parameter
+                // sse type is SSE_S3
+                if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseS3Type()){
+                    S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
+                    return -1;
+                }
+                S3fsCurl::SetSseType(sse_type_t::SSE_S3);
+
+            }else if(0 == strcmp(arg, "use_sse=kmsid") || 0 == strcmp(arg, "use_sse=k")){
+                // sse type is SSE_KMS with out kmsid(expecting id is loaded by environment)
+                if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
+                    S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
+                    return -1;
+                }
+                if(!S3fsCurl::IsSetSseKmsId()){
+                    S3FS_PRN_EXIT("use_sse=kms but not loaded kms id by environment.");
+                    return -1;
+                }
+                S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
+
+            }else if(0 == STR2NCMP(arg, "use_sse=kmsid:") || 0 == STR2NCMP(arg, "use_sse=k:")){
+                // sse type is SSE_KMS with kmsid
+                if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
+                    S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
+                    return -1;
+                }
+                const char* kmsid;
+                if(0 == STR2NCMP(arg, "use_sse=kmsid:")){
+                    kmsid = &arg[strlen("use_sse=kmsid:")];
+                }else{
+                    kmsid = &arg[strlen("use_sse=k:")];
+                }
+                if(!S3fsCurl::SetSseKmsid(kmsid)){
+                    S3FS_PRN_EXIT("failed to load use_sse kms id.");
+                    return -1;
+                }
+                S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
+
+            }else if(0 == strcmp(arg, "use_sse=custom") || 0 == strcmp(arg, "use_sse=c")){
+                // sse type is SSE_C with out custom keys(expecting keys are loaded by environment or load_sse_c option)
+                if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
+                    S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
+                    return -1;
+                }
+                // [NOTE]
+                // do not check ckeys exists here.
+                //
+                S3fsCurl::SetSseType(sse_type_t::SSE_C);
+
+            }else if(0 == STR2NCMP(arg, "use_sse=custom:") || 0 == STR2NCMP(arg, "use_sse=c:")){
+                // sse type is SSE_C with custom keys
+                if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
+                    S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
+                    return -1;
+                }
+                const char* ssecfile;
+                if(0 == STR2NCMP(arg, "use_sse=custom:")){
+                    ssecfile = &arg[strlen("use_sse=custom:")];
+                }else{
+                    ssecfile = &arg[strlen("use_sse=c:")];
+                }
+                if(!S3fsCurl::SetSseCKeys(ssecfile)){
+                    S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+                    return -1;
+                }
+                S3fsCurl::SetSseType(sse_type_t::SSE_C);
+
+            }else if(0 == strcmp(arg, "use_sse=")){    // this type is old style(parameter is custom key file path)
+                // SSE_C with custom keys.
+                const char* ssecfile = &arg[strlen("use_sse=")];
+                if(!S3fsCurl::SetSseCKeys(ssecfile)){
+                    S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+                    return -1;
+                }
+                S3fsCurl::SetSseType(sse_type_t::SSE_C);
+
+            }else{
+                // never come here.
+                S3FS_PRN_EXIT("something wrong use_sse option.");
+                return -1;
+            }
+            return 0;
+        }
+        // [NOTE]
+        // Do only load SSE custom keys, care for set without set sse type.
+        if(0 == STR2NCMP(arg, "load_sse_c=")){
+            const char* ssecfile = &arg[strlen("load_sse_c=")];
+            if(!S3fsCurl::SetSseCKeys(ssecfile)){
+                S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
+            long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
+                S3FS_PRN_EXIT("poorly formed argument to option: ssl_verify_hostname.");
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "passwd_file=")){
+            passwd_file = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        if(0 == strcmp(arg, "ibm_iam_auth")){
+            S3fsCurl::SetIsIBMIAMAuth(true);
+            S3fsCurl::SetIAMCredentialsURL("https://iam.bluemix.net/oidc/token");
+            S3fsCurl::SetIAMTokenField("access_token");
+            S3fsCurl::SetIAMExpiryField("expiration");
+            S3fsCurl::SetIAMFieldCount(2);
+            is_ibm_iam_auth = true;
+            return 0;
+        }
+        if (0 == STR2NCMP(arg, "use_session_token")) {
+            is_use_session_token = true;
+        }
+        if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
+            std::string endpoint_url;
+            std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
+            // Check url for http / https protocol string
+            if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
+                 S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
+                 return -1;
+            }
+            endpoint_url = iam_endpoint + "/oidc/token";
+            S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
+            return 0;
+        }
+        if(0 == strcmp(arg, "ecs")){
+            if (is_ibm_iam_auth) {
+                S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
+                return -1;
+            }
+            S3fsCurl::SetIsECS(true);
+            S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
+            S3fsCurl::SetIAMFieldCount(5);
+            is_ecs = true;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "iam_role")){
+            if (is_ecs || is_ibm_iam_auth) {
+                S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
+                return -1;
+            }
+            if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
+                // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
+                //
+                load_iamrole = true;
+                return 0;
+
+            }else if(0 == STR2NCMP(arg, "iam_role=")){
+                const char* role = strchr(arg, '=') + sizeof(char);
+                S3fsCurl::SetIAMRole(role);
+                load_iamrole = false;
+                return 0;
+            }
+        }
+        if(0 == STR2NCMP(arg, "profile=")){
+            aws_profile = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "public_bucket=")){
+            off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            if(1 == pubbucket){
+                S3fsCurl::SetPublicBucket(true);
+                // [NOTE]
+                // if bucket is public(without credential), s3 do not allow copy api.
+                // so s3fs sets nocopyapi mode.
+                //
+                nocopyapi = true;
+            }else if(0 == pubbucket){
+                S3fsCurl::SetPublicBucket(false);
+            }else{
+                S3FS_PRN_EXIT("poorly formed argument to option: public_bucket.");
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "bucket=")){
+            std::string bname = strchr(arg, '=') + sizeof(char);
+            if ((ret = set_bucket(bname.c_str()))){
+                return ret;
+            }
+            return 0;
+        }
+        if(0 == strcmp(arg, "no_check_certificate")){
+            S3fsCurl::SetCheckCertificate(false);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "connect_timeout=")){
+            long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            S3fsCurl::SetConnectTimeout(contimeout);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "readwrite_timeout=")){
+            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            S3fsCurl::SetReadwriteTimeout(rwtimeout);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "list_object_max_keys=")){
+            int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(max_keys < 1000){
+                S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
+                return -1;
+            }
+            max_keys_list_object = max_keys;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "max_stat_cache_size=")){
+            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            StatCache::getStatCacheData()->SetCacheSize(cache_size);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "stat_cache_expire=")){
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            StatCache::getStatCacheData()->SetExpireTime(expr_time);
+            return 0;
+        }
+        // [NOTE]
+        // This option is for compatibility old version.
+        if(0 == STR2NCMP(arg, "stat_cache_interval_expire=")){
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
+            return 0;
+        }
+        if(0 == strcmp(arg, "enable_noobj_cache")){
+            StatCache::getStatCacheData()->EnableCacheNoObject();
+            return 0;
+        }
+        if(0 == strcmp(arg, "nodnscache")){
+            S3fsCurl::SetDnsCache(false);
+            return 0;
+        }
+        if(0 == strcmp(arg, "nosscache")){
+            S3fsCurl::SetSslSessionCache(false);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "parallel_count=") || 0 == STR2NCMP(arg, "parallel_upload=")){
+            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(0 >= maxpara){
+                S3FS_PRN_EXIT("argument should be over 1: parallel_count");
+                return -1;
+            }
+            S3fsCurl::SetMaxParallelCount(maxpara);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "fd_page_size=")){
+            S3FS_PRN_ERR("option fd_page_size is no longer supported, so skip this option.");
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "multipart_size=")){
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(!S3fsCurl::SetMultipartSize(size)){
+                S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "ensure_diskfree=")){
+            off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
+            if(dfsize < S3fsCurl::GetMultipartSize()){
+                S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
+                dfsize = S3fsCurl::GetMultipartSize();
+            }
+            FdManager::SetEnsureFreeDiskSpace(dfsize);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "singlepart_copy_limit=")){
+            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "ahbe_conf=")){
+            string ahbe_conf = strchr(arg, '=') + sizeof(char);
+            if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
+                S3FS_PRN_EXIT("failed to load ahbe_conf file(%s).", ahbe_conf.c_str());
+                return -1;
+            }
+            AdditionalHeader::get()->Dump();
+            return 0;
+        }
+        if(0 == strcmp(arg, "noxmlns")){
+            noxmlns = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "nomixupload")){
+            FdEntity::SetNoMixMultipart();
+            return 0;
+        }
+        if(0 == strcmp(arg, "nocopyapi")){
+            nocopyapi = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "norenameapi")){
+            norenameapi = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "complement_stat")){
+            complement_stat = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "notsup_compat_dir")){
+            support_compat_dir = false;
+            return 0;
+        }
+        if(0 == strcmp(arg, "enable_content_md5")){
+            S3fsCurl::SetContentMd5(true);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "host=")){
+            s3host = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "servicepath=")){
+            service_path = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "url=")){
+            s3host = strchr(arg, '=') + sizeof(char);
+            // strip the trailing '/', if any, off the end of the host
+            // string
+            size_t found, length;
+            found  = s3host.find_last_of('/');
+            length = s3host.length();
+            while(found == (length - 1) && length > 0){
+                s3host.erase(found);
+                found  = s3host.find_last_of('/');
+                length = s3host.length();
+            }
+            // Check url for http / https protocol string
+            if((s3host.compare(0, 8, "https://") != 0) && (s3host.compare(0, 7, "http://") != 0)) {
+                S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == strcmp(arg, "sigv2")){
+            S3fsCurl::SetSignatureV4(false);
+            return 0;
+        }
+        if(0 == strcmp(arg, "createbucket")){
+            create_bucket = true;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "endpoint=")){
+            endpoint              = strchr(arg, '=') + sizeof(char);
+            is_specified_endpoint = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "use_path_request_style")){
+            pathrequeststyle = true;
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "noua")){
+            S3fsCurl::SetUserAgentFlag(false);
+            return 0;
+        }
+        if(0 == strcmp(arg, "use_xattr")){
+            is_use_xattr = true;
+            return 0;
+        }else if(0 == STR2NCMP(arg, "use_xattr=")){
+            const char* strflag = strchr(arg, '=') + sizeof(char);
+            if(0 == strcmp(strflag, "1")){
+                is_use_xattr = true;
+            }else if(0 == strcmp(strflag, "0")){
+                is_use_xattr = false;
+            }else{
+                S3FS_PRN_EXIT("option use_xattr has unknown parameter(%s).", strflag);
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "cipher_suites=")){
+            cipher_suites = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "instance_name=")){
+            instance_name = strchr(arg, '=') + sizeof(char);
+            instance_name = "[" + instance_name + "]";
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "mime=")){
+            mimetype_file = strchr(arg, '=') + sizeof(char);
+            return 0;
+        }
+        //
+        // debug option for s3fs
+        //
+        if(0 == STR2NCMP(arg, "dbglevel=")){
+            const char* strlevel = strchr(arg, '=') + sizeof(char);
+            if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
+                S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
+            }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
+                S3fsSignals::SetLogLevel(S3FS_LOG_ERR);
+            }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
+                S3fsSignals::SetLogLevel(S3FS_LOG_WARN);
+            }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
+                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+            }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
+                S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+            }else{
+                S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
+                return -1;
+            }
+            return 0;
+        }
+        //
+        // debug option
+        //
+        // debug_level is S3FS_LOG_INFO, after second -d is passed to fuse.
+        //
+        if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
+            if(!IS_S3FS_LOG_INFO() && !IS_S3FS_LOG_DBG()){
+                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+                return 0;
+            }
+            if(0 == strcmp(arg, "--debug")){
+                // fuse doesn't understand "--debug", but it understands -d.
+                // but we can't pass -d back to fuse.
+                return 0;
+            }
+        }
+        // "f2" is not used no more.
+        // (set S3FS_LOG_DBG)
+        if(0 == strcmp(arg, "f2")){
+            S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+            return 0;
+        }
+        if(0 == strcmp(arg, "curldbg")){
+            S3fsCurl::SetVerbose(true);
+            return 0;
+        }else if(0 == STR2NCMP(arg, "curldbg=")){
+            const char* strlevel = strchr(arg, '=') + sizeof(char);
+            if(0 == strcasecmp(strlevel, "normal")){
+                S3fsCurl::SetVerbose(true);
+            }else if(0 == strcasecmp(strlevel, "body")){
+                S3fsCurl::SetVerbose(true);
+                S3fsCurl::SetDumpBody(true);
+            }else{
+                S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel);
+                return -1;
+            }
+            return 0;
+        }
+        //
+        // Check cache file, using SIGUSR1
+        //
+        if(0 == strcmp(arg, "set_check_cache_sigusr1")){
+            if(!S3fsSignals::SetUsr1Handler(NULL)){
+                S3FS_PRN_EXIT("could not set sigusr1 for checking cache.");
+                return -1;
+            }
+            return 0;
+        }else if(0 == STR2NCMP(arg, "set_check_cache_sigusr1=")){
+            const char* strfilepath = strchr(arg, '=') + sizeof(char);
+            if(!S3fsSignals::SetUsr1Handler(strfilepath)){
+                S3FS_PRN_EXIT("could not set sigusr1 for checking cache and output file(%s).", strfilepath);
+                return -1;
+            }
+            return 0;
+        }
+        if(0 == STR2NCMP(arg, "accessKeyId=")){
+            S3FS_PRN_EXIT("option accessKeyId is no longer supported.");
             return -1;
-          }
         }
-        closedir(dp);
-      }
-      return 1;
-    }
-
-    // Unknown option
-    if(NO_UTILITY_MODE == utility_mode){
-      S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
-    }else{
-      S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
-    }
-    return -1;
-
-  }else if(key == FUSE_OPT_KEY_OPT){
-    if(0 == STR2NCMP(arg, "uid=")){
-      s3fs_uid = get_uid(strchr(arg, '=') + sizeof(char));
-      if(0 != geteuid() && 0 == s3fs_uid){
-        S3FS_PRN_EXIT("root user can only specify uid=0.");
-        return -1;
-      }
-      is_s3fs_uid = true;
-      return 1; // continue for fuse option
-    }
-    if(0 == STR2NCMP(arg, "gid=")){
-      s3fs_gid = get_gid(strchr(arg, '=') + sizeof(char));
-      if(0 != getegid() && 0 == s3fs_gid){
-        S3FS_PRN_EXIT("root user can only specify gid=0.");
-        return -1;
-      }
-      is_s3fs_gid = true;
-      return 1; // continue for fuse option
-    }
-    if(0 == STR2NCMP(arg, "umask=")){
-      s3fs_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
-      s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
-      is_s3fs_umask = true;
-      return 1; // continue for fuse option
-    }
-    if(0 == strcmp(arg, "allow_other")){
-      allow_other = true;
-      return 1; // continue for fuse option
-    }
-    if(0 == STR2NCMP(arg, "mp_umask=")){
-      mp_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
-      mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
-      is_mp_umask = true;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "default_acl=")){
-      const char* acl_string = strchr(arg, '=') + sizeof(char);
-      acl_t acl = acl_t::from_str(acl_string);
-      if(acl == acl_t::UNKNOWN){
-        S3FS_PRN_EXIT("unknown value for default_acl: %s", acl_string);
-        return -1;
-      }
-      S3fsCurl::SetDefaultAcl(acl);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "retries=")){
-      off_t retries = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if(retries == 0){
-        S3FS_PRN_EXIT("retries must be greater than zero");
-        return -1;
-      }
-      S3fsCurl::SetRetries(retries);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "use_cache=")){
-      FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char));
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "check_cache_dir_exist")){
-      FdManager::SetCheckCacheDirExist(true);
-      return 0;
-    }
-    if(0 == strcmp(arg, "del_cache")){
-      is_remove_cache = true;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "multireq_max=")){
-      int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      S3fsCurl::SetMaxMultiRequest(maxreq);
-      return 0;
-    }
-    if(0 == strcmp(arg, "nonempty")){
-      nonempty = true;
-      return 1; // need to continue for fuse.
-    }
-    if(0 == strcmp(arg, "nomultipart")){
-      nomultipart = true;
-      return 0;
-    }
-    // old format for storage_class
-    if(0 == strcmp(arg, "use_rrs") || 0 == STR2NCMP(arg, "use_rrs=")){
-      off_t rrs = 1;
-      // for an old format.
-      if(0 == STR2NCMP(arg, "use_rrs=")){
-        rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
-      }
-      if(0 == rrs){
-        S3fsCurl::SetStorageClass(storage_class_t::STANDARD);
-      }else if(1 == rrs){
-        S3fsCurl::SetStorageClass(storage_class_t::REDUCED_REDUNDANCY);
-      }else{
-        S3FS_PRN_EXIT("poorly formed argument to option: use_rrs");
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "storage_class=")){
-      const char *storage_class_str = strchr(arg, '=') + sizeof(char);
-      storage_class_t storage_class = storage_class_t::from_str(storage_class_str);
-      if(storage_class == storage_class_t::UNKNOWN){
-        S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class_str);
-        return -1;
-      }
-      S3fsCurl::SetStorageClass(storage_class);
-      return 0;
-    }
-    //
-    // [NOTE]
-    // use_sse                        Set Server Side Encrypting type to SSE-S3
-    // use_sse=1
-    // use_sse=file                   Set Server Side Encrypting type to Custom key(SSE-C) and load custom keys
-    // use_sse=custom(c):file
-    // use_sse=custom(c)              Set Server Side Encrypting type to Custom key(SSE-C)
-    // use_sse=kmsid(k):kms-key-id    Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS) and load KMS id
-    // use_sse=kmsid(k)               Set Server Side Encrypting type to AWS Key Management key id(SSE-KMS)
-    //
-    // load_sse_c=file                Load Server Side Encrypting custom keys
-    //
-    // AWSSSECKEYS                    Loading Environment for Server Side Encrypting custom keys
-    // AWSSSEKMSID                    Loading Environment for Server Side Encrypting Key id
-    //
-    if(0 == STR2NCMP(arg, "use_sse")){
-      if(0 == strcmp(arg, "use_sse") || 0 == strcmp(arg, "use_sse=1")){ // use_sse=1 is old type parameter
-        // sse type is SSE_S3
-        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseS3Type()){
-          S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
-          return -1;
+        if(0 == STR2NCMP(arg, "secretAccessKey=")){
+            S3FS_PRN_EXIT("option secretAccessKey is no longer supported.");
+            return -1;
         }
-        S3fsCurl::SetSseType(sse_type_t::SSE_S3);
-
-      }else if(0 == strcmp(arg, "use_sse=kmsid") || 0 == strcmp(arg, "use_sse=k")){
-        // sse type is SSE_KMS with out kmsid(expecting id is loaded by environment)
-        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
-          S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
-          return -1;
+        if(0 == strcmp(arg, "use_wtf8")){
+            use_wtf8 = true;
+            return 0;
         }
-        if(!S3fsCurl::IsSetSseKmsId()){
-          S3FS_PRN_EXIT("use_sse=kms but not loaded kms id by environment.");
-          return -1;
-        }
-        S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
-
-      }else if(0 == STR2NCMP(arg, "use_sse=kmsid:") || 0 == STR2NCMP(arg, "use_sse=k:")){
-        // sse type is SSE_KMS with kmsid
-        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
-          S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
-          return -1;
-        }
-        const char* kmsid;
-        if(0 == STR2NCMP(arg, "use_sse=kmsid:")){
-          kmsid = &arg[strlen("use_sse=kmsid:")];
-        }else{
-          kmsid = &arg[strlen("use_sse=k:")];
-        }
-        if(!S3fsCurl::SetSseKmsid(kmsid)){
-          S3FS_PRN_EXIT("failed to load use_sse kms id.");
-          return -1;
-        }
-        S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
-
-      }else if(0 == strcmp(arg, "use_sse=custom") || 0 == strcmp(arg, "use_sse=c")){
-        // sse type is SSE_C with out custom keys(expecting keys are loaded by environment or load_sse_c option)
-        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
-          S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
-          return -1;
+        if(0 == strcmp(arg, "requester_pays")){
+            S3fsCurl::SetRequesterPays(true);
+            return 0;
         }
         // [NOTE]
-        // do not check ckeys exists here.
+        // following option will be discarding, because these are not for fuse.
+        // (Referenced sshfs.c)
         //
-        S3fsCurl::SetSseType(sse_type_t::SSE_C);
-
-      }else if(0 == STR2NCMP(arg, "use_sse=custom:") || 0 == STR2NCMP(arg, "use_sse=c:")){
-        // sse type is SSE_C with custom keys
-        if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
-          S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
-          return -1;
+        if(0 == strcmp(arg, "auto")   ||
+           0 == strcmp(arg, "noauto") ||
+           0 == strcmp(arg, "user")   ||
+           0 == strcmp(arg, "nouser") ||
+           0 == strcmp(arg, "users")  ||
+           0 == strcmp(arg, "_netdev"))
+        {
+            return 0;
         }
-        const char* ssecfile;
-        if(0 == STR2NCMP(arg, "use_sse=custom:")){
-          ssecfile = &arg[strlen("use_sse=custom:")];
-        }else{
-          ssecfile = &arg[strlen("use_sse=c:")];
-        }
-        if(!S3fsCurl::SetSseCKeys(ssecfile)){
-          S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
-          return -1;
-        }
-        S3fsCurl::SetSseType(sse_type_t::SSE_C);
-
-      }else if(0 == strcmp(arg, "use_sse=")){    // this type is old style(parameter is custom key file path)
-        // SSE_C with custom keys.
-        const char* ssecfile = &arg[strlen("use_sse=")];
-        if(!S3fsCurl::SetSseCKeys(ssecfile)){
-          S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
-          return -1;
-        }
-        S3fsCurl::SetSseType(sse_type_t::SSE_C);
-
-      }else{
-        // never come here.
-        S3FS_PRN_EXIT("something wrong use_sse option.");
-        return -1;
-      }
-      return 0;
     }
-    // [NOTE]
-    // Do only load SSE custom keys, care for set without set sse type.
-    if(0 == STR2NCMP(arg, "load_sse_c=")){
-      const char* ssecfile = &arg[strlen("load_sse_c=")];
-      if(!S3fsCurl::SetSseCKeys(ssecfile)){
-        S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
-      long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
-        S3FS_PRN_EXIT("poorly formed argument to option: ssl_verify_hostname.");
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "passwd_file=")){
-      passwd_file = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == strcmp(arg, "ibm_iam_auth")){
-      S3fsCurl::SetIsIBMIAMAuth(true);
-      S3fsCurl::SetIAMCredentialsURL("https://iam.bluemix.net/oidc/token");
-      S3fsCurl::SetIAMTokenField("access_token");
-      S3fsCurl::SetIAMExpiryField("expiration");
-      S3fsCurl::SetIAMFieldCount(2);
-      is_ibm_iam_auth = true;
-      return 0;
-    }
-    if (0 == STR2NCMP(arg, "use_session_token")) {
-      is_use_session_token = true;
-    }
-    if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
-      std::string endpoint_url;
-      std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
-      // Check url for http / https protocol string
-      if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
-         S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
-         return -1;
-      }
-      endpoint_url = iam_endpoint + "/oidc/token";
-      S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
-      return 0;
-    }
-    if(0 == strcmp(arg, "ecs")){
-      if (is_ibm_iam_auth) {
-        S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
-        return -1;
-      }
-      S3fsCurl::SetIsECS(true);
-      S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
-      S3fsCurl::SetIAMFieldCount(5);
-      is_ecs = true;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "iam_role")){
-      if (is_ecs || is_ibm_iam_auth) {
-        S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
-        return -1;
-      }
-      if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
-        // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
-        //
-        load_iamrole = true;
-        return 0;
-
-      }else if(0 == STR2NCMP(arg, "iam_role=")){
-        const char* role = strchr(arg, '=') + sizeof(char);
-        S3fsCurl::SetIAMRole(role);
-        load_iamrole = false;
-        return 0;
-      }
-    }
-    if(0 == STR2NCMP(arg, "profile=")){
-      aws_profile = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "public_bucket=")){
-      off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
-      if(1 == pubbucket){
-        S3fsCurl::SetPublicBucket(true);
-        // [NOTE]
-        // if bucket is public(without credential), s3 do not allow copy api.
-        // so s3fs sets nocopyapi mode.
-        //
-        nocopyapi = true;
-      }else if(0 == pubbucket){
-        S3fsCurl::SetPublicBucket(false);
-      }else{
-        S3FS_PRN_EXIT("poorly formed argument to option: public_bucket.");
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "bucket=")){
-      std::string bname = strchr(arg, '=') + sizeof(char);
-      if ((ret = set_bucket(bname.c_str()))){
-        return ret;
-      }
-      return 0;
-    }
-    if(0 == strcmp(arg, "no_check_certificate")){
-        S3fsCurl::SetCheckCertificate(false);
-        return 0;
-    }
-    if(0 == STR2NCMP(arg, "connect_timeout=")){
-      long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      S3fsCurl::SetConnectTimeout(contimeout);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "readwrite_timeout=")){
-      time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      S3fsCurl::SetReadwriteTimeout(rwtimeout);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "list_object_max_keys=")){
-      int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if(max_keys < 1000){
-        S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
-        return -1;
-      }
-      max_keys_list_object = max_keys;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "max_stat_cache_size=")){
-      unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      StatCache::getStatCacheData()->SetCacheSize(cache_size);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "stat_cache_expire=")){
-      time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      StatCache::getStatCacheData()->SetExpireTime(expr_time);
-      return 0;
-    }
-    // [NOTE]
-    // This option is for compatibility old version.
-    if(0 == STR2NCMP(arg, "stat_cache_interval_expire=")){
-      time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
-      return 0;
-    }
-    if(0 == strcmp(arg, "enable_noobj_cache")){
-      StatCache::getStatCacheData()->EnableCacheNoObject();
-      return 0;
-    }
-    if(0 == strcmp(arg, "nodnscache")){
-      S3fsCurl::SetDnsCache(false);
-      return 0;
-    }
-    if(0 == strcmp(arg, "nosscache")){
-      S3fsCurl::SetSslSessionCache(false);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "parallel_count=") || 0 == STR2NCMP(arg, "parallel_upload=")){
-      int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if(0 >= maxpara){
-        S3FS_PRN_EXIT("argument should be over 1: parallel_count");
-        return -1;
-      }
-      S3fsCurl::SetMaxParallelCount(maxpara);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "fd_page_size=")){
-      S3FS_PRN_ERR("option fd_page_size is no longer supported, so skip this option.");
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "multipart_size=")){
-      off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-      if(!S3fsCurl::SetMultipartSize(size)){
-        S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "ensure_diskfree=")){
-      off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
-      if(dfsize < S3fsCurl::GetMultipartSize()){
-        S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
-        dfsize = S3fsCurl::GetMultipartSize();
-      }
-      FdManager::SetEnsureFreeDiskSpace(dfsize);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "singlepart_copy_limit=")){
-      singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "ahbe_conf=")){
-      string ahbe_conf = strchr(arg, '=') + sizeof(char);
-      if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
-        S3FS_PRN_EXIT("failed to load ahbe_conf file(%s).", ahbe_conf.c_str());
-        return -1;
-      }
-      AdditionalHeader::get()->Dump();
-      return 0;
-    }
-    if(0 == strcmp(arg, "noxmlns")){
-      noxmlns = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "nomixupload")){
-      FdEntity::SetNoMixMultipart();
-      return 0;
-    }
-    if(0 == strcmp(arg, "nocopyapi")){
-      nocopyapi = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "norenameapi")){
-      norenameapi = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "complement_stat")){
-      complement_stat = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "notsup_compat_dir")){
-      support_compat_dir = false;
-      return 0;
-    }
-    if(0 == strcmp(arg, "enable_content_md5")){
-      S3fsCurl::SetContentMd5(true);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "host=")){
-      host = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "servicepath=")){
-      service_path = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "url=")){
-      host = strchr(arg, '=') + sizeof(char);
-      // strip the trailing '/', if any, off the end of the host
-      // string
-      size_t found, length;
-      found  = host.find_last_of('/');
-      length = host.length();
-      while(found == (length - 1) && length > 0){
-         host.erase(found);
-         found  = host.find_last_of('/');
-         length = host.length();
-      }
-      // Check url for http / https protocol string
-      if((host.compare(0, 8, "https://") != 0) && (host.compare(0, 7, "http://") != 0)) {
-         S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
-         return -1;
-      }
-      return 0;
-    }
-    if(0 == strcmp(arg, "sigv2")){
-      S3fsCurl::SetSignatureV4(false);
-      return 0;
-    }
-    if(0 == strcmp(arg, "createbucket")){
-      create_bucket = true;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "endpoint=")){
-      endpoint              = strchr(arg, '=') + sizeof(char);
-      is_specified_endpoint = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "use_path_request_style")){
-      pathrequeststyle = true;
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "noua")){
-      S3fsCurl::SetUserAgentFlag(false);
-      return 0;
-    }
-    if(0 == strcmp(arg, "use_xattr")){
-      is_use_xattr = true;
-      return 0;
-    }else if(0 == STR2NCMP(arg, "use_xattr=")){
-      const char* strflag = strchr(arg, '=') + sizeof(char);
-      if(0 == strcmp(strflag, "1")){
-        is_use_xattr = true;
-      }else if(0 == strcmp(strflag, "0")){
-        is_use_xattr = false;
-      }else{
-        S3FS_PRN_EXIT("option use_xattr has unknown parameter(%s).", strflag);
-        return -1;
-      }
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "cipher_suites=")){
-      cipher_suites = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "instance_name=")){
-      instance_name = strchr(arg, '=') + sizeof(char);
-      instance_name = "[" + instance_name + "]";
-      return 0;
-    }
-    if(0 == STR2NCMP(arg, "mime=")){
-      mimetype_file = strchr(arg, '=') + sizeof(char);
-      return 0;
-    }
-    //
-    // debug option for s3fs
-    //
-    if(0 == STR2NCMP(arg, "dbglevel=")){
-      const char* strlevel = strchr(arg, '=') + sizeof(char);
-      if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
-        S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
-      }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
-        S3fsSignals::SetLogLevel(S3FS_LOG_ERR);
-      }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
-        S3fsSignals::SetLogLevel(S3FS_LOG_WARN);
-      }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
-        S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
-      }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
-        S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
-      }else{
-        S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
-        return -1;
-      }
-      return 0;
-    }
-    //
-    // debug option
-    //
-    // debug_level is S3FS_LOG_INFO, after second -d is passed to fuse.
-    //
-    if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
-      if(!IS_S3FS_LOG_INFO() && !IS_S3FS_LOG_DBG()){
-        S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
-        return 0;
-      }
-      if(0 == strcmp(arg, "--debug")){
-        // fuse doesn't understand "--debug", but it understands -d.
-        // but we can't pass -d back to fuse.
-        return 0;
-      }
-    }
-    // "f2" is not used no more.
-    // (set S3FS_LOG_DBG)
-    if(0 == strcmp(arg, "f2")){
-      S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
-      return 0;
-    }
-    if(0 == strcmp(arg, "curldbg")){
-      S3fsCurl::SetVerbose(true);
-      return 0;
-    }else if(0 == STR2NCMP(arg, "curldbg=")){
-      const char* strlevel = strchr(arg, '=') + sizeof(char);
-      if(0 == strcasecmp(strlevel, "normal")){
-        S3fsCurl::SetVerbose(true);
-      }else if(0 == strcasecmp(strlevel, "body")){
-        S3fsCurl::SetVerbose(true);
-        S3fsCurl::SetDumpBody(true);
-      }else{
-        S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel);
-        return -1;
-      }
-      return 0;
-    }
-    //
-    // Check cache file, using SIGUSR1
-    //
-    if(0 == strcmp(arg, "set_check_cache_sigusr1")){
-      if(!S3fsSignals::SetUsr1Handler(NULL)){
-        S3FS_PRN_EXIT("could not set sigusr1 for checking cache.");
-        return -1;
-      }
-      return 0;
-    }else if(0 == STR2NCMP(arg, "set_check_cache_sigusr1=")){
-      const char* strfilepath = strchr(arg, '=') + sizeof(char);
-      if(!S3fsSignals::SetUsr1Handler(strfilepath)){
-        S3FS_PRN_EXIT("could not set sigusr1 for checking cache and output file(%s).", strfilepath);
-        return -1;
-      }
-      return 0;
-    }
-
-    if(0 == STR2NCMP(arg, "accessKeyId=")){
-      S3FS_PRN_EXIT("option accessKeyId is no longer supported.");
-      return -1;
-    }
-    if(0 == STR2NCMP(arg, "secretAccessKey=")){
-      S3FS_PRN_EXIT("option secretAccessKey is no longer supported.");
-      return -1;
-    }
-    if(0 == strcmp(arg, "use_wtf8")){
-      use_wtf8 = true;
-      return 0;
-    }
-    if(0 == strcmp(arg, "requester_pays")){
-      S3fsCurl::SetRequesterPays(true);
-      return 0;
-    }
-
-    // [NOTE]
-    // following option will be discarding, because these are not for fuse.
-    // (Referenced sshfs.c)
-    //
-    if(0 == strcmp(arg, "auto")   ||
-       0 == strcmp(arg, "noauto") ||
-       0 == strcmp(arg, "user")   ||
-       0 == strcmp(arg, "nouser") ||
-       0 == strcmp(arg, "users")  ||
-       0 == strcmp(arg, "_netdev"))
-    {
-      return 0;
-    }
-  }
-  return 1;
+    return 1;
 }
 
 int main(int argc, char* argv[])
 {
-  int ch;
-  int fuse_res;
-  int option_index = 0; 
-  struct fuse_operations s3fs_oper;
-  time_t incomp_abort_time = (24 * 60 * 60);
+    int ch;
+    int fuse_res;
+    int option_index = 0; 
+    struct fuse_operations s3fs_oper;
+    time_t incomp_abort_time = (24 * 60 * 60);
 
-  static const struct option long_opts[] = {
-    {"help",                 no_argument,       NULL, 'h'},
-    {"version",              no_argument,       0,     0},
-    {"debug",                no_argument,       NULL, 'd'},
-    {"incomplete-mpu-list",  no_argument,       NULL, 'u'},
-    {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
-    {NULL, 0, NULL, 0}
-  };
+    static const struct option long_opts[] = {
+        {"help",                 no_argument,       NULL, 'h'},
+        {"version",              no_argument,       0,     0},
+        {"debug",                no_argument,       NULL, 'd'},
+        {"incomplete-mpu-list",  no_argument,       NULL, 'u'},
+        {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
+        {NULL, 0, NULL, 0}
+    };
 
-  // init syslog(default CRIT)
-  openlog("s3fs", LOG_PID | LOG_ODELAY | LOG_NOWAIT, LOG_USER);
-  S3fsSignals::SetLogLevel(debug_level);
+    // init syslog(default CRIT)
+    openlog("s3fs", LOG_PID | LOG_ODELAY | LOG_NOWAIT, LOG_USER);
+    S3fsSignals::SetLogLevel(debug_level);
 
-  // init xml2
-  xmlInitParser();
-  LIBXML_TEST_VERSION
+    // init xml2
+    xmlInitParser();
+    LIBXML_TEST_VERSION
 
-  init_sysconf_vars();
+    init_sysconf_vars();
 
-  // get program name - emulate basename
-  program_name.assign(argv[0]);
-  size_t found = program_name.find_last_of('/');
-  if(found != string::npos){
-    program_name.replace(0, found+1, "");
-  }
-
-  while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
-    switch(ch){
-    case 0:
-      if(strcmp(long_opts[option_index].name, "version") == 0){
-        show_version();
-        exit(EXIT_SUCCESS);
-      }
-      break;
-    case 'h':
-      show_help();
-      exit(EXIT_SUCCESS);
-    case 'o':
-      break;
-    case 'd':
-      break;
-    case 'f':
-      foreground = true;
-      break;
-    case 's':
-      break;
-    case 'u':   // --incomplete-mpu-list
-      if(NO_UTILITY_MODE != utility_mode){
-        S3FS_PRN_EXIT("already utility mode option is specified.");
-        exit(EXIT_FAILURE);
-      }
-      utility_mode = INCOMP_TYPE_LIST;
-      break;
-    case 'a':   // --incomplete-mpu-abort
-      if(NO_UTILITY_MODE != utility_mode){
-        S3FS_PRN_EXIT("already utility mode option is specified.");
-        exit(EXIT_FAILURE);
-      }
-      utility_mode = INCOMP_TYPE_ABORT;
-
-      // check expire argument
-      if(NULL != optarg && 0 == strcasecmp(optarg, "all")){ // all is 0s
-        incomp_abort_time = 0;
-      }else if(NULL != optarg){
-        if(!convert_unixtime_from_option_arg(optarg, incomp_abort_time)){
-          S3FS_PRN_EXIT("--incomplete-mpu-abort option argument is wrong.");
-          exit(EXIT_FAILURE);
-        }
-      }
-      // if optarg is null, incomp_abort_time is 24H(default)
-      break;
-    default:
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  // Load SSE environment
-  if(!S3fsCurl::LoadEnvSse()){
-    S3FS_PRN_EXIT("something wrong about SSE environment.");
-    exit(EXIT_FAILURE);
-  }
-
-  // ssl init
-  if(!s3fs_init_global_ssl()){
-    S3FS_PRN_EXIT("could not initialize for ssl libraries.");
-    exit(EXIT_FAILURE);
-  }
-
-  // init curl (without mime types)
-  //
-  // [NOTE]
-  // The curl initialization here does not load mime types.
-  // The mime types file parameter are dynamic values according
-  // to the user's environment, and are analyzed by the my_fuse_opt_proc
-  // function.
-  // The my_fuse_opt_proc function is executed after this curl
-  // initialization. Because the curl method is used in the
-  // my_fuse_opt_proc function, then it must be called here to
-  // initialize. Fortunately, the processing using mime types
-  // is only PUT/POST processing, and it is not used until the
-  // call of my_fuse_opt_proc function is completed. Therefore,
-  // the mime type is loaded just after calling the my_fuse_opt_proc
-  // function.
-  // 
-  if(!S3fsCurl::InitS3fsCurl()){
-    S3FS_PRN_EXIT("Could not initiate curl library.");
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // clear this structure
-  memset(&s3fs_oper, 0, sizeof(s3fs_oper));
-
-  // This is the fuse-style parser for the arguments
-  // after which the bucket name and mountpoint names
-  // should have been set
-  struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
-  if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // init mime types for curl
-  if(!S3fsCurl::InitMimeType(mimetype_file)){
-    S3FS_PRN_WARN("Missing MIME types prevents setting Content-Type on uploaded objects.");
-  }
-
-  // [NOTE]
-  // exclusive option check here.
-  //
-  if(storage_class_t::REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
-    S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-  if(!S3fsCurl::FinalCheckSse()){
-    S3FS_PRN_EXIT("something wrong about SSE options.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // The first plain argument is the bucket
-  if(bucket.empty()){
-    S3FS_PRN_EXIT("missing BUCKET argument.");
-    show_usage();
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // bucket names cannot contain upper case characters in virtual-hosted style
-  if((!pathrequeststyle) && (lower(bucket) != bucket)){
-    S3FS_PRN_EXIT("BUCKET %s, name not compatible with virtual-hosted style.", bucket.c_str());
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // check bucket name for illegal characters
-  found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
-  if(found != string::npos){
-    S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  if(!pathrequeststyle && STR2NCMP(host.c_str(), "https://") == 0 && bucket.find_first_of('.') != string::npos) {
-    S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // The second plain argument is the mountpoint
-  // if the option was given, we all ready checked for a
-  // readable, non-empty directory, this checks determines
-  // if the mountpoint option was ever supplied
-  if(NO_UTILITY_MODE == utility_mode){
-    if(mountpoint.empty()){
-      S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
-      show_usage();
-      S3fsCurl::DestroyS3fsCurl();
-      s3fs_destroy_global_ssl();
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  // error checking of command line arguments for compatibility
-  if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
-    S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-  if(!passwd_file.empty() && S3fsCurl::IsSetAccessKeys()){
-    S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-  if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
-    if(EXIT_SUCCESS != get_access_keys()){
-      S3fsCurl::DestroyS3fsCurl();
-      s3fs_destroy_global_ssl();
-      exit(EXIT_FAILURE);
-    }
-    if(!S3fsCurl::IsSetAccessKeys()){
-      S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
-      S3fsCurl::DestroyS3fsCurl();
-      s3fs_destroy_global_ssl();
-      exit(EXIT_FAILURE);
-    }
-    // More error checking on the access key pair can be done
-    // like checking for appropriate lengths and characters  
-  }
-
-  // check cache dir permission
-  if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
-    S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  // check IBM IAM requirements
-  if(is_ibm_iam_auth){
-
-    // check that default ACL is either public-read or private
-    acl_t defaultACL = S3fsCurl::GetDefaultAcl();
-    if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
-      S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
-      S3fsCurl::DestroyS3fsCurl();
-      s3fs_destroy_global_ssl();
-      exit(EXIT_FAILURE);
-    }
-
-    if(create_bucket && !S3fsCurl::IsSetAccessKeyID()){
-      S3FS_PRN_EXIT("missing service instance ID for bucket creation");
-      S3fsCurl::DestroyS3fsCurl();
-      s3fs_destroy_global_ssl();
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  // set user agent
-  S3fsCurl::InitUserAgent();
-
-  // There's room for more command line error checking
-
-  // Check to see if the bucket name contains periods and https (SSL) is
-  // being used. This is a known limitation:
-  // https://docs.amazonwebservices.com/AmazonS3/latest/dev/
-  // The Developers Guide suggests that either use HTTP of for us to write
-  // our own certificate verification logic.
-  // For now, this will be unsupported unless we get a request for it to
-  // be supported. In that case, we have a couple of options:
-  // - implement a command line option that bypasses the verify host 
-  //   but doesn't bypass verifying the certificate
-  // - write our own host verification (this might be complex)
-  // See issue #128strncasecmp
-  /* 
-  if(1 == S3fsCurl::GetSslVerifyHostname()){
-    found = bucket.find_first_of(".");
+    // get program name - emulate basename
+    program_name.assign(argv[0]);
+    size_t found = program_name.find_last_of('/');
     if(found != string::npos){
-      found = host.find("https:");
-      if(found != string::npos){
-        S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
-        exit(1);
-      }
+        program_name.replace(0, found+1, "");
     }
-  }
-  */
 
-  if(NO_UTILITY_MODE != utility_mode){
-    int exitcode = s3fs_utility_processing(incomp_abort_time);
+    while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
+        switch(ch){
+            case 0:
+                if(strcmp(long_opts[option_index].name, "version") == 0){
+                    show_version();
+                    exit(EXIT_SUCCESS);
+                }
+                break;
+            case 'h':
+                show_help();
+                exit(EXIT_SUCCESS);
+            case 'o':
+                break;
+            case 'd':
+                break;
+            case 'f':
+                foreground = true;
+                break;
+            case 's':
+                break;
+            case 'u':   // --incomplete-mpu-list
+                if(NO_UTILITY_MODE != utility_mode){
+                    S3FS_PRN_EXIT("already utility mode option is specified.");
+                    exit(EXIT_FAILURE);
+                }
+                utility_mode = INCOMP_TYPE_LIST;
+                break;
+            case 'a':   // --incomplete-mpu-abort
+                if(NO_UTILITY_MODE != utility_mode){
+                    S3FS_PRN_EXIT("already utility mode option is specified.");
+                    exit(EXIT_FAILURE);
+                }
+                utility_mode = INCOMP_TYPE_ABORT;
 
-    S3fsCurl::DestroyS3fsCurl();
+                // check expire argument
+                if(NULL != optarg && 0 == strcasecmp(optarg, "all")){ // all is 0s
+                    incomp_abort_time = 0;
+                }else if(NULL != optarg){
+                    if(!convert_unixtime_from_option_arg(optarg, incomp_abort_time)){
+                        S3FS_PRN_EXIT("--incomplete-mpu-abort option argument is wrong.");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                // if optarg is null, incomp_abort_time is 24H(default)
+                break;
+            default:
+                exit(EXIT_FAILURE);
+        }
+    }
+
+    // Load SSE environment
+    if(!S3fsCurl::LoadEnvSse()){
+        S3FS_PRN_EXIT("something wrong about SSE environment.");
+        exit(EXIT_FAILURE);
+    }
+
+    // ssl init
+    if(!s3fs_init_global_ssl()){
+        S3FS_PRN_EXIT("could not initialize for ssl libraries.");
+        exit(EXIT_FAILURE);
+    }
+
+    // init curl (without mime types)
+    //
+    // [NOTE]
+    // The curl initialization here does not load mime types.
+    // The mime types file parameter are dynamic values according
+    // to the user's environment, and are analyzed by the my_fuse_opt_proc
+    // function.
+    // The my_fuse_opt_proc function is executed after this curl
+    // initialization. Because the curl method is used in the
+    // my_fuse_opt_proc function, then it must be called here to
+    // initialize. Fortunately, the processing using mime types
+    // is only PUT/POST processing, and it is not used until the
+    // call of my_fuse_opt_proc function is completed. Therefore,
+    // the mime type is loaded just after calling the my_fuse_opt_proc
+    // function.
+    // 
+    if(!S3fsCurl::InitS3fsCurl()){
+        S3FS_PRN_EXIT("Could not initiate curl library.");
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // clear this structure
+    memset(&s3fs_oper, 0, sizeof(s3fs_oper));
+
+    // This is the fuse-style parser for the arguments
+    // after which the bucket name and mountpoint names
+    // should have been set
+    struct fuse_args custom_args = FUSE_ARGS_INIT(argc, argv);
+    if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // init mime types for curl
+    if(!S3fsCurl::InitMimeType(mimetype_file)){
+        S3FS_PRN_WARN("Missing MIME types prevents setting Content-Type on uploaded objects.");
+    }
+
+    // [NOTE]
+    // exclusive option check here.
+    //
+    if(storage_class_t::REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
+        S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+    if(!S3fsCurl::FinalCheckSse()){
+        S3FS_PRN_EXIT("something wrong about SSE options.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // The first plain argument is the bucket
+    if(bucket.empty()){
+        S3FS_PRN_EXIT("missing BUCKET argument.");
+        show_usage();
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // bucket names cannot contain upper case characters in virtual-hosted style
+    if((!pathrequeststyle) && (lower(bucket) != bucket)){
+        S3FS_PRN_EXIT("BUCKET %s, name not compatible with virtual-hosted style.", bucket.c_str());
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // check bucket name for illegal characters
+    found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
+    if(found != string::npos){
+        S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    if(!pathrequeststyle && STR2NCMP(s3host.c_str(), "https://") == 0 && bucket.find_first_of('.') != string::npos) {
+        S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // The second plain argument is the mountpoint
+    // if the option was given, we all ready checked for a
+    // readable, non-empty directory, this checks determines
+    // if the mountpoint option was ever supplied
+    if(NO_UTILITY_MODE == utility_mode){
+        if(mountpoint.empty()){
+            S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
+            show_usage();
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // error checking of command line arguments for compatibility
+    if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
+        S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+    if(!passwd_file.empty() && S3fsCurl::IsSetAccessKeys()){
+        S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+    if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
+        if(EXIT_SUCCESS != get_access_keys()){
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            exit(EXIT_FAILURE);
+        }
+        if(!S3fsCurl::IsSetAccessKeys()){
+            S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            exit(EXIT_FAILURE);
+        }
+        // More error checking on the access key pair can be done
+        // like checking for appropriate lengths and characters  
+    }
+
+    // check cache dir permission
+    if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
+        S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    // check IBM IAM requirements
+    if(is_ibm_iam_auth){
+        // check that default ACL is either public-read or private
+        acl_t defaultACL = S3fsCurl::GetDefaultAcl();
+        if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
+            S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            exit(EXIT_FAILURE);
+        }
+
+        if(create_bucket && !S3fsCurl::IsSetAccessKeyID()){
+            S3FS_PRN_EXIT("missing service instance ID for bucket creation");
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // set user agent
+    S3fsCurl::InitUserAgent();
+
+    // There's room for more command line error checking
+
+    // Check to see if the bucket name contains periods and https (SSL) is
+    // being used. This is a known limitation:
+    // https://docs.amazonwebservices.com/AmazonS3/latest/dev/
+    // The Developers Guide suggests that either use HTTP of for us to write
+    // our own certificate verification logic.
+    // For now, this will be unsupported unless we get a request for it to
+    // be supported. In that case, we have a couple of options:
+    // - implement a command line option that bypasses the verify host 
+    //   but doesn't bypass verifying the certificate
+    // - write our own host verification (this might be complex)
+    // See issue #128strncasecmp
+    /* 
+    if(1 == S3fsCurl::GetSslVerifyHostname()){
+        found = bucket.find_first_of(".");
+        if(found != string::npos){
+            found = s3host.find("https:");
+            if(found != string::npos){
+                S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
+                exit(1);
+            }
+        }
+    }
+    */
+
+    if(NO_UTILITY_MODE != utility_mode){
+        int exitcode = s3fs_utility_processing(incomp_abort_time);
+
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(exitcode);
+    }
+
+    // Check multipart / copy api for mix multipart uploading
+    if(nomultipart || nocopyapi || norenameapi){
+        FdEntity::SetNoMixMultipart();
+    }
+
+    // check free disk space
+    if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+        S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
+    s3fs_oper.getattr     = s3fs_getattr;
+    s3fs_oper.readlink    = s3fs_readlink;
+    s3fs_oper.mknod       = s3fs_mknod;
+    s3fs_oper.mkdir       = s3fs_mkdir;
+    s3fs_oper.unlink      = s3fs_unlink;
+    s3fs_oper.rmdir       = s3fs_rmdir;
+    s3fs_oper.symlink     = s3fs_symlink;
+    s3fs_oper.rename      = s3fs_rename;
+    s3fs_oper.link        = s3fs_link;
+    if(!nocopyapi){
+        s3fs_oper.chmod   = s3fs_chmod;
+        s3fs_oper.chown   = s3fs_chown;
+        s3fs_oper.utimens = s3fs_utimens;
+    }else{
+        s3fs_oper.chmod   = s3fs_chmod_nocopy;
+        s3fs_oper.chown   = s3fs_chown_nocopy;
+        s3fs_oper.utimens = s3fs_utimens_nocopy;
+    }
+    s3fs_oper.truncate    = s3fs_truncate;
+    s3fs_oper.open        = s3fs_open;
+    s3fs_oper.read        = s3fs_read;
+    s3fs_oper.write       = s3fs_write;
+    s3fs_oper.statfs      = s3fs_statfs;
+    s3fs_oper.flush       = s3fs_flush;
+    s3fs_oper.fsync       = s3fs_fsync;
+    s3fs_oper.release     = s3fs_release;
+    s3fs_oper.opendir     = s3fs_opendir;
+    s3fs_oper.readdir     = s3fs_readdir;
+    s3fs_oper.init        = s3fs_init;
+    s3fs_oper.destroy     = s3fs_destroy;
+    s3fs_oper.access      = s3fs_access;
+    s3fs_oper.create      = s3fs_create;
+    // extended attributes
+    if(is_use_xattr){
+        s3fs_oper.setxattr    = s3fs_setxattr;
+        s3fs_oper.getxattr    = s3fs_getxattr;
+        s3fs_oper.listxattr   = s3fs_listxattr;
+        s3fs_oper.removexattr = s3fs_removexattr;
+    }
+
+    // now passing things off to fuse, fuse will finish evaluating the command line args
+    fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
+    fuse_opt_free_args(&custom_args);
+
+    // Destroy curl
+    if(!S3fsCurl::DestroyS3fsCurl()){
+        S3FS_PRN_WARN("Could not release curl library.");
+    }
     s3fs_destroy_global_ssl();
-    exit(exitcode);
-  }
 
-  // Check multipart / copy api for mix multipart uploading
-  if(nomultipart || nocopyapi || norenameapi){
-    FdEntity::SetNoMixMultipart();
-  }
+    // cleanup xml2
+    xmlCleanupParser();
+    S3FS_MALLOCTRIM(0);
 
-  // check free disk space
-  if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
-    S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
-    S3fsCurl::DestroyS3fsCurl();
-    s3fs_destroy_global_ssl();
-    exit(EXIT_FAILURE);
-  }
-
-  s3fs_oper.getattr   = s3fs_getattr;
-  s3fs_oper.readlink  = s3fs_readlink;
-  s3fs_oper.mknod     = s3fs_mknod;
-  s3fs_oper.mkdir     = s3fs_mkdir;
-  s3fs_oper.unlink    = s3fs_unlink;
-  s3fs_oper.rmdir     = s3fs_rmdir;
-  s3fs_oper.symlink   = s3fs_symlink;
-  s3fs_oper.rename    = s3fs_rename;
-  s3fs_oper.link      = s3fs_link;
-  if(!nocopyapi){
-    s3fs_oper.chmod   = s3fs_chmod;
-    s3fs_oper.chown   = s3fs_chown;
-    s3fs_oper.utimens = s3fs_utimens;
-  }else{
-    s3fs_oper.chmod   = s3fs_chmod_nocopy;
-    s3fs_oper.chown   = s3fs_chown_nocopy;
-    s3fs_oper.utimens = s3fs_utimens_nocopy;
-  }
-  s3fs_oper.truncate  = s3fs_truncate;
-  s3fs_oper.open      = s3fs_open;
-  s3fs_oper.read      = s3fs_read;
-  s3fs_oper.write     = s3fs_write;
-  s3fs_oper.statfs    = s3fs_statfs;
-  s3fs_oper.flush     = s3fs_flush;
-  s3fs_oper.fsync     = s3fs_fsync;
-  s3fs_oper.release   = s3fs_release;
-  s3fs_oper.opendir   = s3fs_opendir;
-  s3fs_oper.readdir   = s3fs_readdir;
-  s3fs_oper.init      = s3fs_init;
-  s3fs_oper.destroy   = s3fs_destroy;
-  s3fs_oper.access    = s3fs_access;
-  s3fs_oper.create    = s3fs_create;
-  // extended attributes
-  if(is_use_xattr){
-    s3fs_oper.setxattr    = s3fs_setxattr;
-    s3fs_oper.getxattr    = s3fs_getxattr;
-    s3fs_oper.listxattr   = s3fs_listxattr;
-    s3fs_oper.removexattr = s3fs_removexattr;
-  }
-
-  // now passing things off to fuse, fuse will finish evaluating the command line args
-  fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
-  fuse_opt_free_args(&custom_args);
-
-  // Destroy curl
-  if(!S3fsCurl::DestroyS3fsCurl()){
-    S3FS_PRN_WARN("Could not release curl library.");
-  }
-  s3fs_destroy_global_ssl();
-
-  // cleanup xml2
-  xmlCleanupParser();
-  S3FS_MALLOCTRIM(0);
-
-  exit(fuse_res);
+    exit(fuse_res);
 }
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */

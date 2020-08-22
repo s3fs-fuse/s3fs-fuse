@@ -17,6 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #ifndef S3FS_AUTH_H_
 #define S3FS_AUTH_H_
 
@@ -53,9 +54,9 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size);
 
 /*
 * Local variables:
-* tab-width: 2
-* c-basic-offset: 2
+* tab-width: 4
+* c-basic-offset: 4
 * End:
-* vim600: expandtab sw=2 ts=2 fdm=marker
-* vim<600: expandtab sw=2 ts=2
+* vim600: expandtab sw=4 ts=4 fdm=marker
+* vim<600: expandtab sw=4 ts=4
 */
