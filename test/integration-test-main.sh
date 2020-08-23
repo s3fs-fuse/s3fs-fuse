@@ -667,7 +667,7 @@ function test_overwrite_existing_file_range {
     rm_test_file
 }
 
-function test_concurrency {
+function test_concurrent_directory_updates {
     describe "Test concurrent updates to a directory ..."
     for i in `seq 5`; do echo foo > $i; done
     for process in `seq 10`; do
@@ -682,11 +682,21 @@ function test_concurrency {
     rm -f `seq 5`
 }
 
-function test_concurrent_writes {
-    describe "Test concurrent updates to a file ..."
+function test_concurrent_reads {
+    describe "Test concurrent reads from a file ..."
     dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
     for process in `seq 10`; do
-        dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=1 bs=1024 conv=notrunc &
+        dd if=${TEST_TEXT_FILE} of=/dev/null seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 &
+    done
+    wait
+    rm_test_file
+}
+
+function test_concurrent_writes {
+    describe "Test concurrent writes to a file ..."
+    dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
+    for process in `seq 10`; do
+        dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 conv=notrunc &
     done
     wait
     rm_test_file
@@ -1060,7 +1070,8 @@ function add_all_tests {
     add_tests test_copy_file
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
-    add_tests test_concurrency
+    add_tests test_concurrent_directory_updates
+    add_tests test_concurrent_reads
     add_tests test_concurrent_writes
     add_tests test_open_second_fd
     add_tests test_write_multiple_offsets
