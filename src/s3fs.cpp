@@ -1601,10 +1601,12 @@ static int s3fs_chmod(const char* _path, mode_t mode)
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
+            FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -1778,10 +1780,12 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
+            FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -1957,10 +1961,12 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
+	    FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -2910,6 +2916,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             ent->SetXattr(strxattr);
         }
         if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
+            FdManager::get()->Close(ent);
             return result;
         }
 
@@ -2921,11 +2928,12 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             // allow to put header
             // updatemeta already merged the orgmeta of the opened files.
             if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                FdManager::get()->Close(ent);
                 return -EIO;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
-
+        FdManager::get()->Close(ent);
     }else{
         // not opened file, then put headers
         merge_headers(meta, updatemeta, true);
@@ -3199,11 +3207,12 @@ static int s3fs_removexattr(const char* path, const char* name)
                 updatemeta.erase("x-amz-meta-xattr");
             }
             if(0 != put_headers(strpath.c_str(), updatemeta, true)){
+                FdManager::get()->Close(ent);
                 return -EIO;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
-
+        FdManager::get()->Close(ent);
     }else{
         // not opened file, then put headers
         if(updatemeta["x-amz-meta-xattr"].empty()){
