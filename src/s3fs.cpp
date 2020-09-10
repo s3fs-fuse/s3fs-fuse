@@ -4285,6 +4285,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if (0 == STR2NCMP(arg, "use_session_token")) {
             is_use_session_token = true;
+	    return 0;
         }
         if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
             std::string endpoint_url;
