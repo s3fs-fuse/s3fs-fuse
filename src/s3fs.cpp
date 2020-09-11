@@ -46,8 +46,6 @@
 #include "s3fs_help.h"
 #include "mpu_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
@@ -112,8 +110,8 @@ int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE
 // Static functions : prototype
 //-------------------------------------------------------------------
 static bool is_special_name_folder_object(const char* path);
-static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta = NULL, dirtype* pDirType = NULL);
-static int remove_old_type_dir(const string& path, dirtype type);
+static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta = NULL, dirtype* pDirType = NULL);
+static int remove_old_type_dir(const std::string& path, dirtype type);
 static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = NULL, bool overcheck = true, bool* pisforce = NULL, bool add_no_truncate_cache = false);
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
@@ -133,7 +131,7 @@ static int clone_directory_object(const char* from, const char* to);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
 static void free_xattrs(xattrs_t& xattrs);
-static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval);
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
@@ -214,10 +212,10 @@ static bool is_special_name_folder_object(const char* path)
         return false;
     }
 
-    string    strpath = path;
+    std::string strpath = path;
     headers_t header;
 
-    if(string::npos == strpath.find("_$folder$", 0)){
+    if(std::string::npos == strpath.find("_$folder$", 0)){
         if('/' == strpath[strpath.length() - 1]){
             strpath = strpath.substr(0, strpath.length() - 1);
         }
@@ -244,7 +242,7 @@ static bool is_special_name_folder_object(const char* path)
 // pmeta:     headers map
 // pDirType:  directory object type
 //
-static int chk_dir_object_type(const char* path, string& newpath, string& nowpath, string& nowcache, headers_t* pmeta, dirtype* pDirType)
+static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta, dirtype* pDirType)
 {
     dirtype TypeTmp;
     int  result  = -1;
@@ -254,8 +252,8 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
     // Normalize new path.
     newpath = path;
     if('/' != newpath[newpath.length() - 1]){
-        string::size_type Pos;
-        if(string::npos != (Pos = newpath.find("_$folder$", 0))){
+        std::string::size_type Pos;
+        if(std::string::npos != (Pos = newpath.find("_$folder$", 0))){
             newpath = newpath.substr(0, Pos);
         }
         newpath += "/";
@@ -322,7 +320,7 @@ static int chk_dir_object_type(const char* path, string& newpath, string& nowpat
     return result;
 }
 
-static int remove_old_type_dir(const string& path, dirtype type)
+static int remove_old_type_dir(const std::string& path, dirtype type)
 {
     if(IS_RMTYPEDIR(type)){
         S3fsCurl s3fscurl;
@@ -354,10 +352,10 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     struct stat* pstat = pstbuf ? pstbuf : &tmpstbuf;
     headers_t    tmpHead;
     headers_t*   pheader = pmeta ? pmeta : &tmpHead;
-    string       strpath;
+    std::string  strpath;
     S3fsCurl     s3fscurl;
     bool         forcedir = false;
-    string::size_type Pos;
+    std::string::size_type Pos;
 
     S3FS_PRN_DBG("[path=%s]", path);
 
@@ -378,7 +376,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     pisforce    = (NULL != pisforce ? pisforce : &forcedir);
     (*pisforce) = false;
     strpath     = path;
-    if(support_compat_dir && overcheck && string::npos != (Pos = strpath.find("_$folder$", 0))){
+    if(support_compat_dir && overcheck && std::string::npos != (Pos = strpath.find("_$folder$", 0))){
         strpath = strpath.substr(0, Pos);
         strpath += "/";
     }
@@ -400,7 +398,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     if(0 != result){
         if(overcheck){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
-            if('/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0)){
+            if('/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0)){
                 // now path is "object", do check "object/" for over checking
                 strpath    += "/";
                 result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
@@ -415,13 +413,13 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
               if(0 != result){
                   // cut "_$folder$" for over checking "no dir object" after here
-                  if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+                  if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
                       strpath  = strpath.substr(0, Pos);
                   }
               }
             }
         }
-        if(support_compat_dir && 0 != result && string::npos == strpath.find("_$folder$", 0)){
+        if(support_compat_dir && 0 != result && std::string::npos == strpath.find("_$folder$", 0)){
             // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
             if('/' == strpath[strpath.length() - 1]){
                 strpath = strpath.substr(0, strpath.length() - 1);
@@ -434,7 +432,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             }
         }
     }else{
-        if(support_compat_dir && '/' != strpath[strpath.length() - 1] && string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
+        if(support_compat_dir && '/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
             // check a case of that "object" does not have attribute and "object" is possible to be directory.
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
                 // found "no dir object".
@@ -453,7 +451,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }
 
     // if path has "_$folder$", need to cut it.
-    if(string::npos != (Pos = strpath.find("_$folder$", 0))){
+    if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
         strpath = strpath.substr(0, Pos);
         strpath += "/";
     }
@@ -609,7 +607,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
 //
 static int check_parent_object_access(const char* path, int mask)
 {
-    string parent;
+    std::string parent;
     int result;
 
     S3FS_PRN_DBG("[path=%s]", path);
@@ -647,7 +645,7 @@ static int check_parent_object_access(const char* path, int mask)
 //
 // ssevalue is MD5 for SSE-C type, or KMS id for SSE-KMS
 //
-bool get_object_sse_type(const char* path, sse_type_t& ssetype, string& ssevalue)
+bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue)
 {
     if(!path){
         return false;
@@ -662,7 +660,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, string& ssevalue
     ssetype = sse_type_t::SSE_DISABLE;
     ssevalue.erase();
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-        string key = (*iter).first;
+        std::string key = (*iter).first;
         if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
             ssetype  = sse_type_t::SSE_S3;
         }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
@@ -800,10 +798,10 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         return 0;
     }
     WTF8_ENCODE(path)
-    string    strValue;
+    std::string strValue;
 
     // check symblic link cache
-    if(!StatCache::getStatCacheData()->GetSymlink(string(path), strValue)){
+    if(!StatCache::getStatCacheData()->GetSymlink(std::string(path), strValue)){
         // not found in cache, then open the path
         FdEntity*   ent;
         if(NULL == (ent = get_local_fent(path))){
@@ -833,7 +831,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         FdManager::get()->Close(ent);
 
         // check buf if it has space words.
-        strValue = trim(string(buf));
+        strValue = trim(std::string(buf));
 
         // decode wtf8. This will always be shorter
         if(use_wtf8){
@@ -841,7 +839,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         }
 
         // add symblic link cache
-        if(!StatCache::getStatCacheData()->AddSymlink(string(path), strValue)){
+        if(!StatCache::getStatCacheData()->AddSymlink(std::string(path), strValue)){
           S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
         }
     }
@@ -910,7 +908,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 
     time_t now = time(NULL);
     headers_t meta;
-    meta["Content-Type"]     = S3fsCurl::LookupMimeType(string(path));
+    meta["Content-Type"]     = S3fsCurl::LookupMimeType(std::string(path));
     meta["x-amz-meta-uid"]   = str(uid);
     meta["x-amz-meta-gid"]   = str(gid);
     meta["x-amz-meta-mode"]  = str(mode);
@@ -993,7 +991,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
     if(!path || '\0' == path[0]){
         return -1;
     }
-    string tpath = path;
+    std::string tpath = path;
     if('/' != tpath[tpath.length() - 1]){
         tpath += "/";
     }
@@ -1078,7 +1076,7 @@ static int s3fs_rmdir(const char* _path)
 {
     WTF8_ENCODE(path)
     int result;
-    string strpath;
+    std::string strpath;
     struct stat stbuf;
 
     S3FS_PRN_INFO("[path=%s]", path);
@@ -1155,7 +1153,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
 
     time_t now = time(NULL);
     headers_t headers;
-    headers["Content-Type"]     = string("application/octet-stream"); // Static
+    headers["Content-Type"]     = std::string("application/octet-stream"); // Static
     headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
     headers["x-amz-meta-ctime"] = str(now);
     headers["x-amz-meta-mtime"] = str(now);
@@ -1169,7 +1167,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
         return -errno;
     }
     // write(without space words)
-    string  strFrom   = trim(string(from));
+    std::string strFrom = trim(std::string(from));
     ssize_t from_size = static_cast<ssize_t>(strFrom.length());
     if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
         S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
@@ -1183,7 +1181,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     FdManager::get()->Close(ent);
 
     StatCache::getStatCacheData()->DelStat(to);
-    if(!StatCache::getStatCacheData()->AddSymlink(string(to), strFrom)){
+    if(!StatCache::getStatCacheData()->AddSymlink(std::string(to), strFrom)){
         S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
     }
     S3FS_MALLOCTRIM(0);
@@ -1194,7 +1192,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
 static int rename_object(const char* from, const char* to)
 {
     int result;
-    string s3_realpath;
+    std::string s3_realpath;
     headers_t meta;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
@@ -1213,7 +1211,7 @@ static int rename_object(const char* from, const char* to)
     s3_realpath = get_realpath(from);
 
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
-    meta["Content-Type"]             = S3fsCurl::LookupMimeType(string(to));
+    meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
     if(0 != (result = put_headers(to, meta, true))){
@@ -1335,11 +1333,11 @@ static int rename_directory(const char* from, const char* to)
 {
     S3ObjList head;
     s3obj_list_t headlist;
-    string strfrom  = from ? from : "";   // from is without "/".
-    string strto    = to ? to : "";       // to is without "/" too.
-    string basepath = strfrom + "/";
-    string newpath;                       // should be from name(not used)
-    string nowcache;                      // now cache path(not used)
+    std::string strfrom  = from ? from : "";   // from is without "/".
+    std::string strto    = to ? to : "";       // to is without "/" too.
+    std::string basepath = strfrom + "/";
+    std::string newpath;                       // should be from name(not used)
+    std::string nowcache;                      // now cache path(not used)
     dirtype DirType;
     bool normdir; 
     MVNODE* mn_head = NULL;
@@ -1384,9 +1382,9 @@ static int rename_directory(const char* from, const char* to)
     s3obj_list_t::const_iterator liter;
     for(liter = headlist.begin(); headlist.end() != liter; ++liter){
         // make "from" and "to" object name.
-        string from_name = basepath + (*liter);
-        string to_name   = strto + (*liter);
-        string etag      = head.GetETag((*liter).c_str());
+        std::string from_name = basepath + (*liter);
+        std::string to_name   = strto + (*liter);
+        std::string etag      = head.GetETag((*liter).c_str());
 
         // Check subdirectory.
         StatCache::getStatCacheData()->HasStat(from_name, etag.c_str()); // Check ETag
@@ -1531,9 +1529,9 @@ static int s3fs_chmod(const char* _path, mode_t mode)
 {
     WTF8_ENCODE(path)
     int result;
-    string strpath;
-    string newpath;
-    string nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     headers_t meta;
     struct stat stbuf;
     dirtype nDirType = DIRTYPE_UNKNOWN;
@@ -1625,9 +1623,9 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 {
     WTF8_ENCODE(path)
     int         result;
-    string      strpath;
-    string      newpath;
-    string      nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
@@ -1704,9 +1702,9 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 {
     WTF8_ENCODE(path)
     int result;
-    string strpath;
-    string newpath;
-    string nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     headers_t meta;
     struct stat stbuf;
     dirtype nDirType = DIRTYPE_UNKNOWN;
@@ -1804,9 +1802,9 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 {
     WTF8_ENCODE(path)
     int         result;
-    string      strpath;
-    string      newpath;
-    string      nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
@@ -1891,9 +1889,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 {
     WTF8_ENCODE(path)
     int result;
-    string strpath;
-    string newpath;
-    string nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     headers_t meta;
     struct stat stbuf;
     dirtype nDirType = DIRTYPE_UNKNOWN;
@@ -1985,9 +1983,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 {
     WTF8_ENCODE(path)
     int         result;
-    string      strpath;
-    string      newpath;
-    string      nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
@@ -2105,7 +2103,7 @@ static int s3fs_truncate(const char* _path, off_t size)
             return -EIO;
         }
         time_t now = time(NULL);
-        meta["Content-Type"]     = string("application/octet-stream"); // Static
+        meta["Content-Type"]     = std::string("application/octet-stream"); // Static
         meta["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
         meta["x-amz-meta-ctime"] = str(now);
         meta["x-amz-meta-mtime"] = str(now);
@@ -2331,7 +2329,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     // [NOTE]
     // All opened file's stats is cached with no truncate flag.
     // Thus we unset it here.
-    StatCache::getStatCacheData()->ChangeNoTruncateFlag(string(path), false);
+    StatCache::getStatCacheData()->ChangeNoTruncateFlag(std::string(path), false);
 
     // [NOTICE]
     // At first, we remove stats cache.
@@ -2388,7 +2386,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl)
     if(!s3fscurl){
         return false;
     }
-    string saved_path = s3fscurl->GetSpacialSavedPath();
+    std::string saved_path = s3fscurl->GetSpacialSavedPath();
     if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
         S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
         return false;
@@ -2417,9 +2415,9 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     }
 
     S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
-    string path       = s3fscurl->GetPath();
-    string base_path  = s3fscurl->GetBasePath();
-    string saved_path = s3fscurl->GetSpacialSavedPath();
+    std::string path       = s3fscurl->GetPath();
+    std::string base_path  = s3fscurl->GetBasePath();
+    std::string saved_path = s3fscurl->GetSpacialSavedPath();
 
     if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
@@ -2452,10 +2450,10 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     fillerlist.clear();
     // Make single head request(with max).
     for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
-        string disppath = path + (*iter);
-        string etag     = head.GetETag((*iter).c_str());
+        std::string disppath = path + (*iter);
+        std::string etag     = head.GetETag((*iter).c_str());
 
-        string fillpath = disppath;
+        std::string fillpath = disppath;
         if('/' == disppath[disppath.length() - 1]){
             fillpath = fillpath.substr(0, fillpath.length() -1);
         }
@@ -2501,7 +2499,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
         struct stat st;
         bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
-        string bpath = mybasename((*iter));
+        std::string bpath = mybasename((*iter));
         if(use_wtf8){
             bpath = s3fs_wtf8_decode(bpath);
         }
@@ -2542,7 +2540,7 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     }
 
     // Send multi head request for stats caching.
-    string strpath = path;
+    std::string strpath = path;
     if(strcmp(path, "/") != 0){
         strpath += "/";
     }
@@ -2556,12 +2554,12 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
 
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
 {
-    string    s3_realpath;
-    string    query_delimiter;;
-    string    query_prefix;;
-    string    query_maxkey;;
-    string    next_marker;
-    bool      truncated = true;
+    std::string s3_realpath;
+    std::string query_delimiter;
+    std::string query_prefix;
+    std::string query_maxkey;
+    std::string next_marker;
+    bool truncated = true;
     S3fsCurl  s3fscurl;
     xmlDocPtr doc;
 
@@ -2590,7 +2588,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     }
 
     while(truncated){
-        string each_query = query_delimiter;
+        std::string each_query = query_delimiter;
         if(!next_marker.empty()){
             each_query += "marker=" + urlEncode(next_marker) + "&";
             next_marker = "";
@@ -2625,7 +2623,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                 // If did not specify "delimiter", s3 did not return "NextMarker".
                 // On this case, can use last name for next marker.
                 //
-                string lastname;
+                std::string lastname;
                 if(!head.GetLastName(lastname)){
                     S3FS_PRN_WARN("Could not find next marker, thus break loop.");
                     truncated = false;
@@ -2677,12 +2675,12 @@ static void free_xattrs(xattrs_t& xattrs)
     xattrs.clear();
 }
 
-static bool parse_xattr_keyval(const std::string& xattrpair, string& key, PXATTRVAL& pval)
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, PXATTRVAL& pval)
 {
     // parse key and value
     size_t pos;
-    string tmpval;
-    if(string::npos == (pos = xattrpair.find_first_of(':'))){
+    std::string tmpval;
+    if(std::string::npos == (pos = xattrpair.find_first_of(':'))){
         S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
         return false;
     }
@@ -2706,17 +2704,17 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     xattrs.clear();
 
     // decode
-    string jsonxattrs = urlDecode(strxattrs);
+    std::string jsonxattrs = urlDecode(strxattrs);
 
     // get from "{" to "}"
-    string restxattrs;
+    std::string restxattrs;
     {
         size_t startpos;
-        size_t endpos   = string::npos;
-        if(string::npos != (startpos = jsonxattrs.find_first_of('{'))){
+        size_t endpos = std::string::npos;
+        if(std::string::npos != (startpos = jsonxattrs.find_first_of('{'))){
             endpos = jsonxattrs.find_last_of('}');
         }
-        if(startpos == string::npos || endpos == string::npos || endpos <= startpos){
+        if(startpos == std::string::npos || endpos == std::string::npos || endpos <= startpos){
             S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
             return 0;
         }
@@ -2724,9 +2722,9 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     }
 
     // parse each key:val
-    for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != string::npos ? restxattrs.substr(pair_nextpos + 1) : string("")), pair_nextpos = restxattrs.find_first_of(',')){
-        string pair = pair_nextpos != string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
-        string    key;
+    for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : std::string("")), pair_nextpos = restxattrs.find_first_of(',')){
+        std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
+        std::string key;
         PXATTRVAL pval = NULL;
         if(!parse_xattr_keyval(pair, key, pval)){
             // something format error, so skip this.
@@ -2739,7 +2737,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
 
 static std::string build_xattrs(const xattrs_t& xattrs)
 {
-    string strxattrs("{");
+    std::string strxattrs("{");
 
     bool is_set = false;
     for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
@@ -2770,7 +2768,7 @@ static std::string build_xattrs(const xattrs_t& xattrs)
 
 static int set_xattrs_to_header(headers_t& meta, const char* name, const char* value, size_t size, int flags)
 {
-    string   strxattrs;
+    std::string strxattrs;
     xattrs_t xattrs;
 
     headers_t::iterator iter;
@@ -2796,7 +2794,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
     // add name(do not care overwrite and empty name/value)
     xattrs_t::iterator xiter;
-    if(xattrs.end() != (xiter = xattrs.find(string(name)))){
+    if(xattrs.end() != (xiter = xattrs.find(std::string(name)))){
         // found same head. free value.
         delete xiter->second;
     }
@@ -2809,7 +2807,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     }else{
         pval->pvalue = NULL;
     }
-    xattrs[string(name)] = pval;
+    xattrs[std::string(name)] = pval;
 
     // build new strxattrs(not encoded) and set it to headers_t
     meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
@@ -2840,9 +2838,9 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 #endif
 
     int         result;
-    string      strpath;
-    string      newpath;
-    string      nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     headers_t   meta;
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
@@ -2906,7 +2904,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         // the file is opened now.
 
         // get xattr and make new xattr
-        string strxattr;
+        std::string strxattr;
         if(ent->GetXattr(strxattr)){
             updatemeta["x-amz-meta-xattr"] = strxattr;
         }else{
@@ -2990,13 +2988,13 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
         // object does not have xattrs
         return -ENOATTR;
     }
-    string strxattrs = hiter->second;
+    std::string strxattrs = hiter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
     // search name
-    string             strname = name;
-    xattrs_t::iterator xiter   = xattrs.find(strname);
+    std::string strname = name;
+    xattrs_t::iterator xiter = xattrs.find(strname);
     if(xattrs.end() == xiter){
         // not found name in xattrs
         free_xattrs(xattrs);
@@ -3054,7 +3052,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
         // object does not have xattrs
         return 0;
     }
-    string strxattrs = iter->second;
+    std::string strxattrs = iter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
@@ -3103,9 +3101,9 @@ static int s3fs_removexattr(const char* path, const char* name)
     }
 
     int         result;
-    string      strpath;
-    string      newpath;
-    string      nowcache;
+    std::string strpath;
+    std::string newpath;
+    std::string nowcache;
     headers_t   meta;
     xattrs_t    xattrs;
     struct stat stbuf;
@@ -3139,13 +3137,13 @@ static int s3fs_removexattr(const char* path, const char* name)
         // object does not have xattrs
         return -ENOATTR;
     }
-    string strxattrs = hiter->second;
+    std::string strxattrs = hiter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
     // check name xattrs
-    string             strname = name;
-    xattrs_t::iterator xiter   = xattrs.find(strname);
+    std::string strname = name;
+    xattrs_t::iterator xiter = xattrs.find(strname);
     if(xattrs.end() == xiter){
         free_xattrs(xattrs);
         return -ENOATTR;
@@ -3183,7 +3181,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     if(!xattrs.empty()){
         updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);
     }else{
-        updatemeta["x-amz-meta-xattr"]     = string("");      // This is a special case. If empty, this header will eventually be removed.
+        updatemeta["x-amz-meta-xattr"]     = std::string("");      // This is a special case. If empty, this header will eventually be removed.
     }
     free_xattrs(xattrs);
 
@@ -3340,7 +3338,7 @@ static int s3fs_access(const char* path, int mask)
 //
 // So this is cheap code but s3fs should get correct region automatically.
 //
-static bool check_region_error(const char* pbody, size_t len, string& expectregion)
+static bool check_region_error(const char* pbody, size_t len, std::string& expectregion)
 {
     if(!pbody){
         return false;
@@ -3379,7 +3377,7 @@ static int s3fs_check_service()
 
             // check region error(for putting message or retrying)
             BodyData* body = s3fscurl.GetBodyData();
-            string    expectregion;
+            std::string expectregion;
             if(check_region_error(body->str(), body->size(), expectregion)){
                 // [NOTE]
                 // If endpoint is not specified(using us-east-1 region) and
@@ -3472,13 +3470,13 @@ static int s3fs_check_service()
 //
 static int parse_passwd_file(bucketkvmap_t& resmap)
 {
-    string               line;
+    std::string          line;
     size_t               first_pos;
     readline_t           linelist;
     readline_t::iterator iter;
 
     // open passwd file
-    ifstream PF(passwd_file.c_str());
+    std::ifstream PF(passwd_file.c_str());
     if(!PF.good()){
         S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
         return -1;
@@ -3493,7 +3491,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
         if('#' == line[0]){
             continue;
         }
-        if(string::npos != line.find_first_of(" \t")){
+        if(std::string::npos != line.find_first_of(" \t")){
             S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
             return -1;
         }
@@ -3508,12 +3506,12 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
     kvmap_t kv;
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
         first_pos = iter->find_first_of("=");
-        if(first_pos == string::npos){
+        if(first_pos == std::string::npos){
             continue;
         }
         // formatted by "key=val"
-        string key = trim(iter->substr(0, first_pos));
-        string val = trim(iter->substr(first_pos + 1, string::npos));
+        std::string key = trim(iter->substr(0, first_pos));
+        std::string val = trim(iter->substr(first_pos + 1, std::string::npos));
         if(key.empty()){
             continue;
         }
@@ -3524,37 +3522,37 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
         kv[key] = val;
     }
     // set special key name
-    resmap[string(keyval_fields_type)] = kv;
+    resmap[std::string(keyval_fields_type)] = kv;
 
     // read ':' type
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
         first_pos       = iter->find_first_of(":");
         size_t last_pos = iter->find_last_of(":");
-        if(first_pos == string::npos){
+        if(first_pos == std::string::npos){
             continue;
         }
-        string bucketname;
-        string accesskey;
-        string secret;
+        std::string bucketname;
+        std::string accesskey;
+        std::string secret;
         if(first_pos != last_pos){
             // formatted by "bucket:accesskey:secretkey"
             bucketname    = trim(iter->substr(0, first_pos));
             accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
-            secret    = trim(iter->substr(last_pos + 1, string::npos));
+            secret    = trim(iter->substr(last_pos + 1, std::string::npos));
         }else{
             // formatted by "accesskey:secretkey"
             bucketname    = allbucket_fields_type;
             accesskey = trim(iter->substr(0, first_pos));
-            secret    = trim(iter->substr(first_pos + 1, string::npos));
+            secret    = trim(iter->substr(first_pos + 1, std::string::npos));
         }
         if(resmap.end() != resmap.find(bucketname)){
             S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
             return -1;
         }
         kv.clear();
-        kv[string(aws_accesskeyid)] = accesskey;
-        kv[string(aws_secretkey)]   = secret;
-        resmap[bucketname]          = kv;
+        kv[std::string(aws_accesskeyid)] = accesskey;
+        kv[std::string(aws_secretkey)] = secret;
+        resmap[bucketname] = kv;
     }
     return (resmap.empty() ? 0 : 1);
 }
@@ -3566,8 +3564,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 //
 static int check_for_aws_format(const kvmap_t& kvmap)
 {
-    string str1(aws_accesskeyid);
-    string str2(aws_secretkey);
+    std::string str1(aws_accesskeyid);
+    std::string str2(aws_secretkey);
 
     if(kvmap.empty()){
         return 0;
@@ -3643,18 +3641,18 @@ static int check_passwd_file_perms()
 static int read_aws_credentials_file(const std::string &filename)
 {
     // open passwd file
-    ifstream PF(filename.c_str());
+    std::ifstream PF(filename.c_str());
     if(!PF.good()){
         return -1;
     }
 
-    string profile;
-    string accesskey;
-    string secret;
-    string session_token;
+    std::string profile;
+    std::string accesskey;
+    std::string secret;
+    std::string session_token;
 
     // read each line
-    string line;
+    std::string line;
     while(getline(PF, line)){
         line = trim(line);
         if(line.empty()){
@@ -3675,11 +3673,11 @@ static int read_aws_credentials_file(const std::string &filename)
         }
     
         size_t pos = line.find_first_of('=');
-        if(pos == string::npos){
+        if(pos == std::string::npos){
             continue;
         }
-        string key   = trim(line.substr(0, pos));
-        string value = trim(line.substr(pos + 1, string::npos));
+        std::string key   = trim(line.substr(0, pos));
+        std::string value = trim(line.substr(pos + 1, std::string::npos));
         if(key == "aws_access_key_id"){
             accesskey = value;
         }else if(key == "aws_secret_access_key"){
@@ -3763,7 +3761,7 @@ static int read_passwd_file()
         }
     }
 
-    string bucket_key = allbucket_fields_type;
+    std::string bucket_key = allbucket_fields_type;
     if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
         bucket_key = bucket;
     }
@@ -3822,7 +3820,7 @@ static int get_access_keys()
 
     // 2 - was specified on the command line
     if(!passwd_file.empty()){
-        ifstream PF(passwd_file.c_str());
+        std::ifstream PF(passwd_file.c_str());
         if(PF.good()){
              PF.close();
              return read_passwd_file();
@@ -3869,7 +3867,7 @@ static int get_access_keys()
     if(AWS_CREDENTIAL_FILE != NULL){
         passwd_file.assign(AWS_CREDENTIAL_FILE);
         if(!passwd_file.empty()){
-            ifstream PF(passwd_file.c_str());
+            std::ifstream PF(passwd_file.c_str());
             if(PF.good()){
                  PF.close();
                  return read_passwd_file();
@@ -3895,7 +3893,7 @@ static int get_access_keys()
     if(HOME != NULL){
          passwd_file.assign(HOME);
          passwd_file.append("/.passwd-s3fs");
-         ifstream PF(passwd_file.c_str());
+         std::ifstream PF(passwd_file.c_str());
          if(PF.good()){
              PF.close();
              if(EXIT_SUCCESS != read_passwd_file()){
@@ -3912,7 +3910,7 @@ static int get_access_keys()
 
     // 5 - from the system default location
     passwd_file.assign("/etc/passwd-s3fs"); 
-    ifstream PF(passwd_file.c_str());
+    std::ifstream PF(passwd_file.c_str());
     if(PF.good()){
         PF.close();
         return read_passwd_file();
@@ -4290,7 +4288,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
             std::string endpoint_url;
             std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
-            // Check url for http / https protocol string
+            // Check url for http / https protocol std::string
             if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
                  S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
                  return -1;
@@ -4443,7 +4441,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(0 == STR2NCMP(arg, "ahbe_conf=")){
-            string ahbe_conf = strchr(arg, '=') + sizeof(char);
+            std::string ahbe_conf = strchr(arg, '=') + sizeof(char);
             if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
                 S3FS_PRN_EXIT("failed to load ahbe_conf file(%s).", ahbe_conf.c_str());
                 return -1;
@@ -4490,7 +4488,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         if(0 == STR2NCMP(arg, "url=")){
             s3host = strchr(arg, '=') + sizeof(char);
             // strip the trailing '/', if any, off the end of the host
-            // string
+            // std::string
             size_t found, length;
             found  = s3host.find_last_of('/');
             length = s3host.length();
@@ -4499,7 +4497,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 found  = s3host.find_last_of('/');
                 length = s3host.length();
             }
-            // Check url for http / https protocol string
+            // Check url for http / https protocol std::string
             if((s3host.compare(0, 8, "https://") != 0) && (s3host.compare(0, 7, "http://") != 0)) {
                 S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
                 return -1;
@@ -4694,7 +4692,7 @@ int main(int argc, char* argv[])
     // get program name - emulate basename
     program_name.assign(argv[0]);
     size_t found = program_name.find_last_of('/');
-    if(found != string::npos){
+    if(found != std::string::npos){
         program_name.replace(0, found+1, "");
     }
 
@@ -4835,14 +4833,14 @@ int main(int argc, char* argv[])
 
     // check bucket name for illegal characters
     found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
-    if(found != string::npos){
+    if(found != std::string::npos){
         S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);
     }
 
-    if(!pathrequeststyle && STR2NCMP(s3host.c_str(), "https://") == 0 && bucket.find_first_of('.') != string::npos) {
+    if(!pathrequeststyle && STR2NCMP(s3host.c_str(), "https://") == 0 && bucket.find_first_of('.') != std::string::npos) {
         S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
@@ -4938,9 +4936,9 @@ int main(int argc, char* argv[])
     /* 
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = bucket.find_first_of(".");
-        if(found != string::npos){
+        if(found != std::string::npos){
             found = s3host.find("https:");
-            if(found != string::npos){
+            if(found != std::string::npos){
                 S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
                 exit(1);
             }

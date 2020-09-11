@@ -28,8 +28,6 @@
 #include "addhead.h"
 #include "curl_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
@@ -69,14 +67,14 @@ bool AdditionalHeader::Load(const char* file)
     }
     Unload();
 
-    ifstream AH(file);
+    std::ifstream AH(file);
     if(!AH.good()){
         S3FS_PRN_WARN("Could not open file(%s).", file);
         return false;
     }
 
     // read file
-    string   line;
+    std::string line;
     ADDHEAD *paddhead;
     while(getline(AH, line)){
         if('#' == line[0]){
@@ -86,10 +84,10 @@ bool AdditionalHeader::Load(const char* file)
             continue;
         }
         // load a line
-        istringstream ss(line);
-        string        key;           // suffix(key)
-        string        head;          // additional HTTP header
-        string        value;         // header value
+        std::istringstream ss(line);
+        std::string        key;           // suffix(key)
+        std::string        head;          // additional HTTP header
+        std::string        value;         // header value
         if(0 == isblank(line[0])){
             ss >> key;
         }
@@ -114,7 +112,7 @@ bool AdditionalHeader::Load(const char* file)
         if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
             // regex
             if(key.size() <= strlen(ADD_HEAD_REGEX)){
-                S3FS_PRN_ERR("file format error: %s key(suffix) does not have key string.", key.c_str());
+                S3FS_PRN_ERR("file format error: %s key(suffix) does not have key std::string.", key.c_str());
                 delete paddhead;
                 continue;
             }
@@ -239,30 +237,30 @@ bool AdditionalHeader::Dump() const
         return true;
     }
 
-    ostringstream ssdbg;
-    int           cnt = 1;
+    std::ostringstream ssdbg;
+    int cnt = 1;
 
-    ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << endl;
+    ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << std::endl;
 
     for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
       const ADDHEAD *paddhead = *iter;
 
-      ssdbg << "    [" << cnt << "] = {" << endl;
+      ssdbg << "    [" << cnt << "] = {" << std::endl;
 
       if(paddhead){
           if(paddhead->pregex){
-              ssdbg << "        type\t\t--->\tregex" << endl;
+              ssdbg << "        type\t\t--->\tregex" << std::endl;
           }else{
-              ssdbg << "        type\t\t--->\tsuffix matching" << endl;
+              ssdbg << "        type\t\t--->\tsuffix matching" << std::endl;
           }
-            ssdbg << "        base string\t--->\t" << paddhead->basestring << endl;
-            ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << endl;
+            ssdbg << "        base std::string\t--->\t" << paddhead->basestring << std::endl;
+            ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << std::endl;
         }
-        ssdbg << "    }" << endl;
+        ssdbg << "    }" << std::endl;
     }
 
 
-    ssdbg << "}" << endl;
+    ssdbg << "}" << std::endl;
 
     // print all
     S3FS_PRN_DBG("%s", ssdbg.str().c_str());

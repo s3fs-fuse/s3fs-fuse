@@ -32,8 +32,6 @@
 #include "string_util.h"
 #include "autolock.h"
 
-using namespace std;
-
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
@@ -93,7 +91,7 @@ pthread_mutex_t FdManager::fd_manager_lock;
 pthread_mutex_t FdManager::cache_cleanup_lock;
 pthread_mutex_t FdManager::reserved_diskspace_lock;
 bool            FdManager::is_lock_init(false);
-string          FdManager::cache_dir;
+std::string     FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
 std::string     FdManager::check_cache_output;
@@ -129,7 +127,7 @@ bool FdManager::DeleteCacheDirectory()
         return true;
     }
 
-    string cache_path;
+    std::string cache_path;
     if(!FdManager::MakeCachePath(NULL, cache_path, false)){
         return false;
     }
@@ -137,7 +135,7 @@ bool FdManager::DeleteCacheDirectory()
         return false;
     }
 
-    string mirror_path = FdManager::cache_dir + "/." + bucket + ".mirror";
+    std::string mirror_path = FdManager::cache_dir + "/." + bucket + ".mirror";
     if(!delete_files_in_dir(mirror_path.c_str(), true)){
         return false;
     }
@@ -155,7 +153,7 @@ int FdManager::DeleteCacheFile(const char* path)
     if(FdManager::cache_dir.empty()){
         return 0;
     }
-    string cache_path;
+    std::string cache_path;
     if(!FdManager::MakeCachePath(path, cache_path, false)){
         return 0;
     }
@@ -183,14 +181,14 @@ int FdManager::DeleteCacheFile(const char* path)
     return result;
 }
 
-bool FdManager::MakeCachePath(const char* path, string& cache_path, bool is_create_dir, bool is_mirror_path)
+bool FdManager::MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir, bool is_mirror_path)
 {
     if(FdManager::cache_dir.empty()){
         cache_path = "";
         return true;
     }
 
-    string resolved_path(FdManager::cache_dir);
+    std::string resolved_path(FdManager::cache_dir);
     if(!is_mirror_path){
         resolved_path += "/";
         resolved_path += bucket;
@@ -220,12 +218,12 @@ bool FdManager::CheckCacheTopDir()
     if(FdManager::cache_dir.empty()){
         return true;
     }
-    string toppath(FdManager::cache_dir + "/" + bucket);
+    std::string toppath(FdManager::cache_dir + "/" + bucket);
 
     return check_exist_dir_permission(toppath.c_str());
 }
 
-bool FdManager::MakeRandomTempPath(const char* path, string& tmppath)
+bool FdManager::MakeRandomTempPath(const char* path, std::string& tmppath)
 {
     char szBuff[64];
 
@@ -280,7 +278,7 @@ off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
 off_t FdManager::GetFreeDiskSpace(const char* path)
 {
     struct statvfs vfsbuf;
-    string         ctoppath;
+    std::string ctoppath;
     if(!FdManager::cache_dir.empty()){
         ctoppath = FdManager::cache_dir + "/";
         ctoppath = get_exist_directory_path(ctoppath);    // existed directory
@@ -414,7 +412,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
     }
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    fdent_map_t::iterator iter = fent.find(string(path));
+    fdent_map_t::iterator iter = fent.find(std::string(path));
     if(fent.end() != iter && (-1 == existfd || (*iter).second->GetFd() == existfd)){
         iter->second->Dup();
         return (*iter).second;
@@ -450,7 +448,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     // search in mapping by key(path)
-    fdent_map_t::iterator iter = fent.find(string(path));
+    fdent_map_t::iterator iter = fent.find(std::string(path));
 
     if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
         // If the cache directory is not specified, s3fs opens a temporary file
@@ -477,7 +475,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
 
     }else if(is_create){
         // not found
-        string cache_path;
+        std::string cache_path;
         if(!force_tmpfile && !FdManager::MakeCachePath(path, cache_path, true)){
             S3FS_PRN_ERR("failed to make cache path for object(%s).", path);
             return NULL;
@@ -487,7 +485,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
 
         if(!cache_path.empty()){
             // using cache
-            fent[string(path)] = ent;
+            fent[std::string(path)] = ent;
         }else{
             // not using cache, so the key of fdentity is set not really existing path.
             // (but not strictly unexisting path.)
@@ -496,7 +494,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
             // The reason why this process here, please look at the definition of the
             // comments of NOCACHE_PATH_PREFIX_FORM symbol.
             //
-            string tmppath;
+            std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
             fent[tmppath] = ent;
         }
@@ -573,7 +571,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         fent.erase(iter);
 
         // rename path and caches in fd entity
-        string fentmapkey;
+        std::string fentmapkey;
         if(!ent->RenamePath(to, fentmapkey)){
             S3FS_PRN_ERR("Failed to rename FdEntity object for %s to %s", from.c_str(), to.c_str());
             return;
@@ -625,7 +623,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
         if((*iter).second == ent){
             fent.erase(iter++);
 
-            string tmppath;
+            std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
             fent[tmppath] = ent;
         }else{
@@ -670,7 +668,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
             continue;
         }
-        string   fullpath = abs_path;
+        std::string fullpath = abs_path;
         fullpath         += "/";
         fullpath         += dent->d_name;
         struct stat st;
@@ -679,7 +677,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
             closedir(dp);
             return;
         }
-        string next_path = path + "/" + dent->d_name;
+        std::string next_path = path + "/" + dent->d_name;
         if(S_ISDIR(st.st_mode)){
             CleanupCacheDirInternal(next_path);
         }else{
@@ -751,7 +749,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
     // open directory of cache file's stats
     DIR*   statsdir;
-    string target_dir = cache_stat_top_dir;
+    std::string target_dir = cache_stat_top_dir;
     target_dir       += sub_path;
     if(NULL == (statsdir = opendir(target_dir.c_str()))){
         S3FS_PRN_ERR("Could not open directory(%s) by errno(%d)", target_dir.c_str(), errno);
@@ -768,7 +766,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             }
 
             // reentrant for sub directory
-            string subdir_path = sub_path;
+            std::string subdir_path = sub_path;
             subdir_path       += pdirent->d_name;
             subdir_path       += '/';
             if(!RawCheckAllCache(fp, cache_stat_top_dir, subdir_path.c_str(), total_file_cnt, err_file_cnt, err_dir_cnt)){
@@ -782,9 +780,9 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             ++total_file_cnt;
 
             // make cache file path
-            string strOpenedWarn;
-            string cache_path;
-            string object_file_path = sub_path;
+            std::string strOpenedWarn;
+            std::string cache_path;
+            std::string object_file_path = sub_path;
             object_file_path       += pdirent->d_name;
             if(!FdManager::MakeCachePath(object_file_path.c_str(), cache_path, false, false) || cache_path.empty()){
                 ++err_file_cnt;
@@ -905,7 +903,7 @@ bool FdManager::CheckAllCache()
     S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD);
 
     // Loop in directory of cache file's stats
-    string top_path       = CacheFileStat::GetCacheFileStatTopDir();
+    std::string top_path  = CacheFileStat::GetCacheFileStatTopDir();
     int    total_file_cnt = 0;
     int    err_file_cnt   = 0;
     int    err_dir_cnt    = 0;

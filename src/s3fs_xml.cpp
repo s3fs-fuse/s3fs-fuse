@@ -26,8 +26,6 @@
 #include "s3fs_xml.h"
 #include "s3fs_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Variables
 //-------------------------------------------------------------------
@@ -36,10 +34,10 @@ static const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
+static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
 {
     static time_t tmLast = 0;  // cache for 60 sec.
-    static string strNs;
+    static std::string strNs;
     bool result = false;
 
     if(!doc){
@@ -70,8 +68,8 @@ static bool GetXmlNsUrl(xmlDocPtr doc, string& nsurl)
 static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
 {
     xmlXPathObjectPtr  marker_xp;
-    string xmlnsurl;
-    string exp_string;
+    std::string xmlnsurl;
+    std::string exp_string;
 
     if(!doc){
         return NULL;
@@ -134,8 +132,8 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     }
 
     // Make dir path and filename
-    string   strdirpath = mydirname(string((char*)fullpath));
-    string   strmybpath = mybasename(string((char*)fullpath));
+    std::string   strdirpath = mydirname(std::string((char*)fullpath));
+    std::string   strmybpath = mybasename(std::string((char*)fullpath));
     const char* dirpath = strdirpath.c_str();
     const char* mybname = strmybpath.c_str();
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
@@ -168,7 +166,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
                 // OK
                 return strdup(mybname);
             }else if(basepath && 0 < strlen(basepath) && '/' == basepath[strlen(basepath) - 1] && 0 == strncmp(dirpath, basepath, strlen(basepath) - 1)){
-                string withdirname;
+                std::string withdirname;
                 if(strlen(dirpath) > strlen(basepath)){
                     withdirname = &dirpath[strlen(basepath)];
                 }
@@ -224,11 +222,11 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
 
     xmlXPathContextPtr ctx = xmlXPathNewContext(doc);;
 
-    string xmlnsurl;
-    string ex_upload = "//";
-    string ex_key;
-    string ex_id;
-    string ex_date;
+    std::string xmlnsurl;
+    std::string ex_upload = "//";
+    std::string ex_key;
+    std::string ex_id;
+    std::string ex_date;
 
     if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
         xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
@@ -331,9 +329,9 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
     }
     content_nodes = contents_xp->nodesetval;
 
-    bool   is_dir;
-    string stretag;
-    int    i;
+    bool is_dir;
+    std::string stretag;
+    int i;
     for(i = 0; i < content_nodes->nodeNr; i++){
         ctx->node = content_nodes->nodeTab[i];
 
@@ -396,12 +394,12 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
 
 int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
 {
-    string xmlnsurl;
-    string ex_contents = "//";
-    string ex_key;
-    string ex_cprefix  = "//";
-    string ex_prefix;
-    string ex_etag;
+    std::string xmlnsurl;
+    std::string ex_contents = "//";
+    std::string ex_key;
+    std::string ex_cprefix  = "//";
+    std::string ex_prefix;
+    std::string ex_etag;
 
     if(!doc){
         return -1;
@@ -409,7 +407,7 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
 
     // If there is not <Prefix>, use path instead of it.
     xmlChar* pprefix = get_prefix(doc);
-    string   prefix  = (pprefix ? (char*)pprefix : path ? path : "");
+    std::string prefix  = (pprefix ? (char*)pprefix : path ? path : "");
     if(pprefix){
         xmlFree(pprefix);
     }
@@ -465,11 +463,11 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     }
     for(xmlNodePtr cur_node = doc->children->children; NULL != cur_node; cur_node = cur_node->next){
         // For DEBUG
-        // string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
+        // std::string cur_node_name(reinterpret_cast<const char *>(cur_node->name));
         // printf("cur_node_name: %s\n", cur_node_name.c_str());
 
         if(XML_ELEMENT_NODE == cur_node->type){
-            string elementName = reinterpret_cast<const char*>(cur_node->name);
+            std::string elementName = reinterpret_cast<const char*>(cur_node->name);
             // For DEBUG
             // printf("elementName: %s\n", elementName.c_str());
 

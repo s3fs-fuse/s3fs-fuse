@@ -29,8 +29,6 @@
 #include "s3fs_auth.h"
 #include "string_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
@@ -74,7 +72,7 @@ static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
     bool     result = true;
     for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
         const char* tpath     = (*iter).key.c_str();
-        string      upload_id = (*iter).id;
+        std::string upload_id = (*iter).id;
 
         if(0 != abort_time){    // abort_time is 0, it means all.
             time_t    date = 0;
@@ -108,8 +106,8 @@ int s3fs_utility_processing(time_t abort_time)
     printf("\n*** s3fs run as utility mode.\n\n");
 
     S3fsCurl s3fscurl;
-    string   body;
-    int      result = EXIT_SUCCESS;
+    std::string body;
+    int result = EXIT_SUCCESS;
     if(0 != s3fscurl.MultipartListRequest(body)){
         S3FS_PRN_EXIT("Could not get list multipart upload.\nThere is no incomplete multipart uploaded object in bucket.\n");
         result = EXIT_FAILURE;

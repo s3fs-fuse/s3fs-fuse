@@ -37,8 +37,6 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
@@ -50,9 +48,9 @@ static size_t max_group_name_length;
 //-------------------------------------------------------------------
 // Utilities
 //-------------------------------------------------------------------
-string get_realpath(const char *path)
+std::string get_realpath(const char *path)
 {
-    string realpath = mount_prefix;
+    std::string realpath = mount_prefix;
     realpath += path;
 
     return realpath;
@@ -91,7 +89,7 @@ void init_sysconf_vars()
 // Utility for UID/GID
 //-------------------------------------------------------------------
 // get user name from uid
-string get_username(uid_t uid)
+std::string get_username(uid_t uid)
 {
     size_t maxlen = max_password_size;
     int result;
@@ -111,15 +109,15 @@ string get_username(uid_t uid)
     if(0 != result){
         S3FS_PRN_ERR("could not get pw information(%d).", result);
         delete[] pbuf;
-        return string("");
+        return std::string("");
     }
 
     // check pw
     if(NULL == ppwinfo){
         delete[] pbuf;
-        return string("");
+        return std::string("");
     }
-    string name = SAFESTRPTR(ppwinfo->pw_name);
+    std::string name = SAFESTRPTR(ppwinfo->pw_name);
     delete[] pbuf;
     return name;
 }
@@ -154,7 +152,7 @@ int is_uid_include_group(uid_t uid, gid_t gid)
         return -EINVAL;
     }
 
-    string username = get_username(uid);
+    std::string username = get_username(uid);
 
     char** ppgr_mem;
     for(ppgr_mem = pginfo->gr_mem; ppgr_mem && *ppgr_mem; ppgr_mem++){
@@ -171,42 +169,42 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 //-------------------------------------------------------------------
 // Utility for file and directory
 //-------------------------------------------------------------------
-string mydirname(const string& path)
+std::string mydirname(const std::string& path)
 {
-    return string(dirname((char*)path.c_str()));
+    return std::string(dirname((char*)path.c_str()));
 }
 
 // safe variant of dirname
 // dirname clobbers path so let it operate on a tmp copy
-string mydirname(const char* path)
+std::string mydirname(const char* path)
 {
     if(!path || '\0' == path[0]){
-        return string("");
+        return std::string("");
     }
-    return mydirname(string(path));
+    return mydirname(std::string(path));
 }
 
-string mybasename(const string& path)
+std::string mybasename(const std::string& path)
 {
-    return string(basename((char*)path.c_str()));
+    return std::string(basename((char*)path.c_str()));
 }
 
 // safe variant of basename
 // basename clobbers path so let it operate on a tmp copy
-string mybasename(const char* path)
+std::string mybasename(const char* path)
 {
     if(!path || '\0' == path[0]){
-        return string("");
+        return std::string("");
     }
-    return mybasename(string(path));
+    return mybasename(std::string(path));
 }
 
 // mkdir --parents
-int mkdirp(const string& path, mode_t mode)
+int mkdirp(const std::string& path, mode_t mode)
 {
-    string        base;
-    string        component;
-    istringstream ss(path);
+    std::string        base;
+    std::string        component;
+    std::istringstream ss(path);
     while (getline(ss, component, '/')) {
         base += "/" + component;
 
@@ -225,12 +223,12 @@ int mkdirp(const string& path, mode_t mode)
 }
 
 // get existed directory path
-string get_exist_directory_path(const string& path)
+std::string get_exist_directory_path(const std::string& path)
 {
-    string        existed("/");    // "/" is existed.
-    string        base;
-    string        component;
-    istringstream ss(path);
+    std::string        existed("/");    // "/" is existed.
+    std::string        base;
+    std::string        component;
+    std::istringstream ss(path);
     while (getline(ss, component, '/')) {
         if(base != "/"){
             base += "/";
@@ -307,9 +305,9 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
             continue;
         }
-        string   fullpath = dir;
-        fullpath         += "/";
-        fullpath         += dent->d_name;
+        std::string fullpath = dir;
+        fullpath += "/";
+        fullpath += dent->d_name;
         struct stat st;
         if(0 != lstat(fullpath.c_str(), &st)){
             S3FS_PRN_ERR("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);

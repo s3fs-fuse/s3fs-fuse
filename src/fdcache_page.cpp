@@ -29,8 +29,6 @@
 #include "fdcache_page.h"
 #include "string_util.h"
 
-using namespace std;
-
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
@@ -566,8 +564,8 @@ int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t 
         }
 
         // page area
-        off_t page_start = max(iter->offset, start);
-        off_t page_next  = min(iter->next(), next);
+        off_t page_start = std::max(iter->offset, start);
+        off_t page_next  = std::min(iter->next(), next);
         off_t page_size  = page_next - page_start;
 
         // add list
@@ -720,7 +718,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         //
         // put to file
         //
-        ostringstream ssall;
+        std::ostringstream ssall;
         ssall << inode << ":" << Size();
 
         for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
@@ -731,7 +729,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             S3FS_PRN_ERR("failed to truncate file(to 0) for stats(%d)", errno);
             return false;
         }
-        string strall = ssall.str();
+        std::string strall = ssall.str();
         if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
             S3FS_PRN_ERR("failed to write stats(%d)", errno);
             return false;
@@ -760,8 +758,8 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             delete[] ptmp;
             return false;
         }
-        string        oneline;
-        istringstream ssall(ptmp);
+        std::string        oneline;
+        std::istringstream ssall(ptmp);
     
         // loaded
         Clear();
@@ -774,9 +772,9 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             delete[] ptmp;
             return false;
         }else{
-            istringstream sshead(oneline);
-            string        strhead1;
-            string        strhead2;
+            std::istringstream sshead(oneline);
+            std::string        strhead1;
+            std::string        strhead2;
     
             // get first part in head line.
             if(!getline(sshead, strhead1, ':')){
@@ -810,8 +808,8 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         // load each part
         bool is_err = false;
         while(getline(ssall, oneline, '\n')){
-            string        part;
-            istringstream ssparts(oneline);
+            std::string        part;
+            std::istringstream ssparts(oneline);
             // offset
             if(!getline(ssparts, part, ':')){
                 is_err = true;
