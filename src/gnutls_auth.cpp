@@ -190,17 +190,17 @@ size_t get_md5_digest_length()
 }
 
 #ifdef USE_GNUTLS_NETTLE
-unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     struct md5_ctx ctx_md5;
     unsigned char  buf[512];
-    ssize_t        bytes;
+    off_t          bytes;
     unsigned char* result;
 
     memset(buf, 0, 512);
     md5_init(&ctx_md5);
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
@@ -222,12 +222,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
 
 #else // USE_GNUTLS_NETTLE
 
-unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t ctx_md5;
     gcry_error_t err;
     char    buf[512];
-    ssize_t bytes;
+    off_t bytes;
     unsigned char* result;
 
     if(-1 == size){
@@ -235,7 +235,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
         if(-1 == fstat(fd, &st)){
             return NULL;
         }
-        size = static_cast<ssize_t>(st.st_size);
+        size = st.st_size;
     }
 
     memset(buf, 0, 512);
@@ -244,7 +244,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
         return NULL;
     }
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
@@ -290,17 +290,17 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
     return true;
 }
 
-unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     struct sha256_ctx ctx_sha256;
     unsigned char     buf[512];
-    ssize_t           bytes;
+    off_t             bytes;
     unsigned char*    result;
 
     memset(buf, 0, 512);
     sha256_init(&ctx_sha256);
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
@@ -341,12 +341,12 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
     return true;
 }
 
-unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t   ctx_sha256;
     gcry_error_t   err;
     char           buf[512];
-    ssize_t        bytes;
+    off_t          bytes;
     unsigned char* result;
 
     if(-1 == size){
@@ -354,7 +354,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
         if(-1 == fstat(fd, &st)){
             return NULL;
         }
-        size = static_cast<ssize_t>(st.st_size);
+        size = st.st_size;
     }
 
     memset(buf, 0, 512);
@@ -363,7 +363,7 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
         return NULL;
     }
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){

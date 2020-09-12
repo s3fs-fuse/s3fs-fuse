@@ -152,11 +152,11 @@ size_t get_md5_digest_length()
     return MD5_LENGTH;
 }
 
-unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     PK11Context*   md5ctx;
     unsigned char  buf[512];
-    ssize_t        bytes;
+    off_t          bytes;
     unsigned char* result;
     unsigned int   md5outlen;
 
@@ -165,13 +165,13 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, ssize_t size)
         if(-1 == fstat(fd, &st)){
             return NULL;
         }
-        size = static_cast<ssize_t>(st.st_size);
+        size = st.st_size;
     }
 
     memset(buf, 0, 512);
     md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
@@ -218,11 +218,11 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
     return true;
 }
 
-unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
+unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     PK11Context*   sha256ctx;
     unsigned char  buf[512];
-    ssize_t        bytes;
+    off_t          bytes;
     unsigned char* result;
     unsigned int   sha256outlen;
 
@@ -231,13 +231,13 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, ssize_t size)
         if(-1 == fstat(fd, &st)){
             return NULL;
         }
-        size = static_cast<ssize_t>(st.st_size);
+        size = st.st_size;
     }
 
     memset(buf, 0, 512);
     sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
-    for(ssize_t total = 0; total < size; total += bytes){
+    for(off_t total = 0; total < size; total += bytes){
         bytes = 512 < (size - total) ? 512 : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
