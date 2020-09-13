@@ -378,6 +378,7 @@ FdManager::~FdManager()
     if(this == FdManager::get()){
         for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
             FdEntity* ent = (*iter).second;
+            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath(), ent->GetRefCnt());
             delete ent;
         }
         fent.clear();
@@ -403,7 +404,7 @@ FdManager::~FdManager()
     }
 }
 
-FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
+FdEntity* FdManager::GetFdEntity(const char* path, int existfd, bool increase_ref)
 {
     S3FS_PRN_INFO3("[path=%s][fd=%d]", SAFESTRPTR(path), existfd);
 
@@ -414,7 +415,9 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
 
     fdent_map_t::iterator iter = fent.find(std::string(path));
     if(fent.end() != iter && (-1 == existfd || (*iter).second->GetFd() == existfd)){
-        iter->second->Dup();
+        if(increase_ref){
+            iter->second->Dup();
+        }
         return (*iter).second;
     }
 
@@ -423,7 +426,9 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd)
             if((*iter).second && (*iter).second->GetFd() == existfd){
                 // found opened fd in map
                 if(0 == strcmp((*iter).second->GetPath(), path)){
-                    iter->second->Dup();
+                    if(increase_ref){
+                        iter->second->Dup();
+                    }
                     return (*iter).second;
                 }
                 // found fd, but it is used another file(file descriptor is recycled)
