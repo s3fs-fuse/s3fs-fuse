@@ -32,6 +32,7 @@
 #include "s3fs.h"
 #include "metaheader.h"
 #include "fdcache.h"
+#include "fdcache_auto.h"
 #include "curl.h"
 #include "curl_multi.h"
 #include "s3objlist.h"
@@ -116,7 +117,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
-static FdEntity* get_local_fent(const char* path, bool is_load = false);
+static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
@@ -674,7 +675,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
     return true;
 }
 
-static FdEntity* get_local_fent(const char* path, bool is_load)
+static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is_load)
 {
     struct stat stobj;
     FdEntity*   ent;
@@ -690,14 +691,14 @@ static FdEntity* get_local_fent(const char* path, bool is_load)
     time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
         return NULL;
     }
     // load
     if(is_load && !ent->OpenAndLoadAll(&meta)){
         S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
-        FdManager::get()->Close(ent);
+        autoent.Close();
         return NULL;
     }
     return ent;
@@ -739,18 +740,18 @@ int put_headers(const char* path, headers_t& meta, bool is_copy)
     // if path is 'dir/', it does not have cache(could not open file for directory stat)
     //
     if('/' != path[strlen(path) - 1]){
-        FdEntity* ent = NULL;
-        if(NULL == (ent = FdManager::get()->ExistOpen(path, -1, !FdManager::IsCacheDir()))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = autoent.ExistOpen(path, -1, !FdManager::IsCacheDir()))){
             // no opened fd
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
-                ent = FdManager::get()->Open(path, &meta, buf.st_size, -1, false, true);
+                ent = autoent.Open(path, &meta, buf.st_size, -1, false, true);
             }
         }
         if(ent){
             time_t mtime = get_mtime(meta);
             ent->SetMtime(mtime);
-            FdManager::get()->Close(ent);
         }
     }
     return 0;
@@ -773,14 +774,13 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     // If has already opened fd, the st_size should be instead.
     // (See: Issue 241)
     if(stbuf){
-        FdEntity*   ent;
-
-        if(NULL != (ent = FdManager::get()->ExistOpen(path))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.ExistOpen(path))){
             struct stat tmpstbuf;
             if(ent->GetStats(tmpstbuf)){
                 stbuf->st_size = tmpstbuf.st_size;
             }
-            FdManager::get()->Close(ent);
         }
         stbuf->st_blksize = 4096;
         stbuf->st_blocks  = get_blocks(stbuf->st_size);
@@ -803,32 +803,30 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     // check symblic link cache
     if(!StatCache::getStatCacheData()->GetSymlink(std::string(path), strValue)){
         // not found in cache, then open the path
-        FdEntity*   ent;
-        if(NULL == (ent = get_local_fent(path))){
-            S3FS_PRN_ERR("could not get fent(file=%s)", path);
-            return -EIO;
+        {   // scope for AutoFdEntity
+            AutoFdEntity autoent;
+            FdEntity*    ent;
+            if(NULL == (ent = get_local_fent(autoent, path))){
+                S3FS_PRN_ERR("could not get fent(file=%s)", path);
+                return -EIO;
+            }
+            // Get size
+            off_t readsize;
+            if(!ent->GetSize(readsize)){
+                S3FS_PRN_ERR("could not get file size(file=%s)", path);
+                return -EIO;
+            }
+            if(static_cast<off_t>(size) <= readsize){
+                readsize = size - 1;
+            }
+            // Read
+            ssize_t ressize;
+            if(0 > (ressize = ent->Read(buf, 0, readsize))){
+                S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
+                return static_cast<int>(ressize);
+            }
+            buf[ressize] = '\0';
         }
-        // Get size
-        off_t readsize;
-        if(!ent->GetSize(readsize)){
-            S3FS_PRN_ERR("could not get file size(file=%s)", path);
-            FdManager::get()->Close(ent);
-            return -EIO;
-        }
-        if(static_cast<off_t>(size) <= readsize){
-            readsize = size - 1;
-        }
-        // Read
-        ssize_t ressize;
-        if(0 > (ressize = ent->Read(buf, 0, readsize))){
-            S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
-            FdManager::get()->Close(ent);
-            return static_cast<int>(ressize);
-        }
-        buf[ressize] = '\0';
-
-        // close
-        FdManager::get()->Close(ent);
 
         // check buf if it has space words.
         strValue = trim(std::string(buf));
@@ -971,14 +969,17 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
         return result;
     }
 
-    FdEntity*   ent;
-    headers_t   meta;
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    headers_t    meta;
     get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, 0, -1, false, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, 0, -1, false, true))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
+    autoent.Detach();       // KEEP fdentity open
     fi->fh = ent->GetFd();
+
     S3FS_MALLOCTRIM(0);
 
     return 0;
@@ -1161,24 +1162,26 @@ static int s3fs_symlink(const char* _from, const char* _to)
     headers["x-amz-meta-gid"]   = str(pcxt->gid);
 
     // open tmpfile
-    FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->Open(to, &headers, 0, -1, true, true))){
-        S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
-        return -errno;
+    std::string strFrom;
+    {   // scope for AutoFdEntity
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = autoent.Open(to, &headers, 0, -1, true, true))){
+            S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
+            return -errno;
+        }
+        // write(without space words)
+        strFrom           = trim(std::string(from));
+        ssize_t from_size = static_cast<ssize_t>(strFrom.length());
+        if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
+            S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
+            return -errno;
+        }
+        // upload
+        if(0 != (result = ent->Flush(true))){
+            S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
+        }
     }
-    // write(without space words)
-    std::string strFrom = trim(std::string(from));
-    ssize_t from_size = static_cast<ssize_t>(strFrom.length());
-    if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
-        S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
-        FdManager::get()->Close(ent);
-        return -errno;
-    }
-    // upload
-    if(0 != (result = ent->Flush(true))){
-        S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
-    }
-    FdManager::get()->Close(ent);
 
     StatCache::getStatCacheData()->DelStat(to);
     if(!StatCache::getStatCacheData()->AddSymlink(std::string(to), strFrom)){
@@ -1245,27 +1248,27 @@ static int rename_object_nocopy(const char* from, const char* to)
     }
 
     // open & load
-    FdEntity* ent;
-    if(NULL == (ent = get_local_fent(from, true))){
-        S3FS_PRN_ERR("could not open and read file(%s)", from);
-        return -EIO;
-    }
+    {   // scope for AutoFdEntity
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = get_local_fent(autoent, from, true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", from);
+            return -EIO;
+        }
 
-    // Set header
-    if(!ent->SetContentType(to)){
-        S3FS_PRN_ERR("could not set content-type for %s", to);
-        return -EIO;
-    }
+        // Set header
+        if(!ent->SetContentType(to)){
+            S3FS_PRN_ERR("could not set content-type for %s", to);
+            return -EIO;
+        }
 
-    // upload
-    if(0 != (result = ent->RowFlush(to, true))){
-        S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
-        FdManager::get()->Close(ent);
-        return result;
+        // upload
+        if(0 != (result = ent->RowFlush(to, true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+            return result;
+        }
+        FdManager::get()->Rename(from, to);
     }
-
-    FdManager::get()->Rename(from, to);
-    FdManager::get()->Close(ent);
 
     // Remove file
     result = s3fs_unlink(from);
@@ -1489,15 +1492,16 @@ static int s3fs_rename(const char* _from, const char* _to)
     }
 
     // flush pending writes if file is open
-    FdEntity *entity = FdManager::get()->ExistOpen(from);
-    if(entity != NULL){
-        if(0 != (result = entity->Flush(true))){
-            S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
-            return result;
+    {   // scope for AutoFdEntity
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.ExistOpen(from))){
+            if(0 != (result = ent->Flush(true))){
+                S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
+                return result;
+            }
+            StatCache::getStatCacheData()->DelStat(from);
         }
-        StatCache::getStatCacheData()->DelStat(from);
-        FdManager::get()->Close(entity);
-        entity = NULL;
     }
 
     // files larger than 5GB must be modified via the multipart interface
@@ -1588,8 +1592,9 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         // we need to put these header after finishing upload.
         // Or if the file is only open, we must update to FdEntity's internal meta.
         //
-        FdEntity* ent;
-        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
             // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
                 // now uploading
@@ -1599,12 +1604,10 @@ static int s3fs_chmod(const char* _path, mode_t mode)
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
-            FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -1672,8 +1675,9 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // normal object or directory object of newer version
 
         // open & load
-        FdEntity* ent;
-        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return -EIO;
         }
@@ -1686,11 +1690,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // upload
         if(0 != (result = ent->Flush(true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-            FdManager::get()->Close(ent);
             return result;
         }
-        FdManager::get()->Close(ent);
-
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
@@ -1767,8 +1768,9 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         // we need to put these header after finishing upload.
         // Or if the file is only open, we must update to FdEntity's internal meta.
         //
-        FdEntity* ent;
-        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
             // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
                 // now uploading
@@ -1778,12 +1780,10 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
-            FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -1858,8 +1858,9 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // normal object or directory object of newer version
 
         // open & load
-        FdEntity* ent;
-        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return -EIO;
         }
@@ -1873,11 +1874,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // upload
         if(0 != (result = ent->Flush(true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-            FdManager::get()->Close(ent);
             return result;
         }
-        FdManager::get()->Close(ent);
-
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
@@ -1948,8 +1946,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         // we need to put these header after finishing upload.
         // Or if the file is only open, we must update to FdEntity's internal meta.
         //
-        FdEntity* ent;
-        if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
             // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
                 // now uploading
@@ -1959,12 +1958,10 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
                 if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    FdManager::get()->Close(ent);
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
-	    FdManager::get()->Close(ent);
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
@@ -2034,8 +2031,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // normal object or directory object of newer version
 
         // open & load
-        FdEntity* ent;
-        if(NULL == (ent = get_local_fent(strpath.c_str(), true))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return -EIO;
         }
@@ -2043,18 +2041,14 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // set mtime
         if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
             S3FS_PRN_ERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
-            FdManager::get()->Close(ent);
             return result;
         }
 
         // upload
         if(0 != (result = ent->Flush(true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
-            FdManager::get()->Close(ent);
             return result;
         }
-        FdManager::get()->Close(ent);
-
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
@@ -2065,9 +2059,10 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 static int s3fs_truncate(const char* _path, off_t size)
 {
     WTF8_ENCODE(path)
-    int result;
-    headers_t meta;
-    FdEntity* ent = NULL;
+    int          result;
+    headers_t    meta;
+    AutoFdEntity autoent;
+    FdEntity*    ent = NULL;
 
     S3FS_PRN_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
 
@@ -2085,13 +2080,12 @@ static int s3fs_truncate(const char* _path, off_t size)
     // Get file information
     if(0 == (result = get_object_attribute(path, NULL, &meta))){
         // Exists -> Get file(with size)
-        if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, false, true))){
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, false, true))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
         if(0 != (result = ent->Load(0, size))){
             S3FS_PRN_ERR("could not download file(%s): result=%d", path, result);
-            FdManager::get()->Close(ent);
             return result;
         }
 
@@ -2110,7 +2104,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         meta["x-amz-meta-uid"]   = str(pcxt->uid);
         meta["x-amz-meta-gid"]   = str(pcxt->gid);
 
-        if(NULL == (ent = FdManager::get()->Open(path, &meta, size, -1, true, true))){
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, true, true))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -2119,10 +2113,8 @@ static int s3fs_truncate(const char* _path, off_t size)
     // upload
     if(0 != (result = ent->Flush(true))){
         S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
-        FdManager::get()->Close(ent);
         return result;
     }
-    FdManager::get()->Close(ent);
 
     StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
@@ -2174,10 +2166,11 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         st.st_mtime = -1;
     }
 
-    FdEntity*   ent;
-    headers_t   meta;
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    headers_t    meta;
     get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-    if(NULL == (ent = FdManager::get()->Open(path, &meta, st.st_size, st.st_mtime, false, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, false, true))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
@@ -2185,13 +2178,13 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     if (needs_flush){
         if(0 != (result = ent->RowFlush(path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
-            FdManager::get()->Close(ent);
             StatCache::getStatCacheData()->DelStat(path);
             return result;
         }
     }
-
+    autoent.Detach();       // KEEP fdentity open
     fi->fh = ent->GetFd();
+
     S3FS_MALLOCTRIM(0);
 
     return 0;
@@ -2204,8 +2197,9 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 
     S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
-    FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL == (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
     }
@@ -2217,14 +2211,12 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     off_t realsize = 0;
     if(!ent->GetSize(realsize) || 0 == realsize){
         S3FS_PRN_DBG("file size is 0, so break to read.");
-        FdManager::get()->Close(ent);
         return 0;
     }
 
     if(0 > (res = ent->Read(buf, offset, size, false))){
         S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
     }
-    FdManager::get()->Close(ent);
 
     return static_cast<int>(res);
 }
@@ -2236,8 +2228,9 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
-    FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL == (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
     }
@@ -2247,7 +2240,6 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     if(0 > (res = ent->Write(buf, offset, size))){
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
     }
-    FdManager::get()->Close(ent);
 
     return static_cast<int>(res);
 }
@@ -2284,11 +2276,11 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
         return result;
     }
 
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         ent->UpdateMtime();
         result = ent->Flush(false);
-        FdManager::get()->Close(ent);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2305,13 +2297,13 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 
     S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
 
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, static_cast<int>(fi->fh)))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         if(0 == datasync){
             ent->UpdateMtime();
         }
         result = ent->Flush(false);
-        FdManager::get()->Close(ent);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2341,22 +2333,30 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         StatCache::getStatCacheData()->DelStat(path);
     }
 
-    FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find fd(file=%s)", path);
-        return -EIO;
-    }
-    if(ent->GetFd() != static_cast<int>(fi->fh)){
-        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
-    }
+    {   // scope for AutoFdEntity
+        AutoFdEntity autoent;
+        FdEntity*    ent;
 
-    // Once for the implicit refcnt from GetFdEntity and again for release
-    ent->Close();
-    FdManager::get()->Close(ent);
+        // [NOTE]
+        // The number of references to fdEntity corresponding to fi-> fh is already incremented
+        // when it is opened. Therefore, when an existing fdEntity is detected here, the reference
+        // count must not be incremented. And if detected, the number of references incremented
+        // when opened will be decremented when the AutoFdEntity object is subsequently destroyed.
+        //
+        if(NULL == (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh), false))){
+            S3FS_PRN_ERR("could not find fd(file=%s)", path);
+            return -EIO;
+        }
+        if(ent->GetFd() != static_cast<int>(fi->fh)){
+            S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
+        }
+    }
 
     // check - for debug
     if(IS_S3FS_LOG_DBG()){
-        if(NULL != (ent = FdManager::get()->GetFdEntity(path, static_cast<int>(fi->fh)))){
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL != (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh)))){
             S3FS_PRN_WARN("file(%s),fd(%d) is still opened.", path, ent->GetFd());
         }
     }
@@ -2899,8 +2899,9 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     // we need to put these header after finishing upload.
     // Or if the file is only open, we must update to FdEntity's internal meta.
     //
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
         // the file is opened now.
 
         // get xattr and make new xattr
@@ -2914,7 +2915,6 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             ent->SetXattr(strxattr);
         }
         if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
-            FdManager::get()->Close(ent);
             return result;
         }
 
@@ -2926,12 +2926,10 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             // allow to put header
             // updatemeta already merged the orgmeta of the opened files.
             if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                FdManager::get()->Close(ent);
                 return -EIO;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
-        FdManager::get()->Close(ent);
     }else{
         // not opened file, then put headers
         merge_headers(meta, updatemeta, true);
@@ -3191,8 +3189,9 @@ static int s3fs_removexattr(const char* path, const char* name)
     // we need to put these header after finishing upload.
     // Or if the file is only open, we must update to FdEntity's internal meta.
     //
-    FdEntity* ent;
-    if(NULL != (ent = FdManager::get()->ExistOpen(path, -1, true))){
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
         // the file is opened now.
         if(ent->MergeOrgMeta(updatemeta)){
             // now uploading
@@ -3205,12 +3204,10 @@ static int s3fs_removexattr(const char* path, const char* name)
                 updatemeta.erase("x-amz-meta-xattr");
             }
             if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                FdManager::get()->Close(ent);
                 return -EIO;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
-        FdManager::get()->Close(ent);
     }else{
         // not opened file, then put headers
         if(updatemeta["x-amz-meta-xattr"].empty()){

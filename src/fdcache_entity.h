@@ -75,6 +75,7 @@ class FdEntity
         int Open(headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
         bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
         int Dup(bool lock_already_held = false);
+        int GetRefCnt(void) const { return refcnt; }                // [NOTE] Use only debugging
 
         const char* GetPath(void) const { return path.c_str(); }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);

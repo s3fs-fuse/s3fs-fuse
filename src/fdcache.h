@@ -76,7 +76,7 @@ class FdManager
       static bool HaveLseekHole(void);
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
-      FdEntity* GetFdEntity(const char* path, int existfd = -1);
+      FdEntity* GetFdEntity(const char* path, int existfd = -1, bool increase_ref = true);
       FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
       FdEntity* ExistOpen(const char* path, int existfd = -1, bool ignore_existfd = false);
       void Rename(const std::string &from, const std::string &to);
