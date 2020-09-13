@@ -26,8 +26,6 @@
 #include "curl_handlerpool.h"
 #include "autolock.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Class CurlHandlerPool
 //-------------------------------------------------------------------

@@ -31,14 +31,12 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 
-using namespace std;
-
 //------------------------------------------------
 // CacheFileStat class methods
 //------------------------------------------------
-string CacheFileStat::GetCacheFileStatTopDir()
+std::string CacheFileStat::GetCacheFileStatTopDir()
 {
-    string top_path("");
+    std::string top_path("");
     if(!FdManager::IsCacheDir() || bucket.empty()){
         return top_path;
     }
@@ -51,9 +49,9 @@ string CacheFileStat::GetCacheFileStatTopDir()
     return top_path;
 }
 
-bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, bool is_create_dir)
+bool CacheFileStat::MakeCacheFileStatPath(const char* path, std::string& sfile_path, bool is_create_dir)
 {
-    string top_path = CacheFileStat::GetCacheFileStatTopDir();
+    std::string top_path = CacheFileStat::GetCacheFileStatTopDir();
     if(top_path.empty()){
         S3FS_PRN_ERR("The path to cache top dir is empty.");
         return false;
@@ -76,7 +74,7 @@ bool CacheFileStat::MakeCacheFileStatPath(const char* path, string& sfile_path, 
 
 bool CacheFileStat::CheckCacheFileStatTopDir()
 {
-    string top_path = CacheFileStat::GetCacheFileStatTopDir();
+    std::string top_path = CacheFileStat::GetCacheFileStatTopDir();
     if(top_path.empty()){
         S3FS_PRN_INFO("The path to cache top dir is empty, thus not need to check permission.");
         return true;
@@ -91,7 +89,7 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
         return false;
     }
     // stat path
-    string sfile_path;
+    std::string sfile_path;
     if(!CacheFileStat::MakeCacheFileStatPath(path, sfile_path, false)){
         S3FS_PRN_ERR("failed to create cache stat file path(%s)", path);
         return false;
@@ -113,7 +111,7 @@ bool CacheFileStat::DeleteCacheFileStat(const char* path)
 //
 bool CacheFileStat::DeleteCacheFileStatDirectory()
 {
-    string top_path = CacheFileStat::GetCacheFileStatTopDir();
+    std::string top_path = CacheFileStat::GetCacheFileStatTopDir();
     if(top_path.empty()){
         S3FS_PRN_INFO("The path to cache top dir is empty, thus not need to remove it.");
         return true;
@@ -128,8 +126,8 @@ bool CacheFileStat::RenameCacheFileStat(const char* oldpath, const char* newpath
     }
 
     // stat path
-    string old_filestat;
-    string new_filestat;
+    std::string old_filestat;
+    std::string new_filestat;
     if(!CacheFileStat::MakeCacheFileStatPath(oldpath, old_filestat, false) || !CacheFileStat::MakeCacheFileStatPath(newpath, new_filestat, false)){
         return false;
     }
@@ -203,7 +201,7 @@ bool CacheFileStat::RawOpen(bool readonly)
         return true;
     }
     // stat path
-    string sfile_path;
+    std::string sfile_path;
     if(!CacheFileStat::MakeCacheFileStatPath(path.c_str(), sfile_path, true)){
         S3FS_PRN_ERR("failed to create cache stat file path(%s)", path.c_str());
         return false;

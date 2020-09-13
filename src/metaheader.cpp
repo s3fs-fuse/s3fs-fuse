@@ -28,8 +28,6 @@
 #include "metaheader.h"
 #include "string_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
@@ -41,11 +39,11 @@ time_t get_mtime(const char *str)
     // truncating the floating point or less (in seconds or less) to
     // correspond to this.
     //
-    string strmtime;
+    std::string strmtime;
     if(str && '\0' != *str){
         strmtime = str;
-        string::size_type pos = strmtime.find('.', 0);
-        if(string::npos != pos){
+        std::string::size_type pos = strmtime.find('.', 0);
+        if(std::string::npos != pos){
             strmtime = strmtime.substr(0, pos);
         }
     }
@@ -137,10 +135,10 @@ mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool for
                     mode |= S_IFDIR;
                 }else{
                     if(meta.end() != (iter = meta.find("Content-Type"))){
-                        string strConType = (*iter).second;
+                        std::string strConType = (*iter).second;
                         // Leave just the mime type, remove any optional parameters (eg charset)
-                        string::size_type pos = strConType.find(';');
-                        if(string::npos != pos){
+                        std::string::size_type pos = strConType.find(';');
+                        if(std::string::npos != pos){
                             strConType = strConType.substr(0, pos);
                         }
                         if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){

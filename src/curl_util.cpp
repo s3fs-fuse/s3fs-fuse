@@ -28,8 +28,6 @@
 #include "string_util.h"
 #include "s3fs_auth.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Utility Functions
 //-------------------------------------------------------------------
@@ -43,11 +41,11 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
     if(!data){
         return list;
     }
-    string strkey = data;
-    string strval;
+    std::string strkey = data;
+    std::string strval;
 
-    string::size_type pos = strkey.find(':', 0);
-    if(string::npos != pos){
+    std::string::size_type pos = strkey.find(':', 0);
+    if(std::string::npos != pos){
         strval = strkey.substr(pos + 1);
         strkey = strkey.substr(0, pos);
     }
@@ -69,9 +67,9 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
 
     // key & value are trimmed and lower (only key)
-    string strkey = trim(string(key));
-    string strval = trim(string(value ? value : ""));
-    string strnew = key + string(": ") + strval;
+    std::string strkey = trim(std::string(key));
+    std::string strval = trim(std::string(value ? value : ""));
+    std::string strnew = key + std::string(": ") + strval;
     if(NULL == (new_item->data = strdup(strnew.c_str()))){
         free(new_item);
         return list;
@@ -79,9 +77,9 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     new_item->next = NULL;
 
     for(lastpos = NULL, curpos = list; curpos; lastpos = curpos, curpos = curpos->next){
-        string strcur = curpos->data;
+        std::string strcur = curpos->data;
         size_t pos;
-        if(string::npos != (pos = strcur.find(':', 0))){
+        if(std::string::npos != (pos = strcur.find(':', 0))){
             strcur = strcur.substr(0, pos);
         }
 
@@ -122,18 +120,18 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     return list;
 }
 
-string get_sorted_header_keys(const struct curl_slist* list)
+std::string get_sorted_header_keys(const struct curl_slist* list)
 {
-    string sorted_headers;
+    std::string sorted_headers;
 
     if(!list){
         return sorted_headers;
     }
 
     for( ; list; list = list->next){
-        string strkey = list->data;
+        std::string strkey = list->data;
         size_t pos;
-        if(string::npos != (pos = strkey.find(':', 0))){
+        if(std::string::npos != (pos = strkey.find(':', 0))){
             if (trim(strkey.substr(pos + 1)).empty()) {
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
@@ -149,16 +147,16 @@ string get_sorted_header_keys(const struct curl_slist* list)
     return sorted_headers;
 }
 
-string get_header_value(const struct curl_slist* list, const string &key)
+std::string get_header_value(const struct curl_slist* list, const std::string &key)
 {
     if(!list){
         return "";
     }
 
     for( ; list; list = list->next){
-        string strkey = list->data;
+        std::string strkey = list->data;
         size_t pos;
-        if(string::npos != (pos = strkey.find(':', 0))){
+        if(std::string::npos != (pos = strkey.find(':', 0))){
             if(0 == strcasecmp(trim(strkey.substr(0, pos)).c_str(), key.c_str())){
                 return trim(strkey.substr(pos+1));
             }
@@ -168,9 +166,9 @@ string get_header_value(const struct curl_slist* list, const string &key)
     return "";
 }
 
-string get_canonical_headers(const struct curl_slist* list)
+std::string get_canonical_headers(const struct curl_slist* list)
 {
-    string canonical_headers;
+    std::string canonical_headers;
 
     if(!list){
         canonical_headers = "\n";
@@ -178,11 +176,11 @@ string get_canonical_headers(const struct curl_slist* list)
     }
 
     for( ; list; list = list->next){
-        string strhead = list->data;
+        std::string strhead = list->data;
         size_t pos;
-        if(string::npos != (pos = strhead.find(':', 0))){
-            string strkey = trim(lower(strhead.substr(0, pos)));
-            string strval = trim(strhead.substr(pos + 1));
+        if(std::string::npos != (pos = strhead.find(':', 0))){
+            std::string strkey = trim(lower(strhead.substr(0, pos)));
+            std::string strval = trim(strhead.substr(pos + 1));
             if (strval.empty()) {
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
@@ -197,9 +195,9 @@ string get_canonical_headers(const struct curl_slist* list)
     return canonical_headers;
 }
 
-string get_canonical_headers(const struct curl_slist* list, bool only_amz)
+std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
 {
-    string canonical_headers;
+    std::string canonical_headers;
 
     if(!list){
         canonical_headers = "\n";
@@ -207,11 +205,11 @@ string get_canonical_headers(const struct curl_slist* list, bool only_amz)
     }
 
     for( ; list; list = list->next){
-        string strhead = list->data;
+        std::string strhead = list->data;
         size_t pos;
-        if(string::npos != (pos = strhead.find(':', 0))){
-            string strkey = trim(lower(strhead.substr(0, pos)));
-            string strval = trim(strhead.substr(pos + 1));
+        if(std::string::npos != (pos = strhead.find(':', 0))){
+            std::string strkey = trim(lower(strhead.substr(0, pos)));
+            std::string strval = trim(strhead.substr(pos + 1));
             if (strval.empty()) {
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
@@ -230,7 +228,7 @@ string get_canonical_headers(const struct curl_slist* list, bool only_amz)
 }
 
 // function for using global values
-bool MakeUrlResource(const char* realpath, string& resourcepath, string& url)
+bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url)
 {
     if(!realpath){
         return false;
@@ -240,15 +238,15 @@ bool MakeUrlResource(const char* realpath, string& resourcepath, string& url)
     return true;
 }
 
-string prepare_url(const char* url)
+std::string prepare_url(const char* url)
 {
     S3FS_PRN_INFO3("URL is %s", url);
 
-    string uri;
-    string hostname;
-    string path;
-    string url_str = string(url);
-    string token = string("/") + bucket;
+    std::string uri;
+    std::string hostname;
+    std::string path;
+    std::string url_str = std::string(url);
+    std::string token = std::string("/") + bucket;
     int bucket_pos;
     int bucket_length = token.size();
     int uri_length = 0;
@@ -266,7 +264,7 @@ string prepare_url(const char* url)
         path = url_str.substr((bucket_pos + bucket_length));
     }else{
         hostname = url_str.substr(uri_length, bucket_pos - uri_length);
-        string part = url_str.substr((bucket_pos + bucket_length));
+        std::string part = url_str.substr((bucket_pos + bucket_length));
         if('/' != part[0]){
             part = "/" + part;
         }
@@ -284,7 +282,7 @@ string prepare_url(const char* url)
 // This function uses temporary file, but should not use it.
 // For not using it, we implement function in each auth file(openssl, nss. gnutls).
 //
-bool make_md5_from_binary(const char* pstr, size_t length, string& md5)
+bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5)
 {
     if(!pstr || '\0' == pstr[0]){
         S3FS_PRN_ERR("Parameter is wrong.");
@@ -317,12 +315,12 @@ bool make_md5_from_binary(const char* pstr, size_t length, string& md5)
     return true;
 }
 
-string url_to_host(const string &url)
+std::string url_to_host(const std::string &url)
 {
     S3FS_PRN_INFO3("url is %s", url.c_str());
 
-    static const string http = "http://";
-    static const string https = "https://";
+    static const std::string http = "http://";
+    static const std::string https = "https://";
     std::string hostname;
 
     if (url.compare(0, http.size(), http) == 0) {
@@ -335,14 +333,14 @@ string url_to_host(const string &url)
     }
 
     size_t idx;
-    if ((idx = hostname.find('/')) != string::npos) {
+    if ((idx = hostname.find('/')) != std::string::npos) {
         return hostname.substr(0, idx);
     } else {
         return hostname;
     }
 }
 
-string get_bucket_host()
+std::string get_bucket_host()
 {
     if(!pathrequeststyle){
         return bucket + "." + url_to_host(s3host);
@@ -376,7 +374,7 @@ const char* getCurlDebugHead(curl_infotype type)
 //
 // compare ETag ignoring quotes and case
 //
-bool etag_equals(string s1, string s2)
+bool etag_equals(std::string s1, std::string s2)
 {
     if(s1.length() > 1 && s1[0] == '\"' && s1[s1.length() - 1] == '\"'){
         s1 = s1.substr(1, s1.size() - 2);

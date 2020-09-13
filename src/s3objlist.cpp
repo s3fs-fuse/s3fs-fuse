@@ -25,8 +25,6 @@
 #include "s3fs.h"
 #include "s3objlist.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Class S3ObjList
 //-------------------------------------------------------------------
@@ -44,12 +42,12 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
     }
 
     s3obj_t::iterator iter;
-    string newname;
-    string orgname = name;
+    std::string newname;
+    std::string orgname = name;
 
     // Normalization
-    string::size_type pos = orgname.find("_$folder$");
-    if(string::npos != pos){
+    std::string::size_type pos = orgname.find("_$folder$");
+    if(std::string::npos != pos){
         newname = orgname.substr(0, pos);
         is_dir  = true;
     }else{
@@ -67,13 +65,13 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
 
     // Check derived name object.
     if(is_dir){
-        string chkname = newname.substr(0, newname.length() - 1);
+        std::string chkname = newname.substr(0, newname.length() - 1);
         if(objects.end() != (iter = objects.find(chkname))){
             // found "dir" object --> remove it.
             objects.erase(iter);
         }
     }else{
-        string chkname = newname + "/";
+        std::string chkname = newname + "/";
         if(objects.end() != (iter = objects.find(chkname))){
             // found "dir/" object --> not add new object.
             // and add normalization
@@ -88,7 +86,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         (*iter).second.orgname = orgname;
         (*iter).second.is_dir  = is_dir;
         if(etag){
-            (*iter).second.etag = string(etag);  // over write
+            (*iter).second.etag = std::string(etag);  // over write
         }
     }else{
         // add new object
@@ -144,44 +142,44 @@ const s3obj_entry* S3ObjList::GetS3Obj(const char* name) const
     return &((*iter).second);
 }
 
-string S3ObjList::GetOrgName(const char* name) const
+std::string S3ObjList::GetOrgName(const char* name) const
 {
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return string("");
+        return std::string("");
     }
     if(NULL == (ps3obj = GetS3Obj(name))){
-        return string("");
+        return std::string("");
     }
     return ps3obj->orgname;
 }
 
-string S3ObjList::GetNormalizedName(const char* name) const
+std::string S3ObjList::GetNormalizedName(const char* name) const
 {
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return string("");
+        return std::string("");
     }
     if(NULL == (ps3obj = GetS3Obj(name))){
-        return string("");
+        return std::string("");
     }
     if(0 == (ps3obj->normalname).length()){
-        return string(name);
+        return std::string(name);
     }
     return ps3obj->normalname;
 }
 
-string S3ObjList::GetETag(const char* name) const
+std::string S3ObjList::GetETag(const char* name) const
 {
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return string("");
+        return std::string("");
     }
     if(NULL == (ps3obj = GetS3Obj(name))){
-        return string("");
+        return std::string("");
     }
     return ps3obj->etag;
 }
@@ -224,9 +222,9 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
         if(OnlyNormalized && 0 != (*iter).second.normalname.length()){
             continue;
         }
-        string name = (*iter).first;
+        std::string name = (*iter).first;
         if(CutSlash && 1 < name.length() && '/' == name[name.length() - 1]){
-            // only "/" string is skipped this.
+            // only "/" std::string is skipped this.
             name = name.substr(0, name.length() - 1);
         }
         list.push_back(name);
@@ -243,14 +241,14 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     s3obj_list_t::const_iterator liter;
 
     for(liter = list.begin(); list.end() != liter; ++liter){
-        string strtmp = (*liter);
+        std::string strtmp = (*liter);
         if(1 < strtmp.length() && '/' == strtmp[strtmp.length() - 1]){
             strtmp = strtmp.substr(0, strtmp.length() - 1);
         }
         h_map[strtmp] = true;
 
         // check hierarchized directory
-        for(string::size_type pos = strtmp.find_last_of('/'); string::npos != pos; pos = strtmp.find_last_of('/')){
+        for(std::string::size_type pos = strtmp.find_last_of('/'); std::string::npos != pos; pos = strtmp.find_last_of('/')){
             strtmp = strtmp.substr(0, pos);
             if(0 == strtmp.length() || "/" == strtmp){
                 break;
@@ -266,7 +264,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     for(hiter = h_map.begin(); hiter != h_map.end(); ++hiter){
         if(false == (*hiter).second){
             // add hierarchized directory.
-            string strtmp = (*hiter).first;
+            std::string strtmp = (*hiter).first;
             if(haveSlash){
                 strtmp += "/";
             }

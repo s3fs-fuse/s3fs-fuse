@@ -33,8 +33,6 @@
 #include "autolock.h"
 #include "curl.h"
 
-using namespace std;
-
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
@@ -58,10 +56,10 @@ bool FdEntity::SetNoMixMultipart()
 int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
 {
     unsigned char bytes[1024 * 32];         // 32kb
-    memset(bytes, byte, min(static_cast<off_t>(sizeof(bytes)), size));
+    memset(bytes, byte, std::min(static_cast<off_t>(sizeof(bytes)), size));
 
     for(off_t total = 0, onewrote = 0; total < size; total += onewrote){
-        if(-1 == (onewrote = pwrite(fd, bytes, min(static_cast<off_t>(sizeof(bytes)), size - total), start + total))){
+        if(-1 == (onewrote = pwrite(fd, bytes, std::min(static_cast<off_t>(sizeof(bytes)), size - total), start + total))){
             S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
             return -errno;
         }
@@ -263,7 +261,7 @@ int FdEntity::OpenMirrorFile()
     }
 
     // make temporary directory
-    string bupdir;
+    std::string bupdir;
     if(!FdManager::MakeCachePath(NULL, bupdir, true, true)){
         S3FS_PRN_ERR("could not make bup cache directory path or create it.");
         return -EIO;
@@ -587,13 +585,13 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
 // The mirror file descriptor is also the same. The mirror file path does
 // not need to be changed and will remain as it is.
 //
-bool FdEntity::RenamePath(const string& newpath, string& fentmapkey)
+bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 {
     if(!cachepath.empty()){
         // has cache path
 
         // make new cache path
-        string newcachepath;
+        std::string newcachepath;
         if(!FdManager::MakeCachePath(newpath.c_str(), newcachepath, true)){
           S3FS_PRN_ERR("failed to make cache path for object(%s).", newpath.c_str());
           return false;
@@ -729,7 +727,7 @@ bool FdEntity::GetSize(off_t& size)
     return true;
 }
 
-bool FdEntity::GetXattr(string& xattr)
+bool FdEntity::GetXattr(std::string& xattr)
 {
     AutoLock auto_lock(&fdent_lock);
 
@@ -775,7 +773,7 @@ bool FdEntity::SetContentType(const char* path)
         return false;
     }
     AutoLock auto_lock(&fdent_lock);
-    orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(string(path));
+    orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(std::string(path));
     return true;
 }
 
@@ -912,7 +910,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
         for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < static_cast<off_t>(iter->bytes); totalread += oneread){
             int   upload_fd = fd;
             off_t offset    = iter->offset + totalread;
-            oneread         = min(static_cast<off_t>(iter->bytes) - totalread, S3fsCurl::GetMultipartSize());
+            oneread         = std::min(static_cast<off_t>(iter->bytes) - totalread, S3fsCurl::GetMultipartSize());
 
             // check rest size is over minimum part size
             //
@@ -1301,7 +1299,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
         // load size(for prefetch)
         size_t load_size = size;
         if(start + static_cast<ssize_t>(size) < pagelist.Size()){
-            ssize_t prefetch_max_size = max(static_cast<off_t>(size), S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount());
+            ssize_t prefetch_max_size = std::max(static_cast<off_t>(size), S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount());
 
             if(start + prefetch_max_size < pagelist.Size()){
                 load_size = prefetch_max_size;

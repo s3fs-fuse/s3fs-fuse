@@ -32,8 +32,6 @@
 #include "autolock.h"
 #include "string_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
@@ -241,10 +239,10 @@ void StatCache::Clear()
     S3FS_MALLOCTRIM(0);
 }
 
-bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
+bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
 {
     bool is_delete_cache = false;
-    string strpath = key;
+    std::string strpath = key;
 
     AutoLock lock(&StatCache::stat_cache_lock);
 
@@ -271,11 +269,11 @@ bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bo
                 return false;
             }
             // hit without checking etag
-            string stretag;
+            std::string stretag;
             if(petag){
                 // find & check ETag
                 for(headers_t::iterator hiter = ent->meta.begin(); hiter != ent->meta.end(); ++hiter){
-                    string tag = lower(hiter->first);
+                    std::string tag = lower(hiter->first);
                     if(tag == "etag"){
                         stretag = hiter->second;
                         if('\0' != petag[0] && 0 != strcmp(petag, stretag.c_str())){
@@ -323,10 +321,10 @@ bool StatCache::GetStat(const string& key, struct stat* pst, headers_t* meta, bo
     return false;
 }
 
-bool StatCache::IsNoObjectCache(const string& key, bool overcheck)
+bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
 {
-    bool   is_delete_cache = false;
-    string strpath         = key;
+    bool is_delete_cache = false;
+    std::string strpath = key;
 
     if(!IsCacheNoObject){
         return false;
@@ -402,8 +400,8 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
     SetStatCacheTime(ent->cache_date);    // Set time.
     //copy only some keys
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
-        string tag   = lower(iter->first);
-        string value = iter->second;
+        std::string tag   = lower(iter->first);
+        std::string value = iter->second;
         if(tag == "content-type"){
             ent->meta[iter->first] = value;
         }else if(tag == "content-length"){
@@ -437,7 +435,7 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
     return true;
 }
 
-bool StatCache::AddNoObjectCache(const string& key)
+bool StatCache::AddNoObjectCache(const std::string& key)
 {
     if(!IsCacheNoObject){
         return true;    // pretend successful
@@ -582,12 +580,12 @@ bool StatCache::DelStat(const char* key, bool lock_already_held)
     AutoLock lock(&StatCache::stat_cache_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
     stat_cache_t::iterator iter;
-    if(stat_cache.end() != (iter = stat_cache.find(string(key)))){
+    if(stat_cache.end() != (iter = stat_cache.find(std::string(key)))){
         delete (*iter).second;
         stat_cache.erase(iter);
     }
     if(0 < strlen(key) && 0 != strcmp(key, "/")){
-        string strpath = key;
+        std::string strpath = key;
         if('/' == strpath[strpath.length() - 1]){
             // If there is "path" cache, delete it.
             strpath = strpath.substr(0, strpath.length() - 1);
@@ -605,10 +603,10 @@ bool StatCache::DelStat(const char* key, bool lock_already_held)
     return true;
 }
 
-bool StatCache::GetSymlink(const string& key, string& value)
+bool StatCache::GetSymlink(const std::string& key, std::string& value)
 {
     bool is_delete_cache = false;
-    const string& strpath = key;
+    const std::string& strpath = key;
 
     AutoLock lock(&StatCache::stat_cache_lock);
 
@@ -639,7 +637,7 @@ bool StatCache::GetSymlink(const string& key, string& value)
     return false;
 }
 
-bool StatCache::AddSymlink(const string& key, const string& value)
+bool StatCache::AddSymlink(const std::string& key, const std::string& value)
 {
     if(CacheSize< 1){
         return true;
@@ -741,7 +739,7 @@ bool StatCache::DelSymlink(const char* key, bool lock_already_held)
     AutoLock lock(&StatCache::stat_cache_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
     symlink_cache_t::iterator iter;
-    if(symlink_cache.end() != (iter = symlink_cache.find(string(key)))){
+    if(symlink_cache.end() != (iter = symlink_cache.find(std::string(key)))){
         delete iter->second;
         symlink_cache.erase(iter);
     }

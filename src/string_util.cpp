@@ -31,8 +31,6 @@
 #include "s3fs.h"
 #include "string_util.h"
 
-using namespace std;
-
 //-------------------------------------------------------------------
 // Gloval variables
 //-------------------------------------------------------------------
@@ -88,11 +86,11 @@ bool try_strtoofft(const char* str, off_t& value, int base)
         try{
             value = s3fs_strtoofft(str, base);
         }catch(std::exception &e){
-            S3FS_PRN_WARN("something error is occurred in convert string(%s) to off_t.", str);
+            S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t.", str);
             return false;
         }
     }else{
-        S3FS_PRN_WARN("parameter string is null.");
+        S3FS_PRN_WARN("parameter std::string is null.");
         return false;
     }
     return true;
@@ -107,39 +105,39 @@ off_t cvt_strtoofft(const char* str, int base)
 {
     off_t result = 0;
     if(!try_strtoofft(str, result, base)){
-        S3FS_PRN_WARN("something error is occurred in convert string(%s) to off_t, thus return 0 as default.", (str ? str : "null"));
+        S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t, thus return 0 as default.", (str ? str : "null"));
         return 0;
     }
     return result;
 }
 
-string lower(string s)
+std::string lower(std::string s)
 {
-    // change each character of the string to lower case
+    // change each character of the std::string to lower case
     for(size_t i = 0; i < s.length(); i++){
         s[i] = tolower(s[i]);
     }
     return s;
 }
 
-string trim_left(const string &s, const string &t /* = SPACES */)
+std::string trim_left(const std::string &s, const std::string &t /* = SPACES */)
 {
-    string d(s);
+    std::string d(s);
     return d.erase(0, s.find_first_not_of(t));
 }
 
-string trim_right(const string &s, const string &t /* = SPACES */)
+std::string trim_right(const std::string &s, const std::string &t /* = SPACES */)
 {
-    string d(s);
-    string::size_type i(d.find_last_not_of(t));
-    if(i == string::npos){
+    std::string d(s);
+    std::string::size_type i(d.find_last_not_of(t));
+    if(i == std::string::npos){
         return "";
     }else{
         return d.erase(d.find_last_not_of(t) + 1);
     }
 }
 
-string trim(const string &s, const string &t /* = SPACES */)
+std::string trim(const std::string &s, const std::string &t /* = SPACES */)
 {
     return trim_left(trim_right(s, t), t);
 }
@@ -149,9 +147,9 @@ string trim(const string &s, const string &t /* = SPACES */)
 // taking into special consideration "/",
 // otherwise regular urlEncode.
 //
-string urlEncode(const string &s)
+std::string urlEncode(const std::string &s)
 {
-    string result;
+    std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
         char c = s[i];
         if (c == '/' // Note- special case for fuse paths...
@@ -178,9 +176,9 @@ string urlEncode(const string &s)
 // taking into special consideration "/",
 // otherwise regular urlEncode.
 //
-string urlEncode2(const string &s)
+std::string urlEncode2(const std::string &s)
 {
-    string result;
+    std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
         char c = s[i];
         if (c == '=' // Note- special case for fuse paths...
@@ -204,9 +202,9 @@ string urlEncode2(const string &s)
     return result;
 }
 
-string urlDecode(const string& s)
+std::string urlDecode(const std::string& s)
 {
-    string result;
+    std::string result;
     for(size_t i = 0; i < s.length(); ++i){
         if(s[i] != '%'){
             result += s[i];
@@ -227,20 +225,20 @@ string urlDecode(const string& s)
     return result;
 }
 
-bool takeout_str_dquart(string& str)
+bool takeout_str_dquart(std::string& str)
 {
     size_t pos;
 
     // '"' for start
-    if(string::npos != (pos = str.find_first_of('\"'))){
+    if(std::string::npos != (pos = str.find_first_of('\"'))){
         str = str.substr(pos + 1);
 
         // '"' for end
-        if(string::npos == (pos = str.find_last_of('\"'))){
+        if(std::string::npos == (pos = str.find_last_of('\"'))){
             return false;
         }
         str = str.substr(0, pos);
-        if(string::npos != str.find_first_of('\"')){
+        if(std::string::npos != str.find_first_of('\"')){
             return false;
         }
     }
@@ -250,14 +248,14 @@ bool takeout_str_dquart(string& str)
 //
 // ex. target="http://......?keyword=value&..."
 //
-bool get_keyword_value(string& target, const char* keyword, string& value)
+bool get_keyword_value(std::string& target, const char* keyword, std::string& value)
 {
     if(!keyword){
         return false;
     }
     size_t spos;
     size_t epos;
-    if(string::npos == (spos = target.find(keyword))){
+    if(std::string::npos == (spos = target.find(keyword))){
         return false;
     }
     spos += strlen(keyword);
@@ -265,7 +263,7 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
         return false;
     }
     spos++;
-    if(string::npos == (epos = target.find('&', spos))){
+    if(std::string::npos == (epos = target.find('&', spos))){
         value = target.substr(spos);
     }else{
         value = target.substr(spos, (epos - spos));
@@ -277,7 +275,7 @@ bool get_keyword_value(string& target, const char* keyword, string& value)
 // Returns the current date
 // in a format suitable for a HTTP request header.
 //
-string get_date_rfc850()
+std::string get_date_rfc850()
 {
     char buf[100];
     time_t t = time(NULL);
@@ -286,14 +284,14 @@ string get_date_rfc850()
     return buf;
 }
 
-void get_date_sigv3(string& date, string& date8601)
+void get_date_sigv3(std::string& date, std::string& date8601)
 {
     time_t tm = time(NULL);
     date     = get_date_string(tm);
     date8601 = get_date_iso8601(tm);
 }
 
-string get_date_string(time_t tm)
+std::string get_date_string(time_t tm)
 {
     char buf[100];
     struct tm res;
@@ -301,7 +299,7 @@ string get_date_string(time_t tm)
     return buf;
 }
 
-string get_date_iso8601(time_t tm)
+std::string get_date_iso8601(time_t tm)
 {
     char buf[100];
     struct tm res;
@@ -326,7 +324,7 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
 }
 
 //
-// Convert to unixtime from string which formatted by following:
+// Convert to unixtime from std::string which formatted by following:
 //   "12Y12M12D12h12m12s", "86400s", "9h30m", etc
 //
 bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
@@ -487,7 +485,7 @@ static unsigned int escape_base = 0xe000;
 
 // encode bytes into wobbly utf8.  
 // 'result' can be null. returns true if transform was needed.
-bool s3fs_wtf8_encode(const char *s, string *result)
+bool s3fs_wtf8_encode(const char *s, std::string *result)
 {
     bool invalid = false;
 
@@ -506,7 +504,7 @@ bool s3fs_wtf8_encode(const char *s, string *result)
         // otherwise, it must be one of the valid start bytes
         if ( c >= 0xc2 && c <= 0xf5 ) {
             // two byte encoding
-            // don't need bounds check, string is zero terminated
+            // don't need bounds check, std::string is zero terminated
             if ((c & 0xe0) == 0xc0 && (s[1] & 0xc0) == 0x80) {
                 // all two byte encodings starting higher than c1 are valid
                 if (result) {
@@ -557,16 +555,16 @@ bool s3fs_wtf8_encode(const char *s, string *result)
     return invalid;
 }
 
-string s3fs_wtf8_encode(const string &s)
+std::string s3fs_wtf8_encode(const std::string &s)
 {
-    string result;
+    std::string result;
     s3fs_wtf8_encode(s.c_str(), &result);
     return result;
 }
 
 // The reverse operation, turn encoded bytes back into their original values
 // The code assumes that we map to a three-byte code point.
-bool s3fs_wtf8_decode(const char *s, string *result)
+bool s3fs_wtf8_decode(const char *s, std::string *result)
 {
     bool encoded = false;
     for (; *s; s++) {
@@ -593,9 +591,9 @@ bool s3fs_wtf8_decode(const char *s, string *result)
     return encoded;
 }
  
-string s3fs_wtf8_decode(const string &s)
+std::string s3fs_wtf8_decode(const std::string &s)
 {
-    string result;
+    std::string result;
     s3fs_wtf8_decode(s.c_str(), &result);
     return result;
 }
