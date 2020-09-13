@@ -3291,7 +3291,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
 
     // Signal object
-    if(S3fsSignals::Initialize()){
+    if(!S3fsSignals::Initialize()){
         S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
     }
 
@@ -3303,7 +3303,7 @@ static void s3fs_destroy(void*)
     S3FS_PRN_INFO("destroy");
 
     // Signal object
-    if(S3fsSignals::Destroy()){
+    if(!S3fsSignals::Destroy()){
         S3FS_PRN_WARN("Failed to clean up signal object.");
     }
 
