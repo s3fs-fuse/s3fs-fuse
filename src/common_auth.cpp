@@ -54,7 +54,7 @@ string s3fs_get_content_md5(int fd)
     return Signature;
 }
 
-string s3fs_md5sum(int fd, off_t start, ssize_t size)
+string s3fs_md5sum(int fd, off_t start, off_t size)
 {
     size_t digestlen = get_md5_digest_length();
     unsigned char* md5hex;
@@ -69,7 +69,7 @@ string s3fs_md5sum(int fd, off_t start, ssize_t size)
     return md5;
 }
 
-string s3fs_sha256sum(int fd, off_t start, ssize_t size)
+string s3fs_sha256sum(int fd, off_t start, off_t size)
 {
     size_t digestlen = get_sha256_digest_length();
     char sha256[2 * digestlen + 1];
