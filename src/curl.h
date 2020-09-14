@@ -178,7 +178,7 @@ class S3fsCurl
         const unsigned char* b_postdata;           // backup for retrying
         int                  b_postdata_remaining; // backup for retrying
         off_t                b_partdata_startpos;  // backup for retrying
-        ssize_t              b_partdata_size;      // backup for retrying
+        off_t                b_partdata_size;      // backup for retrying
         int                  b_ssekey_pos;         // backup for retrying
         std::string          b_ssevalue;           // backup for retrying
         sse_type_t           b_ssetype;            // backup for retrying
@@ -273,7 +273,7 @@ class S3fsCurl
         static bool DestroyS3fsCurl(void);
         static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
-        static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size);
+        static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size);
         static bool CheckIAMCredentialUpdate(void);
 
         // class methods(variables)
@@ -363,8 +363,8 @@ class S3fsCurl
         int HeadRequest(const char* tpath, headers_t& meta);
         int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
         int PutRequest(const char* tpath, headers_t& meta, int fd);
-        int PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, std::string& ssevalue);
-        int GetObjectRequest(const char* tpath, int fd, off_t start = -1, ssize_t size = -1);
+        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue);
+        int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
         int CheckBucket(void);
         int ListBucketRequest(const char* tpath, const char* query);
         int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
