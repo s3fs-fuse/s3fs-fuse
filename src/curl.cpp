@@ -761,9 +761,9 @@ storage_class_t S3fsCurl::SetStorageClass(storage_class_t storage_class)
     return old;
 }
 
-bool S3fsCurl::PushbackSseKeys(std::string& onekey)
+bool S3fsCurl::PushbackSseKeys(const std::string& input)
 {
-    onekey = trim(onekey);
+    std::string onekey = trim(input);
     if(onekey.empty()){
         return false;
     }
@@ -2772,8 +2772,9 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
     return (0 == result);
 }
 
-bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy)
+bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, bool is_only_c, bool is_copy)
 {
+    std::string ssevalue = input;
     switch(ssetype){
         case sse_type_t::SSE_DISABLE:
             return true;
@@ -3135,7 +3136,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     return result;
 }
 
-int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue)
+int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue)
 {
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
