@@ -70,20 +70,16 @@ std::string s3fs_md5sum(int fd, off_t start, off_t size)
 std::string s3fs_sha256sum(int fd, off_t start, off_t size)
 {
     size_t digestlen = get_sha256_digest_length();
-    char sha256[2 * digestlen + 1];
     unsigned char* sha256hex;
 
     if(NULL == (sha256hex = s3fs_sha256hexsum(fd, start, size))){
         return std::string("");
     }
 
-    memset(sha256, 0, 2 * digestlen + 1);
-    for(size_t pos = 0; pos < digestlen; pos++){
-        snprintf(sha256 + 2 * pos, 3, "%02x", sha256hex[pos]);
-    }
+    std::string sha256 = s3fs_hex(sha256hex, digestlen);
     delete[] sha256hex;
 
-    return std::string(sha256);
+    return sha256;
 }
 
 /*

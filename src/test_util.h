@@ -38,14 +38,8 @@ template <> void assert_equals(const std::string &x, const std::string &y, const
 {
     if (x != y) {
         std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
-        for (unsigned i=0; i<x.length(); i++) {
-             fprintf(stderr, "%02x ", (unsigned char)x[i]);
-        }
-        std::cerr << std::endl;
-        for (unsigned i=0; i<y.length(); i++) {
-             fprintf(stderr, "%02x ", (unsigned char)y[i]);
-        }
-        std::cerr << std::endl;
+        std::cerr << s3fs_hex(reinterpret_cast<const unsigned char *>(x.c_str()), x.size()) << std::endl;
+        std::cerr << s3fs_hex(reinterpret_cast<const unsigned char *>(y.c_str()), y.size()) << std::endl;
         std::exit(1);
     }
 }
@@ -63,14 +57,8 @@ template <> void assert_nequals(const std::string &x, const std::string &y, cons
 {
     if (x == y) {
         std::cerr << x << " == " << y << " at " << file << ":" << line << std::endl;
-        for (unsigned i=0; i<x.length(); i++) {
-            fprintf(stderr, "%02x ", (unsigned char)x[i]);
-        }
-        std::cerr << std::endl;
-        for (unsigned i=0; i<y.length(); i++) {
-             fprintf(stderr, "%02x ", (unsigned char)y[i]);
-        }
-        std::cerr << std::endl;
+        std::cerr << s3fs_hex(reinterpret_cast<const unsigned char *>(x.c_str()), x.size()) << std::endl;
+        std::cerr << s3fs_hex(reinterpret_cast<const unsigned char *>(y.c_str()), y.size()) << std::endl;
         std::exit(1);
     }
 }

@@ -2492,9 +2492,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     char          kSecret[128];
     unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = NULL;
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len = 0;
-    char          hexsRequest[64 + 1];
     int           kSecret_len = snprintf(kSecret, sizeof(kSecret), "AWS4%s", S3fsCurl::AWSSecretAccessKey.c_str());
-    unsigned int  cnt;
 
     s3fs_HMAC256(kSecret, kSecret_len, reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate, &kDate_len);
     s3fs_HMAC256(kDate, kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion, &kRegion_len);
@@ -2507,15 +2505,12 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
     unsigned int         cRequest_len = StringCQ.size();
     s3fs_sha256(cRequest, cRequest_len, &sRequest, &sRequest_len);
-    for(cnt = 0; cnt < sRequest_len; cnt++){
-        sprintf(&hexsRequest[cnt * 2], "%02x", sRequest[cnt]);
-    }
-    delete[] sRequest;
 
     StringToSign  = "AWS4-HMAC-SHA256\n";
     StringToSign += date8601 + "\n";
     StringToSign += strdate + "/" + endpoint + "/s3/aws4_request\n";
-    StringToSign += hexsRequest;
+    StringToSign += s3fs_hex(sRequest, sRequest_len);
+    delete[] sRequest;
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
     unsigned int         cscope_len = StringToSign.size();
@@ -2523,15 +2518,10 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     unsigned int         md_len     = 0;
 
     s3fs_HMAC256(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
-    char *hexSig = new char[2 * md_len + 1];
-    for(cnt = 0; cnt < md_len; cnt++){
-        sprintf(&hexSig[cnt * 2], "%02x", md[cnt]);
-    }
     delete[] kSigning;
-    delete[] md;
 
-    Signature = hexSig;
-    delete[] hexSig;
+    Signature = s3fs_hex(md, md_len);
+    delete[] md;
 
     return Signature;
 }
@@ -2550,14 +2540,9 @@ void S3fsCurl::insertV4Headers()
                 unsigned int    cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
                 unsigned char*  sRequest     = NULL;
                 unsigned int    sRequest_len = 0;
-                char            hexsRequest[64 + 1];
-                unsigned int    cnt;
                 s3fs_sha256(b_postdata, cRequest_len, &sRequest, &sRequest_len);
-                for(cnt = 0; cnt < sRequest_len; cnt++){
-                    sprintf(&hexsRequest[cnt * 2], "%02x", sRequest[cnt]);
-                }
+                payload_hash = s3fs_hex(sRequest, sRequest_len);
                 delete[] sRequest;
-                payload_hash.assign(hexsRequest, &hexsRequest[sRequest_len * 2]);
                 break;
             }
 
