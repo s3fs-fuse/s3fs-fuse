@@ -191,15 +191,15 @@ size_t get_md5_digest_length()
 unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     struct md5_ctx ctx_md5;
-    unsigned char  buf[512];
     off_t          bytes;
     unsigned char* result;
 
-    memset(buf, 0, 512);
     md5_init(&ctx_md5);
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        unsigned char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -210,7 +210,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         md5_update(&ctx_md5, bytes, buf);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_md5_digest_length()];
     md5_digest(&ctx_md5, get_md5_digest_length(), result);
@@ -224,7 +223,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t ctx_md5;
     gcry_error_t err;
-    char    buf[512];
     off_t bytes;
     unsigned char* result;
 
@@ -236,14 +234,15 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
         size = st.st_size;
     }
 
-    memset(buf, 0, 512);
     if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_md5, GCRY_MD_MD5, 0))){
         S3FS_PRN_ERR("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
         return NULL;
     }
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -255,7 +254,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         gcry_md_write(ctx_md5, buf, bytes);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_md5_digest_length()];
     memcpy(result, gcry_md_read(ctx_md5, 0), get_md5_digest_length());
@@ -291,15 +289,15 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     struct sha256_ctx ctx_sha256;
-    unsigned char     buf[512];
     off_t             bytes;
     unsigned char*    result;
 
-    memset(buf, 0, 512);
     sha256_init(&ctx_sha256);
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        unsigned char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -310,7 +308,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         sha256_update(&ctx_sha256, bytes, buf);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_sha256_digest_length()];
     sha256_digest(&ctx_sha256, get_sha256_digest_length(), result);
@@ -343,7 +340,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t   ctx_sha256;
     gcry_error_t   err;
-    char           buf[512];
     off_t          bytes;
     unsigned char* result;
 
@@ -355,14 +351,15 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
         size = st.st_size;
     }
 
-    memset(buf, 0, 512);
     if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_sha256, GCRY_MD_SHA256, 0))){
         S3FS_PRN_ERR("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
         return NULL;
     }
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -374,7 +371,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         gcry_md_write(ctx_sha256, buf, bytes);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_sha256_digest_length()];
     memcpy(result, gcry_md_read(ctx_sha256, 0), get_sha256_digest_length());
