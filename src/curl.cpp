@@ -1457,7 +1457,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
     return newcurl;
 }
 
-int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
+int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size)
 {
     S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
@@ -1467,7 +1467,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, s
         S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
     }
     int        result = 0;
-    ssize_t    remaining_bytes;
+    off_t      remaining_bytes;
 
     // cycle through open fd, pulling off 10MB chunks at a time
     for(remaining_bytes = size; 0 < remaining_bytes; ){
@@ -3139,7 +3139,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     return result;
 }
 
-int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size, sse_type_t ssetype, std::string& ssevalue)
+int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue)
 {
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
@@ -3189,7 +3189,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, ssize_
     return 0;
 }
 
-int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, ssize_t size)
+int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t size)
 {
     int result;
 
