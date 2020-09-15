@@ -256,7 +256,6 @@ size_t get_md5_digest_length()
 unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     MD5_CTX md5ctx;
-    char    buf[512];
     off_t   bytes;
     unsigned char* result;
 
@@ -268,11 +267,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
         size = st.st_size;
     }
 
-    memset(buf, 0, 512);
     MD5_Init(&md5ctx);
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        const off_t len = 512;
+        char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -283,7 +283,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         MD5_Update(&md5ctx, buf, bytes);
-        memset(buf, 0, 512);
     }
 
     result = new unsigned char[get_md5_digest_length()];
@@ -319,7 +318,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     const EVP_MD*  md = EVP_get_digestbyname("sha256");
     EVP_MD_CTX*    sha256ctx;
-    char           buf[512];
     off_t          bytes;
     unsigned char* result;
 
@@ -334,9 +332,10 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
     sha256ctx = EVP_MD_CTX_create();
     EVP_DigestInit_ex(sha256ctx, md, NULL);
 
-    memset(buf, 0, 512);
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        const off_t len = 512;
+        char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -348,7 +347,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         EVP_DigestUpdate(sha256ctx, buf, bytes);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_sha256_digest_length()];
     EVP_DigestFinal_ex(sha256ctx, result, NULL);

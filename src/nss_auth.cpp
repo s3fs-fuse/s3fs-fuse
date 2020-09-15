@@ -153,7 +153,6 @@ size_t get_md5_digest_length()
 unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 {
     PK11Context*   md5ctx;
-    unsigned char  buf[512];
     off_t          bytes;
     unsigned char* result;
     unsigned int   md5outlen;
@@ -166,11 +165,12 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
         size = st.st_size;
     }
 
-    memset(buf, 0, 512);
     md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        unsigned char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -182,7 +182,6 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         PK11_DigestOp(md5ctx, buf, bytes);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_md5_digest_length()];
     PK11_DigestFinal(md5ctx, result, &md5outlen, get_md5_digest_length());
@@ -219,7 +218,6 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
 unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
 {
     PK11Context*   sha256ctx;
-    unsigned char  buf[512];
     off_t          bytes;
     unsigned char* result;
     unsigned int   sha256outlen;
@@ -232,11 +230,12 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
         size = st.st_size;
     }
 
-    memset(buf, 0, 512);
     sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
     for(off_t total = 0; total < size; total += bytes){
-        bytes = 512 < (size - total) ? 512 : (size - total);
+        off_t len = 512;
+        unsigned char buf[len];
+        bytes = len < (size - total) ? len : (size - total);
         bytes = pread(fd, buf, bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -248,7 +247,6 @@ unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
             return NULL;
         }
         PK11_DigestOp(sha256ctx, buf, bytes);
-        memset(buf, 0, 512);
     }
     result = new unsigned char[get_sha256_digest_length()];
     PK11_DigestFinal(sha256ctx, result, &sha256outlen, get_sha256_digest_length());
