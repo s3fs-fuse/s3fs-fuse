@@ -1032,7 +1032,6 @@ int FdEntity::NoCachePreMultipartPost()
     // initialize multipart upload values
     upload_id.erase();
     etaglist.clear();
-    pending_headers.clear();
 
     S3fsCurl s3fscurl(true);
     int      result;
@@ -1457,70 +1456,43 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 {
     AutoLock auto_lock(&fdent_lock);
 
-    bool is_pending;
-    if(upload_id.empty()){
-        // merge update meta
-        headers_t mergedmeta = orgmeta;
-
-        merge_headers(orgmeta, updatemeta, false);      // overwrite existing keys only
-        merge_headers(mergedmeta, updatemeta, true);    // overwrite all keys
-        updatemeta = mergedmeta;                        // swap
-
-        is_pending = false;
-    }else{
-        // could not update meta because uploading now, then put pending.
-        pending_headers.push_back(updatemeta);
-        is_pending = true;
+    merge_headers(orgmeta, updatemeta, true);      // overwrite all keys
+    // [NOTE]
+    // this is special cases, we remove the key which has empty values.
+    for(headers_t::iterator hiter = orgmeta.begin(); hiter != orgmeta.end(); ){
+        if(hiter->second.empty()){
+            orgmeta.erase(hiter++);
+        }else{
+            ++hiter;
+        }
     }
+    updatemeta = orgmeta;
+    // update ctime/mtime
+    time_t updatetime = get_mtime(updatemeta, false);  // not overcheck
+    if(0 != updatetime){
+        SetMtime(updatetime, true);
+    }
+    updatetime = get_ctime(updatemeta, false);         // not overcheck
+    if(0 != updatetime){
+        SetCtime(updatetime, true);
+    }
+    bool is_pending = !upload_id.empty();
+
     return is_pending;
 }
 
 // global function in s3fs.cpp
-int put_headers(const char* path, headers_t& meta, bool is_copy);
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mtime);
 
 int FdEntity::UploadPendingMeta()
 {
     AutoLock auto_lock(&fdent_lock);
 
-    int result = 0;
-    for(headers_list_t::const_iterator iter = pending_headers.begin(); iter != pending_headers.end(); ++iter){
-        // [NOTE]
-        // orgmeta will be updated sequentially.
-        headers_t putmeta = orgmeta;
-        merge_headers(putmeta, *iter, true);            // overwrite all keys
-        merge_headers(orgmeta, *iter, false);           // overwrite existing keys only
-
-        // [NOTE]
-        // this is special cases, we remove the key which has empty values.
-        for(headers_t::iterator hiter = putmeta.begin(); hiter != putmeta.end(); ){
-            if(hiter->second.empty()){
-                if(orgmeta.end() != orgmeta.find(hiter->first)){
-                    orgmeta.erase(hiter->first);
-                }
-                putmeta.erase(hiter++);
-            }else{
-                ++hiter;
-            }
-        }
-
-        // update ctime/mtime
-        time_t updatetime = get_mtime((*iter), false);  // not overcheck
-        if(0 != updatetime){
-            SetMtime(updatetime, true);
-        }
-        updatetime = get_ctime((*iter), false);         // not overcheck
-        if(0 != updatetime){
-            SetCtime(updatetime, true);
-        }
-
-        // put headers
-        int one_result = put_headers(path.c_str(), putmeta, true);
-        if(0 != one_result){
-            S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), one_result);
-            result = one_result;      // keep lastest result code
-        }
+    // put headers, no need to update mtime to avoid dead lock
+    int result = put_headers(path.c_str(), orgmeta, true, false);
+    if(0 != result){
+        S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
     }
-    pending_headers.clear();
     return result;
 }
 

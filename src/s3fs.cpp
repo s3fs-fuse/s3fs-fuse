@@ -105,7 +105,7 @@ static const std::string aws_secretkey         = "AWSSecretKey";
 //-------------------------------------------------------------------
 // Global functions : prototype
 //-------------------------------------------------------------------
-int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE] global function because this is called from FdEntity class
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mtime = true);       // [NOTE] global function because this is called from FdEntity class
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -709,7 +709,7 @@ static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is
 // ow_sse_flg is for over writing sse header by use_sse option.
 // @return fuse return code
 //
-int put_headers(const char* path, headers_t& meta, bool is_copy)
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mtime)
 {
     int         result;
     S3fsCurl    s3fscurl(true);
@@ -739,7 +739,7 @@ int put_headers(const char* path, headers_t& meta, bool is_copy)
     // [NOTE]
     // if path is 'dir/', it does not have cache(could not open file for directory stat)
     //
-    if('/' != path[strlen(path) - 1]){
+    if(update_mtime && '/' != path[strlen(path) - 1] ){
         AutoFdEntity autoent;
         FdEntity*    ent;
         if(NULL == (ent = autoent.ExistOpen(path, -1, !FdManager::IsCacheDir()))){

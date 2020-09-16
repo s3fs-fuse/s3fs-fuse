@@ -36,7 +36,6 @@ struct header_nocase_cmp : public std::binary_function<std::string, std::string,
     }
 };
 typedef std::map<std::string, std::string, header_nocase_cmp> headers_t;
-typedef std::list<headers_t>                                  headers_list_t;
 
 //-------------------------------------------------------------------
 // Functions
