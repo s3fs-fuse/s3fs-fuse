@@ -32,7 +32,7 @@ extern const std::string SPACES;
 //-------------------------------------------------------------------
 // Inline functions
 //-------------------------------------------------------------------
-static inline int STR2NCMP(const char *str1, const char *str2) { return strncmp(str1, str2, strlen(str2)); }
+static inline int is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
 static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
