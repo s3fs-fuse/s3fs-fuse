@@ -188,7 +188,7 @@ size_t get_md5_digest_length()
 }
 
 #ifdef USE_GNUTLS_NETTLE
-unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
+unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
 {
     struct md5_ctx ctx_md5;
     off_t          bytes;
@@ -219,7 +219,7 @@ unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
 
 #else // USE_GNUTLS_NETTLE
 
-unsigned char* s3fs_md5hexsum(int fd, off_t start, off_t size)
+unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t ctx_md5;
     gcry_error_t err;
@@ -286,7 +286,7 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
     return true;
 }
 
-unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
+unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
 {
     struct sha256_ctx ctx_sha256;
     off_t             bytes;
@@ -336,7 +336,7 @@ bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char*
     return true;
 }
 
-unsigned char* s3fs_sha256hexsum(int fd, off_t start, off_t size)
+unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
 {
     gcry_md_hd_t   ctx_sha256;
     gcry_error_t   err;

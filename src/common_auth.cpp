@@ -34,17 +34,18 @@
 //-------------------------------------------------------------------
 std::string s3fs_get_content_md5(int fd)
 {
-    unsigned char* md5hex;
+    unsigned char* md5;
     char* base64;
     std::string Signature;
 
-    if(NULL == (md5hex = s3fs_md5hexsum(fd, 0, -1))){
+    if(NULL == (md5 = s3fs_md5_fd(fd, 0, -1))){
         return std::string("");
     }
-    if(NULL == (base64 = s3fs_base64(md5hex, get_md5_digest_length()))){
+    if(NULL == (base64 = s3fs_base64(md5, get_md5_digest_length()))){
+        delete[] md5;
         return std::string("");  // ENOMEM
     }
-    delete[] md5hex;
+    delete[] md5;
 
     Signature = base64;
     delete[] base64;
@@ -52,34 +53,19 @@ std::string s3fs_get_content_md5(int fd)
     return Signature;
 }
 
-std::string s3fs_md5sum(int fd, off_t start, off_t size)
-{
-    size_t digestlen = get_md5_digest_length();
-    unsigned char* md5hex;
-
-    if(NULL == (md5hex = s3fs_md5hexsum(fd, start, size))){
-        return std::string("");
-    }
-
-    std::string md5 = s3fs_hex(md5hex, digestlen);
-    delete[] md5hex;
-
-    return md5;
-}
-
-std::string s3fs_sha256sum(int fd, off_t start, off_t size)
+std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)
 {
     size_t digestlen = get_sha256_digest_length();
-    unsigned char* sha256hex;
+    unsigned char* sha256;
 
-    if(NULL == (sha256hex = s3fs_sha256hexsum(fd, start, size))){
+    if(NULL == (sha256 = s3fs_sha256_fd(fd, start, size))){
         return std::string("");
     }
 
-    std::string sha256 = s3fs_hex(sha256hex, digestlen);
-    delete[] sha256hex;
+    std::string sha256hex = s3fs_hex(sha256, digestlen);
+    delete[] sha256;
 
-    return sha256;
+    return sha256hex;
 }
 
 /*

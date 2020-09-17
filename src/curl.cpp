@@ -2532,7 +2532,7 @@ void S3fsCurl::insertV4Headers()
     std::string payload_hash;
     switch (type) {
         case REQTYPE_PUT:
-            payload_hash = s3fs_sha256sum(b_infile == NULL ? -1 : fileno(b_infile), 0, -1);
+            payload_hash = s3fs_sha256_hex_fd(b_infile == NULL ? -1 : fileno(b_infile), 0, -1);
             break;
 
         case REQTYPE_COMPLETEMULTIPOST:
@@ -2547,7 +2547,7 @@ void S3fsCurl::insertV4Headers()
             }
 
         case REQTYPE_UPLOADMULTIPOST:
-            payload_hash = s3fs_sha256sum(partdata.fd, partdata.startpos, partdata.size);
+            payload_hash = s3fs_sha256_hex_fd(partdata.fd, partdata.startpos, partdata.size);
             break;
         default:
             break;
@@ -3557,7 +3557,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
 
     // make md5 and file pointer
     if(S3fsCurl::is_content_md5){
-        unsigned char *md5raw = s3fs_md5hexsum(partdata.fd, partdata.startpos, partdata.size);
+        unsigned char *md5raw = s3fs_md5_fd(partdata.fd, partdata.startpos, partdata.size);
         if(md5raw == NULL){
             S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
             return -1;
