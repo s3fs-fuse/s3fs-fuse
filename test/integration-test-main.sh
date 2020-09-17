@@ -318,8 +318,8 @@ function test_external_directory_creation {
     describe "Test external directory creation ..."
     OBJECT_NAME="$(basename $PWD)/directory/${TEST_TEXT_FILE}"
     echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
-    ls | grep directory
-    get_permissions directory | grep ^750$
+    ls | grep -q directory
+    get_permissions directory | grep -q 750$
     ls directory
     cmp <(echo "data") directory/${TEST_TEXT_FILE}
     rm -f directory/${TEST_TEXT_FILE}
@@ -1045,7 +1045,7 @@ function test_ut_ossfs {
 }
 
 function add_all_tests {
-    if `ps -ef | grep -v grep | grep s3fs | grep -q use_cache`; then
+    if ps u $S3FS_PID | grep -q use_cache; then
         add_tests test_cache_file_stat
     fi
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
