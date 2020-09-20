@@ -2678,7 +2678,12 @@ int S3fsCurl::GetIAMCredentials()
 
     // url
     if(is_ecs){
-        url = std::string(S3fsCurl::IAM_cred_url) + std::getenv(ECS_IAM_ENV_VAR.c_str());
+        const char *env = std::getenv(ECS_IAM_ENV_VAR.c_str());
+        if(env == NULL){
+            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR.c_str());
+            return -EIO;
+        }
+        url = std::string(S3fsCurl::IAM_cred_url) + env;
     }else{
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
     }
