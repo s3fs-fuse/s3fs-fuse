@@ -48,14 +48,14 @@ class S3ObjList
         bool insert_normalized(const char* name, const char* normalized, bool is_dir);
         const s3obj_entry* GetS3Obj(const char* name) const;
 
-        s3obj_t::const_iterator begin(void) const { return objects.begin(); }
-        s3obj_t::const_iterator end(void) const { return objects.end(); }
+        s3obj_t::const_iterator begin() const { return objects.begin(); }
+        s3obj_t::const_iterator end() const { return objects.end(); }
 
     public:
         S3ObjList() {}
         ~S3ObjList() {}
 
-        bool IsEmpty(void) const { return objects.empty(); }
+        bool IsEmpty() const { return objects.empty(); }
         bool insert(const char* name, const char* etag = NULL, bool is_dir = false);
         std::string GetOrgName(const char* name) const;
         std::string GetNormalizedName(const char* name) const;

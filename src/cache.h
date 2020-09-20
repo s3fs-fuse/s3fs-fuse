@@ -95,36 +95,36 @@ class StatCache
         StatCache();
         ~StatCache();
 
-        void Clear(void);
+        void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
         // Truncate stat cache
-        bool TruncateCache(void);
+        bool TruncateCache();
         // Truncate symbolic link cache
-        bool TruncateSymlink(void);
+        bool TruncateSymlink();
 
     public:
         // Reference singleton
-        static StatCache* getStatCacheData(void)
+        static StatCache* getStatCacheData()
         {
             return &singleton;
         }
 
         // Attribute
-        unsigned long GetCacheSize(void) const;
+        unsigned long GetCacheSize() const;
         unsigned long SetCacheSize(unsigned long size);
-        time_t GetExpireTime(void) const;
+        time_t GetExpireTime() const;
         time_t SetExpireTime(time_t expire, bool is_interval = false);
-        time_t UnsetExpireTime(void);
+        time_t UnsetExpireTime();
         bool SetCacheNoObject(bool flag);
-        bool EnableCacheNoObject(void)
+        bool EnableCacheNoObject()
         {
             return SetCacheNoObject(true);
         }
-        bool DisableCacheNoObject(void)
+        bool DisableCacheNoObject()
         {
             return SetCacheNoObject(false);
         }
-        bool GetCacheNoObject(void) const
+        bool GetCacheNoObject() const
         {
             return IsCacheNoObject;
         }

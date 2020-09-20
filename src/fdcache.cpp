@@ -306,7 +306,7 @@ bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
     return size + FdManager::GetEnsureFreeDiskSpace() <= fsize;
 }
 
-bool FdManager::HaveLseekHole(void)
+bool FdManager::HaveLseekHole()
 {
     if(FdManager::checked_lseek){
         return FdManager::have_lseek_hole;

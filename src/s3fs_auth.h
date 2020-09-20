@@ -36,17 +36,17 @@ std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size);
 //
 // in xxxxxx_auth.cpp
 //
-const char* s3fs_crypt_lib_name(void);
-bool s3fs_init_global_ssl(void);
-bool s3fs_destroy_global_ssl(void);
-bool s3fs_init_crypt_mutex(void);
-bool s3fs_destroy_crypt_mutex(void);
+const char* s3fs_crypt_lib_name();
+bool s3fs_init_global_ssl();
+bool s3fs_destroy_global_ssl();
+bool s3fs_init_crypt_mutex();
+bool s3fs_destroy_crypt_mutex();
 bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
-size_t get_md5_digest_length(void);
+size_t get_md5_digest_length();
 unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size);
 bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen);
-size_t get_sha256_digest_length(void);
+size_t get_sha256_digest_length();
 unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size);
 
 #endif // S3FS_AUTH_H_

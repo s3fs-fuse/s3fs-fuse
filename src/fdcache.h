@@ -53,27 +53,27 @@ class FdManager
       ~FdManager();
 
       // Reference singleton
-      static FdManager* get(void) { return &singleton; }
+      static FdManager* get() { return &singleton; }
 
-      static bool DeleteCacheDirectory(void);
+      static bool DeleteCacheDirectory();
       static int DeleteCacheFile(const char* path);
       static bool SetCacheDir(const char* dir);
-      static bool IsCacheDir(void) { return !FdManager::cache_dir.empty(); }
-      static const char* GetCacheDir(void) { return FdManager::cache_dir.c_str(); }
+      static bool IsCacheDir() { return !FdManager::cache_dir.empty(); }
+      static const char* GetCacheDir() { return FdManager::cache_dir.c_str(); }
       static bool SetCacheCheckOutput(const char* path);
-      static const char* GetCacheCheckOutput(void) { return FdManager::check_cache_output.c_str(); }
+      static const char* GetCacheCheckOutput() { return FdManager::check_cache_output.c_str(); }
       static bool MakeCachePath(const char* path, std::string& cache_path, bool is_create_dir = true, bool is_mirror_path = false);
-      static bool CheckCacheTopDir(void);
+      static bool CheckCacheTopDir();
       static bool MakeRandomTempPath(const char* path, std::string& tmppath);
       static bool SetCheckCacheDirExist(bool is_check);
-      static bool CheckCacheDirExist(void);
+      static bool CheckCacheDirExist();
 
       static off_t GetEnsureFreeDiskSpace();
       static off_t SetEnsureFreeDiskSpace(off_t size);
       static bool IsSafeDiskSpace(const char* path, off_t size);
       static void FreeReservedDiskSpace(off_t size);
       static bool ReserveDiskSpace(off_t size);
-      static bool HaveLseekHole(void);
+      static bool HaveLseekHole();
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int existfd = -1, bool increase_ref = true);
@@ -84,7 +84,7 @@ class FdManager
       bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
       void CleanupCacheDir();
 
-      bool CheckAllCache(void);
+      bool CheckAllCache();
 };
 
 #endif // S3FS_FDCACHE_H_

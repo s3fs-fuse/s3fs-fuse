@@ -258,7 +258,7 @@ struct filepart
       clear();
     }
 
-    void clear(void)
+    void clear()
     {
         uploaded = false;
         etag     = "";

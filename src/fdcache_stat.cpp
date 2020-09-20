@@ -36,7 +36,7 @@
 //------------------------------------------------
 std::string CacheFileStat::GetCacheFileStatTopDir()
 {
-    std::string top_path("");
+    std::string top_path;
     if(!FdManager::IsCacheDir() || bucket.empty()){
         return top_path;
     }

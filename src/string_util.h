@@ -72,7 +72,7 @@ std::string lower(std::string s);
 //
 // Date string
 //
-std::string get_date_rfc850(void);
+std::string get_date_rfc850();
 void get_date_sigv3(std::string& date, std::string& date8601);
 std::string get_date_string(time_t tm);
 std::string get_date_iso8601(time_t tm);
