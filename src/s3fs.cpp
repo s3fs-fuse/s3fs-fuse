@@ -4043,7 +4043,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         return -1;
 
     }else if(key == FUSE_OPT_KEY_OPT){
-        if(0 == STR2NCMP(arg, "uid=")){
+        if(is_prefix(arg, "uid=")){
             s3fs_uid = get_uid(strchr(arg, '=') + sizeof(char));
             if(0 != geteuid() && 0 == s3fs_uid){
                 S3FS_PRN_EXIT("root user can only specify uid=0.");
@@ -4052,7 +4052,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_s3fs_uid = true;
             return 1; // continue for fuse option
         }
-        if(0 == STR2NCMP(arg, "gid=")){
+        if(is_prefix(arg, "gid=")){
             s3fs_gid = get_gid(strchr(arg, '=') + sizeof(char));
             if(0 != getegid() && 0 == s3fs_gid){
                 S3FS_PRN_EXIT("root user can only specify gid=0.");
@@ -4061,7 +4061,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_s3fs_gid = true;
             return 1; // continue for fuse option
         }
-        if(0 == STR2NCMP(arg, "umask=")){
+        if(is_prefix(arg, "umask=")){
             s3fs_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
             s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
             is_s3fs_umask = true;
@@ -4071,13 +4071,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             allow_other = true;
             return 1; // continue for fuse option
         }
-        if(0 == STR2NCMP(arg, "mp_umask=")){
+        if(is_prefix(arg, "mp_umask=")){
             mp_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
             mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
             is_mp_umask = true;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "default_acl=")){
+        if(is_prefix(arg, "default_acl=")){
             const char* acl_string = strchr(arg, '=') + sizeof(char);
             acl_t acl = acl_t::from_str(acl_string);
             if(acl == acl_t::UNKNOWN){
@@ -4087,7 +4087,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetDefaultAcl(acl);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "retries=")){
+        if(is_prefix(arg, "retries=")){
             off_t retries = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(retries == 0){
                 S3FS_PRN_EXIT("retries must be greater than zero");
@@ -4096,7 +4096,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetRetries(retries);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "use_cache=")){
+        if(is_prefix(arg, "use_cache=")){
             FdManager::SetCacheDir(strchr(arg, '=') + sizeof(char));
             return 0;
         }
@@ -4108,7 +4108,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_remove_cache = true;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "multireq_max=")){
+        if(is_prefix(arg, "multireq_max=")){
             int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             S3fsCurl::SetMaxMultiRequest(maxreq);
             return 0;
@@ -4122,10 +4122,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         // old format for storage_class
-        if(0 == strcmp(arg, "use_rrs") || 0 == STR2NCMP(arg, "use_rrs=")){
+        if(0 == strcmp(arg, "use_rrs") || is_prefix(arg, "use_rrs=")){
             off_t rrs = 1;
             // for an old format.
-            if(0 == STR2NCMP(arg, "use_rrs=")){
+            if(is_prefix(arg, "use_rrs=")){
                 rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
             }
             if(0 == rrs){
@@ -4138,7 +4138,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "storage_class=")){
+        if(is_prefix(arg, "storage_class=")){
             const char *storage_class_str = strchr(arg, '=') + sizeof(char);
             storage_class_t storage_class = storage_class_t::from_str(storage_class_str);
             if(storage_class == storage_class_t::UNKNOWN){
@@ -4163,7 +4163,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         // AWSSSECKEYS                    Loading Environment for Server Side Encrypting custom keys
         // AWSSSEKMSID                    Loading Environment for Server Side Encrypting Key id
         //
-        if(0 == STR2NCMP(arg, "use_sse")){
+        if(is_prefix(arg, "use_sse")){
             if(0 == strcmp(arg, "use_sse") || 0 == strcmp(arg, "use_sse=1")){ // use_sse=1 is old type parameter
                 // sse type is SSE_S3
                 if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseS3Type()){
@@ -4184,14 +4184,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 }
                 S3fsCurl::SetSseType(sse_type_t::SSE_KMS);
 
-            }else if(0 == STR2NCMP(arg, "use_sse=kmsid:") || 0 == STR2NCMP(arg, "use_sse=k:")){
+            }else if(is_prefix(arg, "use_sse=kmsid:") || is_prefix(arg, "use_sse=k:")){
                 // sse type is SSE_KMS with kmsid
                 if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseKmsType()){
                     S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
                     return -1;
                 }
                 const char* kmsid;
-                if(0 == STR2NCMP(arg, "use_sse=kmsid:")){
+                if(is_prefix(arg, "use_sse=kmsid:")){
                     kmsid = &arg[strlen("use_sse=kmsid:")];
                 }else{
                     kmsid = &arg[strlen("use_sse=k:")];
@@ -4213,14 +4213,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 //
                 S3fsCurl::SetSseType(sse_type_t::SSE_C);
 
-            }else if(0 == STR2NCMP(arg, "use_sse=custom:") || 0 == STR2NCMP(arg, "use_sse=c:")){
+            }else if(is_prefix(arg, "use_sse=custom:") || is_prefix(arg, "use_sse=c:")){
                 // sse type is SSE_C with custom keys
                 if(!S3fsCurl::IsSseDisable() && !S3fsCurl::IsSseCType()){
                     S3FS_PRN_EXIT("already set SSE another type, so conflict use_sse option or environment.");
                     return -1;
                 }
                 const char* ssecfile;
-                if(0 == STR2NCMP(arg, "use_sse=custom:")){
+                if(is_prefix(arg, "use_sse=custom:")){
                     ssecfile = &arg[strlen("use_sse=custom:")];
                 }else{
                     ssecfile = &arg[strlen("use_sse=c:")];
@@ -4249,7 +4249,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         // [NOTE]
         // Do only load SSE custom keys, care for set without set sse type.
-        if(0 == STR2NCMP(arg, "load_sse_c=")){
+        if(is_prefix(arg, "load_sse_c=")){
             const char* ssecfile = &arg[strlen("load_sse_c=")];
             if(!S3fsCurl::SetSseCKeys(ssecfile)){
                 S3FS_PRN_EXIT("failed to load use_sse custom key file(%s).", ssecfile);
@@ -4257,7 +4257,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "ssl_verify_hostname=")){
+        if(is_prefix(arg, "ssl_verify_hostname=")){
             long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
                 S3FS_PRN_EXIT("poorly formed argument to option: ssl_verify_hostname.");
@@ -4265,7 +4265,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "passwd_file=")){
+        if(is_prefix(arg, "passwd_file=")){
             passwd_file = strchr(arg, '=') + sizeof(char);
             return 0;
         }
@@ -4282,7 +4282,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_use_session_token = true;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "ibm_iam_endpoint=")){
+        if(is_prefix(arg, "ibm_iam_endpoint=")){
             std::string endpoint_url;
             std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
             // Check url for http / https protocol std::string
@@ -4305,7 +4305,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_ecs = true;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "iam_role")){
+        if(is_prefix(arg, "iam_role")){
             if (is_ecs || is_ibm_iam_auth) {
                 S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
                 return -1;
@@ -4316,18 +4316,18 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 load_iamrole = true;
                 return 0;
 
-            }else if(0 == STR2NCMP(arg, "iam_role=")){
+            }else if(is_prefix(arg, "iam_role=")){
                 const char* role = strchr(arg, '=') + sizeof(char);
                 S3fsCurl::SetIAMRole(role);
                 load_iamrole = false;
                 return 0;
             }
         }
-        if(0 == STR2NCMP(arg, "profile=")){
+        if(is_prefix(arg, "profile=")){
             aws_profile = strchr(arg, '=') + sizeof(char);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "public_bucket=")){
+        if(is_prefix(arg, "public_bucket=")){
             off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
             if(1 == pubbucket){
                 S3fsCurl::SetPublicBucket(true);
@@ -4344,7 +4344,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "bucket=")){
+        if(is_prefix(arg, "bucket=")){
             std::string bname = strchr(arg, '=') + sizeof(char);
             if ((ret = set_bucket(bname.c_str()))){
                 return ret;
@@ -4355,17 +4355,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetCheckCertificate(false);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "connect_timeout=")){
+        if(is_prefix(arg, "connect_timeout=")){
             long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             S3fsCurl::SetConnectTimeout(contimeout);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "readwrite_timeout=")){
+        if(is_prefix(arg, "readwrite_timeout=")){
             time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             S3fsCurl::SetReadwriteTimeout(rwtimeout);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "list_object_max_keys=")){
+        if(is_prefix(arg, "list_object_max_keys=")){
             int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(max_keys < 1000){
                 S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
@@ -4374,19 +4374,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             max_keys_list_object = max_keys;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "max_stat_cache_size=")){
+        if(is_prefix(arg, "max_stat_cache_size=")){
             unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             StatCache::getStatCacheData()->SetCacheSize(cache_size);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "stat_cache_expire=")){
+        if(is_prefix(arg, "stat_cache_expire=")){
             time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             StatCache::getStatCacheData()->SetExpireTime(expr_time);
             return 0;
         }
         // [NOTE]
         // This option is for compatibility old version.
-        if(0 == STR2NCMP(arg, "stat_cache_interval_expire=")){
+        if(is_prefix(arg, "stat_cache_interval_expire=")){
             time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
             return 0;
@@ -4403,7 +4403,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetSslSessionCache(false);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "parallel_count=") || 0 == STR2NCMP(arg, "parallel_upload=")){
+        if(is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){
             int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(0 >= maxpara){
                 S3FS_PRN_EXIT("argument should be over 1: parallel_count");
@@ -4412,11 +4412,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetMaxParallelCount(maxpara);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "fd_page_size=")){
+        if(is_prefix(arg, "fd_page_size=")){
             S3FS_PRN_ERR("option fd_page_size is no longer supported, so skip this option.");
             return 0;
         }
-        if(0 == STR2NCMP(arg, "multipart_size=")){
+        if(is_prefix(arg, "multipart_size=")){
             off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(!S3fsCurl::SetMultipartSize(size)){
                 S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
@@ -4424,7 +4424,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "ensure_diskfree=")){
+        if(is_prefix(arg, "ensure_diskfree=")){
             off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
             if(dfsize < S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
@@ -4433,11 +4433,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             FdManager::SetEnsureFreeDiskSpace(dfsize);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "singlepart_copy_limit=")){
+        if(is_prefix(arg, "singlepart_copy_limit=")){
             singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "ahbe_conf=")){
+        if(is_prefix(arg, "ahbe_conf=")){
             std::string ahbe_conf = strchr(arg, '=') + sizeof(char);
             if(!AdditionalHeader::get()->Load(ahbe_conf.c_str())){
                 S3FS_PRN_EXIT("failed to load ahbe_conf file(%s).", ahbe_conf.c_str());
@@ -4474,15 +4474,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetContentMd5(true);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "host=")){
+        if(is_prefix(arg, "host=")){
             s3host = strchr(arg, '=') + sizeof(char);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "servicepath=")){
+        if(is_prefix(arg, "servicepath=")){
             service_path = strchr(arg, '=') + sizeof(char);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "url=")){
+        if(is_prefix(arg, "url=")){
             s3host = strchr(arg, '=') + sizeof(char);
             // strip the trailing '/', if any, off the end of the host
             // std::string
@@ -4509,7 +4509,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             create_bucket = true;
             return 0;
         }
-        if(0 == STR2NCMP(arg, "endpoint=")){
+        if(is_prefix(arg, "endpoint=")){
             endpoint              = strchr(arg, '=') + sizeof(char);
             is_specified_endpoint = true;
             return 0;
@@ -4525,7 +4525,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         if(0 == strcmp(arg, "use_xattr")){
             is_use_xattr = true;
             return 0;
-        }else if(0 == STR2NCMP(arg, "use_xattr=")){
+        }else if(is_prefix(arg, "use_xattr=")){
             const char* strflag = strchr(arg, '=') + sizeof(char);
             if(0 == strcmp(strflag, "1")){
                 is_use_xattr = true;
@@ -4537,23 +4537,23 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "cipher_suites=")){
+        if(is_prefix(arg, "cipher_suites=")){
             cipher_suites = strchr(arg, '=') + sizeof(char);
             return 0;
         }
-        if(0 == STR2NCMP(arg, "instance_name=")){
+        if(is_prefix(arg, "instance_name=")){
             instance_name = strchr(arg, '=') + sizeof(char);
             instance_name = "[" + instance_name + "]";
             return 0;
         }
-        if(0 == STR2NCMP(arg, "mime=")){
+        if(is_prefix(arg, "mime=")){
             mimetype_file = strchr(arg, '=') + sizeof(char);
             return 0;
         }
         //
         // debug option for s3fs
         //
-        if(0 == STR2NCMP(arg, "dbglevel=")){
+        if(is_prefix(arg, "dbglevel=")){
             const char* strlevel = strchr(arg, '=') + sizeof(char);
             if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
                 S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
@@ -4596,7 +4596,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         if(0 == strcmp(arg, "curldbg")){
             S3fsCurl::SetVerbose(true);
             return 0;
-        }else if(0 == STR2NCMP(arg, "curldbg=")){
+        }else if(is_prefix(arg, "curldbg=")){
             const char* strlevel = strchr(arg, '=') + sizeof(char);
             if(0 == strcasecmp(strlevel, "normal")){
                 S3fsCurl::SetVerbose(true);
@@ -4618,7 +4618,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 return -1;
             }
             return 0;
-        }else if(0 == STR2NCMP(arg, "set_check_cache_sigusr1=")){
+        }else if(is_prefix(arg, "set_check_cache_sigusr1=")){
             const char* strfilepath = strchr(arg, '=') + sizeof(char);
             if(!S3fsSignals::SetUsr1Handler(strfilepath)){
                 S3FS_PRN_EXIT("could not set sigusr1 for checking cache and output file(%s).", strfilepath);
@@ -4626,11 +4626,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(0 == STR2NCMP(arg, "accessKeyId=")){
+        if(is_prefix(arg, "accessKeyId=")){
             S3FS_PRN_EXIT("option accessKeyId is no longer supported.");
             return -1;
         }
-        if(0 == STR2NCMP(arg, "secretAccessKey=")){
+        if(is_prefix(arg, "secretAccessKey=")){
             S3FS_PRN_EXIT("option secretAccessKey is no longer supported.");
             return -1;
         }
@@ -4837,7 +4837,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    if(!pathrequeststyle && STR2NCMP(s3host.c_str(), "https://") == 0 && bucket.find_first_of('.') != std::string::npos) {
+    if(!pathrequeststyle && is_prefix(s3host.c_str(), "https://") && bucket.find_first_of('.') != std::string::npos) {
         S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
