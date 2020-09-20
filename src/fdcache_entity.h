@@ -56,37 +56,37 @@ class FdEntity
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
         static ino_t GetInode(int fd);
 
-        void Clear(void);
-        ino_t GetInode(void);
-        int OpenMirrorFile(void);
+        void Clear();
+        ino_t GetInode();
+        int OpenMirrorFile();
         bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
-        bool SetAllStatusUnloaded(void) { return SetAllStatus(false); }
-        int UploadPendingMeta(void);
+        bool SetAllStatusUnloaded() { return SetAllStatus(false); }
+        int UploadPendingMeta();
 
     public:
-        static bool SetNoMixMultipart(void);
+        static bool SetNoMixMultipart();
 
         explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
         ~FdEntity();
 
-        void Close(void);
-        bool IsOpen(void) const { return (-1 != fd); }
+        void Close();
+        bool IsOpen() const { return (-1 != fd); }
         int Open(headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
         bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
         int Dup(bool lock_already_held = false);
-        int GetRefCnt(void) const { return refcnt; }                // [NOTE] Use only debugging
+        int GetRefCnt() const { return refcnt; }                // [NOTE] Use only debugging
 
-        const char* GetPath(void) const { return path.c_str(); }
+        const char* GetPath() const { return path.c_str(); }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
-        int GetFd(void) const { return fd; }
-        bool IsModified(void) const;
+        int GetFd() const { return fd; }
+        bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(time_t time, bool lock_already_held = false);
         int SetMtime(time_t time, bool lock_already_held = false);
-        bool UpdateCtime(void);
-        bool UpdateMtime(void);
+        bool UpdateCtime();
+        bool UpdateMtime();
         bool GetSize(off_t& size);
         bool GetXattr(std::string& xattr);
         bool SetXattr(const std::string& xattr);
@@ -97,9 +97,9 @@ class FdEntity
 
         int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false, bool is_modified_flag = false);  // size=0 means loading to end
         int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);   // size=0 means loading to end
-        int NoCachePreMultipartPost(void);
+        int NoCachePreMultipartPost();
         int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
-        int NoCacheCompleteMultipartPost(void);
+        int NoCacheCompleteMultipartPost();
 
         int RowFlush(const char* tpath, bool force_sync = false);
         int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }

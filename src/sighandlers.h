@@ -36,29 +36,29 @@ class S3fsSignals
         Semaphore*          pSemUsr1;
 
     protected:
-        static S3fsSignals* get(void) { return pSingleton; }
+        static S3fsSignals* get() { return pSingleton; }
 
         static void HandlerUSR1(int sig);
         static void* CheckCacheWorker(void* arg);
 
         static void HandlerUSR2(int sig);
-        static bool InitUsr2Handler(void);
+        static bool InitUsr2Handler();
 
         S3fsSignals();
         ~S3fsSignals();
 
-        bool InitUsr1Handler(void);
-        bool DestroyUsr1Handler(void);
-        bool WakeupUsr1Thread(void);
+        bool InitUsr1Handler();
+        bool DestroyUsr1Handler();
+        bool WakeupUsr1Thread();
 
     public:
-        static bool Initialize(void);
-        static bool Destroy(void);
+        static bool Initialize();
+        static bool Destroy();
 
         static bool SetUsr1Handler(const char* path);
 
         static s3fs_log_level SetLogLevel(s3fs_log_level level);
-        static s3fs_log_level BumpupLogLevel(void);
+        static s3fs_log_level BumpupLogLevel();
 };
 
 #endif // S3FS_SIGHANDLERS_H_

@@ -40,7 +40,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
 
 bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5);
 std::string url_to_host(const std::string &url);
-std::string get_bucket_host(void);
+std::string get_bucket_host();
 const char* getCurlDebugHead(curl_infotype type);
 
 bool etag_equals(std::string s1, std::string s2);

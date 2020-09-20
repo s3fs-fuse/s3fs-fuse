@@ -51,11 +51,11 @@ struct fdpage
     fdpage(off_t start = 0, off_t  size = 0, bool is_loaded = false, bool is_modified = false) :
         offset(start), bytes(size), loaded(is_loaded), modified(is_modified) {}
 
-    off_t next(void) const
+    off_t next() const
     {
         return (offset + bytes);
     }
-    off_t end(void) const
+    off_t end() const
     {
         return (0 < bytes ? offset + bytes - 1 : 0);
     }
@@ -88,7 +88,7 @@ class PageList
         static bool CheckZeroAreaInFile(int fd, off_t start, size_t bytes);
         static bool CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpage_list_t& sparse_list, int fd, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
 
-        void Clear(void);
+        void Clear();
         bool Compress();
         bool Parse(off_t new_pos);
 
@@ -100,7 +100,7 @@ class PageList
         ~PageList();
 
         bool Init(off_t size, bool is_loaded, bool is_modified);
-        off_t Size(void) const;
+        off_t Size() const;
         bool Resize(off_t size, bool is_loaded, bool is_modified);
 
         bool IsPageLoaded(off_t start = 0, off_t size = 0) const;                  // size=0 is checking to end of list
@@ -110,11 +110,11 @@ class PageList
         int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
         bool GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize);
 
-        bool IsModified(void) const;
-        bool ClearAllModified(void);
+        bool IsModified() const;
+        bool ClearAllModified();
 
         bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
-        void Dump(void) const;
+        void Dump() const;
         bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
 };
 

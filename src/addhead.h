@@ -53,14 +53,14 @@ class AdditionalHeader
 
     public:
         // Reference singleton
-        static AdditionalHeader* get(void) { return &singleton; }
+        static AdditionalHeader* get() { return &singleton; }
 
         bool Load(const char* file);
-        void Unload(void);
+        void Unload();
 
         bool AddHeader(headers_t& meta, const char* path) const;
         struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
-        bool Dump(void) const;
+        bool Dump() const;
 };
 
 #endif // S3FS_ADDHEAD_H_

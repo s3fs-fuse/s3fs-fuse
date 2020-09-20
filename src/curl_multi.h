@@ -49,8 +49,8 @@ class S3fsMultiCurl
 
     private:
         bool ClearEx(bool is_all);
-        int MultiPerform(void);
-        int MultiRead(void);
+        int MultiPerform();
+        int MultiRead();
 
         static void* RequestPerformWrapper(void* arg);
 
@@ -62,9 +62,9 @@ class S3fsMultiCurl
 
         S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
         S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
-        bool Clear(void) { return ClearEx(true); }
+        bool Clear() { return ClearEx(true); }
         bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
-        int Request(void);
+        int Request();
 };
 
 #endif // S3FS_CURL_MULTI_H_

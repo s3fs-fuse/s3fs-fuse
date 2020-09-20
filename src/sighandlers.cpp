@@ -47,9 +47,8 @@ bool S3fsSignals::Initialize()
 
 bool S3fsSignals::Destroy()
 {
-    if(S3fsSignals::pSingleton){
-        delete S3fsSignals::pSingleton;
-    }
+    delete S3fsSignals::pSingleton;
+    S3fsSignals::pSingleton = NULL;
     return true;
 }
 

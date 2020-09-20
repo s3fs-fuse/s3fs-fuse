@@ -36,20 +36,20 @@ class CacheFileStat
         bool RawOpen(bool readonly);
 
     public:
-        static std::string GetCacheFileStatTopDir(void);
+        static std::string GetCacheFileStatTopDir();
         static bool DeleteCacheFileStat(const char* path);
-        static bool CheckCacheFileStatTopDir(void);
-        static bool DeleteCacheFileStatDirectory(void);
+        static bool CheckCacheFileStatTopDir();
+        static bool DeleteCacheFileStatDirectory();
         static bool RenameCacheFileStat(const char* oldpath, const char* newpath);
 
         explicit CacheFileStat(const char* tpath = NULL);
         ~CacheFileStat();
 
-        bool Open(void);
-        bool ReadOnlyOpen(void);
-        bool Release(void);
+        bool Open();
+        bool ReadOnlyOpen();
+        bool Release();
         bool SetPath(const char* tpath, bool is_open = true);
-        int GetFd(void) const { return fd; }
+        int GetFd() const { return fd; }
 };
 
 #endif // S3FS_FDCACHE_STAT_H_
