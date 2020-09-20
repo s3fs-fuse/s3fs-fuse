@@ -225,9 +225,12 @@ function start_s3fs {
             -o dbglevel=${DBGLEVEL:=info} \
             -o retries=3 \
             -f \
-            "${@}" | stdbuf -oL -eL sed $SED_BUFFER_FLAG "s/^/s3fs: /" &
-        S3FS_PID=$!
-    )
+            "${@}" &
+        echo $! >&3
+    ) 3>pid | stdbuf -oL -eL sed $SED_BUFFER_FLAG "s/^/s3fs: /" &
+    sleep 1
+    export S3FS_PID=$(<pid)
+    rm -f pid
 
     if [ `uname` = "Darwin" ]; then
          set +o errexit
