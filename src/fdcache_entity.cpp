@@ -30,6 +30,7 @@
 #include "fdcache_entity.h"
 #include "fdcache.h"
 #include "string_util.h"
+#include "s3fs_util.h"
 #include "autolock.h"
 #include "curl.h"
 
@@ -95,7 +96,7 @@ ino_t FdEntity::GetInode(int fd)
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
     fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
-    cachepath(SAFESTRPTR(cpath)), mirrorpath("")
+    cachepath(SAFESTRPTR(cpath)), mirrorpath(""), is_meta_pending(false)
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -1467,6 +1468,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         }
     }
     updatemeta = orgmeta;
+    orgmeta.erase("x-amz-copy-source");
     // update ctime/mtime
     time_t updatetime = get_mtime(updatemeta, false);  // not overcheck
     if(0 != updatetime){
@@ -1476,9 +1478,9 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     if(0 != updatetime){
         SetCtime(updatetime, true);
     }
-    bool is_pending = !upload_id.empty();
+    is_meta_pending |= !upload_id.empty();
 
-    return is_pending;
+    return is_meta_pending;
 }
 
 // global function in s3fs.cpp
@@ -1486,13 +1488,19 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mti
 
 int FdEntity::UploadPendingMeta()
 {
-    AutoLock auto_lock(&fdent_lock);
+    if(!is_meta_pending) {
+       return 0;
+    }
 
+    AutoLock auto_lock(&fdent_lock);
+    headers_t updatemeta = orgmeta;
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(path.c_str()));
     // put headers, no need to update mtime to avoid dead lock
-    int result = put_headers(path.c_str(), orgmeta, true, false);
+    int result = put_headers(path.c_str(), updatemeta, true, false);
     if(0 != result){
         S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
     }
+    is_meta_pending = false;
     return result;
 }
 

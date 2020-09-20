@@ -51,6 +51,7 @@ class FdEntity
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
+        volatile bool            is_meta_pending;
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
