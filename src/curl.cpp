@@ -2473,15 +2473,15 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
     uriencode = urlEncode(canonical_uri);
     StringCQ  = method + "\n";
-    if(0 == strcmp(method.c_str(),"HEAD") || 0 == strcmp(method.c_str(),"PUT") || 0 == strcmp(method.c_str(),"DELETE")){
+    if(method == "HEAD" || method == "PUT" || method == "DELETE"){
         StringCQ += uriencode + "\n";
-    }else if (0 == strcmp(method.c_str(), "GET") && 0 == strcmp(uriencode.c_str(), "")) {
+    }else if(method == "GET" && uriencode.empty()){
         StringCQ +="/\n";
-    }else if (0 == strcmp(method.c_str(), "GET") && 0 == strncmp(uriencode.c_str(), "/", 1)) {
+    }else if(method == "GET" && uriencode == "/"){
         StringCQ += uriencode +"\n";
-    }else if (0 == strcmp(method.c_str(), "GET") && 0 != strncmp(uriencode.c_str(), "/", 1)) {
+    }else if(method == "GET" && uriencode != "/"){
         StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
-    }else if (0 == strcmp(method.c_str(), "POST")) {
+    }else if(method == "POST"){
         StringCQ += uriencode + "\n";
     }
     StringCQ += urlEncode2(query_string) + "\n";
