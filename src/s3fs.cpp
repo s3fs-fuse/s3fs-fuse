@@ -3862,7 +3862,7 @@ static int get_access_keys()
     char * AWS_CREDENTIAL_FILE;
     AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
     if(AWS_CREDENTIAL_FILE != NULL){
-        passwd_file.assign(AWS_CREDENTIAL_FILE);
+        passwd_file = AWS_CREDENTIAL_FILE;
         if(!passwd_file.empty()){
             std::ifstream PF(passwd_file.c_str());
             if(PF.good()){
@@ -3888,8 +3888,8 @@ static int get_access_keys()
     char * HOME;
     HOME = getenv ("HOME");
     if(HOME != NULL){
-         passwd_file.assign(HOME);
-         passwd_file.append("/.passwd-s3fs");
+         passwd_file = HOME;
+         passwd_file += "/.passwd-s3fs";
          std::ifstream PF(passwd_file.c_str());
          if(PF.good()){
              PF.close();
@@ -3906,7 +3906,7 @@ static int get_access_keys()
      }
 
     // 5 - from the system default location
-    passwd_file.assign("/etc/passwd-s3fs"); 
+    passwd_file = "/etc/passwd-s3fs";
     std::ifstream PF(passwd_file.c_str());
     if(PF.good()){
         PF.close();
@@ -3966,7 +3966,7 @@ static int set_bucket(const char* arg)
             }
             mount_prefix = pmount_prefix;
             // remove trailing slash
-            if(mount_prefix.at(mount_prefix.size() - 1) == '/'){
+            if(mount_prefix[mount_prefix.size() - 1] == '/'){
                 mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
             }
         }
@@ -4687,7 +4687,7 @@ int main(int argc, char* argv[])
     init_sysconf_vars();
 
     // get program name - emulate basename
-    program_name.assign(argv[0]);
+    program_name = argv[0];
     size_t found = program_name.find_last_of('/');
     if(found != std::string::npos){
         program_name.replace(0, found+1, "");

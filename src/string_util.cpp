@@ -259,7 +259,7 @@ bool get_keyword_value(std::string& target, const char* keyword, std::string& va
         return false;
     }
     spos += strlen(keyword);
-    if('=' != target.at(spos)){
+    if('=' != target[spos]){
         return false;
     }
     spos++;
