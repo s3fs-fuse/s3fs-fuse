@@ -4272,8 +4272,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         if(0 == strcmp(arg, "ibm_iam_auth")){
             S3fsCurl::SetIsIBMIAMAuth(true);
             S3fsCurl::SetIAMCredentialsURL("https://iam.bluemix.net/oidc/token");
-            S3fsCurl::SetIAMTokenField("access_token");
-            S3fsCurl::SetIAMExpiryField("expiration");
+            S3fsCurl::SetIAMTokenField("\"access_token\"");
+            S3fsCurl::SetIAMExpiryField("\"expiration\"");
             S3fsCurl::SetIAMFieldCount(2);
             is_ibm_iam_auth = true;
             return 0;

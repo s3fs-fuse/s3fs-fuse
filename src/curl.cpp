@@ -1686,11 +1686,14 @@ bool S3fsCurl::CheckIAMCredentialUpdate()
     if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
         return true;
     }
+    S3FS_PRN_INFO("IAM Access Token refreshing...");
     // update
     S3fsCurl s3fscurl;
     if(0 != s3fscurl.GetIAMCredentials()){
+        S3FS_PRN_ERR("IAM Access Token refresh failed");
         return false;
     }
+    S3FS_PRN_INFO("IAM Access Token refreshed");
     return true;
 }
 
