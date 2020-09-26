@@ -3098,8 +3098,11 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
     // SSE
     std::string ssevalue;
-    if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
-        S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+    // do not add SSE for create bucket
+    if(0 != strcmp(tpath, "/")){
+        if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
+            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+        }
     }
     if(is_use_ahbe){
         // set additional header by ahbe conf
