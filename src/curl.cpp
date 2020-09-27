@@ -517,7 +517,7 @@ bool S3fsCurl::LocateBundle()
                 return false;
             }
             BF.close();
-            S3fsCurl::curl_ca_bundle.assign(CURL_CA_BUNDLE); 
+            S3fsCurl::curl_ca_bundle = CURL_CA_BUNDLE;
             return true;
         }
     }else{
@@ -549,22 +549,22 @@ bool S3fsCurl::LocateBundle()
     std::ifstream BF("/etc/pki/tls/certs/ca-bundle.crt");
     if(BF.good()){
         BF.close();
-        S3fsCurl::curl_ca_bundle.assign("/etc/pki/tls/certs/ca-bundle.crt"); 
+        S3fsCurl::curl_ca_bundle = "/etc/pki/tls/certs/ca-bundle.crt";
     }else{
         BF.open("/etc/ssl/certs/ca-certificates.crt");
         if(BF.good()){
             BF.close();
-            S3fsCurl::curl_ca_bundle.assign("/etc/ssl/certs/ca-certificates.crt");
+            S3fsCurl::curl_ca_bundle = "/etc/ssl/certs/ca-certificates.crt";
         }else{
             BF.open("/usr/share/ssl/certs/ca-bundle.crt");
             if(BF.good()){
                 BF.close();
-                S3fsCurl::curl_ca_bundle.assign("/usr/share/ssl/certs/ca-bundle.crt");
+                S3fsCurl::curl_ca_bundle = "/usr/share/ssl/certs/ca-bundle.crt";
             }else{
                 BF.open("/usr/local/share/certs/ca-root.crt");
                 if(BF.good()){
                     BF.close();
-                    S3fsCurl::curl_ca_bundle.assign("/usr/share/ssl/certs/ca-bundle.crt");
+                    S3fsCurl::curl_ca_bundle = "/usr/share/ssl/certs/ca-bundle.crt";
                 }else{
                     S3FS_PRN_ERR("%s: /.../ca-bundle.crt is not readable", program_name.c_str());
                     return false;
@@ -3706,7 +3706,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
             return false;
         }
     }
-    partdata.etaglist->at(partdata.etagpos).assign(it->second);
+    (*partdata.etaglist)[partdata.etagpos] = it->second;
     partdata.uploaded = true;
 
     return true;
@@ -3726,9 +3726,9 @@ bool S3fsCurl::CopyMultipartPostComplete()
     std::string etag;
     partdata.uploaded = simple_parse_xml(bodydata.str(), bodydata.size(), "ETag", etag);
     if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
-        etag.assign(etag.substr(1, etag.size() - 2));
+        etag = etag.substr(1, etag.size() - 2);
     }
-    partdata.etaglist->at(partdata.etagpos).assign(etag);
+    (*partdata.etaglist)[partdata.etagpos] = etag;
 
     bodydata.Clear();
     headdata.Clear();
