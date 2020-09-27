@@ -194,6 +194,14 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
     off_t          bytes;
     unsigned char* result;
 
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            return NULL;
+        }
+        size = st.st_size;
+    }
+
     md5_init(&ctx_md5);
 
     for(off_t total = 0; total < size; total += bytes){
