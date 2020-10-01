@@ -2480,9 +2480,9 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
         StringCQ += uriencode + "\n";
     }else if(method == "GET" && uriencode.empty()){
         StringCQ +="/\n";
-    }else if(method == "GET" && uriencode == "/"){
+    }else if(method == "GET" && is_prefix(uriencode.c_str(), "/")){
         StringCQ += uriencode +"\n";
-    }else if(method == "GET" && uriencode != "/"){
+    }else if(method == "GET" && !is_prefix(uriencode.c_str(), "/")){
         StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
     }else if(method == "POST"){
         StringCQ += uriencode + "\n";
