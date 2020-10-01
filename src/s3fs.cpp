@@ -881,9 +881,9 @@ static int do_create_bucket()
     int      res = s3fscurl.PutRequest("/", meta, tmpfd);
     if(res < 0){
         long responseCode = s3fscurl.GetLastResponseCode();
-        if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+        if((responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
             S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
 
             // retry to check
             s3fscurl.DestroyCurlHandle();
@@ -3390,7 +3390,8 @@ static int s3fs_check_service()
                     // current endpoint is wrong, so try to connect to expected region.
                     S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
                     endpoint = expectregion;
-                    if(S3fsCurl::IsSignatureV4()){
+                    if(S3fsCurl::GetSignatureType() == V4_ONLY ||
+                       S3fsCurl::GetSignatureType() == V2_OR_V4){
                         if(s3host == "http://s3.amazonaws.com"){
                             s3host = "http://s3-" + endpoint + ".amazonaws.com";
                         }else if(s3host == "https://s3.amazonaws.com"){
@@ -3407,10 +3408,10 @@ static int s3fs_check_service()
         }
 
         // try signature v2
-        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
             // switch sigv2
             S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
@@ -4502,7 +4503,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(0 == strcmp(arg, "sigv2")){
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
+            return 0;
+        }
+        if(0 == strcmp(arg, "sigv4")){
+            S3fsCurl::SetSignatureType(V4_ONLY);
             return 0;
         }
         if(0 == strcmp(arg, "createbucket")){

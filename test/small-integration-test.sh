@@ -63,6 +63,7 @@ FLAGS=(
     nomultipart
     notsup_compat_dir
     sigv2
+    sigv4
     singlepart_copy_limit=$((10 * 1024))  # limit size to exercise multipart code paths
     #use_sse  # TODO: S3Proxy does not support SSE
 )

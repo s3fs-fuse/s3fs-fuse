@@ -234,6 +234,12 @@ class sse_type_t{
         Value value_;
 };
 
+enum signature_type_t {
+    V2_ONLY,
+    V4_ONLY,
+    V2_OR_V4
+};
+
 //----------------------------------------------
 // etaglist_t / filepart
 //----------------------------------------------

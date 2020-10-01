@@ -127,7 +127,7 @@ std::string      S3fsCurl::userAgent;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
-bool             S3fsCurl::is_sigv4            = true;           // default
+signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::is_use_session_token= false;          // default
 bool             S3fsCurl::requester_pays      = false;          // default
@@ -889,7 +889,7 @@ bool S3fsCurl::FinalCheckSse()
                 S3FS_PRN_ERR("sse type is SSE-KMS, but there is no specified kms id.");
                 return false;
             }
-            if(!S3fsCurl::IsSignatureV4()){
+            if(S3fsCurl::GetSignatureType() == V2_ONLY){
                 S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
                 return false;
             }
@@ -2621,7 +2621,7 @@ void S3fsCurl::insertAuthHeaders()
 
     if(S3fsCurl::is_ibm_iam_auth){
         insertIBMIAMHeaders();
-    }else if(!S3fsCurl::is_sigv4){
+    }else if(S3fsCurl::signature_type == V2_ONLY){
         insertV2Headers();
     }else{
         insertV4Headers();
