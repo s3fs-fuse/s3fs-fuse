@@ -1382,11 +1382,9 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             }
         }else{
             // Multipart copy
-            std::ostringstream  strrange;
+            std::ostringstream strrange;
             strrange << "bytes=" << iter->offset << "-" << (iter->offset + iter->bytes - 1);
             meta["x-amz-copy-source-range"] = strrange.str();
-            strrange.str("");
-            strrange.clear(std::stringstream::goodbit);
 
             s3fscurl_para->b_from   = SAFESTRPTR(tpath);
             s3fscurl_para->b_meta   = meta;
@@ -3757,7 +3755,6 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     off_t          chunk;
     off_t          bytes_remaining;
     etaglist_t     list;
-    std::ostringstream  strrange;
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3774,10 +3771,9 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
+        std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
         meta["x-amz-copy-source-range"] = strrange.str();
-        strrange.str("");
-        strrange.clear(std::stringstream::goodbit);
 
         // s3fscurl sub object
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);
@@ -3922,7 +3918,6 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     off_t          chunk;
     off_t          bytes_remaining;
     etaglist_t     list;
-    std::ostringstream  strrange;
 
     S3FS_PRN_INFO3("[from=%s][to=%s]", SAFESTRPTR(from), SAFESTRPTR(to));
 
@@ -3946,10 +3941,9 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
+        std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
         meta["x-amz-copy-source-range"] = strrange.str();
-        strrange.str("");
-        strrange.clear(std::stringstream::goodbit);
 
         // s3fscurl sub object
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);
