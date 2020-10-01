@@ -58,7 +58,6 @@ template std::string str(unsigned long long value);
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static const char hexAlphabet[] = "0123456789ABCDEF";
 
 // replacement for C++11 std::stoll
 off_t s3fs_strtoofft(const char* str, int base)
@@ -151,7 +150,7 @@ std::string urlEncode(const std::string &s)
 {
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
-        char c = s[i];
+        unsigned char c = s[i];
         if (c == '/' // Note- special case for fuse paths...
             || c == '.'
             || c == '-'
@@ -164,8 +163,7 @@ std::string urlEncode(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += hexAlphabet[static_cast<unsigned char>(c) / 16];
-            result += hexAlphabet[static_cast<unsigned char>(c) % 16];
+            result += s3fs_hex(&c, 1);
         }
     }
     return result;
@@ -180,7 +178,7 @@ std::string urlEncode2(const std::string &s)
 {
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
-        char c = s[i];
+        unsigned char c = s[i];
         if (c == '=' // Note- special case for fuse paths...
           || c == '&' // Note- special case for s3...
           || c == '%'
@@ -195,8 +193,7 @@ std::string urlEncode2(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += hexAlphabet[static_cast<unsigned char>(c) / 16];
-            result += hexAlphabet[static_cast<unsigned char>(c) % 16];
+            result += s3fs_hex(&c, 1);
         }
     }
     return result;
@@ -378,11 +375,11 @@ bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
 
 std::string s3fs_hex(const unsigned char* input, size_t length)
 {
+    static const char hexAlphabet[] = "0123456789abcdef";
     std::string hex;
     for(size_t pos = 0; pos < length; ++pos){
-        char hexbuf[3];
-        snprintf(hexbuf, 3, "%02x", input[pos]);
-        hex += hexbuf;
+        hex += hexAlphabet[input[pos] / 16];
+        hex += hexAlphabet[input[pos] % 16];
     }
     return hex;
 }
