@@ -60,51 +60,30 @@ template std::string str(unsigned long long value);
 //-------------------------------------------------------------------
 static const char hexAlphabet[] = "0123456789ABCDEF";
 
-// replacement for C++11 std::stoll
-off_t s3fs_strtoofft(const char* str, int base)
+bool s3fs_strtoofft(off_t* value, const char* str, int base)
 {
+    if(value == NULL || str == NULL){
+        return false;
+    }
     errno = 0;
     char *temp;
     long long result = strtoll(str, &temp, base);
 
     if(temp == str || *temp != '\0'){
-        throw std::invalid_argument("s3fs_strtoofft");
-    }
-    if((result == LLONG_MIN || result == LLONG_MAX) && errno == ERANGE){
-        throw std::out_of_range("s3fs_strtoofft");
-    }
-    return result;
-}
-
-// wrapped s3fs_strtoofft()
-//
-// This function catches the s3fs_strtoofft () exception and returns a boolean value.
-//
-bool try_strtoofft(const char* str, off_t& value, int base)
-{
-    if(str){
-        try{
-            value = s3fs_strtoofft(str, base);
-        }catch(std::exception &e){
-            S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t.", str);
-            return false;
-        }
-    }else{
-        S3FS_PRN_WARN("parameter std::string is null.");
         return false;
     }
+    if((result == LLONG_MIN || result == LLONG_MAX) && errno == ERANGE){
+        return false;
+    }
+
+    *value = result;
     return true;
 }
 
-// wrapped try_strtoofft -> s3fs_strtoofft()
-//
-// This function returns 0 if a value that cannot be converted is specified.
-// Only call if 0 is considered an error and the operation can continue.
-//
 off_t cvt_strtoofft(const char* str, int base)
 {
     off_t result = 0;
-    if(!try_strtoofft(str, result, base)){
+    if(!s3fs_strtoofft(&result, str, base)){
         S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t, thus return 0 as default.", (str ? str : "null"));
         return 0;
     }

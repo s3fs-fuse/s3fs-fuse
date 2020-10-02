@@ -55,10 +55,14 @@ template <class T> std::string str(T value);
 // Utilities
 //-------------------------------------------------------------------
 //
-// Convert string to off_t.  Throws std::invalid_argument and std::out_of_range on bad input.
+// Convert string to off_t.  Returns false on bad input.
+// Replacement for C++11 std::stoll.
 //
-off_t s3fs_strtoofft(const char* str, int base = 0);
-bool try_strtoofft(const char* str, off_t& value, int base = 0);
+bool s3fs_strtoofft(off_t* value, const char* str, int base = 0);
+//
+// This function returns 0 if a value that cannot be converted is specified.
+// Only call if 0 is considered an error and the operation can continue.
+//
 off_t cvt_strtoofft(const char* str, int base = 0);
 
 //

@@ -1133,7 +1133,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
-    if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
     part_num = static_cast<off_t>(tmp_part_num);
@@ -1181,7 +1181,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
-    if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
     part_num = static_cast<off_t>(tmp_part_num);
@@ -1666,7 +1666,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
     if(S3fsCurl::is_ibm_iam_auth){
         off_t tmp_expire = 0;
-        if(!try_strtoofft(keyval[std::string(S3fsCurl::IAM_expiry_field)].c_str(), tmp_expire, /*base=*/ 10)){
+        if(!s3fs_strtoofft(&tmp_expire, keyval[std::string(S3fsCurl::IAM_expiry_field)].c_str(), /*base=*/ 10)){
             return false;
         }
         S3fsCurl::AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);

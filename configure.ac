@@ -33,7 +33,7 @@ AC_CHECK_HEADERS([sys/xattr.h])
 AC_CHECK_HEADERS([attr/xattr.h])
 AC_CHECK_HEADERS([sys/extattr.h])
 
-CXXFLAGS="$CXXFLAGS -Wall -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=2"
+CXXFLAGS="$CXXFLAGS -Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=2"
 
 dnl ----------------------------------------------
 dnl For macOS
