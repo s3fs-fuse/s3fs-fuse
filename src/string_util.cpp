@@ -163,7 +163,7 @@ std::string urlEncode(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += s3fs_hex(&c, 1);
+            result += s3fs_hex(&c, 1, false);
         }
     }
     return result;
@@ -193,7 +193,7 @@ std::string urlEncode2(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += s3fs_hex(&c, 1);
+            result += s3fs_hex(&c, 1, false);
         }
     }
     return result;
@@ -373,9 +373,12 @@ bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
     return true;
 }
 
-std::string s3fs_hex(const unsigned char* input, size_t length)
+std::string s3fs_hex(const unsigned char* input, size_t length, bool lower)
 {
-    static const char hexAlphabet[] = "0123456789abcdef";
+    static const char hexLower[] = "0123456789abcdef";
+    static const char hexUpper[] = "0123456789ABCDEF";
+
+    const char* hexAlphabet = (lower ? hexLower : hexUpper);
     std::string hex;
     for(size_t pos = 0; pos < length; ++pos){
         hex += hexAlphabet[input[pos] / 16];
