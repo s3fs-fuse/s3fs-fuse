@@ -4284,13 +4284,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(is_prefix(arg, "ibm_iam_endpoint=")){
             std::string endpoint_url;
-            std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
+            const char *iam_endpoint = strchr(arg, '=') + sizeof(char);
             // Check url for http / https protocol std::string
-            if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
+            if(!is_prefix(iam_endpoint, "https://") && !is_prefix(iam_endpoint, "http://")) {
                  S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
                  return -1;
             }
-            endpoint_url = iam_endpoint + "/oidc/token";
+            endpoint_url = std::string(iam_endpoint) + "/oidc/token";
             S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
             return 0;
         }
@@ -4495,7 +4495,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 length = s3host.length();
             }
             // Check url for http / https protocol std::string
-            if((s3host.compare(0, 8, "https://") != 0) && (s3host.compare(0, 7, "http://") != 0)) {
+            if(!is_prefix(s3host.c_str(), "https://") && !is_prefix(s3host.c_str(), "http://")){
                 S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
                 return -1;
             }

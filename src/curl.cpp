@@ -617,7 +617,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
         // Force to lower, only "x-amz"
         std::string lkey = key;
         transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
-        if(lkey.compare(0, 5, "x-amz") == 0){
+        if(is_prefix(lkey.c_str(), "x-amz")){
             key = lkey;
         }
         std::string value;
@@ -2904,7 +2904,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
             meta[iter->first] = value;
         }else if(key == "last-modified"){
             meta[iter->first] = value;
-        }else if(key.substr(0, 5) == "x-amz"){
+        }else if(is_prefix(key.c_str(), "x-amz")){
             meta[key] = value;        // key is lower case for "x-amz"
         }
     }
@@ -2938,9 +2938,9 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source"){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
@@ -3077,9 +3077,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
@@ -3325,9 +3325,9 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // Only copy mode.

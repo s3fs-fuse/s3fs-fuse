@@ -323,9 +323,9 @@ std::string url_to_host(const std::string &url)
     static const std::string https = "https://";
     std::string hostname;
 
-    if (url.compare(0, http.size(), http) == 0) {
+    if (is_prefix(url.c_str(), http.c_str())) {
         hostname = url.substr(http.size());
-    } else if (url.compare(0, https.size(), https) == 0) {
+    } else if (is_prefix(url.c_str(), https.c_str())) {
         hostname = url.substr(https.size());
     } else {
         S3FS_PRN_EXIT("url does not begin with http:// or https://");
