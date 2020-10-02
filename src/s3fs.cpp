@@ -3502,7 +3502,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
     // read '=' type
     kvmap_t kv;
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos = iter->find_first_of("=");
+        first_pos = iter->find_first_of('=');
         if(first_pos == std::string::npos){
             continue;
         }
@@ -3523,8 +3523,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 
     // read ':' type
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos       = iter->find_first_of(":");
-        size_t last_pos = iter->find_last_of(":");
+        first_pos       = iter->find_first_of(':');
+        size_t last_pos = iter->find_last_of(':');
         if(first_pos == std::string::npos){
             continue;
         }
@@ -4932,7 +4932,7 @@ int main(int argc, char* argv[])
     // See issue #128strncasecmp
     /* 
     if(1 == S3fsCurl::GetSslVerifyHostname()){
-        found = bucket.find_first_of(".");
+        found = bucket.find_first_of('.');
         if(found != std::string::npos){
             found = s3host.find("https:");
             if(found != std::string::npos){

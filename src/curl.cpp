@@ -2353,7 +2353,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
             case CURLE_PEER_FAILED_VERIFICATION:
                 S3FS_PRN_ERR("### CURLE_PEER_FAILED_VERIFICATION");
 
-                first_pos = bucket.find_first_of(".");
+                first_pos = bucket.find_first_of('.');
                 if(first_pos != std::string::npos){
                     S3FS_PRN_INFO("curl returned a CURL_PEER_FAILED_VERIFICATION error");
                     S3FS_PRN_INFO("security issue found: buckets with periods in their name are incompatible with http");
