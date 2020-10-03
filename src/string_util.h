@@ -87,7 +87,7 @@ std::string urlEncode2(const std::string &s);
 std::string urlDecode(const std::string& s);
 
 bool takeout_str_dquart(std::string& str);
-bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
+bool get_keyword_value(const std::string& target, const char* keyword, std::string& value);
 
 //
 // For binary string

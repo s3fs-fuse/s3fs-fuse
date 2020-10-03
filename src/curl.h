@@ -240,7 +240,7 @@ class S3fsCurl
         static bool SetIAMRoleFromMetaData(const char* response);
         static bool LoadEnvSseCKeys();
         static bool LoadEnvSseKmsid();
-        static bool PushbackSseKeys(std::string& onekey);
+        static bool PushbackSseKeys(const std::string& onekey);
         static bool AddUserAgent(CURL* hCurl);
 
         static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
@@ -352,18 +352,18 @@ class S3fsCurl
         bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
 
         bool LoadIAMRoleFromMetaData();
-        bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
+        bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, int ssekey_pos = -1);
-        bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath, int ssekey_pos = -1) {
+        bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, int ssekey_pos = -1) {
           return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
         }
         int HeadRequest(const char* tpath, headers_t& meta);
         int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
         int PutRequest(const char* tpath, headers_t& meta, int fd);
-        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue);
+        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
         int CheckBucket();
         int ListBucketRequest(const char* tpath, const char* query);

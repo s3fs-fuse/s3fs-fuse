@@ -245,7 +245,7 @@ bool takeout_str_dquart(std::string& str)
 //
 // ex. target="http://......?keyword=value&..."
 //
-bool get_keyword_value(std::string& target, const char* keyword, std::string& value)
+bool get_keyword_value(const std::string& target, const char* keyword, std::string& value)
 {
     if(!keyword){
         return false;

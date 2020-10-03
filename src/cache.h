@@ -163,7 +163,7 @@ class StatCache
 
         // Delete stat cache
         bool DelStat(const char* key, bool lock_already_held = false);
-        bool DelStat(std::string& key, bool lock_already_held = false)
+        bool DelStat(const std::string& key, bool lock_already_held = false)
         {
             return DelStat(key.c_str(), lock_already_held);
         }
