@@ -40,9 +40,9 @@ typedef std::map<std::string, std::string, header_nocase_cmp> headers_t;
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-time_t get_mtime(const char *s);
 time_t get_mtime(const headers_t& meta, bool overcheck = true);
 time_t get_ctime(const headers_t& meta, bool overcheck = true);
+time_t get_atime(const headers_t& meta, bool overcheck = true);
 off_t get_size(const char *s);
 off_t get_size(const headers_t& meta);
 mode_t get_mode(const char *s, int base = 0);

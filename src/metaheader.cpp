@@ -31,7 +31,7 @@
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
-time_t get_mtime(const char *str)
+static time_t cvt_string_to_time(const char *str)
 {
     // [NOTE]
     // In rclone, there are cases where ns is set to x-amz-meta-mtime
@@ -54,37 +54,49 @@ static time_t get_time(const headers_t& meta, const char *header)
 {
     headers_t::const_iterator iter;
     if(meta.end() == (iter = meta.find(header))){
-        return 0;
+        return -1;
     }
-    return get_mtime((*iter).second.c_str());
+    return cvt_string_to_time((*iter).second.c_str());
 }
 
 time_t get_mtime(const headers_t& meta, bool overcheck)
 {
     time_t t = get_time(meta, "x-amz-meta-mtime");
-    if(t != 0){
+    if(0 < t){
         return t;
     }
     t = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
-    if(t != 0){
+    if(0 < t){
         return t;
     }
     if(overcheck){
         return get_lastmodified(meta);
     }
-    return 0;
+    return -1;
 }
 
 time_t get_ctime(const headers_t& meta, bool overcheck)
 {
     time_t t = get_time(meta, "x-amz-meta-ctime");
-    if(t != 0){
+    if(0 < t){
         return t;
     }
     if(overcheck){
         return get_lastmodified(meta);
     }
-    return 0;
+    return -1;
+}
+
+time_t get_atime(const headers_t& meta, bool overcheck)
+{
+    time_t t = get_time(meta, "x-amz-meta-atime");
+    if(0 < t){
+        return t;
+    }
+    if(overcheck){
+        return get_lastmodified(meta);
+    }
+    return -1;
 }
 
 off_t get_size(const char *s)
@@ -244,7 +256,7 @@ time_t get_lastmodified(const char* s)
 {
     struct tm tm;
     if(!s){
-        return 0L;
+        return -1;
     }
     memset(&tm, 0, sizeof(struct tm));
     strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
@@ -255,7 +267,7 @@ time_t get_lastmodified(const headers_t& meta)
 {
     headers_t::const_iterator iter = meta.find("Last-Modified");
     if(meta.end() == iter){
-        return 0;
+        return -1;
     }
     return get_lastmodified((*iter).second.c_str());
 }
@@ -276,6 +288,8 @@ bool is_need_check_obj_detail(const headers_t& meta)
     // if the object has x-amz-meta information, checking is no more.
     if(meta.end() != meta.find("x-amz-meta-mode")  ||
        meta.end() != meta.find("x-amz-meta-mtime") ||
+       meta.end() != meta.find("x-amz-meta-ctime") ||
+       meta.end() != meta.find("x-amz-meta-atime") ||
        meta.end() != meta.find("x-amz-meta-uid")   ||
        meta.end() != meta.find("x-amz-meta-gid")   ||
        meta.end() != meta.find("x-amz-meta-owner") ||
