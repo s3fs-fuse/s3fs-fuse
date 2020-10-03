@@ -125,10 +125,10 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
-static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
-static int rename_object(const char* from, const char* to);
-static int rename_object_nocopy(const char* from, const char* to);
-static int clone_directory_object(const char* from, const char* to);
+static int create_directory_object(const char* path, mode_t mode, time_t atime, time_t mtime, time_t ctime, uid_t uid, gid_t gid);
+static int rename_object(const char* from, const char* to, bool update_ctime);
+static int rename_object_nocopy(const char* from, const char* to, bool update_ctime);
+static int clone_directory_object(const char* from, const char* to, bool update_ctime);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
 static void free_xattrs(xattrs_t& xattrs);
@@ -751,7 +751,19 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mti
         }
         if(ent){
             time_t mtime = get_mtime(meta);
-            ent->SetMtime(mtime);
+            time_t ctime = get_ctime(meta);
+            time_t atime = get_atime(meta);
+            if(mtime < 0){
+                mtime = 0L;
+            }
+            if(ctime < 0){
+                ctime = 0L;
+            }
+            if(atime < 0){
+                atime = 0L;
+            }
+            ent->SetMCtime(mtime, ctime);
+            ent->SetAtime(atime);
         }
     }
     return 0;
@@ -910,6 +922,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
     meta["x-amz-meta-uid"]   = str(uid);
     meta["x-amz-meta-gid"]   = str(gid);
     meta["x-amz-meta-mode"]  = str(mode);
+    meta["x-amz-meta-atime"] = str(now);
     meta["x-amz-meta-ctime"] = str(now);
     meta["x-amz-meta-mtime"] = str(now);
 
@@ -985,9 +998,9 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     return 0;
 }
 
-static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
+static int create_directory_object(const char* path, mode_t mode, time_t atime, time_t mtime, time_t ctime, uid_t uid, gid_t gid)
 {
-    S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(time), (unsigned int)uid, (unsigned int)gid);
+    S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%lld][mtime=%lld][ctime=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(atime), static_cast<long long>(ctime), static_cast<long long>(mtime), (unsigned int)uid, (unsigned int)gid);
 
     if(!path || '\0' == path[0]){
         return -1;
@@ -1001,8 +1014,9 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
     meta["x-amz-meta-uid"]   = str(uid);
     meta["x-amz-meta-gid"]   = str(gid);
     meta["x-amz-meta-mode"]  = str(mode);
-    meta["x-amz-meta-ctime"] = str(time);
-    meta["x-amz-meta-mtime"] = str(time);
+    meta["x-amz-meta-atime"] = str(atime);
+    meta["x-amz-meta-mtime"] = str(mtime);
+    meta["x-amz-meta-ctime"] = str(ctime);
 
     S3fsCurl s3fscurl;
     return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
@@ -1030,8 +1044,8 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         }
         return result;
     }
+    result = create_directory_object(path, mode, time(NULL), time(NULL), time(NULL), pcxt->uid, pcxt->gid);
 
-    result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
     StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
 
@@ -1156,6 +1170,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     headers_t headers;
     headers["Content-Type"]     = std::string("application/octet-stream"); // Static
     headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+    headers["x-amz-meta-atime"] = str(now);
     headers["x-amz-meta-ctime"] = str(now);
     headers["x-amz-meta-mtime"] = str(now);
     headers["x-amz-meta-uid"]   = str(pcxt->uid);
@@ -1192,7 +1207,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     return result;
 }
 
-static int rename_object(const char* from, const char* to)
+static int rename_object(const char* from, const char* to, bool update_ctime)
 {
     int result;
     std::string s3_realpath;
@@ -1213,6 +1228,9 @@ static int rename_object(const char* from, const char* to)
     }
     s3_realpath = get_realpath(from);
 
+    if(update_ctime){
+        meta["x-amz-meta-ctime"]     = str(time(NULL));
+    }
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
@@ -1232,7 +1250,7 @@ static int rename_object(const char* from, const char* to)
     return result;
 }
 
-static int rename_object_nocopy(const char* from, const char* to)
+static int rename_object_nocopy(const char* from, const char* to, bool update_ctime)
 {
     int result;
 
@@ -1260,6 +1278,11 @@ static int rename_object_nocopy(const char* from, const char* to)
         if(!ent->SetContentType(to)){
             S3FS_PRN_ERR("could not set content-type for %s", to);
             return -EIO;
+        }
+
+        // update ctime
+        if(update_ctime){
+            ent->SetCtime(time(NULL));
         }
 
         // upload
@@ -1315,7 +1338,7 @@ static int rename_large_object(const char* from, const char* to)
     return result;
 }
 
-static int clone_directory_object(const char* from, const char* to)
+static int clone_directory_object(const char* from, const char* to, bool update_ctime)
 {
     int result = -1;
     struct stat stbuf;
@@ -1326,7 +1349,8 @@ static int clone_directory_object(const char* from, const char* to)
     if(0 != (result = get_object_attribute(from, &stbuf))){
         return result;
     }
-    result = create_directory_object(to, stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid);
+    result = create_directory_object(to, stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, (update_ctime ? time(NULL) : stbuf.st_ctime), stbuf.st_uid, stbuf.st_gid);
+
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1424,7 +1448,11 @@ static int rename_directory(const char* from, const char* to)
     // rename directory objects.
     for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
         if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
-            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
+            // [NOTE]
+            // The ctime is updated only for the top (from) directory.
+            // Other than that, it will not be updated.
+            //
+            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path)))){
                 S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
                 free_mvnodes(mn_head);
                 return -EIO;
@@ -1436,11 +1464,10 @@ static int rename_directory(const char* from, const char* to)
     // does a safe copy - copies first and then deletes old
     for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
         if(!mn_cur->is_dir){
-            // TODO: call s3fs_rename instead?
             if(!nocopyapi && !norenameapi){
-                result = rename_object(mn_cur->old_path, mn_cur->new_path);
+                result = rename_object(mn_cur->old_path, mn_cur->new_path, false);          // keep ctime
             }else{
-                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
+                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path, false);   // keep ctime
             }
             if(0 != result){
                 S3FS_PRN_ERR("rename_object returned an error(%d)", result);
@@ -1511,9 +1538,9 @@ static int s3fs_rename(const char* _from, const char* _to)
         result = rename_large_object(from, to);
     }else{
         if(!nocopyapi && !norenameapi){
-            result = rename_object(from, to);
+            result = rename_object(from, to, true);             // update ctime
         }else{
-            result = rename_object_nocopy(from, to);
+            result = rename_object_nocopy(from, to, true);      // update ctime
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -1575,7 +1602,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -1668,7 +1695,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -1751,7 +1778,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), uid, gid))){
             return result;
         }
     }else{
@@ -1851,7 +1878,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), uid, gid))){
             return result;
         }
     }else{
@@ -1894,7 +1921,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype nDirType = DIRTYPE_UNKNOWN;
 
-    S3FS_PRN_INFO("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO("[path=%s][mtime=%lld][ctime/atime=%lld]", path, static_cast<long long>(ts[1].tv_sec), static_cast<long long>(ts[0].tv_sec));
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -1931,12 +1958,14 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
         headers_t updatemeta;
         updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
+        updatemeta["x-amz-meta-ctime"]         = str(ts[0].tv_sec);
+        updatemeta["x-amz-meta-atime"]         = str(ts[0].tv_sec);
         updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -1961,6 +1990,13 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
+
+                // [NOTE]
+                // Depending on the order in which write/flush and utimens are called,
+                // the mtime updated here may be overwritten at the time of flush.
+                // To avoid that, set a special flag.
+                //
+                ent->SetHoldingMtime(ts[1].tv_sec);     // ts[1].tv_sec is mtime
             }
         }else{
             // not opened file, then put headers
@@ -1986,7 +2022,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-    S3FS_PRN_INFO1("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO1("[path=%s][mtime=%lld][atime/ctime=%lld]", path, static_cast<long long>(ts[1].tv_sec), static_cast<long long>(ts[0].tv_sec));
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -2024,7 +2060,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -2038,9 +2074,15 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
             return -EIO;
         }
 
-        // set mtime
-        if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
-            S3FS_PRN_ERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
+        // set mtime/ctime
+        if(0 != (result = ent->SetMCtime(ts[1].tv_sec, ts[0].tv_sec))){
+            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", strpath.c_str(), result);
+            return result;
+        }
+
+        // set atime
+        if(0 != (result = ent->SetAtime(ts[0].tv_sec))){
+            S3FS_PRN_ERR("could not set atime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
 
@@ -2279,7 +2321,8 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
-        ent->UpdateMtime();
+        ent->UpdateMtime(true);         // clear the flag not to update mtime.
+        ent->UpdateCtime();
         result = ent->Flush(false);
     }
     S3FS_MALLOCTRIM(0);
@@ -2302,6 +2345,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         if(0 == datasync){
             ent->UpdateMtime();
+            ent->UpdateCtime();
         }
         result = ent->Flush(false);
     }
@@ -2878,7 +2922,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, stbuf.st_ctime, stbuf.st_uid, stbuf.st_gid))){
           return result;
         }
 
@@ -3162,7 +3206,7 @@ static int s3fs_removexattr(const char* path, const char* name)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, stbuf.st_ctime, stbuf.st_uid, stbuf.st_gid))){
             free_xattrs(xattrs);
             return result;
         }

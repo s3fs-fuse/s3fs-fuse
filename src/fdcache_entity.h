@@ -51,7 +51,8 @@ class FdEntity
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
-        volatile bool            is_meta_pending;
+        volatile bool   is_meta_pending;
+        volatile time_t holding_mtime;  // if mtime is updated while the file is open, it is set time_t value
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -85,9 +86,14 @@ class FdEntity
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(time_t time, bool lock_already_held = false);
-        int SetMtime(time_t time, bool lock_already_held = false);
+        int SetAtime(time_t time, bool lock_already_held = false);
+        int SetMCtime(time_t mtime, time_t ctime, bool lock_already_held = false);
         bool UpdateCtime();
-        bool UpdateMtime();
+        bool UpdateAtime();
+        bool UpdateMtime(bool clear_holding_mtime = false);
+        bool UpdateMCtime();
+        bool SetHoldingMtime(time_t mtime, bool lock_already_held = false);
+        bool ClearHoldingMtime(bool lock_already_held = false);
         bool GetSize(off_t& size);
         bool GetXattr(std::string& xattr);
         bool SetXattr(const std::string& xattr);

@@ -96,7 +96,7 @@ ino_t FdEntity::GetInode(int fd)
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
     fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
-    cachepath(SAFESTRPTR(cpath)), mirrorpath(""), is_meta_pending(false)
+    cachepath(SAFESTRPTR(cpath)), mirrorpath(""), is_meta_pending(false), holding_mtime(-1)
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -524,9 +524,9 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
         size_orgmeta = 0;
     }
 
-    // set mtime(set "x-amz-meta-mtime" in orgmeta)
+    // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
     if(-1 != time){
-        if(0 != SetMtime(time, /*lock_already_held=*/ true)){
+        if(0 != SetMCtime(time, time, /*lock_already_held=*/ true)){
             S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
             fclose(pfile);
             pfile = NULL;
@@ -657,7 +657,7 @@ int FdEntity::SetCtime(time_t time, bool lock_already_held)
     return 0;
 }
 
-int FdEntity::SetMtime(time_t time, bool lock_already_held)
+int FdEntity::SetAtime(time_t time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
@@ -666,12 +666,28 @@ int FdEntity::SetMtime(time_t time, bool lock_already_held)
     if(-1 == time){
         return 0;
     }
+    orgmeta["x-amz-meta-atime"] = str(time);
+    return 0;
+}
+
+// [NOTE]
+// This method updates mtime as well as ctime.
+//
+int FdEntity::SetMCtime(time_t mtime, time_t ctime, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    S3FS_PRN_INFO3("[path=%s][fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), fd, static_cast<long long>(mtime), static_cast<long long>(ctime));
+
+    if(mtime < 0 || ctime < 0){
+        return 0;
+    }
 
     if(-1 != fd){
         struct timeval tv[2];
-        tv[0].tv_sec = time;
+        tv[0].tv_sec = mtime;
         tv[0].tv_usec= 0L;
-        tv[1].tv_sec = tv[0].tv_sec;
+        tv[1].tv_sec = ctime;
         tv[1].tv_usec= 0L;
         if(-1 == futimes(fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
@@ -679,16 +695,16 @@ int FdEntity::SetMtime(time_t time, bool lock_already_held)
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct utimbuf n_mtime;
-        n_mtime.modtime = time;
-        n_mtime.actime  = time;
-        if(-1 == utime(cachepath.c_str(), &n_mtime)){
+        struct utimbuf n_time;
+        n_time.modtime = mtime;
+        n_time.actime  = ctime;
+        if(-1 == utime(cachepath.c_str(), &n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return -errno;
         }
     }
-    orgmeta["x-amz-meta-ctime"] = str(time);
-    orgmeta["x-amz-meta-mtime"] = str(time);
+    orgmeta["x-amz-meta-mtime"] = str(mtime);
+    orgmeta["x-amz-meta-ctime"] = str(ctime);
 
     return 0;
 }
@@ -704,15 +720,90 @@ bool FdEntity::UpdateCtime()
     return true;
 }
 
-bool FdEntity::UpdateMtime()
+bool FdEntity::UpdateAtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
     if(!GetStats(st, /*lock_already_held=*/ true)){
         return false;
     }
-    orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
-    orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
+    orgmeta["x-amz-meta-atime"] = str(st.st_atime);
+    return true;
+}
+
+bool FdEntity::UpdateMtime(bool clear_holding_mtime)
+{
+    AutoLock auto_lock(&fdent_lock);
+
+    if(0 <= holding_mtime){
+        // [NOTE]
+        // This conditional statement is very special.
+        // If you copy a file with "cp -p" etc., utimens or chown will be
+        // called after opening the file, after that call to write, flush.
+        // If normally utimens are not called(cases like "cp" only), mtime
+        // should be updated at the file flush.
+        // Here, check the holding_mtime value to prevent mtime from being
+        // overwritten.
+        //
+        if(clear_holding_mtime){
+            if(!ClearHoldingMtime(true)){
+                return false;
+            }
+        }
+    }else{
+        struct stat st;
+        if(!GetStats(st, /*lock_already_held=*/ true)){
+            return false;
+        }
+        orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
+    }
+    return true;
+}
+
+bool FdEntity::SetHoldingMtime(time_t mtime, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(mtime < 0){
+        return false;
+    }
+    holding_mtime = mtime;
+    return true;
+}
+
+bool FdEntity::ClearHoldingMtime(bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(holding_mtime < 0){
+        return false;
+    }
+    struct stat st;
+    if(!GetStats(st, true)){
+        return false;
+    }
+    if(-1 != fd){
+        struct timeval tv[2];
+        tv[0].tv_sec = holding_mtime;
+        tv[0].tv_usec= 0L;
+        tv[1].tv_sec = st.st_ctime;
+        tv[1].tv_usec= 0L;
+        if(-1 == futimes(fd, tv)){
+            S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
+            return false;
+        }
+    }else if(!cachepath.empty()){
+        // not opened file yet.
+        struct utimbuf n_time;
+        n_time.modtime = holding_mtime;
+        n_time.actime  = st.st_ctime;
+        if(-1 == utime(cachepath.c_str(), &n_time)){
+            S3FS_PRN_ERR("utime failed. errno(%d)", errno);
+            return false;
+        }
+    }
+    holding_mtime = -1;
+
     return true;
 }
 
@@ -1469,14 +1560,16 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     }
     updatemeta = orgmeta;
     orgmeta.erase("x-amz-copy-source");
-    // update ctime/mtime
-    time_t updatetime = get_mtime(updatemeta, false);  // not overcheck
-    if(0 != updatetime){
-        SetMtime(updatetime, true);
+
+    // update ctime/mtime/atime
+    time_t mtime = get_mtime(updatemeta, false);      // not overcheck
+    time_t ctime = get_ctime(updatemeta, false);      // not overcheck
+    time_t atime = get_atime(updatemeta, false);      // not overcheck
+    if(0 <= mtime){
+        SetMCtime(mtime, (ctime < 0 ? mtime : ctime), true);
     }
-    updatetime = get_ctime(updatemeta, false);         // not overcheck
-    if(0 != updatetime){
-        SetCtime(updatetime, true);
+    if(0 <= atime){
+        SetAtime(atime, true);
     }
     is_meta_pending |= !upload_id.empty();
 

@@ -269,6 +269,14 @@ function get_mtime() {
     fi
 }
 
+function get_atime() {
+    if [ `uname` = "Darwin" ]; then
+        stat -f "%a" "$1"
+    else
+        stat -c "%X" "$1"
+    fi
+}
+
 function get_permissions() {
     if [ `uname` = "Darwin" ]; then
         stat -f "%p" "$1"

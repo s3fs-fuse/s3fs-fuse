@@ -771,9 +771,21 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
 
     // mtime
     pst->st_mtime = get_mtime(meta);
+    if(pst->st_mtime < 0){
+        pst->st_mtime = 0L;
+    }
 
     // ctime
     pst->st_ctime = get_ctime(meta);
+    if(pst->st_ctime < 0){
+        pst->st_ctime = 0L;
+    }
+
+    // atime
+    pst->st_atime = get_atime(meta);
+    if(pst->st_atime < 0){
+        pst->st_atime = 0L;
+    }
 
     // size
     pst->st_size = get_size(meta);
