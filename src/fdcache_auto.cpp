@@ -90,7 +90,7 @@ FdEntity* AutoFdEntity::GetFdEntity(const char* path, int existfd, bool increase
     Close();
 
     if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, increase_ref))){
-        S3FS_PRN_ERR("Could not find fd(file=%s, existfd=%d)", path, existfd);
+        S3FS_PRN_DBG("Could not find fd(file=%s, existfd=%d)", path, existfd);
         return NULL;
     }
     return pFdEntity;
