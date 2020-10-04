@@ -33,7 +33,13 @@ DBGLEVEL=debug make check -C test/
 make clean
 ./configure CXX=clang++ CXXFLAGS='-fsanitize=address -fsanitize-address-use-after-scope -g'
 make
-ASAN_OPTIONS='detect_stack_use_after_return=1' make check -C test/
+ASAN_OPTIONS='detect_leaks=1,detect_stack_use_after_return=1' make check -C test/
+
+# run tests under MemorySanitizer, https://clang.llvm.org/docs/MemorySanitizer.html
+make clean
+./configure CXX=clang++ CXXFLAGS='-fsanitize=memory -g'
+make
+make check -C test/
 
 # run tests under ThreadSanitizer, https://clang.llvm.org/docs/ThreadSanitizer.html
 make clean
@@ -41,11 +47,11 @@ make clean
 make
 TSAN_OPTIONS='halt_on_error=1' make check -C test/
 
-# run tests under Valgrind
+# run tests under UndefinedBehaviorSanitizer, https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 make clean
-./configure CXXFLAGS='-O1 -g'
+./configure CXX=clang++ CXXFLAGS='-fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow -g'
 make
-RETRIES=200 VALGRIND='--error-exitcode=1 --leak-check=full' make check -C test/
+make check -C test/
 
 #
 # Local variables:
