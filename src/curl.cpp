@@ -83,6 +83,7 @@ static const char* SPECIAL_DARWIN_MIME_FILE         = "/etc/apache2/mime.types";
 const long       S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
 const long       S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR;
 const int        S3fsCurl::S3FSCURL_PERFORM_RESULT_NOTSET;
+pthread_mutex_t  S3fsCurl::curl_warnings_lock;
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
@@ -117,6 +118,9 @@ std::string      S3fsCurl::IAM_expiry_field    = "Expiration";
 std::string      S3fsCurl::IAM_role;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 
+// protected by curl_warnings_lock
+bool             S3fsCurl::curl_warnings_once = false;
+
 // protected by curl_handles_lock
 curltime_t       S3fsCurl::curl_times;
 curlprogress_t   S3fsCurl::curl_progress;
@@ -142,6 +146,9 @@ bool S3fsCurl::InitS3fsCurl()
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
+    if(0 != pthread_mutex_init(&S3fsCurl::curl_warnings_lock, &attr)){
+        return false;
+    }
     if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, &attr)){
         return false;
     }
@@ -198,6 +205,9 @@ bool S3fsCurl::DestroyS3fsCurl()
         result = false;
     }
     if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
+        result = false;
+    }
+    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_warnings_lock)){
         result = false;
     }
     return result;
@@ -1840,7 +1850,13 @@ S3fsCurl::~S3fsCurl()
 
 bool S3fsCurl::ResetHandle(bool lock_already_held)
 {
-    static volatile bool run_once = false;  // emit older curl warnings only once
+    bool run_once;
+    {
+        AutoLock lock(&S3fsCurl::curl_warnings_lock);
+        run_once = curl_warnings_once;
+        curl_warnings_once = true;
+    }
+
     curl_easy_reset(hCurl);
     curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true);
@@ -1858,7 +1874,6 @@ bool S3fsCurl::ResetHandle(bool lock_already_held)
     if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1) && !run_once){
         S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
     }
-    run_once = true;
 
     if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
         // REQTYPE_IAMCRED and REQTYPE_IAMROLE are always HTTP
