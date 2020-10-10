@@ -688,7 +688,7 @@ static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is
     }
 
     // open
-    time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
+    time_t mtime         = (!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
     if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
