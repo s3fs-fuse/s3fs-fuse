@@ -206,7 +206,7 @@ int mkdirp(const std::string& path, mode_t mode)
     std::string        component;
     std::istringstream ss(path);
     while (getline(ss, component, '/')) {
-        base += "/" + component;
+        base += component + "/";
 
         struct stat st;
         if(0 == stat(base.c_str(), &st)){
