@@ -66,6 +66,7 @@ class FdEntity
         int UploadPendingMeta();
 
     public:
+        static bool GetNoMixMultipart() { return mixmultipart; }
         static bool SetNoMixMultipart();
 
         explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
@@ -108,6 +109,7 @@ class FdEntity
         int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost();
 
+        off_t BytesModified() const;
         int RowFlush(const char* tpath, bool force_sync = false);
         int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }
 

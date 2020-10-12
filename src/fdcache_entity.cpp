@@ -1175,6 +1175,10 @@ int FdEntity::NoCacheCompleteMultipartPost()
     return 0;
 }
 
+off_t FdEntity::BytesModified() const {
+    return pagelist.BytesModified();
+}
+
 int FdEntity::RowFlush(const char* tpath, bool force_sync)
 {
     int result = 0;
