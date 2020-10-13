@@ -689,6 +689,17 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     return true;
 }
 
+off_t PageList::BytesModified() const
+{
+    off_t total = 0;
+    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        if(iter->modified){
+            total += iter->bytes;
+        }
+    }
+    return total;
+}
+
 bool PageList::IsModified() const
 {
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){

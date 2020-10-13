@@ -95,6 +95,7 @@ static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
+static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 
 static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
@@ -2283,6 +2284,14 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
     }
 
+    if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
+        if(0 != (res = ent->RowFlush(path, true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%zd", path, res);
+            StatCache::getStatCacheData()->DelStat(path);
+            return res;
+        }
+    }
+
     return static_cast<int>(res);
 }
 
@@ -4469,6 +4478,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
+        if(is_prefix(arg, "max_dirty_data=")){
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(size < 50){
+                S3FS_PRN_EXIT("max_dirty_data option must be at least 50 MB.");
+                return -1;
+            }
+            size *= 1024 * 1024;
+            max_dirty_data = size;
+            return 0;
+        }
         if(is_prefix(arg, "ensure_diskfree=")){
             off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
             if(dfsize < S3fsCurl::GetMultipartSize()){
@@ -4858,6 +4877,11 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);
+    }
+
+    if(!FdEntity::GetNoMixMultipart() && max_dirty_data != -1){
+        S3FS_PRN_WARN("Setting max_dirty_data to -1 when nomixupload is enabled");
+        max_dirty_data = -1;
     }
 
     // The first plain argument is the bucket

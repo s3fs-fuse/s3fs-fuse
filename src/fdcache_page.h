@@ -110,6 +110,7 @@ class PageList
         int GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
         bool GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize);
 
+        off_t BytesModified() const;
         bool IsModified() const;
         bool ClearAllModified();
 
