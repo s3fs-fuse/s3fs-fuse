@@ -337,6 +337,11 @@ Specify the path of the mime.types file.
 If this option is not specified, the existence of "/etc/mime.types" is checked, and that file is loaded as mime information.
 If this file does not exist on macOS, then "/etc/apache2/mime.types" is checked as well.
 .TP
+\fB\-o\fR logfile - specify the log output file.
+s3fs outputs the log file to syslog. Alternatively, if s3fs is started with the "-f" option specified, the log will be output to the stdout/stderr.
+You can use this option to specify the log file that s3fs outputs.
+If you specify a log file with this option, it will reopen the log file when s3fs receives a SIGHUP signal. You can use the SIGHUP signal for log rotation.
+.TP
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit (critical), err (error), warn (warning), info (information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
