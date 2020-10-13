@@ -2203,7 +2203,7 @@ bool S3fsCurl::RemakeHandle()
 //
 int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
-    if(IS_S3FS_LOG_DBG()){
+    if(S3fsLog::IsS3fsLogDbg()){
         char* ptr_url = NULL;
         curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
         S3FS_PRN_DBG("connecting to URL %s", SAFESTRPTR(ptr_url));

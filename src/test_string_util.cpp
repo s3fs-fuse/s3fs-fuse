@@ -34,7 +34,6 @@
 // Global variables for test_string_util
 //-------------------------------------------------------------------
 bool foreground                   = false;
-s3fs_log_level debug_level        = S3FS_LOG_CRIT;
 std::string instance_name;
 
 void test_trim()
@@ -141,6 +140,8 @@ void test_wtf8_encoding()
 
 int main(int argc, char *argv[])
 {
+    S3fsLog singletonLog;
+
     test_trim();
     test_base64();
     test_strtoofft();

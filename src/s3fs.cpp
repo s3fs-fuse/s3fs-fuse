@@ -2406,7 +2406,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     }
 
     // check - for debug
-    if(IS_S3FS_LOG_DBG()){
+    if(S3fsLog::IsS3fsLogDbg()){
         AutoFdEntity autoent;
         FdEntity*    ent;
         if(NULL != (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh)))){
@@ -4619,20 +4619,31 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         //
-        // debug option for s3fs
+        // log file option
+        //
+        if(is_prefix(arg, "logfile=")){
+            const char* strlogfile = strchr(arg, '=') + sizeof(char);
+            if(!S3fsLog::SetLogfile(strlogfile)){
+                S3FS_PRN_EXIT("The file(%s) specified by logfile option could not be opened.", strlogfile);
+                return -1;
+            }
+            return 0;
+        }
+        //
+        // debug level option
         //
         if(is_prefix(arg, "dbglevel=")){
             const char* strlevel = strchr(arg, '=') + sizeof(char);
             if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_CRIT);
             }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_ERR);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_ERR);
             }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_WARN);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_WARN);
             }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
             }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
             }else{
                 S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
                 return -1;
@@ -4642,11 +4653,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         //
         // debug option
         //
-        // debug_level is S3FS_LOG_INFO, after second -d is passed to fuse.
+        // S3fsLog level is LEVEL_INFO, after second -d is passed to fuse.
         //
         if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
-            if(!IS_S3FS_LOG_INFO() && !IS_S3FS_LOG_DBG()){
-                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+            if(!S3fsLog::IsS3fsLogInfo() && !S3fsLog::IsS3fsLogDbg()){
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
                 return 0;
             }
             if(0 == strcmp(arg, "--debug")){
@@ -4656,9 +4667,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
         }
         // "f2" is not used no more.
-        // (set S3FS_LOG_DBG)
+        // (set S3fsLog::LEVEL_DBG)
         if(0 == strcmp(arg, "f2")){
-            S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+            S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
             return 0;
         }
         if(0 == strcmp(arg, "curldbg")){
@@ -4734,6 +4745,7 @@ int main(int argc, char* argv[])
     int option_index = 0; 
     struct fuse_operations s3fs_oper;
     time_t incomp_abort_time = (24 * 60 * 60);
+    S3fsLog singletonLog;
 
     static const struct option long_opts[] = {
         {"help",                 no_argument,       NULL, 'h'},
@@ -4743,10 +4755,6 @@ int main(int argc, char* argv[])
         {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
         {NULL, 0, NULL, 0}
     };
-
-    // init syslog(default CRIT)
-    openlog("s3fs", LOG_PID | LOG_ODELAY | LOG_NOWAIT, LOG_USER);
-    S3fsSignals::SetLogLevel(debug_level);
 
     // init xml2
     xmlInitParser();
