@@ -112,10 +112,16 @@ time_t           S3fsCurl::AWSAccessTokenExpire= 0;
 bool             S3fsCurl::is_ecs              = false;
 bool             S3fsCurl::is_ibm_iam_auth     = false;
 std::string      S3fsCurl::IAM_cred_url        = "http://169.254.169.254/latest/meta-data/iam/security-credentials/";
+std::string      S3fsCurl::IAMv2_token_url     = "http://169.254.169.254/latest/api/token";
+std::string      S3fsCurl::IAMv2_token_ttl_hdr = "X-aws-ec2-metadata-token-ttl-seconds";
+std::string      S3fsCurl::IAMv2_token_hdr     = "X-aws-ec2-metadata-token";
+int              S3fsCurl::IAMv2_token_ttl     = 21600;
 size_t           S3fsCurl::IAM_field_count     = 4;
 std::string      S3fsCurl::IAM_token_field     = "Token";
 std::string      S3fsCurl::IAM_expiry_field    = "Expiration";
 std::string      S3fsCurl::IAM_role;
+std::string      S3fsCurl::IAMv2_api_token;
+int              S3fsCurl::IAM_api_version     = 2;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 
 // protected by curl_warnings_lock
@@ -1085,6 +1091,12 @@ std::string S3fsCurl::SetIAMExpiryField(const char* expiry_field)
     return old;
 }
 
+bool S3fsCurl::SetIMDSVersion(int version)
+{
+	S3fsCurl::IAM_api_version = version;
+	return true;
+}
+
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
     size = size * 1024 * 1024;
@@ -1654,6 +1666,13 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
         keyval[key] = val;
     }
     return true;
+}
+
+bool S3fsCurl::SetIAMv2APIToken(const char* response)
+{
+    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", response);
+    S3fsCurl::IAMv2_api_token = std::string(response);
+	return true;
 }
 
 bool S3fsCurl::SetIAMCredentials(const char* response)
@@ -2671,6 +2690,42 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 }
 
 //
+// Get the token that we need to pass along with AWS IMDSv2 API requests
+//
+int S3fsCurl::GetIAMv2ApiToken()
+{
+    url = std::string(S3fsCurl::IAMv2_token_url);
+    if(!CreateCurlHandle()){
+        return -EIO;
+    }
+    requestHeaders  = NULL;
+    responseHeaders.clear();
+    bodydata.Clear();
+
+    // maximum allowed value is 21600, so 6 bytes for the C string
+    char ttlstr[6];
+    snprintf(ttlstr, sizeof(ttlstr), "%d", S3fsCurl::IAMv2_token_ttl);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
+                                            ttlstr);
+    curl_easy_setopt(hCurl, CURLOPT_PUT, true);
+    curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
+    curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    S3fsCurl::AddUserAgent(hCurl);
+
+    int result = RequestPerform(true);
+
+    if(0 == result && !S3fsCurl::SetIAMv2APIToken(bodydata.str())){
+        S3FS_PRN_ERR("Error storing IMDSv2 API token.");
+        result = -EIO;
+    }
+    bodydata.Clear();
+    curl_easy_setopt(hCurl, CURLOPT_PUT, false);
+
+    return result;
+}
+
+//
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
@@ -2701,6 +2756,23 @@ int S3fsCurl::GetIAMCredentials()
         }
         url = std::string(S3fsCurl::IAM_cred_url) + env;
     }else{
+		if(S3fsCurl::IAM_api_version > 1){
+			int result = GetIAMv2ApiToken();
+			if(-ENOENT == result){
+				// If we get a 404 back when requesting the token service,
+				// then it's highly likely we're running in an environment
+				// that doesn't support the AWS IMDSv2 API, so we'll skip
+				// the token retrieval in the future.
+				SetIMDSVersion(1);
+			}else if(result != 0){
+				// If we get an unexpected error when retrieving the API
+				// token, log it but continue.  Requirement for including
+				// an API token with the metadata request may or may not
+				// be required, so we should not abort here.
+				S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+			}
+		}
+
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
     }
 
@@ -2729,6 +2801,10 @@ int S3fsCurl::GetIAMCredentials()
         curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining));
         curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
         curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+    }
+
+    if(S3fsCurl::IAM_api_version > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
     }
 
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
