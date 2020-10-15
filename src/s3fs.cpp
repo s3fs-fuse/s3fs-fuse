@@ -4329,6 +4329,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetIAMTokenField("\"access_token\"");
             S3fsCurl::SetIAMExpiryField("\"expiration\"");
             S3fsCurl::SetIAMFieldCount(2);
+            S3fsCurl::SetIMDSVersion(1);
             is_ibm_iam_auth = true;
             return 0;
         }
@@ -4348,12 +4349,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
             return 0;
         }
+        if(0 == strcmp(arg, "imdsv1only")){
+            S3fsCurl::SetIMDSVersion(1);
+            return 0;
+        }
         if(0 == strcmp(arg, "ecs")){
             if (is_ibm_iam_auth) {
                 S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
                 return -1;
             }
             S3fsCurl::SetIsECS(true);
+            S3fsCurl::SetIMDSVersion(1);
             S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
             S3fsCurl::SetIAMFieldCount(5);
             is_ecs = true;

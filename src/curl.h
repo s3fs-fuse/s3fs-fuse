@@ -142,6 +142,12 @@ class S3fsCurl
         static bool             is_use_session_token;
         static bool             is_ibm_iam_auth;
         static std::string      IAM_cred_url;
+        static int              IAM_api_version;
+        static std::string      IAMv2_token_url;
+        static int              IAMv2_token_ttl;
+        static std::string      IAMv2_token_ttl_hdr;
+        static std::string      IAMv2_token_hdr;
+        static std::string      IAMv2_api_token;
         static size_t           IAM_field_count;
         static std::string      IAM_token_field;
         static std::string      IAM_expiry_field;
@@ -238,6 +244,7 @@ class S3fsCurl
 
         static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
         static bool SetIAMCredentials(const char* response);
+        static bool SetIAMv2APIToken(const char* response);
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
         static bool SetIAMRoleFromMetaData(const char* response);
         static bool LoadEnvSseCKeys();
@@ -260,6 +267,7 @@ class S3fsCurl
         void insertAuthHeaders();
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
+        int GetIAMv2ApiToken();
         int GetIAMCredentials();
 
         int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
@@ -348,6 +356,7 @@ class S3fsCurl
         static void InitUserAgent();
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
+		static bool SetIMDSVersion(int version);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
