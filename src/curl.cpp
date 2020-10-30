@@ -1093,8 +1093,8 @@ std::string S3fsCurl::SetIAMExpiryField(const char* expiry_field)
 
 bool S3fsCurl::SetIMDSVersion(int version)
 {
-	S3fsCurl::IAM_api_version = version;
-	return true;
+    S3fsCurl::IAM_api_version = version;
+    return true;
 }
 
 bool S3fsCurl::SetMultipartSize(off_t size)
@@ -1672,7 +1672,7 @@ bool S3fsCurl::SetIAMv2APIToken(const char* response)
 {
     S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", response);
     S3fsCurl::IAMv2_api_token = std::string(response);
-	return true;
+    return true;
 }
 
 bool S3fsCurl::SetIAMCredentials(const char* response)
@@ -2756,23 +2756,23 @@ int S3fsCurl::GetIAMCredentials()
         }
         url = std::string(S3fsCurl::IAM_cred_url) + env;
     }else{
-		if(S3fsCurl::IAM_api_version > 1){
-			int result = GetIAMv2ApiToken();
-			if(-ENOENT == result){
-				// If we get a 404 back when requesting the token service,
-				// then it's highly likely we're running in an environment
-				// that doesn't support the AWS IMDSv2 API, so we'll skip
-				// the token retrieval in the future.
-				SetIMDSVersion(1);
-			}else if(result != 0){
-				// If we get an unexpected error when retrieving the API
-				// token, log it but continue.  Requirement for including
-				// an API token with the metadata request may or may not
-				// be required, so we should not abort here.
-				S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
-			}
-		}
-
+        if(S3fsCurl::IAM_api_version > 1){
+            int result = GetIAMv2ApiToken();
+            if(-ENOENT == result){
+                // If we get a 404 back when requesting the token service,
+                // then it's highly likely we're running in an environment
+                // that doesn't support the AWS IMDSv2 API, so we'll skip
+                // the token retrieval in the future.
+                SetIMDSVersion(1);
+            }else if(result != 0){
+                // If we get an unexpected error when retrieving the API
+                // token, log it but continue.  Requirement for including
+                // an API token with the metadata request may or may not
+                // be required, so we should not abort here.
+                S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+            }
+        }
+        
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
     }
 

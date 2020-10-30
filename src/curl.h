@@ -356,7 +356,7 @@ class S3fsCurl
         static void InitUserAgent();
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
-		static bool SetIMDSVersion(int version);
+        static bool SetIMDSVersion(int version);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);

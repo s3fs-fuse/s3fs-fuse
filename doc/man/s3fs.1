@@ -255,6 +255,12 @@ This option instructs s3fs to query the ECS container credential metadata addres
 \fB\-o\fR iam_role (default is no IAM role)
 This option requires the IAM role name or "auto". If you specify "auto", s3fs will automatically use the IAM role names that are set to an instance. If you specify this option without any argument, it is the same as that you have specified the "auto".
 .TP
+\fB\-o\fR imdsv1only (default is to use IMDSv2 with fallback to v1)
+AWS instance metadata service, used with IAM role authentication,
+supports the use of an API token.  If you're using an IAM role in an
+environment that does not support IMDSv2, setting this flag will skip
+retrieval and usage of the API token when retrieving IAM credentials.
+
 \fB\-o\fR ibm_iam_auth (default is not using IBM IAM authentication)
 This option instructs s3fs to use IBM IAM authentication. In this mode, the AWSAccessKey and AWSSecretKey will be used as IBM's Service-Instance-ID and APIKey, respectively.
 .TP
