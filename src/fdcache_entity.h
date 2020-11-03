@@ -117,6 +117,7 @@ class FdEntity
         ssize_t Write(const char* bytes, off_t start, size_t size);
 
         bool ReserveDiskSpace(off_t size);
+        bool PunchHole(off_t start = 0, size_t size = 0);
 };
 
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*

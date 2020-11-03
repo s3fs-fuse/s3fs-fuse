@@ -2285,10 +2285,15 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     }
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
-        if(0 != (res = ent->RowFlush(path, true))){
-            S3FS_PRN_ERR("could not upload file(%s): result=%zd", path, res);
+        int flushres;
+        if(0 != (flushres = ent->RowFlush(path, true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
-            return res;
+            return -EIO;
+        }
+        // Punch a hole in the file to recover disk space.
+        if(!ent->PunchHole()){
+            S3FS_PRN_WARN("could not punching HOLEs to a cache file, but continue.");
         }
     }
 

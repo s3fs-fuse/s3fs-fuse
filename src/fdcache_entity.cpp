@@ -1601,6 +1601,71 @@ int FdEntity::UploadPendingMeta()
     return result;
 }
 
+// [NOTE]
+// For systems where the fallocate function cannot be detected, use a dummy function.
+// ex. OSX
+//
+#ifndef HAVE_FALLOCATE
+// We need the symbols defined in fallocate, so we define them here.
+// The definitions are copied from linux/falloc.h, but if HAVE_FALLOCATE is undefined,
+// these values can be anything.
+//
+#define FALLOC_FL_PUNCH_HOLE     0x02 /* de-allocates range */
+#define FALLOC_FL_KEEP_SIZE      0x01
+
+static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
+{
+    errno = ENOSYS;     // This is a bad idea, but the caller can handle it simply.
+    return -1;
+}
+#endif  // HAVE_FALLOCATE
+
+// [NOTE]
+// This method punches an area(on cache file) that has no data at the time it is called.
+// This is called to prevent the cache file from growing.
+// However, this method uses the non-portable(Linux specific) system call fallocate().
+// Also, depending on the file system, FALLOC_FL_PUNCH_HOLE mode may not work and HOLE
+// will not open.(Filesystems for which this method works are ext4, btrfs, xfs, etc.)
+// 
+bool FdEntity::PunchHole(off_t start, size_t size)
+{
+    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+
+    if(-1 == fd){
+        return false;
+    }
+    AutoLock auto_lock(&fdent_data_lock);
+
+    // get page list that have no data
+    fdpage_list_t   nodata_pages;
+    if(!pagelist.GetNoDataPageLists(nodata_pages)){
+        S3FS_PRN_ERR("filed to get page list that have no data.");
+        return false;
+    }
+    if(nodata_pages.empty()){
+        S3FS_PRN_DBG("there is no page list that have no data, so nothing to do.");
+        return true;
+    }
+
+    // try to punch hole to file
+    for(fdpage_list_t::const_iterator iter = nodata_pages.begin(); iter != nodata_pages.end(); ++iter){
+        if(0 != fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
+            if(ENOSYS == errno || EOPNOTSUPP == errno){
+                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);
+            }else{
+                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d)", errno);
+            }
+            return false;
+        }
+        if(!pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, PageList::PAGE_NOT_LOAD_MODIFIED)){
+            S3FS_PRN_ERR("succeed to punch HOLEs in the cache file, but failed to update the cache stat.");
+            return false;
+        }
+        S3FS_PRN_DBG("made a hole at [%lld - %lld bytes](into a boundary) of the cache file.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
+    }
+    return true;
+}
+
 /*
 * Local variables:
 * tab-width: 4
