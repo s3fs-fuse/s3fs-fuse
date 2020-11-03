@@ -689,6 +689,45 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     return true;
 }
 
+bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size_t size)
+{
+    // compress before this processing
+    if(!Compress()){
+        return false;
+    }
+
+    // extract areas without data
+    fdpage_list_t tmp_pagelist;
+    off_t         stop_pos = (0L == size ? -1 : (start + size));
+    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        if((iter->offset + iter->bytes) < start){
+            continue;
+        }
+        if(-1 != stop_pos && stop_pos <= iter->offset){
+            break;
+        }
+        if(iter->modified){
+            continue;
+        }
+
+        fdpage  tmppage;
+        tmppage.offset   = std::max(iter->offset, start);
+        tmppage.bytes    = (-1 != stop_pos ? iter->bytes : std::min(iter->bytes, (stop_pos - tmppage.offset)));
+        tmppage.loaded   = iter->loaded;
+        tmppage.modified = iter->modified;
+
+        tmp_pagelist.push_back(tmppage);
+    }
+
+    if(tmp_pagelist.empty()){
+        nodata_pages.clear();
+    }else{
+        // compress
+        nodata_pages = compress_fdpage_list(tmp_pagelist);
+    }
+    return true;
+}
+
 off_t PageList::BytesModified() const
 {
     off_t total = 0;
