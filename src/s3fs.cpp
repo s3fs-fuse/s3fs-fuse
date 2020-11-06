@@ -2422,12 +2422,12 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
     int result;
-    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
+    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
 
     S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
     if(0 == (result = check_object_access(path, mask, NULL))){
-        result = check_parent_object_access(path, mask);
+        result = check_parent_object_access(path, X_OK);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2575,7 +2575,7 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
 
     S3FS_PRN_INFO("[path=%s]", path);
 
-    if(0 != (result = check_object_access(path, X_OK, NULL))){
+    if(0 != (result = check_object_access(path, R_OK, NULL))){
         return result;
     }
 
