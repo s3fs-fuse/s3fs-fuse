@@ -180,9 +180,7 @@ bool S3fsLog::LowSetLogfile(const char* pfile)
             fclose(newfp);
             return false;
         }
-        if(S3fsLog::plogfile){
-            delete S3fsLog::plogfile;
-        }
+        delete S3fsLog::plogfile;
         S3fsLog::plogfile = new std::string(pfile);
     }
     return true;
