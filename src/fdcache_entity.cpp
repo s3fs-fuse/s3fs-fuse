@@ -95,8 +95,8 @@ ino_t FdEntity::GetInode(int fd)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
-    fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
-    cachepath(SAFESTRPTR(cpath)), mirrorpath(""), is_meta_pending(false), holding_mtime(-1)
+    fd(-1), pfile(NULL), inode(0), size_orgmeta(0), mp_start(0), mp_size(0),
+    cachepath(SAFESTRPTR(cpath)), is_meta_pending(false), holding_mtime(-1)
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);

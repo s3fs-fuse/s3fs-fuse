@@ -1854,10 +1854,10 @@ int S3fsCurl::RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
+    hCurl(NULL), type(REQTYPE_UNSET), requestHeaders(NULL),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
-    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(sse_type_t::SSE_DISABLE), op(""), query_string(""),
+    b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
     sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
 {
 }
