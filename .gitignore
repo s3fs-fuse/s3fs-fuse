@@ -73,7 +73,7 @@ missing
 *.trs
 default_commit_hash
 src/s3fs
-src/test_*
+src/test_string_util
 test/s3proxy-*
 
 #
