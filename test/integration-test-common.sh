@@ -31,8 +31,9 @@
 # TEST_BUCKET_1=bucketname           Name of bucket to use 
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
 # S3_URL="https://s3.amazonaws.com"  Specify Amazon AWS as the S3 provider
+# S3_ENDPOINT="us-east-1"             Specify region
 #
-# Example of running against Amazon S3 using a bucket named "bucket:
+# Example of running against Amazon S3 using a bucket named "bucket":
 #
 # S3FS_CREDENTIALS_FILE=keyfile TEST_BUCKET_1=bucket S3PROXY_BINARY="" S3_URL="https://s3.amazonaws.com" ./small-integration-test.sh
 #
@@ -64,11 +65,13 @@ S3FS=../src/s3fs
 
 # Allow these defaulted values to be overridden
 : ${S3_URL:="https://127.0.0.1:8080"}
+: ${S3_ENDPOINT:="us-east-1"}
 : ${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}
 : ${TEST_BUCKET_1:="s3fs-integration-test"}
 
 export TEST_BUCKET_1
 export S3_URL
+export S3_ENDPOINT
 export TEST_SCRIPT_DIR=`pwd`
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
@@ -214,6 +217,7 @@ function start_s3fs {
             $TEST_BUCKET_MOUNT_POINT_1 \
             -o use_path_request_style \
             -o url=${S3_URL} \
+            -o endpoint=${S3_ENDPOINT} \
             -o no_check_certificate \
             -o ssl_verify_hostname=0 \
             -o use_xattr=1 \
