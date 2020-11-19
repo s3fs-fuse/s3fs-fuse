@@ -3913,7 +3913,6 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
     std::string    upload_id;
     struct stat    st;
     int            fd2;
-    etaglist_t     list;
     off_t          remaining_bytes;
     off_t          chunk;
 
@@ -3940,6 +3939,7 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
     DestroyCurlHandle();
 
     // cycle through open fd, pulling off 10MB chunks at a time
+    etaglist_t* plist = new etaglist_t;
     for(remaining_bytes = st.st_size; 0 < remaining_bytes; remaining_bytes -= chunk){
         // chunk size
         chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
@@ -3950,21 +3950,24 @@ int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd,
         partdata.size       = chunk;
         b_partdata_startpos = partdata.startpos;
         b_partdata_size     = partdata.size;
-        partdata.add_etag_list(&list);
+        partdata.add_etag_list(plist);
 
         // upload part
-        if(0 != (result = UploadMultipartPostRequest(tpath, list.size(), upload_id))){
+        if(0 != (result = UploadMultipartPostRequest(tpath, plist->size(), upload_id))){
             S3FS_PRN_ERR("failed uploading part(%d)", result);
             close(fd2);
+            delete plist;
             return result;
         }
         DestroyCurlHandle();
     }
     close(fd2);
 
-    if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
+    if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, *plist))){
+        delete plist;
         return result;
     }
+    delete plist;
     return 0;
 }
 
