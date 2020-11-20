@@ -1167,8 +1167,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
     // duplicate request
     S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
-    newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
-    newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+    newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->partdata.fd         = s3fscurl->partdata.fd;
     newcurl->partdata.startpos   = s3fscurl->b_partdata_startpos;
     newcurl->partdata.size       = s3fscurl->b_partdata_size;
@@ -1215,8 +1214,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
     // duplicate request
     S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
-    newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
-    newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+    newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->b_from              = s3fscurl->b_from;
     newcurl->b_meta              = s3fscurl->b_meta;
     newcurl->retry_count         = s3fscurl->retry_count + 1;
@@ -3499,14 +3497,15 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
-    for(int cnt = 0; cnt < (int)parts.size(); cnt++){
-        if(0 == parts[cnt].length()){
+    int cnt = 0;
+    for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it, ++cnt){
+        if(it->empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", cnt + 1);
             return -1;
         }
         postContent += "<Part>\n";
         postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
-        postContent += "  <ETag>" + parts[cnt] + "</ETag>\n";
+        postContent += "  <ETag>" + *it + "</ETag>\n";
         postContent += "</Part>\n";
     }
     postContent += "</CompleteMultipartUpload>\n";
@@ -3799,7 +3798,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
             return false;
         }
     }
-    (*partdata.etaglist)[partdata.etagpos] = it->second;
+    (*partdata.petag) = it->second;
     partdata.uploaded = true;
 
     return true;
@@ -3821,7 +3820,7 @@ bool S3fsCurl::CopyMultipartPostComplete()
     if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
         etag = etag.substr(1, etag.size() - 2);
     }
-    (*partdata.etaglist)[partdata.etagpos] = etag;
+    (*partdata.petag) = etag;
 
     bodydata.Clear();
     headdata.Clear();
