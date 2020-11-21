@@ -63,11 +63,28 @@ endif
 
 s3fs_LDADD = $(DEPS_LIBS)
 
-noinst_PROGRAMS = test_string_util
+noinst_PROGRAMS = \
+    test_curl_util \
+    test_string_util
+
+test_curl_util_SOURCES = common_auth.cpp curl_util.cpp string_util.cpp test_curl_util.cpp s3fs_global.cpp s3fs_logger.cpp
+if USE_SSL_OPENSSL
+    test_curl_util_SOURCES += openssl_auth.cpp
+endif
+if USE_SSL_GNUTLS
+    test_curl_util_SOURCES += gnutls_auth.cpp
+endif
+if USE_SSL_NSS
+    test_curl_util_SOURCES += nss_auth.cpp
+endif
+
+test_curl_util_LDADD = $(DEPS_LIBS)
 
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 
-TESTS = test_string_util
+TESTS = \
+    test_curl_util \
+    test_string_util
 
 clang-tidy:
 	clang-tidy $(s3fs_SOURCES) -- $(DEPS_CFLAGS) $(CPPFLAGS)
