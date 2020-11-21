@@ -76,6 +76,8 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
     new_item->next = NULL;
 
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress nullPointerRedundantCheck
     for(lastpos = NULL, curpos = list; curpos; lastpos = curpos, curpos = curpos->next){
         std::string strcur = curpos->data;
         size_t pos;
