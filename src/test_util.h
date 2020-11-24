@@ -25,6 +25,8 @@
 #include <iostream>
 #include <stdio.h>
 
+#include "string_util.h"
+
 template <typename T> void assert_equals(const T &x, const T &y, const char *file, int line)
 {
     if (x != y) {
