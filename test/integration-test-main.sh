@@ -672,7 +672,7 @@ function test_update_time() {
     #
     # "touch -a" -> update ctime/atime, not update mtime
     #
-    if ! cat /proc/mounts | grep "^s3fs $TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
+    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
         touch -a $TEST_TEXT_FILE
         atime=`get_atime $TEST_TEXT_FILE`
         ctime=`get_ctime $TEST_TEXT_FILE`
@@ -820,7 +820,7 @@ function test_update_directory_time() {
     #
     # "touch -a" -> update ctime/atime, not update mtime
     #
-    if ! cat /proc/mounts | grep "^s3fs $TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
+    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
         touch -a $TEST_DIR
         atime=`get_atime $TEST_DIR`
         ctime=`get_ctime $TEST_DIR`
