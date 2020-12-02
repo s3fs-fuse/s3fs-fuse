@@ -1,0 +1,197 @@
+#
+# s3fs - FUSE-based file system backed by Amazon S3
+#
+# Copyright(C) 2007 Takeshi Nakatani <ggtakec.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+name: s3fs-fuse CI
+
+on:
+  push:
+  pull_request:
+  #
+  # CRON event is fire on every sunday(UTC).
+  #
+  schedule:
+    - cron: '0 0 * * 0'
+
+#
+# Jobs
+#
+# [NOTE]
+# Some tests using awscli may output a python warning.
+# The warning is about HTTPS connections using self-signed certificates.
+# That's why the PYTHONWARNINGS environment variable disables the
+# "Unverified HTTPS request" warning.
+#
+jobs:
+  Linux:
+    runs-on: ubuntu-latest
+
+    #
+    # build matrix for containers
+    #
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      #
+      # matrix for containers
+      #
+      matrix:
+        container:
+          - ubuntu:20.04
+          - ubuntu:18.04
+          - ubuntu:16.04
+          - debian:buster
+          - debian:stretch
+          - centos:centos8
+          - centos:centos7
+          - fedora:32
+          - fedora:31
+          - opensuse/leap:15
+
+    container:
+      image: ${{ matrix.container }}
+
+      options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
+
+    env:
+      # [NOTE]
+      # Installation special environment variables for debian and ubuntu.
+      #
+      DEBIAN_FRONTEND:  noninteractive
+
+      # [NOTE]
+      # Since using a self-signed certificate and have not registered a certificate authority,
+      # we get a warning in python, so we suppress it(by PYTHONWARNINGS).
+      #
+      PYTHONWARNINGS:   "ignore:Unverified HTTPS request"
+
+    steps:
+      # [NOTE]
+      # On openSUSE, tar and gzip must be installed before action/checkout.
+      #
+      - name: Install packages before checkout
+        run: |
+          if [ "${{ matrix.container }}" = "opensuse/leap:15" ]; then zypper install -y tar gzip; fi
+
+      - name: Checkout source code
+        uses: actions/checkout@v2
+
+      # [NOTE]
+      # Matters that depend on OS:VERSION are determined and executed in the following script.
+      # Please note that the option to configure (CONFIGURE_OPTIONS) is set in the environment variable.
+      #
+      - name: Install pacakagse
+        run: |
+          .github/workflows/linux-ci-helper.sh ${{ matrix.container }}
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
+          make
+
+      - name: Cppcheck
+        run: |
+          make cppcheck
+
+      - name: Test suite
+        run: |
+          make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+
+
+  # [NOTE]
+  # A case of "runs-on: macos-11.0" does not work,
+  # becase load_osxfuse returns exit code = 1.
+  # Maybe it needs to reboot. Apple said 
+  # "Installing a new kernel extension requires signing in as an Admin user. You must also restart your Mac to load the extension".
+  # Then we do not use macos 11 on Github Actions now.
+  #
+  macos10:
+    runs-on: macos-10.15
+
+    env:
+      # [NOTE]
+      # Since using a self-signed certificate and have not registered a certificate authority,
+      # we get a warning in python, so we suppress it(by PYTHONWARNINGS).
+      #
+      PYTHONWARNINGS:   "ignore:Unverified HTTPS request"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+
+      - name: Brew tap
+        run: |
+          TAPS="$(brew --repository)/Library/Taps";
+          if [ -e "$TAPS/caskroom/homebrew-cask" ]; then rm -rf "$TAPS/caskroom/homebrew-cask"; fi;
+          if [ ! -f $HOME/.osx_cache/cached ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask; else HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask; fi
+
+      - name: Install osxfuse
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
+
+      - name: Install brew other packages
+        run: |
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils';
+          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
+
+      - name: Install awscli
+        run: |
+          if pip3 --version; then pip3 install awscli; else curl https://bootstrap.pypa.io/get-pip.py | sudo python; pip install awscli --ignore-installed matplotlib; fi
+
+      - name: Check osxfuse permission
+        run: |
+          if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
+
+      - name: Check truncate
+        run: |
+          if [ ! -f /usr/local/bin/truncate ]; then sudo ln -s /usr/local/opt/coreutils/bin/gtruncate /usr/local/bin/truncate; fi
+
+      - name: Check stdbuf
+        run: |
+          if [ ! -f /usr/local/bin/stdbuf ]; then sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf; fi
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
+          make
+
+      - name: Cppcheck
+        run: |
+          make cppcheck
+
+      - name: Test suite
+        run: |
+          make check -C src
+          echo "user_allow_other" | sudo tee -a /etc/fuse.conf >/dev/null
+          if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
+          make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+
+#
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: expandtab sw=4 ts=4 fdm=marker
+# vim<600: expandtab sw=4 ts=4
+#
