@@ -95,6 +95,7 @@ static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
+static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 
 static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
@@ -125,10 +126,10 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
-static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid);
-static int rename_object(const char* from, const char* to);
-static int rename_object_nocopy(const char* from, const char* to);
-static int clone_directory_object(const char* from, const char* to);
+static int create_directory_object(const char* path, mode_t mode, time_t atime, time_t mtime, time_t ctime, uid_t uid, gid_t gid);
+static int rename_object(const char* from, const char* to, bool update_ctime);
+static int rename_object_nocopy(const char* from, const char* to, bool update_ctime);
+static int clone_directory_object(const char* from, const char* to, bool update_ctime);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
 static void free_xattrs(xattrs_t& xattrs);
@@ -688,7 +689,7 @@ static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is
     }
 
     // open
-    time_t mtime         = (!S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
+    time_t mtime         = (!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
     if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
@@ -751,7 +752,19 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mti
         }
         if(ent){
             time_t mtime = get_mtime(meta);
-            ent->SetMtime(mtime);
+            time_t ctime = get_ctime(meta);
+            time_t atime = get_atime(meta);
+            if(mtime < 0){
+                mtime = 0L;
+            }
+            if(ctime < 0){
+                ctime = 0L;
+            }
+            if(atime < 0){
+                atime = 0L;
+            }
+            ent->SetMCtime(mtime, ctime);
+            ent->SetAtime(atime);
         }
     }
     return 0;
@@ -881,9 +894,9 @@ static int do_create_bucket()
     int      res = s3fscurl.PutRequest("/", meta, tmpfd);
     if(res < 0){
         long responseCode = s3fscurl.GetLastResponseCode();
-        if((responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+        if((responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
             S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
 
             // retry to check
             s3fscurl.DestroyCurlHandle();
@@ -910,6 +923,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
     meta["x-amz-meta-uid"]   = str(uid);
     meta["x-amz-meta-gid"]   = str(gid);
     meta["x-amz-meta-mode"]  = str(mode);
+    meta["x-amz-meta-atime"] = str(now);
     meta["x-amz-meta-ctime"] = str(now);
     meta["x-amz-meta-mtime"] = str(now);
 
@@ -985,9 +999,9 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     return 0;
 }
 
-static int create_directory_object(const char* path, mode_t mode, time_t time, uid_t uid, gid_t gid)
+static int create_directory_object(const char* path, mode_t mode, time_t atime, time_t mtime, time_t ctime, uid_t uid, gid_t gid)
 {
-    S3FS_PRN_INFO1("[path=%s][mode=%04o][time=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(time), (unsigned int)uid, (unsigned int)gid);
+    S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%lld][mtime=%lld][ctime=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(atime), static_cast<long long>(ctime), static_cast<long long>(mtime), (unsigned int)uid, (unsigned int)gid);
 
     if(!path || '\0' == path[0]){
         return -1;
@@ -1001,8 +1015,9 @@ static int create_directory_object(const char* path, mode_t mode, time_t time, u
     meta["x-amz-meta-uid"]   = str(uid);
     meta["x-amz-meta-gid"]   = str(gid);
     meta["x-amz-meta-mode"]  = str(mode);
-    meta["x-amz-meta-ctime"] = str(time);
-    meta["x-amz-meta-mtime"] = str(time);
+    meta["x-amz-meta-atime"] = str(atime);
+    meta["x-amz-meta-mtime"] = str(mtime);
+    meta["x-amz-meta-ctime"] = str(ctime);
 
     S3fsCurl s3fscurl;
     return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
@@ -1030,8 +1045,8 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         }
         return result;
     }
+    result = create_directory_object(path, mode, time(NULL), time(NULL), time(NULL), pcxt->uid, pcxt->gid);
 
-    result = create_directory_object(path, mode, time(NULL), pcxt->uid, pcxt->gid);
     StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
 
@@ -1156,6 +1171,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     headers_t headers;
     headers["Content-Type"]     = std::string("application/octet-stream"); // Static
     headers["x-amz-meta-mode"]  = str(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+    headers["x-amz-meta-atime"] = str(now);
     headers["x-amz-meta-ctime"] = str(now);
     headers["x-amz-meta-mtime"] = str(now);
     headers["x-amz-meta-uid"]   = str(pcxt->uid);
@@ -1192,7 +1208,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     return result;
 }
 
-static int rename_object(const char* from, const char* to)
+static int rename_object(const char* from, const char* to, bool update_ctime)
 {
     int result;
     std::string s3_realpath;
@@ -1213,6 +1229,9 @@ static int rename_object(const char* from, const char* to)
     }
     s3_realpath = get_realpath(from);
 
+    if(update_ctime){
+        meta["x-amz-meta-ctime"]     = str(time(NULL));
+    }
     meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
@@ -1232,7 +1251,7 @@ static int rename_object(const char* from, const char* to)
     return result;
 }
 
-static int rename_object_nocopy(const char* from, const char* to)
+static int rename_object_nocopy(const char* from, const char* to, bool update_ctime)
 {
     int result;
 
@@ -1260,6 +1279,11 @@ static int rename_object_nocopy(const char* from, const char* to)
         if(!ent->SetContentType(to)){
             S3FS_PRN_ERR("could not set content-type for %s", to);
             return -EIO;
+        }
+
+        // update ctime
+        if(update_ctime){
+            ent->SetCtime(time(NULL));
         }
 
         // upload
@@ -1315,7 +1339,7 @@ static int rename_large_object(const char* from, const char* to)
     return result;
 }
 
-static int clone_directory_object(const char* from, const char* to)
+static int clone_directory_object(const char* from, const char* to, bool update_ctime)
 {
     int result = -1;
     struct stat stbuf;
@@ -1326,7 +1350,8 @@ static int clone_directory_object(const char* from, const char* to)
     if(0 != (result = get_object_attribute(from, &stbuf))){
         return result;
     }
-    result = create_directory_object(to, stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid);
+    result = create_directory_object(to, stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, (update_ctime ? time(NULL) : stbuf.st_ctime), stbuf.st_uid, stbuf.st_gid);
+
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1424,7 +1449,11 @@ static int rename_directory(const char* from, const char* to)
     // rename directory objects.
     for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
         if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
-            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path))){
+            // [NOTE]
+            // The ctime is updated only for the top (from) directory.
+            // Other than that, it will not be updated.
+            //
+            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path)))){
                 S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
                 free_mvnodes(mn_head);
                 return -EIO;
@@ -1436,11 +1465,10 @@ static int rename_directory(const char* from, const char* to)
     // does a safe copy - copies first and then deletes old
     for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
         if(!mn_cur->is_dir){
-            // TODO: call s3fs_rename instead?
             if(!nocopyapi && !norenameapi){
-                result = rename_object(mn_cur->old_path, mn_cur->new_path);
+                result = rename_object(mn_cur->old_path, mn_cur->new_path, false);          // keep ctime
             }else{
-                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path);
+                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path, false);   // keep ctime
             }
             if(0 != result){
                 S3FS_PRN_ERR("rename_object returned an error(%d)", result);
@@ -1511,9 +1539,9 @@ static int s3fs_rename(const char* _from, const char* _to)
         result = rename_large_object(from, to);
     }else{
         if(!nocopyapi && !norenameapi){
-            result = rename_object(from, to);
+            result = rename_object(from, to, true);             // update ctime
         }else{
-            result = rename_object_nocopy(from, to);
+            result = rename_object_nocopy(from, to, true);      // update ctime
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -1575,7 +1603,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -1668,7 +1696,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -1751,7 +1779,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), uid, gid))){
             return result;
         }
     }else{
@@ -1851,7 +1879,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, time(NULL), uid, gid))){
             return result;
         }
     }else{
@@ -1894,7 +1922,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype nDirType = DIRTYPE_UNKNOWN;
 
-    S3FS_PRN_INFO("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO("[path=%s][mtime=%lld][ctime/atime=%lld]", path, static_cast<long long>(ts[1].tv_sec), static_cast<long long>(ts[0].tv_sec));
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -1931,12 +1959,14 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
         headers_t updatemeta;
         updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
+        updatemeta["x-amz-meta-ctime"]         = str(ts[0].tv_sec);
+        updatemeta["x-amz-meta-atime"]         = str(ts[0].tv_sec);
         updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -1961,6 +1991,13 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                     return -EIO;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
+
+                // [NOTE]
+                // Depending on the order in which write/flush and utimens are called,
+                // the mtime updated here may be overwritten at the time of flush.
+                // To avoid that, set a special flag.
+                //
+                ent->SetHoldingMtime(ts[1].tv_sec);     // ts[1].tv_sec is mtime
             }
         }else{
             // not opened file, then put headers
@@ -1986,7 +2023,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-    S3FS_PRN_INFO1("[path=%s][mtime=%lld]", path, static_cast<long long>(ts[1].tv_sec));
+    S3FS_PRN_INFO1("[path=%s][mtime=%lld][atime/ctime=%lld]", path, static_cast<long long>(ts[1].tv_sec), static_cast<long long>(ts[0].tv_sec));
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mtime for mount point.");
@@ -2024,7 +2061,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[1].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -2038,9 +2075,15 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
             return -EIO;
         }
 
-        // set mtime
-        if(0 != (result = ent->SetMtime(ts[1].tv_sec))){
-            S3FS_PRN_ERR("could not set mtime to file(%s): result=%d", strpath.c_str(), result);
+        // set mtime/ctime
+        if(0 != (result = ent->SetMCtime(ts[1].tv_sec, ts[0].tv_sec))){
+            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", strpath.c_str(), result);
+            return result;
+        }
+
+        // set atime
+        if(0 != (result = ent->SetAtime(ts[0].tv_sec))){
+            S3FS_PRN_ERR("could not set atime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
 
@@ -2241,6 +2284,19 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
     }
 
+    if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
+        int flushres;
+        if(0 != (flushres = ent->RowFlush(path, true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
+            StatCache::getStatCacheData()->DelStat(path);
+            return -EIO;
+        }
+        // Punch a hole in the file to recover disk space.
+        if(!ent->PunchHole()){
+            S3FS_PRN_WARN("could not punching HOLEs to a cache file, but continue.");
+        }
+    }
+
     return static_cast<int>(res);
 }
 
@@ -2279,7 +2335,8 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
-        ent->UpdateMtime();
+        ent->UpdateMtime(true);         // clear the flag not to update mtime.
+        ent->UpdateCtime();
         result = ent->Flush(false);
     }
     S3FS_MALLOCTRIM(0);
@@ -2302,6 +2359,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
         if(0 == datasync){
             ent->UpdateMtime();
+            ent->UpdateCtime();
         }
         result = ent->Flush(false);
     }
@@ -2353,7 +2411,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     }
 
     // check - for debug
-    if(IS_S3FS_LOG_DBG()){
+    if(S3fsLog::IsS3fsLogDbg()){
         AutoFdEntity autoent;
         FdEntity*    ent;
         if(NULL != (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh)))){
@@ -2369,12 +2427,12 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
     int result;
-    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK) | X_OK;
+    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
 
     S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
     if(0 == (result = check_object_access(path, mask, NULL))){
-        result = check_parent_object_access(path, mask);
+        result = check_parent_object_access(path, X_OK);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2522,7 +2580,7 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
 
     S3FS_PRN_INFO("[path=%s]", path);
 
-    if(0 != (result = check_object_access(path, X_OK, NULL))){
+    if(0 != (result = check_object_access(path, R_OK, NULL))){
         return result;
     }
 
@@ -2878,7 +2936,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, stbuf.st_ctime, stbuf.st_uid, stbuf.st_gid))){
           return result;
         }
 
@@ -3162,7 +3220,7 @@ static int s3fs_removexattr(const char* path, const char* name)
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_mtime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, stbuf.st_atime, stbuf.st_mtime, stbuf.st_ctime, stbuf.st_uid, stbuf.st_gid))){
             free_xattrs(xattrs);
             return result;
         }
@@ -3390,7 +3448,8 @@ static int s3fs_check_service()
                     // current endpoint is wrong, so try to connect to expected region.
                     S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
                     endpoint = expectregion;
-                    if(S3fsCurl::IsSignatureV4()){
+                    if(S3fsCurl::GetSignatureType() == V4_ONLY ||
+                       S3fsCurl::GetSignatureType() == V2_OR_V4){
                         if(s3host == "http://s3.amazonaws.com"){
                             s3host = "http://s3-" + endpoint + ".amazonaws.com";
                         }else if(s3host == "https://s3.amazonaws.com"){
@@ -3407,10 +3466,10 @@ static int s3fs_check_service()
         }
 
         // try signature v2
-        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::IsSignatureV4()){
+        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
             // switch sigv2
             S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
@@ -3502,7 +3561,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
     // read '=' type
     kvmap_t kv;
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos = iter->find_first_of("=");
+        first_pos = iter->find_first_of('=');
         if(first_pos == std::string::npos){
             continue;
         }
@@ -3523,8 +3582,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 
     // read ':' type
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos       = iter->find_first_of(":");
-        size_t last_pos = iter->find_last_of(":");
+        first_pos       = iter->find_first_of(':');
+        size_t last_pos = iter->find_last_of(':');
         if(first_pos == std::string::npos){
             continue;
         }
@@ -4275,6 +4334,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetIAMTokenField("\"access_token\"");
             S3fsCurl::SetIAMExpiryField("\"expiration\"");
             S3fsCurl::SetIAMFieldCount(2);
+            S3fsCurl::SetIMDSVersion(1);
             is_ibm_iam_auth = true;
             return 0;
         }
@@ -4284,14 +4344,18 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(is_prefix(arg, "ibm_iam_endpoint=")){
             std::string endpoint_url;
-            std::string iam_endpoint = strchr(arg, '=') + sizeof(char);
+            const char *iam_endpoint = strchr(arg, '=') + sizeof(char);
             // Check url for http / https protocol std::string
-            if((iam_endpoint.compare(0, 8, "https://") != 0) && (iam_endpoint.compare(0, 7, "http://") != 0)) {
+            if(!is_prefix(iam_endpoint, "https://") && !is_prefix(iam_endpoint, "http://")) {
                  S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
                  return -1;
             }
-            endpoint_url = iam_endpoint + "/oidc/token";
+            endpoint_url = std::string(iam_endpoint) + "/oidc/token";
             S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
+            return 0;
+        }
+        if(0 == strcmp(arg, "imdsv1only")){
+            S3fsCurl::SetIMDSVersion(1);
             return 0;
         }
         if(0 == strcmp(arg, "ecs")){
@@ -4300,6 +4364,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 return -1;
             }
             S3fsCurl::SetIsECS(true);
+            S3fsCurl::SetIMDSVersion(1);
             S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
             S3fsCurl::SetIAMFieldCount(5);
             is_ecs = true;
@@ -4424,6 +4489,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
+        if(is_prefix(arg, "max_dirty_data=")){
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(size < 50){
+                S3FS_PRN_EXIT("max_dirty_data option must be at least 50 MB.");
+                return -1;
+            }
+            size *= 1024 * 1024;
+            max_dirty_data = size;
+            return 0;
+        }
         if(is_prefix(arg, "ensure_diskfree=")){
             off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
             if(dfsize < S3fsCurl::GetMultipartSize()){
@@ -4495,14 +4570,18 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 length = s3host.length();
             }
             // Check url for http / https protocol std::string
-            if((s3host.compare(0, 8, "https://") != 0) && (s3host.compare(0, 7, "http://") != 0)) {
+            if(!is_prefix(s3host.c_str(), "https://") && !is_prefix(s3host.c_str(), "http://")){
                 S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
                 return -1;
             }
             return 0;
         }
         if(0 == strcmp(arg, "sigv2")){
-            S3fsCurl::SetSignatureV4(false);
+            S3fsCurl::SetSignatureType(V2_ONLY);
+            return 0;
+        }
+        if(0 == strcmp(arg, "sigv4")){
+            S3fsCurl::SetSignatureType(V4_ONLY);
             return 0;
         }
         if(0 == strcmp(arg, "createbucket")){
@@ -4551,20 +4630,31 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         //
-        // debug option for s3fs
+        // log file option
+        //
+        if(is_prefix(arg, "logfile=")){
+            const char* strlogfile = strchr(arg, '=') + sizeof(char);
+            if(!S3fsLog::SetLogfile(strlogfile)){
+                S3FS_PRN_EXIT("The file(%s) specified by logfile option could not be opened.", strlogfile);
+                return -1;
+            }
+            return 0;
+        }
+        //
+        // debug level option
         //
         if(is_prefix(arg, "dbglevel=")){
             const char* strlevel = strchr(arg, '=') + sizeof(char);
             if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_CRIT);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_CRIT);
             }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_ERR);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_ERR);
             }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_WARN);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_WARN);
             }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
             }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
-                S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
             }else{
                 S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
                 return -1;
@@ -4574,11 +4664,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         //
         // debug option
         //
-        // debug_level is S3FS_LOG_INFO, after second -d is passed to fuse.
+        // S3fsLog level is LEVEL_INFO, after second -d is passed to fuse.
         //
         if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
-            if(!IS_S3FS_LOG_INFO() && !IS_S3FS_LOG_DBG()){
-                S3fsSignals::SetLogLevel(S3FS_LOG_INFO);
+            if(!S3fsLog::IsS3fsLogInfo() && !S3fsLog::IsS3fsLogDbg()){
+                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
                 return 0;
             }
             if(0 == strcmp(arg, "--debug")){
@@ -4588,9 +4678,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
         }
         // "f2" is not used no more.
-        // (set S3FS_LOG_DBG)
+        // (set S3fsLog::LEVEL_DBG)
         if(0 == strcmp(arg, "f2")){
-            S3fsSignals::SetLogLevel(S3FS_LOG_DBG);
+            S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
             return 0;
         }
         if(0 == strcmp(arg, "curldbg")){
@@ -4666,6 +4756,7 @@ int main(int argc, char* argv[])
     int option_index = 0; 
     struct fuse_operations s3fs_oper;
     time_t incomp_abort_time = (24 * 60 * 60);
+    S3fsLog singletonLog;
 
     static const struct option long_opts[] = {
         {"help",                 no_argument,       NULL, 'h'},
@@ -4675,10 +4766,6 @@ int main(int argc, char* argv[])
         {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
         {NULL, 0, NULL, 0}
     };
-
-    // init syslog(default CRIT)
-    openlog("s3fs", LOG_PID | LOG_ODELAY | LOG_NOWAIT, LOG_USER);
-    S3fsSignals::SetLogLevel(debug_level);
 
     // init xml2
     xmlInitParser();
@@ -4811,6 +4898,11 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    if(!FdEntity::GetNoMixMultipart() && max_dirty_data != -1){
+        S3FS_PRN_WARN("Setting max_dirty_data to -1 when nomixupload is enabled");
+        max_dirty_data = -1;
+    }
+
     // The first plain argument is the bucket
     if(bucket.empty()){
         S3FS_PRN_EXIT("missing BUCKET argument.");
@@ -4932,7 +5024,7 @@ int main(int argc, char* argv[])
     // See issue #128strncasecmp
     /* 
     if(1 == S3fsCurl::GetSslVerifyHostname()){
-        found = bucket.find_first_of(".");
+        found = bucket.find_first_of('.');
         if(found != std::string::npos){
             found = s3host.find("https:");
             if(found != std::string::npos){

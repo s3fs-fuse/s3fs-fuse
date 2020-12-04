@@ -123,7 +123,7 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
 void S3fsSignals::HandlerUSR2(int sig)
 {
     if(SIGUSR2 == sig){
-        S3fsSignals::BumpupLogLevel();
+        S3fsLog::BumpupLogLevel();
     }else{
         S3FS_PRN_ERR("The handler for SIGUSR2 received signal(%d)", sig);
     }
@@ -142,29 +142,26 @@ bool S3fsSignals::InitUsr2Handler()
     return true;
 }
 
-s3fs_log_level S3fsSignals::SetLogLevel(s3fs_log_level level)
+void S3fsSignals::HandlerHUP(int sig)
 {
-    if(level == debug_level){
-        return debug_level;
+    if(SIGHUP == sig){
+        S3fsLog::ReopenLogfile();
+    }else{
+        S3FS_PRN_ERR("The handler for SIGHUP received signal(%d)", sig);
     }
-    s3fs_log_level old = debug_level;
-    debug_level        = level;
-    setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
-    S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
-    return old;
 }
 
-s3fs_log_level S3fsSignals::BumpupLogLevel()
+bool S3fsSignals::InitHupHandler()
 {
-    s3fs_log_level old = debug_level;
-    debug_level        = ( S3FS_LOG_CRIT == debug_level ? S3FS_LOG_ERR :
-                           S3FS_LOG_ERR  == debug_level ? S3FS_LOG_WARN :
-                           S3FS_LOG_WARN == debug_level ? S3FS_LOG_INFO :
-                           S3FS_LOG_INFO == debug_level ? S3FS_LOG_DBG :
-                           S3FS_LOG_CRIT );
-    setlogmask(LOG_UPTO(S3FS_LOG_LEVEL_TO_SYSLOG(debug_level)));
-    S3FS_PRN_CRIT("change debug level from %sto %s", S3FS_LOG_LEVEL_STRING(old), S3FS_LOG_LEVEL_STRING(debug_level));
-    return old;
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(struct sigaction));
+    sa.sa_handler = S3fsSignals::HandlerHUP;
+    sa.sa_flags   = SA_RESTART;
+    if(0 != sigaction(SIGHUP, &sa, NULL)){
+        return false;
+    }
+    return true;
 }
 
 //-------------------------------------------------------------------
@@ -179,6 +176,9 @@ S3fsSignals::S3fsSignals() : pThreadUsr1(NULL), pSemUsr1(NULL)
     }
     if(!S3fsSignals::InitUsr2Handler()){
         S3FS_PRN_ERR("failed to initialize SIGUSR2 handler for bumping log level, but continue...");
+    }
+    if(!S3fsSignals::InitHupHandler()){
+        S3FS_PRN_ERR("failed to initialize SIGHUP handler for reopen log file, but continue...");
     }
 }
 

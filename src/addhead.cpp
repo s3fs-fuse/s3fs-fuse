@@ -233,7 +233,7 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
 
 bool AdditionalHeader::Dump() const
 {
-    if(!IS_S3FS_LOG_DBG()){
+    if(!S3fsLog::IsS3fsLogDbg()){
         return true;
     }
 

@@ -583,55 +583,288 @@ function test_mtime_file {
     rm_test_file $ALT_TEST_TEXT_FILE
 }
 
+# [NOTE]
+# If it mounted with relatime or noatime options , the "touch -a"
+# command may not update the atime.
+# In ubuntu:xenial, atime was updated even if relatime was granted.
+# However, it was not updated in bionic/focal.
+# We can probably update atime by explicitly specifying the strictatime
+# option and running the "touch -a" command. However, the strictatime
+# option cannot be set.
+# Therefore, if the relatime option is set, the test with the "touch -a"
+# command is bypassed.
+# We do not know why atime is not updated may or not be affected by
+# these options.(can't say for sure)
+# However, if atime has not been updated, the s3fs_utimens entry point
+# will not be called from FUSE library. We added this bypass because
+# the test became unstable.
+#
 function test_update_time() {
     describe "Testing update time function ..."
 
+    #
     # create the test
+    #
     mk_test_file
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
+    sleep 2
+
+    #
+    # chmod -> update only ctime
+    #
+    chmod +x $TEST_TEXT_FILE
+    atime=`get_atime $TEST_TEXT_FILE`
     ctime=`get_ctime $TEST_TEXT_FILE`
     mtime=`get_mtime $TEST_TEXT_FILE`
-
-    sleep 2
-    chmod +x $TEST_TEXT_FILE
-
-    ctime2=`get_ctime $TEST_TEXT_FILE`
-    mtime2=`get_mtime $TEST_TEXT_FILE`
-    if [ $ctime -eq $ctime2 -o $mtime -ne $mtime2 ]; then
-       echo "Expected updated ctime: $ctime != $ctime2 and same mtime: $mtime == $mtime2"
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
+    base_ctime=$ctime
     sleep 2
+
+    #
+    # chown -> update only ctime
+    #
     chown $UID $TEST_TEXT_FILE
-
-    ctime3=`get_ctime $TEST_TEXT_FILE`
-    mtime3=`get_mtime $TEST_TEXT_FILE`
-    if [ $ctime2 -eq $ctime3 -o $mtime2 -ne $mtime3 ]; then
-       echo "Expected updated ctime: $ctime2 != $ctime3 and same mtime: $mtime2 == $mtime3"
+    atime=`get_atime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
+    base_ctime=$ctime
     sleep 2
+
+    #
+    # set_xattr -> update only ctime
+    #
     set_xattr key value $TEST_TEXT_FILE
-
-    ctime4=`get_ctime $TEST_TEXT_FILE`
-    mtime4=`get_mtime $TEST_TEXT_FILE`
-    if [ $ctime3 -eq $ctime4 -o $mtime3 -ne $mtime4 ]; then
-       echo "Expected updated ctime: $ctime3 != $ctime4 and same mtime: $mtime3 == $mtime4"
+    atime=`get_atime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
+    base_ctime=$ctime
     sleep 2
-    echo foo >> $TEST_TEXT_FILE
 
-    ctime5=`get_ctime $TEST_TEXT_FILE`
-    mtime5=`get_mtime $TEST_TEXT_FILE`
-    if [ $ctime4 -eq $ctime5 -o $mtime4 -eq $mtime5 ]; then
-       echo "Expected updated ctime: $ctime4 != $ctime5 and updated mtime: $mtime4 != $mtime5"
+    #
+    # touch -> update ctime/atime/mtime
+    #
+    touch $TEST_TEXT_FILE
+    atime=`get_atime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
+    if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -eq $mtime ]; then
+       echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
+       return 1
+    fi
+    base_atime=$atime
+    base_mtime=$mtime
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # "touch -a" -> update ctime/atime, not update mtime
+    #
+    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
+        touch -a $TEST_TEXT_FILE
+        atime=`get_atime $TEST_TEXT_FILE`
+        ctime=`get_ctime $TEST_TEXT_FILE`
+        mtime=`get_mtime $TEST_TEXT_FILE`
+        if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+           echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+           return 1
+        fi
+        base_atime=$atime
+        base_ctime=$ctime
+        sleep 2
+    fi
+
+    #
+    # append -> update ctime/mtime, not update atime
+    #
+    echo foo >> $TEST_TEXT_FILE
+    atime=`get_atime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -eq $mtime ]; then
+       echo "append expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime and same atime: $base_atime == $atime"
+       return 1
+    fi
+    base_mtime=$mtime
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # cp -p -> update ctime, not update atime/mtime
+    #
+    TIME_TEST_TEXT_FILE=test-s3fs-time.txt
+    cp -p $TEST_TEXT_FILE $TIME_TEST_TEXT_FILE
+    atime=`get_atime $TIME_TEST_TEXT_FILE`
+    ctime=`get_ctime $TIME_TEST_TEXT_FILE`
+    mtime=`get_mtime $TIME_TEST_TEXT_FILE`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "cp with -p option expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+    sleep 2
+
+    #
+    # mv -> update ctime, not update atime/mtime
+    #
+    TIME2_TEST_TEXT_FILE=test-s3fs-time2.txt
+    mv $TEST_TEXT_FILE $TIME2_TEST_TEXT_FILE
+    atime=`get_atime $TIME2_TEST_TEXT_FILE`
+    ctime=`get_ctime $TIME2_TEST_TEXT_FILE`
+    mtime=`get_mtime $TIME2_TEST_TEXT_FILE`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "mv expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
 
-    rm_test_file
+    rm_test_file $TIME_TEST_TEXT_FILE
+    rm_test_file $TIME2_TEST_TEXT_FILE
+}
+
+# [NOTE]
+# See the description of test_update_time () for notes about the
+# "touch -a" command and atime.
+#
+function test_update_directory_time() {
+    describe "Testing update time for directory function ..."
+
+    #
+    # create the directory and sub-directory and a file in directory
+    #
+    TIME_TEST_SUBDIR="$TEST_DIR/testsubdir"
+    TIME_TEST_FILE_INDIR="$TEST_DIR/testfile"
+    mk_test_dir
+    mkdir $TIME_TEST_SUBDIR
+    touch $TIME_TEST_FILE_INDIR
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
+    subdir_atime=`get_atime $TIME_TEST_SUBDIR`
+    subdir_ctime=`get_ctime $TIME_TEST_SUBDIR`
+    subdir_mtime=`get_mtime $TIME_TEST_SUBDIR`
+    subfile_atime=`get_atime $TIME_TEST_FILE_INDIR`
+    subfile_ctime=`get_ctime $TIME_TEST_FILE_INDIR`
+    subfile_mtime=`get_mtime $TIME_TEST_FILE_INDIR`
+    sleep 2
+
+    #
+    # chmod -> update only ctime
+    #
+    chmod 0777 $TEST_DIR
+    atime=`get_atime $TEST_DIR`
+    ctime=`get_ctime $TEST_DIR`
+    mtime=`get_mtime $TEST_DIR`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # chown -> update only ctime
+    #
+    chown $UID $TEST_DIR
+    atime=`get_atime $TEST_DIR`
+    ctime=`get_ctime $TEST_DIR`
+    mtime=`get_mtime $TEST_DIR`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # set_xattr -> update only ctime
+    #
+    set_xattr key value $TEST_DIR
+    atime=`get_atime $TEST_DIR`
+    ctime=`get_ctime $TEST_DIR`
+    mtime=`get_mtime $TEST_DIR`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # touch -> update ctime/atime/mtime
+    #
+    touch $TEST_DIR
+    atime=`get_atime $TEST_DIR`
+    ctime=`get_ctime $TEST_DIR`
+    mtime=`get_mtime $TEST_DIR`
+    if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -eq $mtime ]; then
+       echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
+       return 1
+    fi
+    base_atime=$atime
+    base_mtime=$mtime
+    base_ctime=$ctime
+    sleep 2
+
+    #
+    # "touch -a" -> update ctime/atime, not update mtime
+    #
+    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
+        touch -a $TEST_DIR
+        atime=`get_atime $TEST_DIR`
+        ctime=`get_ctime $TEST_DIR`
+        mtime=`get_mtime $TEST_DIR`
+        if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+           echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+           return 1
+        fi
+        base_atime=$atime
+        base_ctime=$ctime
+        sleep 2
+    fi
+
+    #
+    # mv -> update ctime, not update atime/mtime for taget directory
+    #       not update any for sub-directory and a file
+    #
+    TIME_TEST_DIR=timetestdir
+    TIME2_TEST_SUBDIR="$TIME_TEST_DIR/testsubdir"
+    TIME2_TEST_FILE_INDIR="$TIME_TEST_DIR/testfile"
+    mv $TEST_DIR $TIME_TEST_DIR
+    atime=`get_atime $TIME_TEST_DIR`
+    ctime=`get_ctime $TIME_TEST_DIR`
+    mtime=`get_mtime $TIME_TEST_DIR`
+    if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+       echo "mv expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+    atime=`get_atime $TIME2_TEST_SUBDIR`
+    ctime=`get_ctime $TIME2_TEST_SUBDIR`
+    mtime=`get_mtime $TIME2_TEST_SUBDIR`
+    if [ $subdir_atime -ne $atime -o $subdir_ctime -ne $ctime -o $subdir_mtime -ne $mtime ]; then
+       echo "mv for sub-directory expected same ctime: $subdir_ctime == $ctime, mtime: $subdir_mtime == $mtime, atime: $subdir_atime == $atime"
+       return 1
+    fi
+    atime=`get_atime $TIME2_TEST_FILE_INDIR`
+    ctime=`get_ctime $TIME2_TEST_FILE_INDIR`
+    mtime=`get_mtime $TIME2_TEST_FILE_INDIR`
+    if [ $subfile_atime -ne $atime -o $subfile_ctime -ne $ctime -o $subfile_mtime -ne $mtime ]; then
+       echo "mv for a file in directory expected same ctime: $subfile_ctime == $ctime, mtime: $subfile_mtime == $mtime, atime: $subfile_atime == $atime"
+       return 1
+    fi
+
+    rm -r $TIME_TEST_DIR
 }
 
 function test_rm_rf_dir {
@@ -1080,6 +1313,7 @@ function add_all_tests {
     add_tests test_extended_attributes
     add_tests test_mtime_file
     add_tests test_update_time
+    add_tests test_update_directory_time
     add_tests test_rm_rf_dir
     add_tests test_copy_file
     add_tests test_write_after_seek_ahead

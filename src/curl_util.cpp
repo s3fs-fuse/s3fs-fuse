@@ -76,6 +76,8 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
     new_item->next = NULL;
 
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress nullPointerRedundantCheck
     for(lastpos = NULL, curpos = list; curpos; lastpos = curpos, curpos = curpos->next){
         std::string strcur = curpos->data;
         size_t pos;
@@ -323,9 +325,9 @@ std::string url_to_host(const std::string &url)
     static const std::string https = "https://";
     std::string hostname;
 
-    if (url.compare(0, http.size(), http) == 0) {
+    if (is_prefix(url.c_str(), http.c_str())) {
         hostname = url.substr(http.size());
-    } else if (url.compare(0, https.size(), https) == 0) {
+    } else if (is_prefix(url.c_str(), https.c_str())) {
         hostname = url.substr(https.size());
     } else {
         S3FS_PRN_EXIT("url does not begin with http:// or https://");

@@ -234,25 +234,30 @@ class sse_type_t{
         Value value_;
 };
 
+enum signature_type_t {
+    V2_ONLY,
+    V4_ONLY,
+    V2_OR_V4
+};
+
 //----------------------------------------------
 // etaglist_t / filepart
 //----------------------------------------------
-typedef std::vector<std::string> etaglist_t;
+typedef std::list<std::string> etaglist_t;
 
 //
 // Each part information for Multipart upload
 //
 struct filepart
 {
-    bool        uploaded;     // does finish uploading
-    std::string etag;         // expected etag value
-    int         fd;           // base file(temporary full file) descriptor
-    off_t       startpos;     // seek fd point for uploading
-    off_t       size;         // uploading size
-    etaglist_t* etaglist;     // use only parallel upload
-    int         etagpos;      // use only parallel upload
+    bool         uploaded;    // does finish uploading
+    std::string  etag;        // expected etag value
+    int          fd;          // base file(temporary full file) descriptor
+    off_t        startpos;    // seek fd point for uploading
+    off_t        size;        // uploading size
+    std::string* petag;       // use only parallel upload
 
-    filepart() : uploaded(false), fd(-1), startpos(0), size(-1), etaglist(NULL), etagpos(-1) {}
+    filepart() : uploaded(false), fd(-1), startpos(0), size(-1), petag(NULL) {}
     ~filepart()
     {
       clear();
@@ -265,20 +270,13 @@ struct filepart
         fd       = -1;
         startpos = 0;
         size     = -1;
-        etaglist = NULL;
-        etagpos  = - 1;
+        petag    = NULL;
     }
 
     void add_etag_list(etaglist_t* list)
     {
-        if(list){
-            list->push_back(std::string(""));
-            etaglist = list;
-            etagpos  = list->size() - 1;
-        }else{
-            etaglist = NULL;
-            etagpos  = - 1;
-        }
+        list->push_back(std::string());
+        petag = &list->back();
     }
 };
 

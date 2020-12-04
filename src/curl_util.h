@@ -23,12 +23,12 @@
 
 #include <curl/curl.h>
 
+struct sse_type_t;
+
 //----------------------------------------------
 // Functions
 //----------------------------------------------
 std::string GetContentMD5(int fd);
-unsigned char* md5hexsum(int fd, off_t start, ssize_t size);
-std::string md5sum(int fd, off_t start, ssize_t size);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value);
 std::string get_sorted_header_keys(const struct curl_slist* list);

@@ -410,7 +410,7 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
             ent->meta[iter->first] = value;
         }else if(tag == "last-modified"){
             ent->meta[iter->first] = value;
-        }else if(tag.substr(0, 5) == "x-amz"){
+        }else if(is_prefix(tag.c_str(), "x-amz")){
             ent->meta[tag] = value;      // key is lower case for "x-amz"
         }
     }
@@ -771,9 +771,21 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
 
     // mtime
     pst->st_mtime = get_mtime(meta);
+    if(pst->st_mtime < 0){
+        pst->st_mtime = 0L;
+    }
 
     // ctime
     pst->st_ctime = get_ctime(meta);
+    if(pst->st_ctime < 0){
+        pst->st_ctime = 0L;
+    }
+
+    // atime
+    pst->st_atime = get_atime(meta);
+    if(pst->st_atime < 0){
+        pst->st_atime = 0L;
+    }
 
     // size
     pst->st_size = get_size(meta);

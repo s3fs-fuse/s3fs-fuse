@@ -95,8 +95,8 @@ ino_t FdEntity::GetInode(int fd)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
-    fd(-1), pfile(NULL), inode(0), size_orgmeta(0), upload_id(""), mp_start(0), mp_size(0),
-    cachepath(SAFESTRPTR(cpath)), mirrorpath(""), is_meta_pending(false)
+    fd(-1), pfile(NULL), inode(0), size_orgmeta(0), mp_start(0), mp_size(0),
+    cachepath(SAFESTRPTR(cpath)), is_meta_pending(false), holding_mtime(-1)
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -524,9 +524,9 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
         size_orgmeta = 0;
     }
 
-    // set mtime(set "x-amz-meta-mtime" in orgmeta)
+    // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
     if(-1 != time){
-        if(0 != SetMtime(time, /*lock_already_held=*/ true)){
+        if(0 != SetMCtime(time, time, /*lock_already_held=*/ true)){
             S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
             fclose(pfile);
             pfile = NULL;
@@ -657,7 +657,7 @@ int FdEntity::SetCtime(time_t time, bool lock_already_held)
     return 0;
 }
 
-int FdEntity::SetMtime(time_t time, bool lock_already_held)
+int FdEntity::SetAtime(time_t time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
@@ -666,12 +666,28 @@ int FdEntity::SetMtime(time_t time, bool lock_already_held)
     if(-1 == time){
         return 0;
     }
+    orgmeta["x-amz-meta-atime"] = str(time);
+    return 0;
+}
+
+// [NOTE]
+// This method updates mtime as well as ctime.
+//
+int FdEntity::SetMCtime(time_t mtime, time_t ctime, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    S3FS_PRN_INFO3("[path=%s][fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), fd, static_cast<long long>(mtime), static_cast<long long>(ctime));
+
+    if(mtime < 0 || ctime < 0){
+        return 0;
+    }
 
     if(-1 != fd){
         struct timeval tv[2];
-        tv[0].tv_sec = time;
+        tv[0].tv_sec = mtime;
         tv[0].tv_usec= 0L;
-        tv[1].tv_sec = tv[0].tv_sec;
+        tv[1].tv_sec = ctime;
         tv[1].tv_usec= 0L;
         if(-1 == futimes(fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
@@ -679,16 +695,16 @@ int FdEntity::SetMtime(time_t time, bool lock_already_held)
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct utimbuf n_mtime;
-        n_mtime.modtime = time;
-        n_mtime.actime  = time;
-        if(-1 == utime(cachepath.c_str(), &n_mtime)){
+        struct utimbuf n_time;
+        n_time.modtime = mtime;
+        n_time.actime  = ctime;
+        if(-1 == utime(cachepath.c_str(), &n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return -errno;
         }
     }
-    orgmeta["x-amz-meta-ctime"] = str(time);
-    orgmeta["x-amz-meta-mtime"] = str(time);
+    orgmeta["x-amz-meta-mtime"] = str(mtime);
+    orgmeta["x-amz-meta-ctime"] = str(ctime);
 
     return 0;
 }
@@ -704,15 +720,90 @@ bool FdEntity::UpdateCtime()
     return true;
 }
 
-bool FdEntity::UpdateMtime()
+bool FdEntity::UpdateAtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
     if(!GetStats(st, /*lock_already_held=*/ true)){
         return false;
     }
-    orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
-    orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
+    orgmeta["x-amz-meta-atime"] = str(st.st_atime);
+    return true;
+}
+
+bool FdEntity::UpdateMtime(bool clear_holding_mtime)
+{
+    AutoLock auto_lock(&fdent_lock);
+
+    if(0 <= holding_mtime){
+        // [NOTE]
+        // This conditional statement is very special.
+        // If you copy a file with "cp -p" etc., utimens or chown will be
+        // called after opening the file, after that call to write, flush.
+        // If normally utimens are not called(cases like "cp" only), mtime
+        // should be updated at the file flush.
+        // Here, check the holding_mtime value to prevent mtime from being
+        // overwritten.
+        //
+        if(clear_holding_mtime){
+            if(!ClearHoldingMtime(true)){
+                return false;
+            }
+        }
+    }else{
+        struct stat st;
+        if(!GetStats(st, /*lock_already_held=*/ true)){
+            return false;
+        }
+        orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
+    }
+    return true;
+}
+
+bool FdEntity::SetHoldingMtime(time_t mtime, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(mtime < 0){
+        return false;
+    }
+    holding_mtime = mtime;
+    return true;
+}
+
+bool FdEntity::ClearHoldingMtime(bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(holding_mtime < 0){
+        return false;
+    }
+    struct stat st;
+    if(!GetStats(st, true)){
+        return false;
+    }
+    if(-1 != fd){
+        struct timeval tv[2];
+        tv[0].tv_sec = holding_mtime;
+        tv[0].tv_usec= 0L;
+        tv[1].tv_sec = st.st_ctime;
+        tv[1].tv_usec= 0L;
+        if(-1 == futimes(fd, tv)){
+            S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
+            return false;
+        }
+    }else if(!cachepath.empty()){
+        // not opened file yet.
+        struct utimbuf n_time;
+        n_time.modtime = holding_mtime;
+        n_time.actime  = st.st_ctime;
+        if(-1 == utime(cachepath.c_str(), &n_time)){
+            S3FS_PRN_ERR("utime failed. errno(%d)", errno);
+            return false;
+        }
+    }
+    holding_mtime = -1;
+
     return true;
 }
 
@@ -1082,6 +1173,10 @@ int FdEntity::NoCacheCompleteMultipartPost()
     mp_size  = 0;
 
     return 0;
+}
+
+off_t FdEntity::BytesModified() const {
+    return pagelist.BytesModified();
 }
 
 int FdEntity::RowFlush(const char* tpath, bool force_sync)
@@ -1469,14 +1564,16 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     }
     updatemeta = orgmeta;
     orgmeta.erase("x-amz-copy-source");
-    // update ctime/mtime
-    time_t updatetime = get_mtime(updatemeta, false);  // not overcheck
-    if(0 != updatetime){
-        SetMtime(updatetime, true);
+
+    // update ctime/mtime/atime
+    time_t mtime = get_mtime(updatemeta, false);      // not overcheck
+    time_t ctime = get_ctime(updatemeta, false);      // not overcheck
+    time_t atime = get_atime(updatemeta, false);      // not overcheck
+    if(0 <= mtime){
+        SetMCtime(mtime, (ctime < 0 ? mtime : ctime), true);
     }
-    updatetime = get_ctime(updatemeta, false);         // not overcheck
-    if(0 != updatetime){
-        SetCtime(updatetime, true);
+    if(0 <= atime){
+        SetAtime(atime, true);
     }
     is_meta_pending |= !upload_id.empty();
 
@@ -1502,6 +1599,71 @@ int FdEntity::UploadPendingMeta()
     }
     is_meta_pending = false;
     return result;
+}
+
+// [NOTE]
+// For systems where the fallocate function cannot be detected, use a dummy function.
+// ex. OSX
+//
+#ifndef HAVE_FALLOCATE
+// We need the symbols defined in fallocate, so we define them here.
+// The definitions are copied from linux/falloc.h, but if HAVE_FALLOCATE is undefined,
+// these values can be anything.
+//
+#define FALLOC_FL_PUNCH_HOLE     0x02 /* de-allocates range */
+#define FALLOC_FL_KEEP_SIZE      0x01
+
+static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
+{
+    errno = ENOSYS;     // This is a bad idea, but the caller can handle it simply.
+    return -1;
+}
+#endif  // HAVE_FALLOCATE
+
+// [NOTE]
+// This method punches an area(on cache file) that has no data at the time it is called.
+// This is called to prevent the cache file from growing.
+// However, this method uses the non-portable(Linux specific) system call fallocate().
+// Also, depending on the file system, FALLOC_FL_PUNCH_HOLE mode may not work and HOLE
+// will not open.(Filesystems for which this method works are ext4, btrfs, xfs, etc.)
+// 
+bool FdEntity::PunchHole(off_t start, size_t size)
+{
+    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+
+    if(-1 == fd){
+        return false;
+    }
+    AutoLock auto_lock(&fdent_data_lock);
+
+    // get page list that have no data
+    fdpage_list_t   nodata_pages;
+    if(!pagelist.GetNoDataPageLists(nodata_pages)){
+        S3FS_PRN_ERR("filed to get page list that have no data.");
+        return false;
+    }
+    if(nodata_pages.empty()){
+        S3FS_PRN_DBG("there is no page list that have no data, so nothing to do.");
+        return true;
+    }
+
+    // try to punch hole to file
+    for(fdpage_list_t::const_iterator iter = nodata_pages.begin(); iter != nodata_pages.end(); ++iter){
+        if(0 != fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
+            if(ENOSYS == errno || EOPNOTSUPP == errno){
+                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);
+            }else{
+                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d)", errno);
+            }
+            return false;
+        }
+        if(!pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, PageList::PAGE_NOT_LOAD_MODIFIED)){
+            S3FS_PRN_ERR("succeed to punch HOLEs in the cache file, but failed to update the cache stat.");
+            return false;
+        }
+        S3FS_PRN_DBG("made a hole at [%lld - %lld bytes](into a boundary) of the cache file.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
+    }
+    return true;
 }
 
 /*

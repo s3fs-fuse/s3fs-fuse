@@ -51,7 +51,8 @@ class FdEntity
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
-        volatile bool            is_meta_pending;
+        volatile bool   is_meta_pending;
+        volatile time_t holding_mtime;  // if mtime is updated while the file is open, it is set time_t value
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -65,6 +66,7 @@ class FdEntity
         int UploadPendingMeta();
 
     public:
+        static bool GetNoMixMultipart() { return mixmultipart; }
         static bool SetNoMixMultipart();
 
         explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
@@ -85,9 +87,14 @@ class FdEntity
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(time_t time, bool lock_already_held = false);
-        int SetMtime(time_t time, bool lock_already_held = false);
+        int SetAtime(time_t time, bool lock_already_held = false);
+        int SetMCtime(time_t mtime, time_t ctime, bool lock_already_held = false);
         bool UpdateCtime();
-        bool UpdateMtime();
+        bool UpdateAtime();
+        bool UpdateMtime(bool clear_holding_mtime = false);
+        bool UpdateMCtime();
+        bool SetHoldingMtime(time_t mtime, bool lock_already_held = false);
+        bool ClearHoldingMtime(bool lock_already_held = false);
         bool GetSize(off_t& size);
         bool GetXattr(std::string& xattr);
         bool SetXattr(const std::string& xattr);
@@ -102,6 +109,7 @@ class FdEntity
         int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost();
 
+        off_t BytesModified() const;
         int RowFlush(const char* tpath, bool force_sync = false);
         int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }
 
@@ -109,6 +117,7 @@ class FdEntity
         ssize_t Write(const char* bytes, off_t start, size_t size);
 
         bool ReserveDiskSpace(off_t size);
+        bool PunchHole(off_t start = 0, size_t size = 0);
 };
 
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*

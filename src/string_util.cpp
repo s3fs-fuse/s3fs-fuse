@@ -58,53 +58,31 @@ template std::string str(unsigned long long value);
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static const char hexAlphabet[] = "0123456789ABCDEF";
 
-// replacement for C++11 std::stoll
-off_t s3fs_strtoofft(const char* str, int base)
+bool s3fs_strtoofft(off_t* value, const char* str, int base)
 {
+    if(value == NULL || str == NULL){
+        return false;
+    }
     errno = 0;
     char *temp;
     long long result = strtoll(str, &temp, base);
 
     if(temp == str || *temp != '\0'){
-        throw std::invalid_argument("s3fs_strtoofft");
-    }
-    if((result == LLONG_MIN || result == LLONG_MAX) && errno == ERANGE){
-        throw std::out_of_range("s3fs_strtoofft");
-    }
-    return result;
-}
-
-// wrapped s3fs_strtoofft()
-//
-// This function catches the s3fs_strtoofft () exception and returns a boolean value.
-//
-bool try_strtoofft(const char* str, off_t& value, int base)
-{
-    if(str){
-        try{
-            value = s3fs_strtoofft(str, base);
-        }catch(std::exception &e){
-            S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t.", str);
-            return false;
-        }
-    }else{
-        S3FS_PRN_WARN("parameter std::string is null.");
         return false;
     }
+    if((result == LLONG_MIN || result == LLONG_MAX) && errno == ERANGE){
+        return false;
+    }
+
+    *value = result;
     return true;
 }
 
-// wrapped try_strtoofft -> s3fs_strtoofft()
-//
-// This function returns 0 if a value that cannot be converted is specified.
-// Only call if 0 is considered an error and the operation can continue.
-//
 off_t cvt_strtoofft(const char* str, int base)
 {
     off_t result = 0;
-    if(!try_strtoofft(str, result, base)){
+    if(!s3fs_strtoofft(&result, str, base)){
         S3FS_PRN_WARN("something error is occurred in convert std::string(%s) to off_t, thus return 0 as default.", (str ? str : "null"));
         return 0;
     }
@@ -151,7 +129,7 @@ std::string urlEncode(const std::string &s)
 {
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
-        char c = s[i];
+        unsigned char c = s[i];
         if (c == '/' // Note- special case for fuse paths...
             || c == '.'
             || c == '-'
@@ -164,8 +142,7 @@ std::string urlEncode(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += hexAlphabet[static_cast<unsigned char>(c) / 16];
-            result += hexAlphabet[static_cast<unsigned char>(c) % 16];
+            result += s3fs_hex(&c, 1, false);
         }
     }
     return result;
@@ -180,7 +157,7 @@ std::string urlEncode2(const std::string &s)
 {
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
-        char c = s[i];
+        unsigned char c = s[i];
         if (c == '=' // Note- special case for fuse paths...
           || c == '&' // Note- special case for s3...
           || c == '%'
@@ -195,8 +172,7 @@ std::string urlEncode2(const std::string &s)
             result += c;
         }else{
             result += "%";
-            result += hexAlphabet[static_cast<unsigned char>(c) / 16];
-            result += hexAlphabet[static_cast<unsigned char>(c) % 16];
+            result += s3fs_hex(&c, 1, false);
         }
     }
     return result;
@@ -248,7 +224,7 @@ bool takeout_str_dquart(std::string& str)
 //
 // ex. target="http://......?keyword=value&..."
 //
-bool get_keyword_value(std::string& target, const char* keyword, std::string& value)
+bool get_keyword_value(const std::string& target, const char* keyword, std::string& value)
 {
     if(!keyword){
         return false;
@@ -376,13 +352,16 @@ bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
     return true;
 }
 
-std::string s3fs_hex(const unsigned char* input, size_t length)
+std::string s3fs_hex(const unsigned char* input, size_t length, bool lower)
 {
+    static const char hexLower[] = "0123456789abcdef";
+    static const char hexUpper[] = "0123456789ABCDEF";
+
+    const char* hexAlphabet = (lower ? hexLower : hexUpper);
     std::string hex;
     for(size_t pos = 0; pos < length; ++pos){
-        char hexbuf[3];
-        snprintf(hexbuf, 3, "%02x", input[pos]);
-        hex += hexbuf;
+        hex += hexAlphabet[input[pos] / 16];
+        hex += hexAlphabet[input[pos] % 16];
     }
     return hex;
 }

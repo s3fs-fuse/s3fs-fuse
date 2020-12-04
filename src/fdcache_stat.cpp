@@ -163,7 +163,7 @@ bool CacheFileStat::RenameCacheFileStat(const char* oldpath, const char* newpath
 //------------------------------------------------
 // CacheFileStat methods
 //------------------------------------------------
-CacheFileStat::CacheFileStat(const char* tpath) : path(""), fd(-1)
+CacheFileStat::CacheFileStat(const char* tpath) : fd(-1)
 {
     if(tpath && '\0' != tpath[0]){
         SetPath(tpath, true);

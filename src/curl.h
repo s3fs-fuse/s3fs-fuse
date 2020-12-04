@@ -108,6 +108,8 @@ class S3fsCurl
         };
 
         // class variables
+        static pthread_mutex_t  curl_warnings_lock;
+        static bool             curl_warnings_once;  // emit older curl warnings only once
         static pthread_mutex_t  curl_handles_lock;
         static struct callback_locks_t {
             pthread_mutex_t dns;
@@ -140,6 +142,12 @@ class S3fsCurl
         static bool             is_use_session_token;
         static bool             is_ibm_iam_auth;
         static std::string      IAM_cred_url;
+        static int              IAM_api_version;
+        static std::string      IAMv2_token_url;
+        static int              IAMv2_token_ttl;
+        static std::string      IAMv2_token_ttl_hdr;
+        static std::string      IAMv2_token_hdr;
+        static std::string      IAMv2_api_token;
         static size_t           IAM_field_count;
         static std::string      IAM_token_field;
         static std::string      IAM_expiry_field;
@@ -153,7 +161,7 @@ class S3fsCurl
         static int              max_parallel_cnt;
         static int              max_multireq;
         static off_t            multipart_size;
-        static bool             is_sigv4;
+        static signature_type_t signature_type;
         static bool             is_ua;             // User-Agent
         static bool             requester_pays;
 
@@ -236,11 +244,12 @@ class S3fsCurl
 
         static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
         static bool SetIAMCredentials(const char* response);
+        static bool SetIAMv2APIToken(const char* response);
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
         static bool SetIAMRoleFromMetaData(const char* response);
         static bool LoadEnvSseCKeys();
         static bool LoadEnvSseKmsid();
-        static bool PushbackSseKeys(std::string& onekey);
+        static bool PushbackSseKeys(const std::string& onekey);
         static bool AddUserAgent(CURL* hCurl);
 
         static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
@@ -258,6 +267,7 @@ class S3fsCurl
         void insertAuthHeaders();
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
+        int GetIAMv2ApiToken();
         int GetIAMCredentials();
 
         int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
@@ -339,31 +349,32 @@ class S3fsCurl
         static const char* GetIAMRole() { return S3fsCurl::IAM_role.c_str(); }
         static bool SetMultipartSize(off_t size);
         static off_t GetMultipartSize() { return S3fsCurl::multipart_size; }
-        static bool SetSignatureV4(bool isset) { bool bresult = S3fsCurl::is_sigv4; S3fsCurl::is_sigv4 = isset; return bresult; }
-        static bool IsSignatureV4() { return S3fsCurl::is_sigv4; }
+        static signature_type_t SetSignatureType(signature_type_t signature_type) { signature_type_t bresult = S3fsCurl::signature_type; S3fsCurl::signature_type = signature_type; return bresult; }
+        static signature_type_t GetSignatureType() { return S3fsCurl::signature_type; }
         static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
         static bool IsUserAgentFlag() { return S3fsCurl::is_ua; }
         static void InitUserAgent();
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
+        static bool SetIMDSVersion(int version);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
         bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
 
         bool LoadIAMRoleFromMetaData();
-        bool AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy);
+        bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, int ssekey_pos = -1);
-        bool PreHeadRequest(std::string& tpath, std::string& bpath, std::string& savedpath, int ssekey_pos = -1) {
+        bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, int ssekey_pos = -1) {
           return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
         }
         int HeadRequest(const char* tpath, headers_t& meta);
         int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
         int PutRequest(const char* tpath, headers_t& meta, int fd);
-        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue);
+        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
         int CheckBucket();
         int ListBucketRequest(const char* tpath, const char* query);

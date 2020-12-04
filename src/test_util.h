@@ -25,6 +25,8 @@
 #include <iostream>
 #include <stdio.h>
 
+#include "string_util.h"
+
 template <typename T> void assert_equals(const T &x, const T &y, const char *file, int line)
 {
     if (x != y) {
@@ -74,6 +76,8 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
   }
 }
 
+#define ASSERT_TRUE(x)          assert_equals((x), true, __FILE__, __LINE__)
+#define ASSERT_FALSE(x)         assert_equals((x), false, __FILE__, __LINE__)
 #define ASSERT_EQUALS(x, y)     assert_equals((x), (y), __FILE__, __LINE__)
 #define ASSERT_NEQUALS(x, y)    assert_nequals((x), (y), __FILE__, __LINE__)
 #define ASSERT_STREQUALS(x, y)  assert_strequals((x), (y), __FILE__, __LINE__)

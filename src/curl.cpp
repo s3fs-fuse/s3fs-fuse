@@ -83,6 +83,7 @@ static const char* SPECIAL_DARWIN_MIME_FILE         = "/etc/apache2/mime.types";
 const long       S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
 const long       S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR;
 const int        S3fsCurl::S3FSCURL_PERFORM_RESULT_NOTSET;
+pthread_mutex_t  S3fsCurl::curl_warnings_lock;
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
@@ -111,11 +112,20 @@ time_t           S3fsCurl::AWSAccessTokenExpire= 0;
 bool             S3fsCurl::is_ecs              = false;
 bool             S3fsCurl::is_ibm_iam_auth     = false;
 std::string      S3fsCurl::IAM_cred_url        = "http://169.254.169.254/latest/meta-data/iam/security-credentials/";
+std::string      S3fsCurl::IAMv2_token_url     = "http://169.254.169.254/latest/api/token";
+std::string      S3fsCurl::IAMv2_token_ttl_hdr = "X-aws-ec2-metadata-token-ttl-seconds";
+std::string      S3fsCurl::IAMv2_token_hdr     = "X-aws-ec2-metadata-token";
+int              S3fsCurl::IAMv2_token_ttl     = 21600;
 size_t           S3fsCurl::IAM_field_count     = 4;
 std::string      S3fsCurl::IAM_token_field     = "Token";
 std::string      S3fsCurl::IAM_expiry_field    = "Expiration";
 std::string      S3fsCurl::IAM_role;
+std::string      S3fsCurl::IAMv2_api_token;
+int              S3fsCurl::IAM_api_version     = 2;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
+
+// protected by curl_warnings_lock
+bool             S3fsCurl::curl_warnings_once = false;
 
 // protected by curl_handles_lock
 curltime_t       S3fsCurl::curl_times;
@@ -127,7 +137,7 @@ std::string      S3fsCurl::userAgent;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
-bool             S3fsCurl::is_sigv4            = true;           // default
+signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::is_use_session_token= false;          // default
 bool             S3fsCurl::requester_pays      = false;          // default
@@ -142,6 +152,9 @@ bool S3fsCurl::InitS3fsCurl()
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
+    if(0 != pthread_mutex_init(&S3fsCurl::curl_warnings_lock, &attr)){
+        return false;
+    }
     if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, &attr)){
         return false;
     }
@@ -198,6 +211,9 @@ bool S3fsCurl::DestroyS3fsCurl()
         result = false;
     }
     if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
+        result = false;
+    }
+    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_warnings_lock)){
         result = false;
     }
     return result;
@@ -617,7 +633,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
         // Force to lower, only "x-amz"
         std::string lkey = key;
         transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
-        if(lkey.compare(0, 5, "x-amz") == 0){
+        if(is_prefix(lkey.c_str(), "x-amz")){
             key = lkey;
         }
         std::string value;
@@ -761,9 +777,9 @@ storage_class_t S3fsCurl::SetStorageClass(storage_class_t storage_class)
     return old;
 }
 
-bool S3fsCurl::PushbackSseKeys(std::string& onekey)
+bool S3fsCurl::PushbackSseKeys(const std::string& input)
 {
-    onekey = trim(onekey);
+    std::string onekey = trim(input);
     if(onekey.empty()){
         return false;
     }
@@ -889,7 +905,7 @@ bool S3fsCurl::FinalCheckSse()
                 S3FS_PRN_ERR("sse type is SSE-KMS, but there is no specified kms id.");
                 return false;
             }
-            if(!S3fsCurl::IsSignatureV4()){
+            if(S3fsCurl::GetSignatureType() == V2_ONLY){
                 S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
                 return false;
             }
@@ -1075,6 +1091,12 @@ std::string S3fsCurl::SetIAMExpiryField(const char* expiry_field)
     return old;
 }
 
+bool S3fsCurl::SetIMDSVersion(int version)
+{
+    S3fsCurl::IAM_api_version = version;
+    return true;
+}
+
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
     size = size * 1024 * 1024;
@@ -1133,7 +1155,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
-    if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
     part_num = static_cast<off_t>(tmp_part_num);
@@ -1145,8 +1167,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
     // duplicate request
     S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
-    newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
-    newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+    newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->partdata.fd         = s3fscurl->partdata.fd;
     newcurl->partdata.startpos   = s3fscurl->b_partdata_startpos;
     newcurl->partdata.size       = s3fscurl->b_partdata_size;
@@ -1181,7 +1202,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
-    if(!try_strtoofft(part_num_str.c_str(), tmp_part_num, /*base=*/ 10)){
+    if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
     part_num = static_cast<off_t>(tmp_part_num);
@@ -1193,8 +1214,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 
     // duplicate request
     S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
-    newcurl->partdata.etaglist   = s3fscurl->partdata.etaglist;
-    newcurl->partdata.etagpos    = s3fscurl->partdata.etagpos;
+    newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->b_from              = s3fscurl->b_from;
     newcurl->b_meta              = s3fscurl->b_meta;
     newcurl->retry_count         = s3fscurl->retry_count + 1;
@@ -1382,11 +1402,9 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             }
         }else{
             // Multipart copy
-            std::ostringstream  strrange;
+            std::ostringstream strrange;
             strrange << "bytes=" << iter->offset << "-" << (iter->offset + iter->bytes - 1);
             meta["x-amz-copy-source-range"] = strrange.str();
-            strrange.str("");
-            strrange.clear(std::stringstream::goodbit);
 
             s3fscurl_para->b_from   = SAFESTRPTR(tpath);
             s3fscurl_para->b_meta   = meta;
@@ -1648,6 +1666,13 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
     return true;
 }
 
+bool S3fsCurl::SetIAMv2APIToken(const char* response)
+{
+    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", response);
+    S3fsCurl::IAMv2_api_token = std::string(response);
+    return true;
+}
+
 bool S3fsCurl::SetIAMCredentials(const char* response)
 {
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
@@ -1666,7 +1691,7 @@ bool S3fsCurl::SetIAMCredentials(const char* response)
 
     if(S3fsCurl::is_ibm_iam_auth){
         off_t tmp_expire = 0;
-        if(!try_strtoofft(keyval[std::string(S3fsCurl::IAM_expiry_field)].c_str(), tmp_expire, /*base=*/ 10)){
+        if(!s3fs_strtoofft(&tmp_expire, keyval[std::string(S3fsCurl::IAM_expiry_field)].c_str(), /*base=*/ 10)){
             return false;
         }
         S3fsCurl::AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
@@ -1827,10 +1852,10 @@ int S3fsCurl::RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(NULL), type(REQTYPE_UNSET), path(""), base_path(""), saved_path(""), url(""), requestHeaders(NULL),
+    hCurl(NULL), type(REQTYPE_UNSET), requestHeaders(NULL),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
-    b_ssekey_pos(-1), b_ssevalue(""), b_ssetype(sse_type_t::SSE_DISABLE), op(""), query_string(""),
+    b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
     sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
 {
 }
@@ -1842,7 +1867,13 @@ S3fsCurl::~S3fsCurl()
 
 bool S3fsCurl::ResetHandle(bool lock_already_held)
 {
-    static volatile bool run_once = false;  // emit older curl warnings only once
+    bool run_once;
+    {
+        AutoLock lock(&S3fsCurl::curl_warnings_lock);
+        run_once = curl_warnings_once;
+        curl_warnings_once = true;
+    }
+
     curl_easy_reset(hCurl);
     curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true);
@@ -1860,7 +1891,6 @@ bool S3fsCurl::ResetHandle(bool lock_already_held)
     if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1) && !run_once){
         S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
     }
-    run_once = true;
 
     if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
         // REQTYPE_IAMCRED and REQTYPE_IAMROLE are always HTTP
@@ -2190,7 +2220,7 @@ bool S3fsCurl::RemakeHandle()
 //
 int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
-    if(IS_S3FS_LOG_DBG()){
+    if(S3fsLog::IsS3fsLogDbg()){
         char* ptr_url = NULL;
         curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
         S3FS_PRN_DBG("connecting to URL %s", SAFESTRPTR(ptr_url));
@@ -2355,7 +2385,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
             case CURLE_PEER_FAILED_VERIFICATION:
                 S3FS_PRN_ERR("### CURLE_PEER_FAILED_VERIFICATION");
 
-                first_pos = bucket.find_first_of(".");
+                first_pos = bucket.find_first_of('.');
                 if(first_pos != std::string::npos){
                     S3FS_PRN_INFO("curl returned a CURL_PEER_FAILED_VERIFICATION error");
                     S3FS_PRN_INFO("security issue found: buckets with periods in their name are incompatible with http");
@@ -2480,9 +2510,9 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
         StringCQ += uriencode + "\n";
     }else if(method == "GET" && uriencode.empty()){
         StringCQ +="/\n";
-    }else if(method == "GET" && uriencode == "/"){
+    }else if(method == "GET" && is_prefix(uriencode.c_str(), "/")){
         StringCQ += uriencode +"\n";
-    }else if(method == "GET" && uriencode != "/"){
+    }else if(method == "GET" && !is_prefix(uriencode.c_str(), "/")){
         StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
     }else if(method == "POST"){
         StringCQ += uriencode + "\n";
@@ -2621,7 +2651,7 @@ void S3fsCurl::insertAuthHeaders()
 
     if(S3fsCurl::is_ibm_iam_auth){
         insertIBMIAMHeaders();
-    }else if(!S3fsCurl::is_sigv4){
+    }else if(S3fsCurl::signature_type == V2_ONLY){
         insertV2Headers();
     }else{
         insertV4Headers();
@@ -2658,6 +2688,42 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 }
 
 //
+// Get the token that we need to pass along with AWS IMDSv2 API requests
+//
+int S3fsCurl::GetIAMv2ApiToken()
+{
+    url = std::string(S3fsCurl::IAMv2_token_url);
+    if(!CreateCurlHandle()){
+        return -EIO;
+    }
+    requestHeaders  = NULL;
+    responseHeaders.clear();
+    bodydata.Clear();
+
+    // maximum allowed value is 21600, so 6 bytes for the C string
+    char ttlstr[6];
+    snprintf(ttlstr, sizeof(ttlstr), "%d", S3fsCurl::IAMv2_token_ttl);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
+                                            ttlstr);
+    curl_easy_setopt(hCurl, CURLOPT_PUT, true);
+    curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
+    curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    S3fsCurl::AddUserAgent(hCurl);
+
+    int result = RequestPerform(true);
+
+    if(0 == result && !S3fsCurl::SetIAMv2APIToken(bodydata.str())){
+        S3FS_PRN_ERR("Error storing IMDSv2 API token.");
+        result = -EIO;
+    }
+    bodydata.Clear();
+    curl_easy_setopt(hCurl, CURLOPT_PUT, false);
+
+    return result;
+}
+
+//
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
@@ -2688,6 +2754,23 @@ int S3fsCurl::GetIAMCredentials()
         }
         url = std::string(S3fsCurl::IAM_cred_url) + env;
     }else{
+        if(S3fsCurl::IAM_api_version > 1){
+            int result = GetIAMv2ApiToken();
+            if(-ENOENT == result){
+                // If we get a 404 back when requesting the token service,
+                // then it's highly likely we're running in an environment
+                // that doesn't support the AWS IMDSv2 API, so we'll skip
+                // the token retrieval in the future.
+                SetIMDSVersion(1);
+            }else if(result != 0){
+                // If we get an unexpected error when retrieving the API
+                // token, log it but continue.  Requirement for including
+                // an API token with the metadata request may or may not
+                // be required, so we should not abort here.
+                S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+            }
+        }
+        
         url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
     }
 
@@ -2716,6 +2799,10 @@ int S3fsCurl::GetIAMCredentials()
         curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining));
         curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this);
         curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback);
+    }
+
+    if(S3fsCurl::IAM_api_version > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
     }
 
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
@@ -2772,8 +2859,9 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
     return (0 == result);
 }
 
-bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string& ssevalue, bool is_only_c, bool is_copy)
+bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, bool is_only_c, bool is_copy)
 {
+    std::string ssevalue = input;
     switch(ssetype){
         case sse_type_t::SSE_DISABLE:
             return true;
@@ -2904,7 +2992,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
             meta[iter->first] = value;
         }else if(key == "last-modified"){
             meta[iter->first] = value;
-        }else if(key.substr(0, 5) == "x-amz"){
+        }else if(is_prefix(key.c_str(), "x-amz")){
             meta[key] = value;        // key is lower case for "x-amz"
         }
     }
@@ -2938,9 +3026,9 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source"){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
@@ -3077,9 +3165,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
@@ -3135,7 +3223,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     return result;
 }
 
-int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, std::string& ssevalue)
+int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue)
 {
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
@@ -3325,9 +3413,9 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
-        if(key.substr(0, 9) == "x-amz-acl"){
+        if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
-        }else if(key.substr(0, 10) == "x-amz-meta"){
+        }else if(is_prefix(key.c_str(), "x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // Only copy mode.
@@ -3409,14 +3497,15 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
-    for(int cnt = 0; cnt < (int)parts.size(); cnt++){
-        if(0 == parts[cnt].length()){
+    int cnt = 0;
+    for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it, ++cnt){
+        if(it->empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", cnt + 1);
             return -1;
         }
         postContent += "<Part>\n";
         postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
-        postContent += "  <ETag>" + parts[cnt] + "</ETag>\n";
+        postContent += "  <ETag>" + *it + "</ETag>\n";
         postContent += "</Part>\n";
     }
     postContent += "</CompleteMultipartUpload>\n";
@@ -3709,7 +3798,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
             return false;
         }
     }
-    (*partdata.etaglist)[partdata.etagpos] = it->second;
+    (*partdata.petag) = it->second;
     partdata.uploaded = true;
 
     return true;
@@ -3731,7 +3820,7 @@ bool S3fsCurl::CopyMultipartPostComplete()
     if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
         etag = etag.substr(1, etag.size() - 2);
     }
-    (*partdata.etaglist)[partdata.etagpos] = etag;
+    (*partdata.petag) = etag;
 
     bodydata.Clear();
     headdata.Clear();
@@ -3757,7 +3846,6 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     off_t          chunk;
     off_t          bytes_remaining;
     etaglist_t     list;
-    std::ostringstream  strrange;
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3774,10 +3862,9 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
+        std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
         meta["x-amz-copy-source-range"] = strrange.str();
-        strrange.str("");
-        strrange.clear(std::stringstream::goodbit);
 
         // s3fscurl sub object
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);
@@ -3922,7 +4009,6 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     off_t          chunk;
     off_t          bytes_remaining;
     etaglist_t     list;
-    std::ostringstream  strrange;
 
     S3FS_PRN_INFO3("[from=%s][to=%s]", SAFESTRPTR(from), SAFESTRPTR(to));
 
@@ -3946,10 +4032,9 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
 
+        std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
         meta["x-amz-copy-source-range"] = strrange.str();
-        strrange.str("");
-        strrange.clear(std::stringstream::goodbit);
 
         // s3fscurl sub object
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);

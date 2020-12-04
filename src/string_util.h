@@ -55,10 +55,14 @@ template <class T> std::string str(T value);
 // Utilities
 //-------------------------------------------------------------------
 //
-// Convert string to off_t.  Throws std::invalid_argument and std::out_of_range on bad input.
+// Convert string to off_t.  Returns false on bad input.
+// Replacement for C++11 std::stoll.
 //
-off_t s3fs_strtoofft(const char* str, int base = 0);
-bool try_strtoofft(const char* str, off_t& value, int base = 0);
+bool s3fs_strtoofft(off_t* value, const char* str, int base = 0);
+//
+// This function returns 0 if a value that cannot be converted is specified.
+// Only call if 0 is considered an error and the operation can continue.
+//
 off_t cvt_strtoofft(const char* str, int base = 0);
 
 //
@@ -87,12 +91,12 @@ std::string urlEncode2(const std::string &s);
 std::string urlDecode(const std::string& s);
 
 bool takeout_str_dquart(std::string& str);
-bool get_keyword_value(std::string& target, const char* keyword, std::string& value);
+bool get_keyword_value(const std::string& target, const char* keyword, std::string& value);
 
 //
 // For binary string
 //
-std::string s3fs_hex(const unsigned char* input, size_t length);
+std::string s3fs_hex(const unsigned char* input, size_t length, bool lower = true);
 char* s3fs_base64(const unsigned char* input, size_t length);
 unsigned char* s3fs_decode64(const char* input, size_t* plength);
 

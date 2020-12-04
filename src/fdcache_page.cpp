@@ -689,6 +689,56 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     return true;
 }
 
+bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size_t size)
+{
+    // compress before this processing
+    if(!Compress()){
+        return false;
+    }
+
+    // extract areas without data
+    fdpage_list_t tmp_pagelist;
+    off_t         stop_pos = (0L == size ? -1 : (start + size));
+    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        if((iter->offset + iter->bytes) < start){
+            continue;
+        }
+        if(-1 != stop_pos && stop_pos <= iter->offset){
+            break;
+        }
+        if(iter->modified){
+            continue;
+        }
+
+        fdpage  tmppage;
+        tmppage.offset   = std::max(iter->offset, start);
+        tmppage.bytes    = (-1 != stop_pos ? iter->bytes : std::min(iter->bytes, (stop_pos - tmppage.offset)));
+        tmppage.loaded   = iter->loaded;
+        tmppage.modified = iter->modified;
+
+        tmp_pagelist.push_back(tmppage);
+    }
+
+    if(tmp_pagelist.empty()){
+        nodata_pages.clear();
+    }else{
+        // compress
+        nodata_pages = compress_fdpage_list(tmp_pagelist);
+    }
+    return true;
+}
+
+off_t PageList::BytesModified() const
+{
+    off_t total = 0;
+    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        if(iter->modified){
+            total += iter->bytes;
+        }
+    }
+    return total;
+}
+
 bool PageList::IsModified() const
 {
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
@@ -751,13 +801,14 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             return true;
         }
         char* ptmp = new char[st.st_size + 1];
-        ptmp[st.st_size] = '\0';
+        int res;
         // read from file
-        if(0 >= pread(file.GetFd(), ptmp, st.st_size, 0)){
+        if(0 >= (res = pread(file.GetFd(), ptmp, st.st_size, 0))){
             S3FS_PRN_ERR("failed to read stats(%d)", errno);
             delete[] ptmp;
             return false;
         }
+        ptmp[res] = '\0';
         std::string        oneline;
         std::istringstream ssall(ptmp);
     
