@@ -645,6 +645,33 @@ static int check_parent_object_access(const char* path, int mask)
 }
 
 //
+// Check if parent allows subdirectories
+//
+static int check_parent_allows_subdirectory(const char* path, int mask)
+{
+    std::string parent;
+    int result;
+    headers_t meta;
+
+    S3FS_PRN_DBG("[path=%s]", path);
+
+    parent = mydirname(path);
+    if(parent == "."){
+        parent = "/";
+    }
+
+    if(0 != (result = get_object_attribute(parent.c_str(), NULL, &meta))){
+        return result;
+    }
+
+    if (is_script_root(meta)){
+        return -EPERM;
+    }
+
+    return 0;
+}
+
+//
 // ssevalue is MD5 for SSE-C type, or KMS id for SSE-KMS
 //
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue)
@@ -1045,6 +1072,11 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         }
         return result;
     }
+
+    if(0 != (result = check_parent_allows_subdirectory(path, W_OK | X_OK))){
+        return result;
+    }
+
     result = create_directory_object(path, mode, time(NULL), time(NULL), time(NULL), pcxt->uid, pcxt->gid);
 
     StatCache::getStatCacheData()->DelStat(path);
@@ -1057,12 +1089,23 @@ static int s3fs_unlink(const char* _path)
 {
     WTF8_ENCODE(path)
     int result;
+    struct stat buf;
+    headers_t meta;
 
     S3FS_PRN_INFO("[path=%s]", path);
 
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
     }
+
+    if(0 != (result = get_object_attribute(path, &buf, &meta))){
+        return result;
+    }
+
+    if (is_immutable(meta)) {
+        return -EACCES;
+    } 
+
     S3fsCurl s3fscurl;
     result = s3fscurl.DeleteRequest(path);
     FdManager::DeleteCacheFile(path);
@@ -1094,11 +1137,20 @@ static int s3fs_rmdir(const char* _path)
     int result;
     std::string strpath;
     struct stat stbuf;
+    headers_t meta;
 
     S3FS_PRN_INFO("[path=%s]", path);
 
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
+    }
+
+    if(0 != (result = get_object_attribute(path, &stbuf, &meta))){
+        return result;
+    }
+
+    if (is_script_root(meta)) {
+        return -EACCES;
     }
 
     // directory must be empty
@@ -1503,6 +1555,8 @@ static int s3fs_rename(const char* _from, const char* _to)
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     struct stat buf;
+    headers_t meta;
+    
     int result;
 
     S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
@@ -1515,8 +1569,12 @@ static int s3fs_rename(const char* _from, const char* _to)
         // not permit removing "from" object parent dir.
         return result;
     }
-    if(0 != (result = get_object_attribute(from, &buf, NULL))){
+    if(0 != (result = get_object_attribute(from, &buf, &meta))){
         return result;
+    }
+
+    if (is_immutable(meta)) {
+        return -EPERM;
     }
 
     // flush pending writes if file is open
