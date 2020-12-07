@@ -272,7 +272,6 @@ time_t get_lastmodified(const headers_t& meta)
     return get_lastmodified((*iter).second.c_str());
 }
 
-// Returns if this object is a script root
 bool is_script_root(const headers_t& meta)
 {
     headers_t::const_iterator iter;
@@ -283,7 +282,6 @@ bool is_script_root(const headers_t& meta)
     return false;
 }
 
-// Returns if this object cannot be changed
 bool is_immutable(const headers_t& meta)
 {
     headers_t::const_iterator iter;
