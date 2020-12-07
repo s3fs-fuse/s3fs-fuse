@@ -55,6 +55,8 @@ blkcnt_t get_blocks(off_t size);
 time_t cvtIAMExpireStringToTime(const char* s);
 time_t get_lastmodified(const char* s);
 time_t get_lastmodified(const headers_t& meta);
+bool is_script_root(const headers_t& meta);
+bool is_immutable(const headers_t& meta);
 bool is_need_check_obj_detail(const headers_t& meta);
 bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist);
 bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value);
