@@ -3486,7 +3486,7 @@ static int s3fs_check_service()
                 S3FS_PRN_CRIT("invalid credentials(host=%s) - result of checking service.", s3host.c_str());
 
             }else if(responseCode == 404){
-                S3FS_PRN_CRIT("bucket not found(host=%s) - result of checking service.", s3host.c_str());
+                S3FS_PRN_CRIT("bucket or key not found(host=%s) - result of checking service.", s3host.c_str());
 
             }else{
                 // another error
