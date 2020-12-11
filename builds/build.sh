@@ -1,4 +1,3 @@
-
 docker build . -t build-s3fs
 s3fs_path=$(docker run --rm build-s3fs sh -c "which s3fs")
 id=$(docker create build-s3fs)

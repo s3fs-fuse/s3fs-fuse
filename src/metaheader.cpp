@@ -272,6 +272,26 @@ time_t get_lastmodified(const headers_t& meta)
     return get_lastmodified((*iter).second.c_str());
 }
 
+bool is_script_root(const headers_t& meta)
+{
+    headers_t::const_iterator iter;
+    if(meta.end() != (iter = meta.find("x-amz-meta-xattr"))){
+        return (*iter).second.find("\"is_script_root\":true") != std::string::npos;
+    }
+
+    return false;
+}
+
+bool is_immutable(const headers_t& meta)
+{
+    headers_t::const_iterator iter;
+    if(meta.end() != (iter = meta.find("x-amz-meta-xattr"))){
+        return (*iter).second.find("\"editable\":false") != std::string::npos;
+    }
+
+    return false;
+}
+
 //
 // Returns it whether it is an object with need checking in detail.
 // If this function returns true, the object is possible to be directory
