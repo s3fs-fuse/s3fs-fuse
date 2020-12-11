@@ -4905,7 +4905,7 @@ int main(int argc, char* argv[])
 
     // The first plain argument is the bucket
     if(bucket.empty()){
-        S3FS_PRN_EXIT("missing BUCKET argument.");
+        S3FS_PRN_EXIT("missing BUCKET argument - get buckets.");
         show_usage();
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
