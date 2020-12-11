@@ -1073,10 +1073,6 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         return result;
     }
 
-    if(0 != (result = check_parent_allows_subdirectory(path, W_OK | X_OK))){
-        return result;
-    }
-
     result = create_directory_object(path, mode, time(NULL), time(NULL), time(NULL), pcxt->uid, pcxt->gid);
 
     StatCache::getStatCacheData()->DelStat(path);
