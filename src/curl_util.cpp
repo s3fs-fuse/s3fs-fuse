@@ -55,31 +55,22 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
 
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value)
 {
-    struct curl_slist* curpos;
-    struct curl_slist* lastpos;
-    struct curl_slist* new_item;
-
     if(!key){
-        return list;
-    }
-    if(NULL == (new_item = reinterpret_cast<struct curl_slist*>(malloc(sizeof(struct curl_slist))))){
         return list;
     }
 
     // key & value are trimmed and lower (only key)
     std::string strkey = trim(std::string(key));
-    std::string strval = trim(std::string(value ? value : ""));
+    std::string strval = value ? trim(std::string(value)) : "";
     std::string strnew = key + std::string(": ") + strval;
-    if(NULL == (new_item->data = strdup(strnew.c_str()))){
-        free(new_item);
+    char* data;
+    if(NULL == (data = strdup(strnew.c_str()))){
         return list;
     }
-    new_item->next = NULL;
 
-    // cppcheck-suppress unmatchedSuppression
-    // cppcheck-suppress nullPointerRedundantCheck
-    for(lastpos = NULL, curpos = list; curpos; lastpos = curpos, curpos = curpos->next){
-        std::string strcur = curpos->data;
+    struct curl_slist **p = &list;
+    for(;*p; p = &(*p)->next){
+        std::string strcur = (*p)->data;
         size_t pos;
         if(std::string::npos != (pos = strcur.find(':', 0))){
             strcur = strcur.substr(0, pos);
@@ -87,38 +78,25 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
 
         int result = strcasecmp(strkey.c_str(), strcur.c_str());
         if(0 == result){
-            // same data, so replace it.
-            if(lastpos){
-                lastpos->next = new_item;
-            }else{
-                list = new_item;
-            }
-            new_item->next = curpos->next;
-            free(curpos->data);
-            free(curpos);
+            free((*p)->data);
+            (*p)->data = data;
+            return list;
+        }else if(result < 0){
             break;
-
-        }else if(0 > result){
-          // add data before curpos.
-          if(lastpos){
-              lastpos->next = new_item;
-          }else{
-              list = new_item;
-          }
-          new_item->next = curpos;
-          break;
         }
     }
 
-    if(!curpos){
-        // append to last pos
-        if(lastpos){
-            lastpos->next = new_item;
-        }else{
-            // a case of list is null
-            list = new_item;
-        }
+    struct curl_slist* new_item;
+    if(NULL == (new_item = reinterpret_cast<struct curl_slist*>(malloc(sizeof(*new_item))))){
+        free(data);
+        return list;
     }
+
+    struct curl_slist* before = *p;
+    *p = new_item;
+    new_item->data = data;
+    new_item->next = before;
+
     return list;
 }
 
