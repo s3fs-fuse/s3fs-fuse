@@ -103,7 +103,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos8" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
     INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel attr diffutils wget python2 python3"
-    INSTALL_CPPCHECK_OPTIONS="--enablerepo=PowerTools"
+    INSTALL_CPPCHECK_OPTIONS="--enablerepo=powertools"
     INSTALL_JDK_PACKAGES="java-1.8.0-openjdk"
 
     # [NOTE]
