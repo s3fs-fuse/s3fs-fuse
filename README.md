@@ -71,7 +71,7 @@ Many systems provide pre-built packages:
 * macOS via [Homebrew](https://brew.sh/):
 
   ```
-  brew cask install osxfuse
+  brew install --cask osxfuse
   brew install s3fs
   ```
 
