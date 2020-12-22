@@ -2230,16 +2230,17 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
     long responseCode;
     int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
 
-    if(!dontAddAuthHeaders) {
-         insertAuthHeaders();
-    }
-
-    curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
-
     // 1 attempt + retries...
     for(int retrycnt = 0; S3FSCURL_PERFORM_RESULT_NOTSET == result && retrycnt < S3fsCurl::retries; ++retrycnt){
         // Reset response code
         responseCode = S3FSCURL_RESPONSECODE_NOTSET;
+        
+        // Insert headers
+        if(!dontAddAuthHeaders) {
+             insertAuthHeaders();
+        }
+
+        curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
         // Requests
         CURLcode curlCode = curl_easy_perform(hCurl);
