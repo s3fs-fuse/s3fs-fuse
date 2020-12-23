@@ -28,7 +28,7 @@
 
 void assert_is_sorted(struct curl_slist* list, const char *file, int line)
 {
-    for(; list != NULL && list->next != NULL; list = list->next){
+    for(; list != NULL; list = list->next){
         std::string key1 = list->data;
         key1.erase(key1.find(':'));
         std::string key2 = list->data;
@@ -40,6 +40,7 @@ void assert_is_sorted(struct curl_slist* list, const char *file, int line)
             std::exit(1);
         }
     }
+    std::cerr << std::endl;
 }
 
 size_t curl_slist_length(const struct curl_slist* list)
@@ -67,11 +68,13 @@ void test_sort_insert()
     // add to head
     list = curl_slist_sort_insert(list, "1", "val");
     ASSERT_IS_SORTED(list);
+    ASSERT_STREQUALS("1: val", list->data);
     // replace head
     list = curl_slist_sort_insert(list, "1", "val2");
     ASSERT_IS_SORTED(list);
     ASSERT_EQUALS(static_cast<size_t>(4), curl_slist_length(list));
     ASSERT_STREQUALS("1: val2", list->data);
+    curl_slist_free_all(list);
 }
 
 int main(int argc, char *argv[])
