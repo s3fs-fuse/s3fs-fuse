@@ -60,7 +60,7 @@ function test_truncate_upload {
 
     rm_test_file ${BIG_FILE}
 
-    truncate ${BIG_FILE} -s ${BIG_FILE_LENGTH}
+    ${TRUNCATE_BIN} ${BIG_FILE} -s ${BIG_FILE_LENGTH}
 
     rm_test_file ${BIG_FILE}
 }
@@ -72,7 +72,7 @@ function test_truncate_empty_file {
 
     # Truncate the file to 1024 length
     t_size=1024
-    truncate ${TEST_TEXT_FILE} -s $t_size
+    ${TRUNCATE_BIN} ${TEST_TEXT_FILE} -s $t_size
 
     check_file_size "${TEST_TEXT_FILE}" $t_size
 
@@ -194,8 +194,8 @@ function test_redirects {
 
     echo 123456 >> $TEST_TEXT_FILE
 
-    LINE1=`sed -n '1,1p' $TEST_TEXT_FILE`
-    LINE2=`sed -n '2,2p' $TEST_TEXT_FILE`
+    LINE1=`${SED_BIN} -n '1,1p' $TEST_TEXT_FILE`
+    LINE2=`${SED_BIN} -n '2,2p' $TEST_TEXT_FILE`
 
     if [ ${LINE1} != "XYZ" ]; then
        echo "LINE1 was not as expected, got ${LINE1}, expected XYZ"
@@ -918,7 +918,7 @@ function test_concurrent_directory_updates {
     for i in `seq 5`; do echo foo > $i; done
     for process in `seq 10`; do
         for i in `seq 5`; do
-            file=$(ls `seq 5` | sed -n "$(($RANDOM % 5 + 1))p")
+            file=$(ls `seq 5` | ${SED_BIN} -n "$(($RANDOM % 5 + 1))p")
             cat $file >/dev/null || true
             rm -f $file
             echo foo > $file || true
@@ -1066,8 +1066,8 @@ function test_cache_file_stat() {
     #
     # get lines from cache stat file
     #
-    CACHE_FILE_STAT_LINE_1=$(sed -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
-    CACHE_FILE_STAT_LINE_2=$(sed -n 2p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    CACHE_FILE_STAT_LINE_1=$(${SED_BIN} -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    CACHE_FILE_STAT_LINE_2=$(${SED_BIN} -n 2p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
     if [ -z ${CACHE_FILE_STAT_LINE_1} ] || [ -z ${CACHE_FILE_STAT_LINE_2} ]; then
         echo "could not get first or second line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
         return 1;
@@ -1109,7 +1109,7 @@ function test_cache_file_stat() {
     #
     # get lines from cache stat file
     #
-    CACHE_FILE_STAT_LINE_1=$(sed -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
+    CACHE_FILE_STAT_LINE_1=$(${SED_BIN} -n 1p ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE})
     CACHE_FILE_STAT_LINE_E=$(tail -1 ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE} 2>/dev/null)
     if [ -z ${CACHE_FILE_STAT_LINE_1} ] || [ -z ${CACHE_FILE_STAT_LINE_E} ]; then
         echo "could not get first or end line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
@@ -1148,7 +1148,7 @@ function test_upload_sparsefile {
     #
     # Make all HOLE file
     #
-    truncate ${BIG_FILE} -s ${BIG_FILE_LENGTH}
+    ${TRUNCATE_BIN} ${BIG_FILE} -s ${BIG_FILE_LENGTH}
 
     #
     # Write some bytes to ABOUT middle in the file

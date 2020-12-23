@@ -138,7 +138,7 @@ function start_s3proxy {
             chmod +x "${S3PROXY_BINARY}"
         fi
 
-        stdbuf -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
+        ${STDBUF_BIN} -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
@@ -189,6 +189,17 @@ function start_s3fs {
        DIRECT_IO_OPT=""
     fi
 
+    # [NOTE]
+    # On macos, running s3fs via stdbuf will result in no response.
+    # Therefore, when it is macos, it is not executed via stdbuf.
+    # This patch may be temporary, but no other method has been found at this time.
+    #
+    if [ `uname` = "Darwin" ]; then
+        VIA_STDBUF_CMDLINE=""
+    else
+        VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
+    fi
+
     # Common s3fs options:
     #
     # TODO: Allow all these options to be overridden with env variables
@@ -211,7 +222,7 @@ function start_s3fs {
     # subshell with set -x to log exact invocation of s3fs-fuse
     (
         set -x 
-        stdbuf -oL -eL \
+        ${VIA_STDBUF_CMDLINE} \
             ${VALGRIND_EXEC} ${S3FS} \
             $TEST_BUCKET_1 \
             $TEST_BUCKET_MOUNT_POINT_1 \
@@ -231,7 +242,7 @@ function start_s3fs {
             -f \
             "${@}" &
         echo $! >&3
-    ) 3>pid | stdbuf -oL -eL sed $SED_BUFFER_FLAG "s/^/s3fs: /" &
+    ) 3>pid | ${STDBUF_BIN} -oL -eL ${SED_BIN} ${SED_BUFFER_FLAG} "s/^/s3fs: /" &
     sleep 1
     export S3FS_PID=$(<pid)
     rm -f pid

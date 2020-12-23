@@ -143,7 +143,7 @@ jobs:
         run: |
           TAPS="$(brew --repository)/Library/Taps";
           if [ -e "$TAPS/caskroom/homebrew-cask" ]; then rm -rf "$TAPS/caskroom/homebrew-cask"; fi;
-          if [ ! -f $HOME/.osx_cache/cached ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask; else HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask; fi
+          HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask
 
       - name: Install osxfuse
         run: |
@@ -151,7 +151,7 @@ jobs:
 
       - name: Install brew other packages
         run: |
-          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils';
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
 
       - name: Install awscli
@@ -161,14 +161,6 @@ jobs:
       - name: Check osxfuse permission
         run: |
           if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then sudo chmod +s /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
-
-      - name: Check truncate
-        run: |
-          if [ ! -f /usr/local/bin/truncate ]; then sudo ln -s /usr/local/opt/coreutils/bin/gtruncate /usr/local/bin/truncate; fi
-
-      - name: Check stdbuf
-        run: |
-          if [ ! -f /usr/local/bin/stdbuf ]; then sudo ln -s /usr/local/opt/coreutils/bin/gstdbuf /usr/local/bin/stdbuf; fi
 
       - name: Build
         run: |

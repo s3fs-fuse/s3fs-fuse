@@ -34,11 +34,23 @@ BIG_FILE=big-file-s3fs.txt
 BIG_FILE_LENGTH=$((25 * 1024 * 1024))
 export RUN_DIR
 
+# [NOTE]
+# stdbuf, truncate and sed installed on macos do not work as
+# expected(not compatible with Linux).
+# Therefore, macos installs a brew package such as coreutils
+# and uses gnu commands(gstdbuf, gtruncate, gsed).
+# Set your PATH appropriately so that you can find these commands.
+#
 if [ `uname` = "Darwin" ]; then
-    export SED_BUFFER_FLAG="-l"
+    export STDBUF_BIN="gstdbuf"
+    export TRUNCATE_BIN="gtruncate"
+    export SED_BIN="gsed"
 else
-    export SED_BUFFER_FLAG="--unbuffered"
+    export STDBUF_BIN="stdbuf"
+    export TRUNCATE_BIN="truncate"
+    export SED_BIN="sed"
 fi
+export SED_BUFFER_FLAG="--unbuffered"
 
 function get_xattr() {
     if [ `uname` = "Darwin" ]; then
