@@ -723,6 +723,12 @@ bool S3fsCurl::SetDnsCache(bool isCache)
     return old;
 }
 
+void S3fsCurl::ResetOffset(S3fsCurl* pCurl)
+{
+    pCurl->partdata.startpos = pCurl->b_partdata_startpos;
+    pCurl->partdata.size     = pCurl->b_partdata_size;
+}
+
 bool S3fsCurl::SetSslSessionCache(bool isCache)
 {
     bool old = S3fsCurl::is_ssl_session_cache;
@@ -1465,6 +1471,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
 
     // duplicate request(setup new curl object)
     S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
+    
     if(0 != (result = newcurl->PreGetObjectRequest(s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size, s3fscurl->b_ssetype, s3fscurl->b_ssevalue))){
         S3FS_PRN_ERR("failed downloading part setup(%d)", result);
         delete newcurl;
@@ -2243,7 +2250,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders);
 
         // Requests
-        CURLcode curlCode = curl_easy_perform(hCurl);
+        curlCode = curl_easy_perform(hCurl);
 
         // Check result
         switch(curlCode){
