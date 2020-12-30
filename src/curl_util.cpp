@@ -47,7 +47,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* d
     std::string::size_type pos = strkey.find(':', 0);
     if(std::string::npos != pos){
         strval = strkey.substr(pos + 1);
-        strkey = strkey.substr(0, pos);
+        strkey.erase(pos);
     }
 
     return curl_slist_sort_insert(list, strkey.c_str(), strval.c_str());
@@ -73,7 +73,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
         std::string strcur = (*p)->data;
         size_t pos;
         if(std::string::npos != (pos = strcur.find(':', 0))){
-            strcur = strcur.substr(0, pos);
+            strcur.erase(pos);
         }
 
         int result = strcasecmp(strkey.c_str(), strcur.c_str());
@@ -112,7 +112,7 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
         std::string strcur = (*p)->data;
         size_t pos;
         if(std::string::npos != (pos = strcur.find(':', 0))){
-            strcur = strcur.substr(0, pos);
+            strcur.erase(pos);
         }
 
         int result = strcasecmp(strkey.c_str(), strcur.c_str());
@@ -143,7 +143,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list)
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
             }
-            strkey = strkey.substr(0, pos);
+            strkey.erase(pos);
         }
         if(0 < sorted_headers.length()){
             sorted_headers += ";";
@@ -384,10 +384,12 @@ const char* getCurlDebugHead(curl_infotype type)
 bool etag_equals(std::string s1, std::string s2)
 {
     if(s1.length() > 1 && s1[0] == '\"' && s1[s1.length() - 1] == '\"'){
-        s1 = s1.substr(1, s1.size() - 2);
+        s1.erase(s1.size() - 1);
+        s1.erase(0, 1);
     }
     if(s2.length() > 1 && s2[0] == '\"' && s2[s2.length() - 1] == '\"'){
-        s2 = s2.substr(1, s2.size() - 2);
+        s2.erase(s2.size() - 1);
+        s2.erase(0, 1);
     }
     return 0 == strcasecmp(s1.c_str(), s2.c_str());
 }

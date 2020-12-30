@@ -588,7 +588,7 @@ bool StatCache::DelStat(const char* key, bool lock_already_held)
         std::string strpath = key;
         if('/' == strpath[strpath.length() - 1]){
             // If there is "path" cache, delete it.
-            strpath = strpath.substr(0, strpath.length() - 1);
+            strpath.erase(strpath.length() - 1);
         }else{
             // If there is "path/" cache, delete it.
             strpath += "/";

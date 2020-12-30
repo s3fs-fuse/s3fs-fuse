@@ -1652,7 +1652,7 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
             if(std::string::npos == (pos = oneline.find_first_of("0123456789", pos))){
                 continue;
             }
-            oneline = oneline.substr(pos);
+            oneline.erase(0, pos);
             if(std::string::npos == (pos = oneline.find_last_of("0123456789"))){
                 continue;
             }
@@ -1662,7 +1662,7 @@ bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
             if(std::string::npos == (pos = oneline.find('\"', pos))){
                 continue;
             }
-            oneline = oneline.substr(pos + sizeof(char));
+            oneline.erase(0, pos+1);
             if(std::string::npos == (pos = oneline.find('\"'))){
                 continue;
             }
@@ -3827,7 +3827,8 @@ bool S3fsCurl::CopyMultipartPostComplete()
     std::string etag;
     partdata.uploaded = simple_parse_xml(bodydata.str(), bodydata.size(), "ETag", etag);
     if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
-        etag = etag.substr(1, etag.size() - 2);
+        etag.erase(etag.size() - 1);
+        etag.erase(0, 1);
     }
     (*partdata.petag) = etag;
 

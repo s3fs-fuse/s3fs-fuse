@@ -116,7 +116,7 @@ bool AdditionalHeader::Load(const char* file)
                 delete paddhead;
                 continue;
             }
-            key = key.substr(strlen(ADD_HEAD_REGEX));
+            key.erase(0, strlen(ADD_HEAD_REGEX));
 
           // compile
           regex_t*  preg = new regex_t;

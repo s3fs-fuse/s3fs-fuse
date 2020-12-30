@@ -219,7 +219,7 @@ static bool is_special_name_folder_object(const char* path)
 
     if(std::string::npos == strpath.find("_$folder$", 0)){
         if('/' == strpath[strpath.length() - 1]){
-            strpath = strpath.substr(0, strpath.length() - 1);
+            strpath.erase(strpath.length() - 1);
         }
         strpath += "_$folder$";
     }
@@ -256,7 +256,7 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
     if('/' != newpath[newpath.length() - 1]){
         std::string::size_type Pos;
         if(std::string::npos != (Pos = newpath.find("_$folder$", 0))){
-            newpath = newpath.substr(0, Pos);
+            newpath.erase(Pos);
         }
         newpath += "/";
     }
@@ -268,7 +268,8 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
         if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
             // "_$folder$" type.
             (*pType) = DIRTYPE_FOLDER;
-            nowpath = newpath.substr(0, newpath.length() - 1) + "_$folder$"; // cut and add
+            nowpath.erase(newpath.length() - 1);
+            nowpath += "_$folder$"; // cut and add
         }else if(isforce){
             // "no dir object" type.
             (*pType) = DIRTYPE_NOOBJ;
@@ -285,7 +286,7 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
         }
     }else if(support_compat_dir){
         // Check "dir" when support_compat_dir is enabled
-        nowpath = newpath.substr(0, newpath.length() - 1);
+        nowpath.erase(newpath.length() - 1);
         if(0 == (result = get_object_attribute(nowpath.c_str(), NULL, pmeta, false, &isforce))){
             // Found "dir" cache --> this case is only "dir" type.
             // Because, if object is "_$folder$" or "no dir object", the cache is "dir/" type.
@@ -379,7 +380,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     (*pisforce) = false;
     strpath     = path;
     if(support_compat_dir && overcheck && std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-        strpath = strpath.substr(0, Pos);
+        strpath.erase(Pos);
         strpath += "/";
     }
     if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
@@ -408,7 +409,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             }
             if(support_compat_dir && 0 != result){
                 // now path is "object/", do check "object_$folder$" for over checking
-                strpath     = strpath.substr(0, strpath.length() - 1);
+                strpath.erase(strpath.length() - 1);
                 strpath    += "_$folder$";
                 result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
                 s3fscurl.DestroyCurlHandle();
@@ -416,7 +417,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
               if(0 != result){
                   // cut "_$folder$" for over checking "no dir object" after here
                   if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-                      strpath  = strpath.substr(0, Pos);
+                      strpath.erase(Pos);
                   }
               }
             }
@@ -424,7 +425,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         if(support_compat_dir && 0 != result && std::string::npos == strpath.find("_$folder$", 0)){
             // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
             if('/' == strpath[strpath.length() - 1]){
-                strpath = strpath.substr(0, strpath.length() - 1);
+                strpath.erase(strpath.length() - 1);
             }
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
                 // found "no dir object".
@@ -454,7 +455,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
     // if path has "_$folder$", need to cut it.
     if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-        strpath = strpath.substr(0, Pos);
+        strpath.erase(Pos);
         strpath += "/";
     }
 
@@ -1124,7 +1125,7 @@ static int s3fs_rmdir(const char* _path)
     // Then "dir/" is not exists, but curl_delete returns 0.
     // So need to check "dir" and should be removed it.
     if('/' == strpath[strpath.length() - 1]){
-        strpath = strpath.substr(0, strpath.length() - 1);
+        strpath.erase(strpath.length() - 1);
     }
     if(0 == get_object_attribute(strpath.c_str(), &stbuf, NULL, false)){
         if(S_ISDIR(stbuf.st_mode)){
@@ -2516,7 +2517,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
         std::string fillpath = disppath;
         if('/' == disppath[disppath.length() - 1]){
-            fillpath = fillpath.substr(0, fillpath.length() -1);
+            fillpath.erase(fillpath.length() -1);
         }
         fillerlist.push_back(fillpath);
 
@@ -4030,7 +4031,7 @@ static int set_bucket(const char* arg)
             mount_prefix = pmount_prefix;
             // remove trailing slash
             if(mount_prefix[mount_prefix.size() - 1] == '/'){
-                mount_prefix = mount_prefix.substr(0, mount_prefix.size() - 1);
+                mount_prefix.erase(mount_prefix.size() - 1);
             }
         }
     }else{
