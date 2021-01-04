@@ -186,8 +186,11 @@ int S3fsMultiCurl::MultiRead()
 
         bool isRetry = false;
         bool isPostpone = false;
+        bool isNeedResetOffset = true;
         long responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        if(s3fscurl->GetResponseCode(responseCode, false)){
+        CURLcode curlCode = s3fscurl->GetCurlCode();
+
+        if(s3fscurl->GetResponseCode(responseCode, false) && curlCode == CURLE_OK){
             if(S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET == responseCode){
                 // This is a case where the processing result has not yet been updated (should be very rare).
                 isPostpone = true;
@@ -219,6 +222,23 @@ int S3fsMultiCurl::MultiRead()
             }
         }else{
             S3FS_PRN_ERR("failed a request(Unknown response code: %s)", s3fscurl->url.c_str());
+            // Reuse partical file
+            switch(curlCode){
+                case CURLE_OPERATION_TIMEDOUT:
+                    isRetry = true;
+                    isNeedResetOffset = false;
+                    break; 
+
+                case CURLE_PARTIAL_FILE:
+                    isRetry = true;
+                    isNeedResetOffset = false;
+                    break; 
+
+                default:
+                    S3FS_PRN_ERR("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
+                    isRetry = true;
+                    break;
+            }
         }
 
         if(isPostpone){
@@ -233,7 +253,12 @@ int S3fsMultiCurl::MultiRead()
                 delete s3fscurl;
             }else{
                 S3fsCurl* retrycurl = NULL;
-      
+
+                // Reset offset
+                if(isNeedResetOffset){
+                    S3fsCurl::ResetOffset(s3fscurl);
+                }
+
                 // For retry
                 if(RetryCallback){
                     retrycurl = RetryCallback(s3fscurl);

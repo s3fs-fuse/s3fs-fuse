@@ -198,7 +198,8 @@ class S3fsCurl
         pthread_mutex_t      *completed_tids_lock;
         std::vector<pthread_t> *completed_tids;
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
-
+        CURLcode             curlCode;             // handle curl return
+    
     public:
         static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
         static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
@@ -333,6 +334,7 @@ class S3fsCurl
         }
         static long SetSslVerifyHostname(long value);
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
+        static void ResetOffset(S3fsCurl* pCurl);
         // maximum parallel GET and PUT requests
         static int SetMaxParallelCount(int value);
         static int GetMaxParallelCount() { return S3fsCurl::max_parallel_cnt; }
@@ -398,6 +400,7 @@ class S3fsCurl
         headers_t* GetResponseHeaders() { return &responseHeaders; }
         BodyData* GetBodyData() { return &bodydata; }
         BodyData* GetHeadData() { return &headdata; }
+        CURLcode GetCurlCode() const { return curlCode; }
         long GetLastResponseCode() const { return LastResponseCode; }
         bool SetUseAhbe(bool ahbe);
         bool EnableUseAhbe() { return SetUseAhbe(true); }
