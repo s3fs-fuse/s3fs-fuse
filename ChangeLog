@@ -1,6 +1,50 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.88 -- 4 Jan, 2021 (major changes only)
+
+#1343 - Moved the SIGUSR2 handler to S3fsSignals class
+#1349 - Fixed a bug about move file over limit of ensure space
+#1356 - Prefer %zd and %zu for ssize_t and size_t
+#1357 - Call readdir instead of readdir_r
+#1363 - Lock fdent_data_lock before accessing pagelist
+#1365 - Dynamically determine whether lseek extended options are supported
+#1366 - Consistently lock curl_times and curl_progress
+#1368 - Prefer named locks in curl
+#1373 - Use scoped enums for acl_t, sse_type_t, and storage_class_t
+#1374 - Add support for deep archive storage class
+#1385 - close FdEntity to avoid leakage
+#1388 - return 0 after parsing "use_session_token" arg
+#1394 - Added a class for automating fdentity reference counts
+#1395 - Fixed incorrect Signal related message at s3fs init/terminate
+#1397 - Centralize hex conversion
+#1399 - Use more descriptive names for digest functions
+#1404 - fix dead lock in disk insufficient and optimize code
+#1408 - Ensure environment variable is set when using ECS
+#1413 - not call put headers if not exist pending meta
+#1421 - enforce exact key match in IBM IAM response
+#1423 - Fix MD5 when using gnutls with nettle
+#1425 - Do not send SSE headers during bucket creation
+#1432 - Add sigv4 flag and fix v4 regression
+#1433 - Further simplify and centralize hex conversion
+#1435 - Remove exceptions from s3fs_strtoofft
+#1436 - Fixed signature error due to case of hex string
+#1437 - Added atime and Corrected atime/mtime/ctime operations
+#1439 - Protect curl_warnings_once with a mutex
+#1446 - Allow relative path with use_path
+#1447 - Fixed a bug that symlink could not be read after restarting s3fs
+#1448 - Flush dirty data after a writing a number of bytes
+#1449 - Added logfile option for non-syslog logging
+#1462 - Implement AWS IMDSv2 support
+#1467 - Fixed flushing dirty data and compressed the cache size
+#1469 - Fix directory authority
+#1479 - Simplify handling of returned ETag
+#1492 - fix 404 error message
+#1494 - Simply curl_slist_sort_insert
+#1502 - fix: miss header when retry
+#1503 - Retry failed may load bad page
+#1505 - Remove authorization header when remaking handle
+
 Version 1.87 -- 10 Aug, 2020 (major changes only)
 
 #1244 - use correct content-type when complete multipart upload
