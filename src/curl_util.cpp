@@ -100,6 +100,33 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     return list;
 }
 
+struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
+{
+    if(!key){
+        return list;
+    }
+
+    std::string strkey = trim(std::string(key));
+    struct curl_slist **p = &list;
+    for(;*p; p = &(*p)->next){
+        std::string strcur = (*p)->data;
+        size_t pos;
+        if(std::string::npos != (pos = strcur.find(':', 0))){
+            strcur = strcur.substr(0, pos);
+        }
+
+        int result = strcasecmp(strkey.c_str(), strcur.c_str());
+        if(0 == result){
+            free((*p)->data);
+            struct curl_slist *tmp = *p;
+            *p = (*p)->next;
+            free(tmp);
+        }
+    }
+
+    return list;
+}
+
 std::string get_sorted_header_keys(const struct curl_slist* list)
 {
     std::string sorted_headers;

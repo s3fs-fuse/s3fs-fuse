@@ -2065,6 +2065,7 @@ bool S3fsCurl::RemakeHandle()
     }
 
     // reinitialize internal data
+    requestHeaders = curl_slist_remove(requestHeaders, "Authorization");
     responseHeaders.clear();
     bodydata.Clear();
     headdata.Clear();
