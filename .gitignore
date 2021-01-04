@@ -75,6 +75,7 @@ default_commit_hash
 src/s3fs
 src/test_curl_util
 src/test_string_util
+test/chaos-http-proxy-*
 test/s3proxy-*
 
 #

@@ -319,6 +319,19 @@ function aws_cli() {
     aws $* --endpoint-url "${S3_URL}" --no-verify-ssl $FLAGS
 }
 
+function wait_for_port() {
+    PORT=$1
+    for i in $(seq 30); do
+        if exec 3<>"/dev/tcp/127.0.0.1/${PORT}";
+        then
+            exec 3<&-  # Close for read
+            exec 3>&-  # Close for write
+            break
+        fi
+        sleep 1
+    done
+}
+
 #
 # Local variables:
 # tab-width: 4

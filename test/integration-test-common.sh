@@ -78,6 +78,9 @@ export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 S3PROXY_VERSION="1.7.1"
 S3PROXY_BINARY=${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}
 
+CHAOS_HTTP_PROXY_VERSION="1.1.0"
+CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
+
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
 then
 	echo "Missing credentials file: $S3FS_CREDENTIALS_FILE"
@@ -142,16 +145,21 @@ function start_s3proxy {
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
-        for i in $(seq 30);
-        do
-            if exec 3<>"/dev/tcp/127.0.0.1/8080";
-            then
-                exec 3<&-  # Close for read
-                exec 3>&-  # Close for write
-                break
-            fi
-            sleep 1
-        done
+        wait_for_port 8080
+    fi
+
+    if [ -n "${CHAOS_HTTP_PROXY}" ]; then
+        if [ ! -e "${CHAOS_HTTP_PROXY_BINARY}" ]; then
+            wget "https://github.com/bouncestorage/chaos-http-proxy/releases/download/chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}/chaos-http-proxy" \
+                --quiet -O "${CHAOS_HTTP_PROXY_BINARY}"
+            chmod +x "${CHAOS_HTTP_PROXY_BINARY}"
+        fi
+
+        ${STDBUF_BIN} -oL -eL java -jar ${CHAOS_HTTP_PROXY_BINARY} --properties chaos-http-proxy.conf &
+        CHAOS_HTTP_PROXY_PID=$!
+
+        # wait for Chaos HTTP Proxy to start
+        wait_for_port 1080
     fi
 }
 
@@ -159,6 +167,11 @@ function stop_s3proxy {
     if [ -n "${S3PROXY_PID}" ]
     then
         kill $S3PROXY_PID
+    fi
+
+    if [ -n "${CHAOS_HTTP_PROXY_PID}" ]
+    then
+        kill $CHAOS_HTTP_PROXY_PID
     fi
 }
 
@@ -187,6 +200,10 @@ function start_s3fs {
        DIRECT_IO_OPT="-o direct_io -o auto_cache"
     else
        DIRECT_IO_OPT=""
+    fi
+
+    if [ -n "${CHAOS_HTTP_PROXY}" ]; then
+        export http_proxy="127.0.0.1:1080"
     fi
 
     # [NOTE]
