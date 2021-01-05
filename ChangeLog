@@ -1,6 +1,27 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.88 -- 4 Jan, 2021 (major changes only)
+
+#1349 - Fixed a bug about move file over limit of ensure space
+#1363 - #1366 - #1439 - Fix multiple race conditions
+#1365 - Dynamically determine whether lseek extended options are supported
+#1374 - Add support for deep archive storage class
+#1385 - Plug FdEntity leaks
+#1388 - Fix use_session_token option parsing
+#1392 - Allow 32-bit platforms to upload single-part objects > 2 GB
+#1404 - Fix dead lock in disk insufficient and optimize code
+#1408 - Ensure environment variable is set when using ECS
+#1413 - not call put headers if not exist pending meta
+#1425 - Do not send SSE headers during bucket creation
+#1432 - Add sigv4 only option
+#1437 - Add atime and correct atime/mtime/ctime operations
+#1447 - Fixed a bug that symlink could not be read after restarting s3fs
+#1448 - #1467 - Periodically flush written data to reduce temporary local storage
+#1449 - Added logfile option for non-syslog logging
+#1462 - Add AWS IMDSv2 support
+#1502 - #1503 - #1505 - Fix multiple issues when retrying requests
+
 Version 1.87 -- 10 Aug, 2020 (major changes only)
 
 #1244 - use correct content-type when complete multipart upload
