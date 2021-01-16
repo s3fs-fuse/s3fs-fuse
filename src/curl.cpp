@@ -1314,7 +1314,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
             S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
             close(fd2);
             delete s3fscurl_para;
-            return -1;
+            return -EIO;
         }
         remaining_bytes -= chunk;
     }
@@ -1432,7 +1432,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
             close(fd2);
             delete s3fscurl_para;
-            return -1;
+            return -EIO;
         }
     }
 
@@ -1521,7 +1521,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, o
             if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
                 S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
                 delete s3fscurl_para;
-                return -1;
+                return -EIO;
             }
         }
 
@@ -2672,10 +2672,10 @@ int S3fsCurl::DeleteRequest(const char* tpath)
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3013,10 +3013,10 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3127,7 +3127,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(-1 != fd){
         // duplicate fd
@@ -3149,7 +3149,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         if(file){
             fclose(file);
         }
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3237,7 +3237,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
     if(!tpath || -1 == fd || 0 > start || 0 > size){
-        return -1;
+        return -EINVAL;
     }
 
     std::string resource;
@@ -3289,7 +3289,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     sse_type_t ssetype = sse_type_t::SSE_DISABLE;
     std::string ssevalue;
@@ -3302,7 +3302,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
     }
     if(!fpLazySetup || !fpLazySetup(this)){
         S3FS_PRN_ERR("Failed to lazy setup in single get object request.");
-        return -1;
+        return -EIO;
     }
 
     S3FS_PRN_INFO3("downloading... [path=%s][fd=%d]", tpath, fd);
@@ -3318,7 +3318,7 @@ int S3fsCurl::CheckBucket()
     S3FS_PRN_INFO3("check a bucket.");
 
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3351,10 +3351,10 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3400,10 +3400,10 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3488,7 +3488,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
 
     if(!simple_parse_xml(bodydata.str(), bodydata.size(), "UploadId", upload_id)){
         bodydata.Clear();
-        return -1;
+        return -EIO;
     }
 
     bodydata.Clear();
@@ -3500,7 +3500,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     S3FS_PRN_INFO3("[tpath=%s][parts=%zu]", SAFESTRPTR(tpath), parts.size());
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
 
     // make contents
@@ -3510,7 +3510,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it, ++cnt){
         if(it->empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", cnt + 1);
-            return -1;
+            return -EIO;
         }
         postContent += "<Part>\n";
         postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
@@ -3526,7 +3526,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     b_postdata_remaining = postdata_remaining;
 
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3573,7 +3573,7 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     S3FS_PRN_INFO3("list request(multipart)");
 
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3614,10 +3614,10 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
     if(!tpath){
-        return -1;
+        return -EINVAL;
     }
     if(!CreateCurlHandle()){
-        return -1;
+        return -EIO;
     }
     std::string resource;
     std::string turl;
@@ -3659,7 +3659,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long int>(partdata.startpos), static_cast<long long int>(partdata.size), part_num);
 
     if(-1 == partdata.fd || -1 == partdata.startpos || -1 == partdata.size){
-        return -1;
+        return -EINVAL;
     }
 
     requestHeaders = NULL;
@@ -3669,7 +3669,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
         unsigned char *md5raw = s3fs_md5_fd(partdata.fd, partdata.startpos, partdata.size);
         if(md5raw == NULL){
             S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
-            return -1;
+            return -EIO;
         }
         partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
         char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
@@ -3724,7 +3724,7 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
 
     if(!fpLazySetup || !fpLazySetup(this)){
         S3FS_PRN_ERR("Failed to lazy setup in multipart upload post request.");
-        return -1;
+        return -EIO;
     }
 
     // request
@@ -3745,7 +3745,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     S3FS_PRN_INFO3("[from=%s][to=%s][part=%d]", SAFESTRPTR(from), SAFESTRPTR(to), part_num);
 
     if(!from || !to){
-        return -1;
+        return -EINVAL;
     }
     query_string = "partNumber=" + str(part_num) + "&uploadId=" + upload_id;
     std::string urlargs = "?" + query_string;
@@ -3892,7 +3892,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
         if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
             S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
             delete s3fscurl_para;
-            return -1;
+            return -EIO;
         }
     }
 
@@ -4062,7 +4062,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
         if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
             S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", to);
             delete s3fscurl_para;
-            return -1;
+            return -EIO;
         }
     }
 

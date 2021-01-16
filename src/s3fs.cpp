@@ -1004,7 +1004,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t atime, 
     S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%lld][mtime=%lld][ctime=%lld][uid=%u][gid=%u]", path, mode, static_cast<long long>(atime), static_cast<long long>(ctime), static_cast<long long>(mtime), (unsigned int)uid, (unsigned int)gid);
 
     if(!path || '\0' == path[0]){
-        return -1;
+        return -EINVAL;
     }
     std::string tpath = path;
     if('/' != tpath[tpath.length() - 1]){
@@ -1456,7 +1456,7 @@ static int rename_directory(const char* from, const char* to)
             if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path)))){
                 S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
                 free_mvnodes(mn_head);
-                return -EIO;
+                return result;
             }
         }
     }
@@ -1473,7 +1473,7 @@ static int rename_directory(const char* from, const char* to)
             if(0 != result){
                 S3FS_PRN_ERR("rename_object returned an error(%d)", result);
                 free_mvnodes(mn_head);
-                return -EIO;
+                return result;
             }
         }
     }
@@ -1485,7 +1485,7 @@ static int rename_directory(const char* from, const char* to)
                 if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
                     S3FS_PRN_ERR("s3fs_rmdir returned an error(%d)", result);
                     free_mvnodes(mn_head);
-                    return -EIO;
+                    return result;
                 }
             }else{
                 // cache clear.
@@ -1631,16 +1631,16 @@ static int s3fs_chmod(const char* _path, mode_t mode)
             }else{
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
-                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    return -EIO;
+                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
+                    return result;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
-            if(0 != put_headers(strpath.c_str(), meta, true)){
-                return -EIO;
+            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+                return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
@@ -1807,16 +1807,16 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
             }else{
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
-                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    return -EIO;
+                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
+                    return result;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
             }
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
-            if(0 != put_headers(strpath.c_str(), meta, true)){
-                return -EIO;
+            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+                return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
@@ -1987,8 +1987,8 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             }else{
                 // allow to put header
                 // updatemeta already merged the orgmeta of the opened files.
-                if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                    return -EIO;
+                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
+                    return result;
                 }
                 StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -2002,8 +2002,8 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         }else{
             // not opened file, then put headers
             merge_headers(meta, updatemeta, true);
-            if(0 != put_headers(strpath.c_str(), meta, true)){
-                return -EIO;
+            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+                return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
@@ -2665,12 +2665,12 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         // xmlDocPtr
         if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
             S3FS_PRN_ERR("xmlReadMemory returns with error.");
-            return -1;
+            return -EIO;
         }
         if(0 != append_objects_from_xml(path, doc, head)){
             S3FS_PRN_ERR("append_objects_from_xml returns with error.");
             xmlFreeDoc(doc);
-            return -1;
+            return -EIO;
         }
         if(true == (truncated = is_truncated(doc))){
             xmlChar* tmpch = get_next_marker(doc);
@@ -2711,15 +2711,16 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 static int remote_mountpath_exists(const char* path)
 {
     struct stat stbuf;
+    int result;
 
     S3FS_PRN_INFO1("[path=%s]", path);
 
     // getattr will prefix the path with the remote mountpoint
-    if(0 != get_object_attribute("/", &stbuf, NULL)){
-        return -1;
+    if(0 != (result = get_object_attribute("/", &stbuf, NULL))){
+        return result;
     }
     if(!S_ISDIR(stbuf.st_mode)){
-        return -1;
+        return -ENOTDIR;
     }
     return 0;
 }
@@ -2983,8 +2984,8 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         }else{
             // allow to put header
             // updatemeta already merged the orgmeta of the opened files.
-            if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                return -EIO;
+            if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
+                return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
@@ -2997,8 +2998,8 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             return result;
         }
 
-        if(0 != put_headers(strpath.c_str(), meta, true)){
-            return -EIO;
+        if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+            return result;
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
@@ -3261,8 +3262,8 @@ static int s3fs_removexattr(const char* path, const char* name)
             if(updatemeta["x-amz-meta-xattr"].empty()){
                 updatemeta.erase("x-amz-meta-xattr");
             }
-            if(0 != put_headers(strpath.c_str(), updatemeta, true)){
-                return -EIO;
+            if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
+                return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
         }
@@ -3272,8 +3273,8 @@ static int s3fs_removexattr(const char* path, const char* name)
             updatemeta.erase("x-amz-meta-xattr");
         }
         merge_headers(meta, updatemeta, true);
-        if(0 != put_headers(strpath.c_str(), meta, true)){
-            return -EIO;
+        if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+            return result;
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
