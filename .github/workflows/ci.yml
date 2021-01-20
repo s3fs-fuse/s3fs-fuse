@@ -147,7 +147,7 @@ jobs:
 
       - name: Install osxfuse
         run: |
-          HOMEBREW_NO_AUTO_UPDATE=1 brew cask install osxfuse
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install osxfuse
 
       - name: Install brew other packages
         run: |
