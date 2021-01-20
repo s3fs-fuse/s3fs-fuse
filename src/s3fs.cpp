@@ -118,7 +118,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
-static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is_load = false);
+static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
@@ -676,16 +676,17 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
     return true;
 }
 
-static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is_load)
+static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load)
 {
+    int         result;
     struct stat stobj;
     FdEntity*   ent;
     headers_t   meta;
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
-    if(0 != get_object_attribute(path, &stobj, &meta)){
-        return NULL;
+    if(0 != (result = get_object_attribute(path, &stobj, &meta))){
+        return result;
     }
 
     // open
@@ -694,15 +695,16 @@ static FdEntity* get_local_fent(AutoFdEntity& autoent, const char* path, bool is
 
     if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
-        return NULL;
+        return -EIO;
     }
     // load
     if(is_load && !ent->OpenAndLoadAll(&meta)){
         S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
         autoent.Close();
-        return NULL;
+        return -EIO;
     }
-    return ent;
+    *entity = ent;
+    return 0;
 }
 
 //
@@ -819,9 +821,10 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         {   // scope for AutoFdEntity
             AutoFdEntity autoent;
             FdEntity*    ent;
-            if(NULL == (ent = get_local_fent(autoent, path))){
+            int          result;
+            if(0 != (result = get_local_fent(autoent, &ent, path))){
                 S3FS_PRN_ERR("could not get fent(file=%s)", path);
-                return -EIO;
+                return result;
             }
             // Get size
             off_t readsize;
@@ -1270,9 +1273,9 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = get_local_fent(autoent, from, true))){
+        if(0 != (result = get_local_fent(autoent, &ent, from, true))){
             S3FS_PRN_ERR("could not open and read file(%s)", from);
-            return -EIO;
+            return result;
         }
 
         // Set header
@@ -1705,9 +1708,9 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-            return -EIO;
+            return result;
         }
 
         ent->SetCtime(time(NULL));
@@ -1888,9 +1891,9 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-            return -EIO;
+            return result;
         }
 
         ent->SetCtime(time(NULL));
@@ -2070,9 +2073,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = get_local_fent(autoent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
-            return -EIO;
+            return result;
         }
 
         // set mtime/ctime
