@@ -33,23 +33,23 @@
 //-------------------------------------------------------------------
 S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), RetryCallback(NULL)
 {
-    int res;
+    int result;
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-    if (0 != (res = pthread_mutex_init(&completed_tids_lock, &attr))) {
-        S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", res);
+    if (0 != (result = pthread_mutex_init(&completed_tids_lock, &attr))) {
+        S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", result);
     }
 }
 
 S3fsMultiCurl::~S3fsMultiCurl()
 {
     Clear();
-    int res;
-    if(0 != (res = pthread_mutex_destroy(&completed_tids_lock))){
-        S3FS_PRN_ERR("could not destroy completed_tids_lock: %i", res);
+    int result;
+    if(0 != (result = pthread_mutex_destroy(&completed_tids_lock))){
+        S3FS_PRN_ERR("could not destroy completed_tids_lock: %i", result);
     }
 }
 

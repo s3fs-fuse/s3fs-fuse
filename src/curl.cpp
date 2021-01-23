@@ -313,15 +313,15 @@ void S3fsCurl::LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_a
         return;
     }
     S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
-    int res;
+    int result;
     if(CURL_LOCK_DATA_DNS == nLockData){
-        if(0 != (res = pthread_mutex_lock(&locks->dns))){
-            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+        if(0 != (result = pthread_mutex_lock(&locks->dns))){
+            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
             abort();
         }
     }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-        if(0 != (res = pthread_mutex_lock(&locks->ssl_session))){
-            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+        if(0 != (result = pthread_mutex_lock(&locks->ssl_session))){
+            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
             abort();
         }
     }
@@ -333,15 +333,15 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
         return;
     }
     S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
-    int res;
+    int result;
     if(CURL_LOCK_DATA_DNS == nLockData){
-        if(0 != (res = pthread_mutex_unlock(&locks->dns))){
-            S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
+        if(0 != (result = pthread_mutex_unlock(&locks->dns))){
+            S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", result);
             abort();
         }
     }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-        if(0 != (res = pthread_mutex_unlock(&locks->ssl_session))){
-            S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", res);
+        if(0 != (result = pthread_mutex_unlock(&locks->ssl_session))){
+            S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", result);
             abort();
         }
     }
