@@ -87,7 +87,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
 
     struct curl_slist* new_item;
-    if(NULL == (new_item = reinterpret_cast<struct curl_slist*>(malloc(sizeof(*new_item))))){
+    if(NULL == (new_item = static_cast<struct curl_slist*>(malloc(sizeof(*new_item))))){
         free(data);
         return list;
     }
