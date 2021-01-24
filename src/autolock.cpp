@@ -34,21 +34,21 @@ AutoLock::AutoLock(pthread_mutex_t* pmutex, Type type) : auto_mutex(pmutex)
     if (type == ALREADY_LOCKED) {
         is_lock_acquired = false;
     } else if (type == NO_WAIT) {
-        int res = pthread_mutex_trylock(auto_mutex);
-        if(res == 0){
+        int result = pthread_mutex_trylock(auto_mutex);
+        if(result == 0){
             is_lock_acquired = true;
-        }else if(res == EBUSY){
+        }else if(result == EBUSY){
             is_lock_acquired = false;
         }else{
-            S3FS_PRN_CRIT("pthread_mutex_trylock returned: %d", res);
+            S3FS_PRN_CRIT("pthread_mutex_trylock returned: %d", result);
             abort();
         }
     } else {
-        int res = pthread_mutex_lock(auto_mutex);
-        if(res == 0){
+        int result = pthread_mutex_lock(auto_mutex);
+        if(result == 0){
             is_lock_acquired = true;
         }else{
-            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
             abort();
         }
     }
@@ -62,9 +62,9 @@ bool AutoLock::isLockAcquired() const
 AutoLock::~AutoLock()
 {
     if (is_lock_acquired) {
-        int res = pthread_mutex_unlock(auto_mutex);
-        if(res != 0){
-            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", res);
+        int result = pthread_mutex_unlock(auto_mutex);
+        if(result != 0){
+            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
             abort();
         }
     }

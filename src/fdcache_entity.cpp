@@ -103,13 +103,13 @@ FdEntity::FdEntity(const char* tpath, const char* cpath) :
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-    int res;
-    if(0 != (res = pthread_mutex_init(&fdent_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init fdent_lock: %d", res);
+    int result;
+    if(0 != (result = pthread_mutex_init(&fdent_lock, &attr))){
+        S3FS_PRN_CRIT("failed to init fdent_lock: %d", result);
         abort();
     }
-    if(0 != (res = pthread_mutex_init(&fdent_data_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init fdent_data_lock: %d", res);
+    if(0 != (result = pthread_mutex_init(&fdent_data_lock, &attr))){
+        S3FS_PRN_CRIT("failed to init fdent_data_lock: %d", result);
         abort();
     }
     is_lock_init = true;
@@ -120,13 +120,13 @@ FdEntity::~FdEntity()
     Clear();
 
     if(is_lock_init){
-      int res;
-      if(0 != (res = pthread_mutex_destroy(&fdent_data_lock))){
-          S3FS_PRN_CRIT("failed to destroy fdent_data_lock: %d", res);
+      int result;
+      if(0 != (result = pthread_mutex_destroy(&fdent_data_lock))){
+          S3FS_PRN_CRIT("failed to destroy fdent_data_lock: %d", result);
           abort();
       }
-      if(0 != (res = pthread_mutex_destroy(&fdent_lock))){
-          S3FS_PRN_CRIT("failed to destroy fdent_lock: %d", res);
+      if(0 != (result = pthread_mutex_destroy(&fdent_lock))){
+          S3FS_PRN_CRIT("failed to destroy fdent_lock: %d", result);
           abort();
       }
       is_lock_init = false;

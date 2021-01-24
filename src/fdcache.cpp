@@ -354,17 +354,17 @@ FdManager::FdManager()
 #if S3FS_PTHREAD_ERRORCHECK
         pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
-        int res;
-        if(0 != (res = pthread_mutex_init(&FdManager::fd_manager_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init fd_manager_lock: %d", res);
+        int result;
+        if(0 != (result = pthread_mutex_init(&FdManager::fd_manager_lock, &attr))){
+            S3FS_PRN_CRIT("failed to init fd_manager_lock: %d", result);
             abort();
         }
-        if(0 != (res = pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init cache_cleanup_lock: %d", res);
+        if(0 != (result = pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr))){
+            S3FS_PRN_CRIT("failed to init cache_cleanup_lock: %d", result);
             abort();
         }
-        if(0 != (res = pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init reserved_diskspace_lock: %d", res);
+        if(0 != (result = pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr))){
+            S3FS_PRN_CRIT("failed to init reserved_diskspace_lock: %d", result);
             abort();
         }
         FdManager::is_lock_init = true;
@@ -384,17 +384,17 @@ FdManager::~FdManager()
         fent.clear();
 
         if(FdManager::is_lock_init){
-            int res;
-            if(0 != (res = pthread_mutex_destroy(&FdManager::fd_manager_lock))){
-                S3FS_PRN_CRIT("failed to destroy fd_manager_lock: %d", res);
+            int result;
+            if(0 != (result = pthread_mutex_destroy(&FdManager::fd_manager_lock))){
+                S3FS_PRN_CRIT("failed to destroy fd_manager_lock: %d", result);
                 abort();
             }
-            if(0 != (res = pthread_mutex_destroy(&FdManager::cache_cleanup_lock))){
-                S3FS_PRN_CRIT("failed to destroy cache_cleanup_lock: %d", res);
+            if(0 != (result = pthread_mutex_destroy(&FdManager::cache_cleanup_lock))){
+                S3FS_PRN_CRIT("failed to destroy cache_cleanup_lock: %d", result);
                 abort();
             }
-            if(0 != (res = pthread_mutex_destroy(&FdManager::reserved_diskspace_lock))){
-                S3FS_PRN_CRIT("failed to destroy reserved_diskspace_lock: %d", res);
+            if(0 != (result = pthread_mutex_destroy(&FdManager::reserved_diskspace_lock))){
+                S3FS_PRN_CRIT("failed to destroy reserved_diskspace_lock: %d", result);
                 abort();
             }
             FdManager::is_lock_init = false;
