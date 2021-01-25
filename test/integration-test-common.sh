@@ -106,7 +106,7 @@ function retry {
     status=0
     for i in $(seq $N); do
         echo "Trying: $*"
-        "$@"
+        eval $@
         status=$?
         if [ $status == 0 ]; then
             break
@@ -296,7 +296,7 @@ function stop_s3fs {
     # Retry in case file system is in use
     if [ `uname` = "Darwin" ]; then
         if df | grep -q $TEST_BUCKET_MOUNT_POINT_1; then
-            retry 10 df | grep -q $TEST_BUCKET_MOUNT_POINT_1 && umount $TEST_BUCKET_MOUNT_POINT_1
+            retry 10 df "|" grep -q $TEST_BUCKET_MOUNT_POINT_1 "&&" umount $TEST_BUCKET_MOUNT_POINT_1
         fi
     else
         if grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts; then 
