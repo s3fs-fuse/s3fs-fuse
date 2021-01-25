@@ -2595,6 +2595,11 @@ void S3fsCurl::insertV4Headers()
             break;
     }
 
+    if(0 == payload_hash.length()){
+        S3FS_PRN_ERR("Failed to make SHA256.");
+        // TODO: propagate error
+    }
+
     S3FS_PRN_INFO3("computing signature [%s] [%s] [%s] [%s]", op.c_str(), server_path.c_str(), query_string.c_str(), payload_hash.c_str());
     std::string strdate;
     std::string date8601;
@@ -3165,6 +3170,10 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     std::string strMD5;
     if(-1 != fd && S3fsCurl::is_content_md5){
         strMD5         = s3fs_get_content_md5(fd);
+        if(0 == strMD5.length()){
+            S3FS_PRN_ERR("Failed to make MD5.");
+            return -EIO;
+        }
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
     }
 
