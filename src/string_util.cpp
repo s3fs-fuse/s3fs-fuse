@@ -207,13 +207,13 @@ bool takeout_str_dquart(std::string& str)
 
     // '"' for start
     if(std::string::npos != (pos = str.find_first_of('\"'))){
-        str = str.substr(pos + 1);
+        str.erase(0, pos + 1);
 
         // '"' for end
         if(std::string::npos == (pos = str.find_last_of('\"'))){
             return false;
         }
-        str = str.substr(0, pos);
+        str.erase(pos);
         if(std::string::npos != str.find_first_of('\"')){
             return false;
         }

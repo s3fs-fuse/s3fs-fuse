@@ -44,7 +44,7 @@ static time_t cvt_string_to_time(const char *str)
         strmtime = str;
         std::string::size_type pos = strmtime.find('.', 0);
         if(std::string::npos != pos){
-            strmtime = strmtime.substr(0, pos);
+            strmtime.erase(pos);
         }
     }
     return static_cast<time_t>(cvt_strtoofft(strmtime.c_str()));
@@ -151,7 +151,7 @@ mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool for
                         // Leave just the mime type, remove any optional parameters (eg charset)
                         std::string::size_type pos = strConType.find(';');
                         if(std::string::npos != pos){
-                            strConType = strConType.substr(0, pos);
+                            strConType.erase(pos);
                         }
                         if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
                             // Nextcloud uses this MIME type for directory objects when mounting bucket as external Storage

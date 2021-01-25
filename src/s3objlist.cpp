@@ -225,7 +225,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
         std::string name = (*iter).first;
         if(CutSlash && 1 < name.length() && '/' == name[name.length() - 1]){
             // only "/" std::string is skipped this.
-            name = name.substr(0, name.length() - 1);
+            name.erase(name.length() - 1);
         }
         list.push_back(name);
     }
@@ -243,13 +243,13 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     for(liter = list.begin(); list.end() != liter; ++liter){
         std::string strtmp = (*liter);
         if(1 < strtmp.length() && '/' == strtmp[strtmp.length() - 1]){
-            strtmp = strtmp.substr(0, strtmp.length() - 1);
+            strtmp.erase(strtmp.length() - 1);
         }
         h_map[strtmp] = true;
 
         // check hierarchized directory
         for(std::string::size_type pos = strtmp.find_last_of('/'); std::string::npos != pos; pos = strtmp.find_last_of('/')){
-            strtmp = strtmp.substr(0, pos);
+            strtmp.erase(pos);
             if(0 == strtmp.length() || "/" == strtmp){
                 break;
             }
