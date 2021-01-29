@@ -29,11 +29,12 @@
 //-------------------------------------------------------------------
 const int               S3fsLog::NEST_MAX;
 const char*             S3fsLog::nest_spaces[S3fsLog::NEST_MAX] = {"", "  ", "    ", "      "};
-const char*             S3fsLog::LOGFILEENV  = "S3FS_LOGFILE";
-S3fsLog*                S3fsLog::pSingleton  = NULL;
-S3fsLog::s3fs_log_level S3fsLog::debug_level = S3fsLog::LEVEL_CRIT;
-FILE*                   S3fsLog::logfp       = NULL;
-std::string*            S3fsLog::plogfile    = NULL;
+const char*             S3fsLog::LOGFILEENV       = "S3FS_LOGFILE";
+S3fsLog*                S3fsLog::pSingleton       = NULL;
+S3fsLog::s3fs_log_level S3fsLog::debug_level      = S3fsLog::LEVEL_CRIT;
+FILE*                   S3fsLog::logfp            = NULL;
+std::string*            S3fsLog::plogfile         = NULL;
+char                    S3fsLog::current_time[32] = "";
 
 //-------------------------------------------------------------------
 // S3fsLog class : class methods

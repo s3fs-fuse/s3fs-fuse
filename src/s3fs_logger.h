@@ -23,6 +23,7 @@
 
 #include <cstdio>
 #include <syslog.h>
+#include <sys/time.h>
 
 //-------------------------------------------------------------------
 // S3fsLog class
@@ -46,6 +47,7 @@ class S3fsLog
         static s3fs_log_level debug_level;
         static FILE*          logfp;
         static std::string*   plogfile;
+        static char           current_time[32];
 
     protected:
         bool LowLoadEnv();
@@ -68,6 +70,18 @@ class S3fsLog
                      LEVEL_WARN == (level & LEVEL_DBG) ? LOG_WARNING :
                      LEVEL_ERR  == (level & LEVEL_DBG) ? LOG_ERR     : LOG_CRIT );
         }
+
+    static const char* GetCurrentTime()
+    {
+        struct timeval now;
+        struct tm res;
+        char tmp[32];
+
+        gettimeofday(&now, NULL);
+        strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
+        snprintf(current_time, sizeof(current_time), "%s.%03ldZ", tmp, (now.tv_usec / 1000));
+        return current_time;
+    }
 
         static const char* GetLevelString(s3fs_log_level level)
         {
@@ -132,7 +146,7 @@ class S3fsLog
             if(S3fsLog::IsS3fsLogLevel(level)){ \
                 if(foreground || S3fsLog::IsSetLogFile()){ \
                     S3fsLog::SeekEnd(); \
-                    fprintf(S3fsLog::GetOutputLogFile(), "%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetLevelString(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
+                    fprintf(S3fsLog::GetOutputLogFile(), "%s %s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime(), S3fsLog::GetLevelString(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
                     S3fsLog::Flush(); \
                 }else{ \
                     syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): " fmt "%s", instance_name.c_str(), __FILE__, __func__, __LINE__, __VA_ARGS__); \
@@ -145,7 +159,7 @@ class S3fsLog
             if(S3fsLog::IsS3fsLogLevel(level)){ \
                 if(foreground || S3fsLog::IsSetLogFile()){ \
                     S3fsLog::SeekEnd(); \
-                    fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
+                    fprintf(S3fsLog::GetOutputLogFile(), "%s %s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
                     S3fsLog::Flush(); \
                 }else{ \
                     syslog(S3fsLog::GetSyslogLevel(level), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), __VA_ARGS__); \
@@ -157,7 +171,7 @@ class S3fsLog
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
                 S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "[CURL DBG] " fmt "%s\n", __VA_ARGS__); \
+                fprintf(S3fsLog::GetOutputLogFile(), "%s [CURL DBG] " fmt "%s\n", S3fsLog::GetCurrentTime(), __VA_ARGS__); \
                 S3fsLog::Flush(); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
@@ -181,7 +195,7 @@ class S3fsLog
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
                 S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetLevelString(S3fsLog::LEVEL_INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
+                fprintf(S3fsLog::GetOutputLogFile(), "%s %s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime(), S3fsLog::GetLevelString(S3fsLog::LEVEL_INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
                 S3fsLog::Flush(); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_INFO), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), __VA_ARGS__, ""); \
