@@ -29,6 +29,7 @@
 #include "s3fs.h"
 #include "fdcache.h"
 #include "s3fs_util.h"
+#include "s3fs_logger.h"
 #include "string_util.h"
 #include "autolock.h"
 
@@ -50,14 +51,14 @@
 // The following symbols are used by FdManager::RawCheckAllCache().
 //
 #define CACHEDBG_FMT_DIR_PROB   "Directory: %s"
-#define CACHEDBG_FMT_HEAD       "------------------------------------------------------------\n" \
-                                "Check cache file and its stats file consistency\n" \
-                                "------------------------------------------------------------"
-#define CACHEDBG_FMT_FOOT       "------------------------------------------------------------\n" \
+#define CACHEDBG_FMT_HEAD       "---------------------------------------------------------------------------\n" \
+                                "Check cache file and its stats file consistency at %s\n"                       \
+                                "---------------------------------------------------------------------------"
+#define CACHEDBG_FMT_FOOT       "---------------------------------------------------------------------------\n" \
                                 "Summary - Total files:                %d\n" \
                                 "          Detected error files:       %d\n" \
                                 "          Detected error directories: %d\n" \
-                                "------------------------------------------------------------"
+                                "---------------------------------------------------------------------------"
 #define CACHEDBG_FMT_FILE_OK    "File:      %s%s    -> [OK] no problem"
 #define CACHEDBG_FMT_FILE_PROB  "File:      %s%s"
 #define CACHEDBG_FMT_DIR_PROB   "Directory: %s"
@@ -905,7 +906,7 @@ bool FdManager::CheckAllCache()
     }
 
     // print head message
-    S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD);
+    S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD, S3fsLog::GetCurrentTime());
 
     // Loop in directory of cache file's stats
     std::string top_path  = CacheFileStat::GetCacheFileStatTopDir();
