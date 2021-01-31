@@ -71,17 +71,17 @@ class S3fsLog
                      LEVEL_ERR  == (level & LEVEL_DBG) ? LOG_ERR     : LOG_CRIT );
         }
 
-    static const char* GetCurrentTime()
-    {
-        struct timeval now;
-        struct tm res;
-        char tmp[32];
+        static const char* GetCurrentTime()
+        {
+            struct timeval now;
+            struct tm res;
+            char tmp[32];
 
-        gettimeofday(&now, NULL);
-        strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
-        snprintf(current_time, sizeof(current_time), "%s.%03ldZ", tmp, (now.tv_usec / 1000));
-        return current_time;
-    }
+            gettimeofday(&now, NULL);
+            strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
+            snprintf(current_time, sizeof(current_time), "%s.%03ldZ", tmp, (now.tv_usec / 1000));
+            return current_time;
+        }
 
         static const char* GetLevelString(s3fs_log_level level)
         {
