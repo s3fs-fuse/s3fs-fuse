@@ -321,9 +321,13 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
     off_t          bytes;
     unsigned char* result;
 
+    if(-1 == fd){
+        return NULL;
+    }
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
+            S3FS_PRN_ERR("fstat error(%d)", errno);
             return NULL;
         }
         size = st.st_size;
