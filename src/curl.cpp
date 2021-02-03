@@ -2595,7 +2595,7 @@ void S3fsCurl::insertV4Headers()
             break;
     }
 
-    if(0 == payload_hash.length()){
+    if(b_infile != NULL && 0 == payload_hash.length()){
         S3FS_PRN_ERR("Failed to make SHA256.");
         // TODO: propagate error
     }
