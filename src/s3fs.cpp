@@ -726,12 +726,7 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mti
     //     get_object_attribute() returns error with initializing buf.
     (void)get_object_attribute(path, &buf);
 
-    if(buf.st_size >= FIVE_GB){
-        // multipart
-        if(nocopyapi || nomultipart){
-            S3FS_PRN_WARN("Metadata update failed because the file is larger than 5GB and the options nocopyapi or nomultipart are set: [path=%s]", path);
-            return -EFBIG;    // File too large
-        }
+    if(buf.st_size >= FIVE_GB && !nocopyapi && !nomultipart){
         if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
             return result;
         }
