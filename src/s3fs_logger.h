@@ -47,7 +47,7 @@ class S3fsLog
         static s3fs_log_level debug_level;
         static FILE*          logfp;
         static std::string*   plogfile;
-        static char           current_time[32];
+        static char           current_time[64];
 
     protected:
         bool LowLoadEnv();
