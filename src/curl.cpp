@@ -2269,6 +2269,18 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                     break;
                 }
 
+                {
+                    // Try to parse more specific AWS error code otherwise fall back to HTTP error code.
+                    std::string value;
+                    if(simple_parse_xml(bodydata.str(), bodydata.size(), "Code", value)){
+                        // TODO: other error codes
+                        if(value == "EntityTooLarge"){
+                            result = -EFBIG;
+                            break;
+                        }
+                    }
+                }
+
                 // Service response codes which are >= 300 && < 500
                 switch(responseCode){
                     case 301:
