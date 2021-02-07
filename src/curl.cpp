@@ -1385,11 +1385,10 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     curlmulti.SetRetryCallback(S3fsCurl::MixMultipartPostRetryCallback);
 
     for(fdpage_list_t::const_iterator iter = mixuppages.begin(); iter != mixuppages.end(); ++iter){
-        // s3fscurl sub object
-        S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
-
         if(iter->modified){
             // Multipart upload
+            S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
+
             s3fscurl_para->partdata.fd         = fd2;
             s3fscurl_para->partdata.startpos   = iter->offset;
             s3fscurl_para->partdata.size       = iter->bytes;
@@ -1406,33 +1405,46 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
                 delete s3fscurl_para;
                 return result;
             }
-        }else{
-            // Multipart copy
-            std::ostringstream strrange;
-            strrange << "bytes=" << iter->offset << "-" << (iter->offset + iter->bytes - 1);
-            meta["x-amz-copy-source-range"] = strrange.str();
 
-            s3fscurl_para->b_from   = SAFESTRPTR(tpath);
-            s3fscurl_para->b_meta   = meta;
-            s3fscurl_para->partdata.add_etag_list(&list);
-
-            S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset), static_cast<long long>(iter->bytes), list.size());
-
-            // initiate upload part for parallel
-            if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
-                S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+            // set into parallel object
+            if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+                S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
                 close(fd2);
                 delete s3fscurl_para;
-                return result;
+                return -EIO;
             }
-        }
+        }else{
+            // Multipart copy
+            for(off_t i = 0; i < iter->bytes; i += FIVE_GB){
+                S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
-        // set into parallel object
-        if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
-            S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-            close(fd2);
-            delete s3fscurl_para;
-            return -EIO;
+                off_t bytes = std::min(FIVE_GB, iter->bytes - i);
+                std::ostringstream strrange;
+                strrange << "bytes=" << (iter->offset + i) << "-" << (iter->offset + i + bytes - 1);
+                meta["x-amz-copy-source-range"] = strrange.str();
+
+                s3fscurl_para->b_from   = SAFESTRPTR(tpath);
+                s3fscurl_para->b_meta   = meta;
+                s3fscurl_para->partdata.add_etag_list(&list);
+
+                S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset + i), static_cast<long long>(bytes), list.size());
+
+                // initiate upload part for parallel
+                if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
+                    S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+                    close(fd2);
+                    delete s3fscurl_para;
+                    return result;
+                }
+
+                // set into parallel object
+                if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
+                    S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
+                    close(fd2);
+                    delete s3fscurl_para;
+                    return -EIO;
+                }
+            }
         }
     }
 
