@@ -25,6 +25,13 @@
 #include <syslog.h>
 #include <sys/time.h>
 
+#ifdef CLOCK_MONOTONIC_COARSE
+#define S3FS_CLOCK_MONOTONIC    CLOCK_MONOTONIC_COARSE
+#else
+// case of OSX
+#define S3FS_CLOCK_MONOTONIC    CLOCK_MONOTONIC
+#endif
+
 //-------------------------------------------------------------------
 // S3fsLog class
 //-------------------------------------------------------------------
@@ -73,11 +80,16 @@ class S3fsLog
 
         static const char* GetCurrentTime()
         {
-            struct timeval now;
+            struct timeval  now;
+            struct timespec tsnow;
             struct tm res;
-            char tmp[32];
-
-            gettimeofday(&now, NULL);
+            char   tmp[32];
+            if(-1 == clock_gettime(S3FS_CLOCK_MONOTONIC, &tsnow)){
+                now.tv_sec  = tsnow.tv_sec;
+                now.tv_usec = (tsnow.tv_nsec / 1000);
+            }else{
+                gettimeofday(&now, NULL);
+            }
             strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
             snprintf(current_time, sizeof(current_time), "%s.%03ldZ", tmp, (now.tv_usec / 1000));
             return current_time;
