@@ -31,7 +31,12 @@ TEST_DIR=testdir
 ALT_TEST_TEXT_FILE=test-s3fs-ALT.txt
 TEST_TEXT_FILE_LENGTH=15
 BIG_FILE=big-file-s3fs.txt
-BIG_FILE_LENGTH=$((25 * 1024 * 1024))
+TEMP_DIR="/var/tmp"
+# /dev/urandom can only return 32 MB per block maximum
+BIG_FILE_BLOCK_SIZE=$((25 * 1024 * 1024))
+BIG_FILE_COUNT=1
+# This should be greater than the multipart size
+BIG_FILE_LENGTH=$(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT))
 export RUN_DIR
 
 # [NOTE]

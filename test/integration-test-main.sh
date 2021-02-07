@@ -363,30 +363,30 @@ function test_rename_before_close {
 function test_multipart_upload {
     describe "Testing multi-part upload ..."
 
-    dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
-    dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     # Verify contents of file
     echo "Comparing test file"
-    if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}" "${BIG_FILE}"
     then
        return 1
     fi
 
-    rm -f "/tmp/${BIG_FILE}"
+    rm -f "${TEMP_DIR}/${BIG_FILE}"
     rm_test_file "${BIG_FILE}"
 }
 
 function test_multipart_copy {
     describe "Testing multi-part copy ..."
 
-    dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
-    dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
     mv "${BIG_FILE}" "${BIG_FILE}-copy"
 
     # Verify contents of file
     echo "Comparing test file"
-    if ! cmp "/tmp/${BIG_FILE}" "${BIG_FILE}-copy"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}" "${BIG_FILE}-copy"
     then
        return 1
     fi
@@ -394,7 +394,7 @@ function test_multipart_copy {
     #check the renamed file content-type
     check_content_type "$1/${BIG_FILE}-copy" "application/octet-stream"
 
-    rm -f "/tmp/${BIG_FILE}"
+    rm -f "${TEMP_DIR}/${BIG_FILE}"
     rm_test_file "${BIG_FILE}-copy"
 }
 
@@ -404,24 +404,24 @@ function test_multipart_mix {
     if [ `uname` = "Darwin" ]; then
        cat /dev/null > $BIG_FILE
     fi
-    dd if=/dev/urandom of="/tmp/${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
-    dd if="/tmp/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_LENGTH seek=0 count=1
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     # (1) Edit the middle of an existing file
     #     modify directly(seek 7.5MB offset)
     #     In the case of nomultipart and nocopyapi,
     #     it makes no sense, but copying files is because it leaves no cache.
     #
-    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${TEMP_DIR}/${BIG_FILE} ${TEMP_DIR}/${BIG_FILE}-mix
     cp ${BIG_FILE} ${BIG_FILE}-mix
 
     MODIFY_START_BLOCK=$((15*1024*1024/2/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
-    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
 
     # Verify contents of file
     echo "Comparing test file (1)"
-    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}-mix" "${BIG_FILE}-mix"
     then
        return 1
     fi
@@ -429,31 +429,31 @@ function test_multipart_mix {
     # (2) Write to an area larger than the size of the existing file
     #     modify directly(over file end offset)
     #
-    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${TEMP_DIR}/${BIG_FILE} ${TEMP_DIR}/${BIG_FILE}-mix
     cp ${BIG_FILE} ${BIG_FILE}-mix
 
     OVER_FILE_BLOCK_POS=$((26*1024*1024/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$OVER_FILE_BLOCK_POS conv=notrunc
-    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$OVER_FILE_BLOCK_POS conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=$OVER_FILE_BLOCK_POS conv=notrunc
 
     # Verify contents of file
     echo "Comparing test file (2)"
-    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}-mix" "${BIG_FILE}-mix"
     then
        return 1
     fi
 
     # (3) Writing from the 0th byte
     #
-    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${TEMP_DIR}/${BIG_FILE} ${TEMP_DIR}/${BIG_FILE}-mix
     cp ${BIG_FILE} ${BIG_FILE}-mix
 
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
-    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
 
     # Verify contents of file
     echo "Comparing test file (3)"
-    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}-mix" "${BIG_FILE}-mix"
     then
        return 1
     fi
@@ -461,22 +461,22 @@ function test_multipart_mix {
     # (4) Write to the area within 5MB from the top
     #     modify directly(seek 1MB offset)
     #
-    cp /tmp/${BIG_FILE} /tmp/${BIG_FILE}-mix
+    cp ${TEMP_DIR}/${BIG_FILE} ${TEMP_DIR}/${BIG_FILE}-mix
     cp ${BIG_FILE} ${BIG_FILE}-mix
 
     MODIFY_START_BLOCK=$((1*1024*1024))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
-    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=$MODIFY_START_BLOCK conv=notrunc
 
     # Verify contents of file
     echo "Comparing test file (4)"
-    if ! cmp "/tmp/${BIG_FILE}-mix" "${BIG_FILE}-mix"
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}-mix" "${BIG_FILE}-mix"
     then
        return 1
     fi
 
-    rm -f "/tmp/${BIG_FILE}"
-    rm -f "/tmp/${BIG_FILE}-mix"
+    rm -f "${TEMP_DIR}/${BIG_FILE}"
+    rm -f "${TEMP_DIR}/${BIG_FILE}-mix"
     rm_test_file "${BIG_FILE}"
     rm_test_file "${BIG_FILE}-mix"
 }
@@ -930,7 +930,7 @@ function test_concurrent_directory_updates {
 
 function test_concurrent_reads {
     describe "Test concurrent reads from a file ..."
-    dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
     for process in `seq 10`; do
         dd if=${TEST_TEXT_FILE} of=/dev/null seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 &
     done
@@ -940,7 +940,7 @@ function test_concurrent_reads {
 
 function test_concurrent_writes {
     describe "Test concurrent writes to a file ..."
-    dd if=/dev/urandom of=${TEST_TEXT_FILE} bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
     for process in `seq 10`; do
         dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 conv=notrunc &
     done
@@ -1047,7 +1047,7 @@ function test_truncate_cache() {
 function test_cache_file_stat() {
     describe "Test cache file stat ..."
 
-    dd if=/dev/urandom of="${BIG_FILE}" bs=${BIG_FILE_LENGTH} count=1
+    dd if=/dev/urandom of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     #
     # get "testrun-xxx" directory name
@@ -1143,7 +1143,7 @@ function test_upload_sparsefile {
     describe "Testing upload sparse file ..."
 
     rm_test_file ${BIG_FILE}
-    rm -f /tmp/${BIG_FILE}
+    rm -f ${TEMP_DIR}/${BIG_FILE}
 
     #
     # Make all HOLE file
@@ -1155,20 +1155,20 @@ function test_upload_sparsefile {
     # (Dare to remove the block breaks)
     #
     WRITE_POS=$((${BIG_FILE_LENGTH} / 2 - 128))
-    echo -n "0123456789ABCDEF" | dd of="/tmp/${BIG_FILE}" bs=1 count=16 seek=${WRITE_POS} conv=notrunc
+    echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}" bs=1 count=16 seek=${WRITE_POS} conv=notrunc
 
     #
     # copy(upload) the file
     #
-    cp /tmp/${BIG_FILE} ${BIG_FILE}
+    cp ${TEMP_DIR}/${BIG_FILE} ${BIG_FILE}
 
     #
     # check
     #
-    cmp /tmp/${BIG_FILE} ${BIG_FILE}
+    cmp ${TEMP_DIR}/${BIG_FILE} ${BIG_FILE}
 
     rm_test_file ${BIG_FILE}
-    rm -f /tmp/${BIG_FILE}
+    rm -f ${TEMP_DIR}/${BIG_FILE}
 }
 
 function test_mix_upload_entities() {
@@ -1177,7 +1177,7 @@ function test_mix_upload_entities() {
     #
     # Make test file
     #
-    dd if=/dev/urandom of=${BIG_FILE} bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     #
     # If the cache option is enabled, delete the cache of uploaded files.
@@ -1214,7 +1214,7 @@ function test_ensurespace_move_file() {
     # Make test file which is not under mountpoint
     #
     mkdir -p ${CACHE_DIR}/.s3fs_test_tmpdir
-    dd if=/dev/urandom of="${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" bs=$BIG_FILE_LENGTH count=1
+    dd if=/dev/urandom of="${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     #
     # Backup file stat
