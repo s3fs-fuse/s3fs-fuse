@@ -4492,11 +4492,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(is_prefix(arg, "max_dirty_data=")){
             off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
-            if(size < 50){
+            if(size >= 50){
+                size *= 1024 * 1024;
+            }else if(size != -1){
                 S3FS_PRN_EXIT("max_dirty_data option must be at least 50 MB.");
                 return -1;
             }
-            size *= 1024 * 1024;
             max_dirty_data = size;
             return 0;
         }
