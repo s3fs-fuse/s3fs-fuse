@@ -4490,6 +4490,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
+        if(is_prefix(arg, "multipart_copy_size=")){
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            if(!S3fsCurl::SetMultipartCopySize(size)){
+                S3FS_PRN_EXIT("multipart_copy_size option must be at least 5 MB.");
+                return -1;
+            }
+            return 0;
+        }
         if(is_prefix(arg, "max_dirty_data=")){
             off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
             if(size >= 50){

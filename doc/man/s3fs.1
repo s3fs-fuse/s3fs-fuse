@@ -195,6 +195,13 @@ It is necessary to set this value depending on a CPU and a network band.
 part size, in MB, for each multipart request.
 The minimum value is 5 MB and the maximum value is 5 GB.
 .TP
+\fB\-o\fR multipart_copy_size (default="512")
+part size, in MB, for each multipart copy request, used for
+renames and mixupload.
+The minimum value is 5 MB and the maximum value is 5 GB.
+Must be at least 512 MB to copy the maximum 5 TB object size
+but lower values may improve performance.
+.TP
 \fB\-o\fR max_dirty_data (default="5120")
 Flush dirty data to S3 after a certain number of MB written.
 The minimum value is 50 MB.  -1 value means disable.
