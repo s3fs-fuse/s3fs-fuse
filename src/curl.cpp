@@ -47,10 +47,6 @@ static const std::string empty_payload_hash         = "e3b0c44298fc1c149afbf4c89
 //-------------------------------------------------------------------
 static const int MULTIPART_SIZE                     = 10 * 1024 * 1024;
 
-// constant must be at least 512 MB to copy the maximum 5 TB object size
-// TODO: scale part size with object size
-static const int MAX_MULTI_COPY_SOURCE_SIZE         = 512 * 1024 * 1024;
-
 static const int IAM_EXPIRE_MERGIN                  = 20 * 60;  // update timing
 static const std::string ECS_IAM_ENV_VAR            = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
 static const std::string IAMCRED_ACCESSKEYID        = "AccessKeyId";
@@ -137,6 +133,7 @@ std::string      S3fsCurl::userAgent;
 int              S3fsCurl::max_parallel_cnt    = 5;              // default
 int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
+off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
 signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::is_use_session_token= false;          // default
@@ -1113,6 +1110,16 @@ bool S3fsCurl::SetMultipartSize(off_t size)
     return true;
 }
 
+bool S3fsCurl::SetMultipartCopySize(off_t size)
+{
+    size = size * 1024 * 1024;
+    if(size < MIN_MULTIPART_SIZE){
+        return false;
+    }
+    S3fsCurl::multipart_copy_size = size;
+    return true;
+}
+
 int S3fsCurl::SetMaxParallelCount(int value)
 {
     int old = S3fsCurl::max_parallel_cnt;
@@ -1415,10 +1422,10 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             }
         }else{
             // Multipart copy
-            for(off_t i = 0; i < iter->bytes; i += FIVE_GB){
+            for(off_t i = 0; i < iter->bytes; i += GetMultipartCopySize()){
                 S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
-                off_t bytes = std::min(FIVE_GB, iter->bytes - i);
+                off_t bytes = std::min(static_cast<off_t>(GetMultipartCopySize()), iter->bytes - i);
                 std::ostringstream strrange;
                 strrange << "bytes=" << (iter->offset + i) << "-" << (iter->offset + i + bytes - 1);
                 meta["x-amz-copy-source-range"] = strrange.str();
@@ -3903,7 +3910,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     curlmulti.SetRetryCallback(S3fsCurl::CopyMultipartPostRetryCallback);
 
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
-        chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
+        chunk = bytes_remaining > GetMultipartCopySize() ? GetMultipartCopySize() : bytes_remaining;
 
         std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
@@ -4073,7 +4080,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     curlmulti.SetRetryCallback(S3fsCurl::CopyMultipartPostRetryCallback);
 
     for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
-        chunk = bytes_remaining > MAX_MULTI_COPY_SOURCE_SIZE ? MAX_MULTI_COPY_SOURCE_SIZE : bytes_remaining;
+        chunk = bytes_remaining > GetMultipartCopySize() ? GetMultipartCopySize() : bytes_remaining;
 
         std::ostringstream strrange;
         strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
