@@ -175,7 +175,7 @@ function rm_test_dir {
 # Sets RUN_DIR to the name of the created directory
 function cd_run_dir {
     if [ "$TEST_BUCKET_MOUNT_POINT_1" == "" ]; then
-        echo "TEST_BUCKET_MOUNT_POINT variable not set"
+        echo "TEST_BUCKET_MOUNT_POINT_1 variable not set"
         exit 1
     fi
     RUN_DIR=${TEST_BUCKET_MOUNT_POINT_1}/${1}
