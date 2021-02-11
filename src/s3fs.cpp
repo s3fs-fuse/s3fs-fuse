@@ -5056,6 +5056,7 @@ int main(int argc, char* argv[])
     // Check multipart / copy api for mix multipart uploading
     if(nomultipart || nocopyapi || norenameapi){
         FdEntity::SetNoMixMultipart();
+        max_dirty_data = -1;
     }
 
     // check free disk space
