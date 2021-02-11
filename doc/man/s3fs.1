@@ -212,6 +212,10 @@ sets MB to ensure disk free space. This option means the threshold of free space
 s3fs makes file for downloading, uploading and caching files.
 If the disk free space is smaller than this value, s3fs do not use diskspace as possible in exchange for the performance.
 .TP
+\fB\-o\fR multipart_threshold (default="25")
+threshold, in MB, to use multipart upload instead of
+single-part.  Must be at least 5 MB.
+.TP
 \fB\-o\fR singlepart_copy_limit (default="512")
 maximum size, in MB, of a single-part copy before trying
 multipart copy.
