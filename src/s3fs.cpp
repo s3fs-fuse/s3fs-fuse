@@ -90,6 +90,7 @@ static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
 static bool is_use_session_token  = false;
 static bool create_bucket         = false;
+static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
@@ -726,7 +727,7 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mti
     //     get_object_attribute() returns error with initializing buf.
     (void)get_object_attribute(path, &buf);
 
-    if(buf.st_size >= FIVE_GB && !nocopyapi && !nomultipart){
+    if(!nocopyapi && !nomultipart && buf.st_size >= multipart_threshold){
         if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
             return result;
         }
@@ -4518,8 +4519,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             FdManager::SetEnsureFreeDiskSpace(dfsize);
             return 0;
         }
+        if(is_prefix(arg, "multipart_threshold=")){
+            multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
+            if(multipart_threshold <= MIN_MULTIPART_SIZE){
+                S3FS_PRN_EXIT("multipart_threshold must be at least %lld, was: %lld", static_cast<long long>(MIN_MULTIPART_SIZE), static_cast<long long>(multipart_threshold));
+                return -1;
+            }
+            return 0;
+        }
         if(is_prefix(arg, "singlepart_copy_limit=")){
-            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
+            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
             return 0;
         }
         if(is_prefix(arg, "ahbe_conf=")){
@@ -5056,6 +5065,7 @@ int main(int argc, char* argv[])
     // Check multipart / copy api for mix multipart uploading
     if(nomultipart || nocopyapi || norenameapi){
         FdEntity::SetNoMixMultipart();
+        max_dirty_data = -1;
     }
 
     // check free disk space
