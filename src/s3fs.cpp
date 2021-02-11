@@ -4528,7 +4528,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "singlepart_copy_limit=")){
-            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024;
+            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
             return 0;
         }
         if(is_prefix(arg, "ahbe_conf=")){
@@ -5065,6 +5065,7 @@ int main(int argc, char* argv[])
     // Check multipart / copy api for mix multipart uploading
     if(nomultipart || nocopyapi || norenameapi){
         FdEntity::SetNoMixMultipart();
+        max_dirty_data = -1;
     }
 
     // check free disk space
