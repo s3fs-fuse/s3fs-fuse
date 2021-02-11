@@ -344,6 +344,14 @@ function test_read_external_object() {
     rm -f ${TEST_TEXT_FILE}
 }
 
+function test_update_metadata_external_object() {
+    describe "issue 1453"
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    chmod +x ${TEST_TEXT_FILE}
+    cmp ${TEST_TEXT_FILE} <(echo "${TEST_INPUT}")
+}
+
 function test_rename_before_close {
     describe "Testing rename before close ..."
     (
@@ -1303,6 +1311,7 @@ function add_all_tests {
     fi
     add_tests test_external_modification
     add_tests test_read_external_object
+    add_tests test_update_metadata_external_object
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
