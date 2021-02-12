@@ -25,7 +25,6 @@
 
 #include "curl_handlerpool.h"
 #include "bodydata.h"
-#include "psemaphore.h"
 #include "metaheader.h"
 #include "fdcache_page.h"
 
@@ -115,6 +114,7 @@ class S3fsCurl
             pthread_mutex_t dns;
             pthread_mutex_t ssl_session;
         } callback_locks;
+        static pthread_mutex_t  cryptfunc_lock;       // [NOTE] exclusive control of cryption libraries(for openssl)
         static bool             is_initglobal_done;
         static CurlHandlerPool* sCurlPool;
         static int              sCurlPoolSize;
@@ -195,12 +195,9 @@ class S3fsCurl
         headers_t            b_meta;               // backup for retrying(for copy request)
         std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
         std::string          query_string;         // request query string
-        Semaphore            *sem;
-        pthread_mutex_t      *completed_tids_lock;
-        std::vector<pthread_t> *completed_tids;
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
-        CURLcode             curlCode;             // handle curl return
-    
+        volatile CURLcode    curlCode;             // handle curl return
+
     public:
         static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
         static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;

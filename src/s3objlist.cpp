@@ -31,6 +31,12 @@
 // New class S3ObjList is base on old s3_object struct.
 // This class is for S3 compatible clients.
 //
+void S3ObjList::clear()
+{
+    objects.clear();
+}
+
+//
 // If name is terminated by "/", it is forced dir type.
 // If name is terminated by "_$folder$", it is forced dir type.
 // If is_dir is true and name is not terminated by "/", the name is added "/".
@@ -101,6 +107,15 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
 
     // add normalization
     return insert_normalized(orgname.c_str(), newname.c_str(), is_dir);
+}
+
+bool S3ObjList::append(const S3ObjList& other)
+{
+    for(s3obj_t::const_iterator iter = other.objects.begin(); iter != other.objects.end(); ++iter){
+        // If it exists, it will be overwritten.
+        objects[iter->first] = iter->second;
+    }
+    return true;
 }
 
 bool S3ObjList::insert_normalized(const char* name, const char* normalized, bool is_dir)

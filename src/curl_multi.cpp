@@ -31,7 +31,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), RetryCallback(NULL)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), exit_thread(true), PrecheckCallback(NULL), SuccessCallback(NULL), RetryCallback(NULL), running_threads(0)
 {
     int result;
     pthread_mutexattr_t attr;
@@ -39,6 +39,9 @@ S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism
 #if S3FS_PTHREAD_ERRORCHECK
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 #endif
+    if (0 != (result = pthread_mutex_init(&clist_lock, &attr))) {
+        S3FS_PRN_ERR("could not initialize clist_lock: %i", result);
+    }
     if (0 != (result = pthread_mutex_init(&completed_tids_lock, &attr))) {
         S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", result);
     }
@@ -50,6 +53,9 @@ S3fsMultiCurl::~S3fsMultiCurl()
     int result;
     if(0 != (result = pthread_mutex_destroy(&completed_tids_lock))){
         S3FS_PRN_ERR("could not destroy completed_tids_lock: %i", result);
+    }
+    if(0 != (result = pthread_mutex_destroy(&clist_lock))){
+        S3FS_PRN_ERR("could not destroy clist_lock: %i", result);
     }
 }
 
@@ -65,6 +71,15 @@ bool S3fsMultiCurl::ClearEx(bool is_all)
     }
     clist_req.clear();
 
+    for(iter = clist_res.begin(); iter != clist_res.end(); ++iter){
+        S3fsCurl* s3fscurl = *iter;
+        if(s3fscurl){
+            s3fscurl->DestroyCurlHandle();
+            delete s3fscurl;  // with destroy curl handle.
+        }
+    }
+    clist_res.clear();
+
     if(is_all){
         for(iter = clist_all.begin(); iter != clist_all.end(); ++iter){
             S3fsCurl* s3fscurl = *iter;
@@ -79,13 +94,20 @@ bool S3fsMultiCurl::ClearEx(bool is_all)
     return true;
 }
 
+S3fsMultiPrecheckCallback S3fsMultiCurl::SetPrecheckCallback(S3fsMultiPrecheckCallback function)
+{
+    S3fsMultiPrecheckCallback old = PrecheckCallback;
+    PrecheckCallback = function;
+    return old;
+}
+
 S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(S3fsMultiSuccessCallback function)
 {
     S3fsMultiSuccessCallback old = SuccessCallback;
     SuccessCallback = function;
     return old;
 }
-  
+
 S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback function)
 {
     S3fsMultiRetryCallback old = RetryCallback;
@@ -98,76 +120,194 @@ bool S3fsMultiCurl::SetS3fsCurlObject(S3fsCurl* s3fscurl)
     if(!s3fscurl){
         return false;
     }
+    AutoLock    lock(&clist_lock);
     clist_all.push_back(s3fscurl);
 
     return true;
 }
 
-int S3fsMultiCurl::MultiPerform()
+bool S3fsMultiCurl::StartParallelThread()
 {
-    std::vector<pthread_t>   threads;
-    bool                     success = true;
-    bool                     isMultiHead = false;
-    Semaphore                sem(GetMaxParallelism());
-    int                      rc;
+    if(!exit_thread){
+        S3FS_PRN_ERR("already run parallel thread.");
+        return false;
+    }
+    // initialize thread count(not need to lock here)
+    running_threads = 0;
+    exit_thread     = false;
 
-    for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ++iter) {
-        pthread_t   thread;
-        S3fsCurl*   s3fscurl = *iter;
-        if(!s3fscurl){
-            continue;
+    int rc;
+    if(0 != (rc = pthread_create(&parallel_thread, NULL, S3fsMultiCurl::ParallelProcessingWorker, static_cast<void*>(this)))){
+        exit_thread = true;
+        S3FS_PRN_ERR("failed pthread_create - rc(%d)", rc);
+        return false;
+    }
+    return true;
+}
+
+int S3fsMultiCurl::WaitParallelThread()
+{
+    if(!exit_thread){
+        exit_thread = true;
+    }
+    int     rc;
+    void*   retval = NULL;
+    if(0 != (rc = pthread_join(parallel_thread, &retval))){
+        S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
+        return -EIO;
+    }
+
+    int int_retval = (int)(intptr_t)(retval);
+    if(0 != int_retval){
+        S3FS_PRN_WARN("thread result is somthing error - %d", int_retval);
+    }
+    return int_retval;
+}
+
+// [NOTE]
+// In this method, do not lock the clist_lock and the completed_tids_lock
+// at the same time. And it also free lock object frequently so as not to
+// hold the lock for a long time.
+// Also, clist_req/clist_res and running_threads are the end conditions
+// of the Loop of ParallelProcessingWorker thread, so there is no moment
+// when they become 0. (Therefore, if we push it into the list first and
+// the processing fails, it will be removed after that soon.)
+//
+int S3fsMultiCurl::MultiPrePerform(Semaphore& sem, bool& has_headreq, bool trywait)
+{
+    bool    success            = true;
+    bool    need_sem_post      = false;
+    bool    need_decrement_tid = false;
+
+    while(true){
+        // If the processing fails, release semaphore at this any unlocked location.
+        if(need_sem_post){
+            sem.post();
+            need_sem_post = false;
         }
 
-        sem.wait();
+        // Nothing to handle
+        {
+            AutoLock  lock(&clist_lock);    // only this scope area
+            if(clist_req.empty()){
+                break;
+            }
+        }
+
+        // Wait semaphore
+        if(trywait){
+            if(!sem.trywait()){
+                break;
+            }
+        }else{
+            sem.wait();
+        }
+
+        // Threads that have already completed processing will immediately call pthread_join.
+        if(0 != MultiPostPerform(has_headreq)){
+            S3FS_PRN_WARN("MultiPostPerform is failure, but continue...");
+            success = false;
+        }
+
+        S3fsCurl* s3fscurl;
+        {
+            AutoLock  lock(&clist_lock);    // only this scope area
+
+            // get front of request list
+            s3fscurl = clist_req.front();
+            if(!s3fscurl){
+                S3FS_PRN_WARN("An empty S3fsCurl object was found in the clist_req. But delete it and continue...");
+                clist_req.pop_front();
+
+                need_sem_post = true;
+                continue;
+            }
+
+            // Pre-check
+            if(PrecheckCallback && !PrecheckCallback(s3fscurl)){
+                // already this object is set in cache, so skip this.
+                clist_req.pop_front();
+                s3fscurl->DestroyCurlHandle();
+                delete s3fscurl;
+
+                need_sem_post = true;
+                continue;
+            }
+
+            // [NOTE]
+            // Register s3fscurl object to clist_res first from clist_req.
+            // If an error occurs, it will be deleted soon after that.
+            clist_res.push_back(s3fscurl);
+            clist_req.pop_front();
+        }
+
+        // check head request
+        has_headreq |= s3fscurl->GetOp() == "HEAD";
 
         {
-            AutoLock lock(&completed_tids_lock);
-            for(std::vector<pthread_t>::iterator it = completed_tids.begin(); it != completed_tids.end(); ++it){
-                void*   retval;
-    
-                rc = pthread_join(*it, &retval);
-                if (rc) {
-                    success = false;
-                    S3FS_PRN_ERR("failed pthread_join - rc(%d) %s", rc, strerror(rc));
-                } else {
-                    int int_retval = (int)(intptr_t)(retval);
-                    if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                        S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
+            // [NOTE]
+            // Before starting a thread, increment the number of running threads.
+            // This value will be decremented immediately if it fails.
+            //
+            AutoLock tid_lock(&completed_tids_lock);    // only this scope area
+            ++running_threads;
+        }
+
+        // Create thread
+        {
+            AutoLock  lock(&clist_lock);    // only this scope area
+
+            int         rc;
+            pthread_t   thread;
+            MCTH_PARAM* thparam = new MCTH_PARAM(this, s3fscurl, &sem);
+            if(0 != (rc = pthread_create(&thread, NULL, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(thparam)))){
+                S3FS_PRN_ERR("failed pthread_create - rc(%d)", rc);
+                success = false;
+
+                // remove s3fscurl object from clist_res
+                for(s3fscurllist_t::iterator iter = clist_res.begin(); iter != clist_res.end(); ++iter){
+                    S3fsCurl* s3fscurl_res = *iter;
+                    if(s3fscurl_res == s3fscurl){
+                        clist_res.erase(iter);
+                        break;
                     }
                 }
+                s3fscurl->DestroyCurlHandle();
+                delete s3fscurl;
+                delete thparam;
+
+                need_sem_post      = true;
+                need_decrement_tid = true;
+                break;
             }
-            completed_tids.clear();
         }
-        s3fscurl->sem = &sem;
-        s3fscurl->completed_tids_lock = &completed_tids_lock;
-        s3fscurl->completed_tids = &completed_tids;
-
-        isMultiHead |= s3fscurl->GetOp() == "HEAD";
-
-        rc = pthread_create(&thread, NULL, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(s3fscurl));
-        if (rc != 0) {
-            success = false;
-            S3FS_PRN_ERR("failed pthread_create - rc(%d)", rc);
-            break;
-        }
-        threads.push_back(thread);
     }
 
-    for(int i = 0; i < sem.get_value(); ++i){
-        sem.wait();
+    if(need_sem_post){
+        sem.post();
     }
+    if(need_decrement_tid){
+        AutoLock tid_lock(&completed_tids_lock);    // only this scope area
+        --running_threads;
+    }
+
+    return success ? 0 : -EIO;
+}
+
+int S3fsMultiCurl::MultiPostPerform(bool has_headreq)
+{
+    bool    success = true;
 
     AutoLock lock(&completed_tids_lock);
-    for (std::vector<pthread_t>::iterator titer = completed_tids.begin(); titer != completed_tids.end(); ++titer) {
-        void*   retval;
-
-        rc = pthread_join(*titer, &retval);
-        if (rc) {
-            success = false;
+    for(s3fsthreadlist_t::iterator titer = completed_tids.begin(); titer != completed_tids.end(); ++titer){
+        void*   retval = NULL;
+        int     rc     = pthread_join(*titer, &retval);
+        if(rc){
             S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
-        } else {
+            success = false;
+        }else{
             int int_retval = (int)(intptr_t)(retval);
-            if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
+            if (int_retval && !(int_retval == -ENOENT && has_headreq)) {
                 S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
             }
         }
@@ -177,11 +317,48 @@ int S3fsMultiCurl::MultiPerform()
     return success ? 0 : -EIO;
 }
 
-int S3fsMultiCurl::MultiRead()
+//
+// MultiPerform
+//
+// [NOTE]
+// The request list is executed by the thread in order, and then
+// the thread is waited for completion.
+// Requests are processed in parallel, but this method waits for
+// the environment of those requests as synchronous processing.
+//
+int S3fsMultiCurl::MultiPerform()
+{
+    bool        success = true;
+    bool        isMultiHead = false;
+    Semaphore   sem(GetMaxParallelism());
+
+    // initialize thread count(not need to lock here)
+    running_threads = 0;
+
+    // Perform all request with thread
+    if(0 != MultiPrePerform(sem, isMultiHead, false)){
+        success = false;
+    }
+
+    // Wait for all requests to finish
+    for(int i = 0; i < sem.get_value(); ++i){
+        sem.wait();
+    }
+
+    // Handles thread termination for all requests.
+    if(0 != MultiPostPerform(isMultiHead)){
+        success = false;
+    }
+
+    return success ? 0 : -EIO;
+}
+
+int S3fsMultiCurl::MultiRead(bool is_parallel)
 {
     int result = 0;
 
-    for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ){
+    AutoLock  lock(&clist_lock);
+    for(s3fscurllist_t::iterator iter = clist_res.begin(); iter != clist_res.end(); ){
         S3fsCurl* s3fscurl = *iter;
 
         bool isRetry = false;
@@ -200,9 +377,12 @@ int S3fsMultiCurl::MultiRead()
                     S3FS_PRN_WARN("error from callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(400 == responseCode){
-                // as possibly in multipart
-                S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
-                isRetry = true;
+                // HEAD request : if object has x-amz-server-side-encryption, may get 400.
+                if(s3fscurl->GetOp() != "HEAD"){
+                    // as possibly in multipart
+                    S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+                    isRetry = true;
+                }
             }else if(404 == responseCode){
                 // not found
                 // HEAD requests on readdir_multi_head can return 404
@@ -242,42 +422,54 @@ int S3fsMultiCurl::MultiRead()
         }
 
         if(isPostpone){
-            clist_req.erase(iter);
-            clist_req.push_back(s3fscurl);    // Re-evaluate at the end
-            iter = clist_req.begin();
-        }else{
-            if(!isRetry || 0 != result){
-                // If an EIO error has already occurred, it will be terminated
-                // immediately even if retry processing is required. 
-                s3fscurl->DestroyCurlHandle();
-                delete s3fscurl;
+            if(is_parallel){
+                // in parallel, skip this
+                ++iter;
             }else{
-                S3fsCurl* retrycurl = NULL;
-
+                // not in parallel
+                clist_res.push_back(s3fscurl);    // Re-evaluate at the end
+                iter = clist_res.erase(iter);
+            }
+        }else{
+            if(0 != result){
+                // If an EIO error is set, the request for a retry will be
+                // completed immediately without retrying.
+                // An EIO error is set if the retry process prior to this
+                // request fails.
+                //
+                isRetry = false;
+            }
+            if(isRetry && RetryCallback){
                 // Reset offset
                 if(isNeedResetOffset){
                     S3fsCurl::ResetOffset(s3fscurl);
                 }
-
-                // For retry
-                if(RetryCallback){
-                    retrycurl = RetryCallback(s3fscurl);
-                    if(NULL != retrycurl){
-                        clist_all.push_back(retrycurl);
-                    }else{
-                        // set EIO and wait for other parts.
-                        result = -EIO;
-                    }
+                // create object for retry
+                S3fsCurl* retrycurl = RetryCallback(s3fscurl);
+                if(retrycurl){
+                    // add new request
+                    clist_all.push_back(retrycurl);
+                }else{
+                    // set EIO and wait for other parts.
+                    S3FS_PRN_ERR("Could not make s3fscurl object for retry.");
+                    result = -EIO;
                 }
+
                 if(s3fscurl != retrycurl){
                     s3fscurl->DestroyCurlHandle();
                     delete s3fscurl;
                 }
+            }else{
+                // This request has been processed
+                s3fscurl->DestroyCurlHandle();
+                delete s3fscurl;
             }
-            iter = clist_req.erase(iter);
+            iter = clist_res.erase(iter);
         }
     }
-    clist_req.clear();
+    // [NOTE]
+    // For parallel, clist_res may not be empty when the above loop completes.
+    // If not parallel, clist_res is always empty.
 
     if(0 != result){
         // If an EIO error has already occurred, clear all retry objects.
@@ -300,24 +492,30 @@ int S3fsMultiCurl::Request()
     // Send multi request loop( with retry )
     // (When many request is sends, sometimes gets "Couldn't connect to server")
     //
-    while(!clist_all.empty()){
-        // set curl handle to multi handle
-        int                      result;
-        s3fscurllist_t::iterator iter;
-        for(iter = clist_all.begin(); iter != clist_all.end(); ++iter){
-            S3fsCurl* s3fscurl = *iter;
-            clist_req.push_back(s3fscurl);
+    while(true){
+        int result;
+        {
+            AutoLock  lock(&clist_lock);
+            if(clist_all.empty()){
+                break;
+            }
+            // move and append list from all to req
+            s3fscurllist_t::iterator iter;
+            for(iter = clist_all.begin(); iter != clist_all.end(); ++iter){
+                S3fsCurl* s3fscurl = *iter;
+                clist_req.push_back(s3fscurl);
+            }
+            clist_all.clear();
         }
-        clist_all.clear();
 
-        // Send multi request.
+        // Setup and run all request in threads and wait for all thread exiting.
         if(0 != (result = MultiPerform())){
             Clear();
             return result;
         }
 
         // Read the result
-        if(0 != (result = MultiRead())){
+        if(0 != (result = MultiRead(false))){
             Clear();
             return result;
         }
@@ -333,28 +531,103 @@ int S3fsMultiCurl::Request()
 //
 void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
 {
-    S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
-    void*     result  = NULL;
-    if(!s3fscurl){
+    MCTH_PARAM* thparam = static_cast<MCTH_PARAM*>(arg);
+    void*       result  = NULL;
+
+    if(!thparam || !(thparam->s3fsmulticurl) || !(thparam->s3fscurl) || !(thparam->sem)){
+        if(thparam){
+            if(thparam->sem){
+                thparam->sem->post();
+            }
+            delete thparam;
+        }
         return (void*)(intptr_t)(-EIO);
     }
-    if(s3fscurl->fpLazySetup){
-        if(!s3fscurl->fpLazySetup(s3fscurl)){
+    if(thparam->s3fscurl->fpLazySetup){
+        if(!thparam->s3fscurl->fpLazySetup(thparam->s3fscurl)){
             S3FS_PRN_ERR("Failed to lazy setup, then respond EIO.");
-            result  = (void*)(intptr_t)(-EIO);
+            result = (void*)(intptr_t)(-EIO);
         }
     }
 
     if(!result){
-        result = (void*)(intptr_t)(s3fscurl->RequestPerform());
-        s3fscurl->DestroyCurlHandle(true, false);
+        result = (void*)(intptr_t)(thparam->s3fscurl->RequestPerform());
     }
 
-    AutoLock  lock(s3fscurl->completed_tids_lock);
-    s3fscurl->completed_tids->push_back(pthread_self());
-    s3fscurl->sem->post();
+    {
+        AutoLock  lock(&(thparam->s3fsmulticurl->completed_tids_lock));     // only this scope area
+        if(0 < thparam->s3fsmulticurl->running_threads){
+            --(thparam->s3fsmulticurl->running_threads);
+        }
+        thparam->s3fsmulticurl->completed_tids.push_back(pthread_self());
+    }
+    thparam->sem->post();
+    delete thparam;
 
     return result;
+}
+
+void* S3fsMultiCurl::ParallelProcessingWorker(void* arg)
+{
+    const static struct timespec waittime = {0L, 100};  // 100ns
+
+    S3fsMultiCurl* pmcurl = static_cast<S3fsMultiCurl*>(arg);
+    if(!pmcurl){
+        return (void*)(intptr_t)(-EIO);
+    }
+
+    Semaphore   sem(pmcurl->GetMaxParallelism());
+    int         result      = 0;
+    bool        isMultiHead = false;
+    bool        remaining   = true;
+
+    while(!pmcurl->exit_thread || remaining){
+        // If there is no remaining job but not allow thread exiting, so wait here.
+        if(!remaining){
+            nanosleep(&waittime, NULL);
+        }
+        remaining = false;
+
+        {
+            AutoLock    lock(&pmcurl->clist_lock);          // only this scope area
+
+            // copy all to request list
+            for(s3fscurllist_t::iterator iter = pmcurl->clist_all.begin(); iter != pmcurl->clist_all.end(); ++iter){
+                S3fsCurl* s3fscurl = *iter;
+                pmcurl->clist_req.push_back(s3fscurl);
+            }
+            pmcurl->clist_all.clear();
+
+            if(!pmcurl->clist_req.empty() || !pmcurl->clist_res.empty()){
+                remaining = true;
+            }
+        }
+        if(!remaining){
+            AutoLock lock(&pmcurl->completed_tids_lock);    // only this scope area
+            if(0 != pmcurl->running_threads || !pmcurl->completed_tids.empty()){
+                remaining = true;
+            }
+        }
+        if(!remaining){
+            continue;
+        }
+
+        // Perform requests in threads up to the number of semaphores
+        if(0 != pmcurl->MultiPrePerform(sem, isMultiHead, true)){
+            result = -EIO;
+        }
+
+        // Handles thread termination for requests.
+        if(0 != pmcurl->MultiPostPerform(isMultiHead)){
+            result = -EIO;
+        }
+
+        // Read the result of request
+        if(0 != pmcurl->MultiRead(true)){
+            result = -EIO;
+        }
+    }
+    return (void*)(intptr_t)(result);
 }
 
 /*

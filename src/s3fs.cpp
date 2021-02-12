@@ -120,10 +120,11 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load = false);
+static bool multi_head_precheck_callback(S3fsCurl* s3fscurl);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
-static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
+static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, int max_keys = 0, bool is_head_req = true, void* buf = NULL, fuse_fill_dir_t* pfiller = NULL);
+static int add_multi_head(S3fsMultiCurl& curlmulti, const char* path, const S3ObjList& head, s3obj_list_t& fillerlist, void* buf, fuse_fill_dir_t* pfiller);
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
@@ -1079,7 +1080,13 @@ static int directory_empty(const char* path)
     int result;
     S3ObjList head;
 
-    if((result = list_bucket(path, head, "/", true)) != 0){
+    // [NOTE]
+    // To check if dire is empty, we only need to check if dir has child objects.
+    // For a dir with children, we only need to check at least two objects, "dir/"
+    // and "dir/child". So a value of max_keys of 2 is sufficient.
+    // And we don't even have to make a head request from list_bucket() here.
+    //
+    if((result = list_bucket(path, head, "/", 2, false)) != 0){
         S3FS_PRN_ERR("list_bucket returns error.");
         return result;
     }
@@ -1399,9 +1406,12 @@ static int rename_directory(const char* from, const char* to)
     //
     // get a list of all the objects
     //
+    // [NOTE]
     // No delimiter is specified, the result(head) is all object keys.
     // (CommonPrefixes is empty, but all object is listed in Key.)
-    if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
+    // we don't even have to make a head request from list_bucket() here.
+    //
+    if(0 != (result = list_bucket(basepath.c_str(), head, NULL, 0, false))){
         S3FS_PRN_ERR("list_bucket returns error.");
         return result; 
     }
@@ -2440,6 +2450,19 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
+static bool multi_head_precheck_callback(S3fsCurl* s3fscurl)
+{
+    if(!s3fscurl){
+        return false;
+    }
+    std::string saved_path = s3fscurl->GetSpacialSavedPath();
+    if(StatCache::getStatCacheData()->HasStat(saved_path)){
+        // Found in cache, so stop the request.(return false)
+        return false;
+    }
+    return true;
+}
+
 static bool multi_head_callback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
@@ -2488,91 +2511,6 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     return newcurl;
 }
 
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
-{
-    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
-    s3obj_list_t  headlist;
-    s3obj_list_t  fillerlist;
-    int           result = 0;
-
-    S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
-
-    // Make base path list.
-    head.GetNameList(headlist, true, false);  // get name with "/".
-
-    // Initialize S3fsMultiCurl
-    curlmulti.SetSuccessCallback(multi_head_callback);
-    curlmulti.SetRetryCallback(multi_head_retry_callback);
-
-    s3obj_list_t::iterator iter;
-
-    fillerlist.clear();
-    // Make single head request(with max).
-    for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
-        std::string disppath = path + (*iter);
-        std::string etag     = head.GetETag((*iter).c_str());
-
-        std::string fillpath = disppath;
-        if('/' == disppath[disppath.length() - 1]){
-            fillpath.erase(fillpath.length() -1);
-        }
-        fillerlist.push_back(fillpath);
-
-        if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
-            continue;
-        }
-
-        // First check for directory, start checking "not SSE-C".
-        // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
-        S3fsCurl* s3fscurl = new S3fsCurl();
-        if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
-            S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
-            delete s3fscurl;
-            continue;
-        }
-
-        if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
-            S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
-            delete s3fscurl;
-            continue;
-        }
-    }
-
-    // Multi request
-    if(0 != (result = curlmulti.Request())){
-        // If result is -EIO, it is something error occurred.
-        // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
-        // So s3fs set result to 0 in order to continue the process.
-        if(-EIO == result){
-            S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
-            result = 0;
-        }else{
-            S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
-            return result;
-        }
-    }
-
-    // populate fuse buffer
-    // here is best position, because a case is cache size < files in directory
-    //
-    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
-        struct stat st;
-        bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
-        std::string bpath = mybasename((*iter));
-        if(use_wtf8){
-            bpath = s3fs_wtf8_decode(bpath);
-        }
-        if(in_cache){
-            filler(buf, bpath.c_str(), &st, 0);
-        }else{
-            S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
-            filler(buf, bpath.c_str(), 0, 0);
-        }
-    }
-
-    return result;
-}
-
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
@@ -2585,42 +2523,27 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
         return result;
     }
 
-    // get a list of all the objects
-    if((result = list_bucket(path, head, "/")) != 0){
-        S3FS_PRN_ERR("list_bucket returns error(%d).", result);
-        return result;
-    }
-
     // force to add "." and ".." name.
     filler(buf, ".", 0, 0);
     filler(buf, "..", 0, 0);
-    if(head.IsEmpty()){
-        return 0;
-    }
 
-    // Send multi head request for stats caching.
-    std::string strpath = path;
-    if(strcmp(path, "/") != 0){
-        strpath += "/";
-    }
-    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
-        S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
+    // get a list of all the objects
+    if(0 != (result = list_bucket(path, head, "/", 0, true, buf, &filler))){
+        S3FS_PRN_ERR("list_bucket returns error(%d).", result);
+        return result;
     }
     S3FS_MALLOCTRIM(0);
 
     return result;
 }
 
-static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only)
+static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, int max_keys, bool is_head_req, void* buf, fuse_fill_dir_t* pfiller)
 {
     std::string s3_realpath;
     std::string query_delimiter;
     std::string query_prefix;
     std::string query_maxkey;
     std::string next_marker;
-    bool truncated = true;
-    S3fsCurl  s3fscurl;
-    xmlDocPtr doc;
 
     S3FS_PRN_INFO1("[path=%s]", path);
 
@@ -2632,18 +2555,38 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
     query_prefix += "&prefix=";
     s3_realpath = get_realpath(path);
-    if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+    if(0 == s3_realpath.length()){
+        query_prefix += "/";
+    }else if('/' != s3_realpath[s3_realpath.length() - 1]){
         // last word must be "/"
         query_prefix += urlEncode(s3_realpath.substr(1) + "/");
     }else{
         query_prefix += urlEncode(s3_realpath.substr(1));
     }
-    if (check_content_only){
-        // Just need to know if there are child objects in dir
-        // For dir with children, expect "dir/" and "dir/child"
-        query_maxkey += "max-keys=2";
-    }else{
+    if(max_keys <= 0){
         query_maxkey += "max-keys=" + str(max_keys_list_object);
+    }else{
+        query_maxkey += "max-keys=" + str(max_keys);
+    }
+
+    bool            truncated = true;
+    S3fsCurl        s3fscurl;
+    xmlDocPtr       doc;
+    S3ObjList       tmphead;
+    s3obj_list_t    fillerlist;                     // display path from head objets
+    int             result = 0;
+
+    // Initialize S3fsMultiCurl
+    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
+    curlmulti.SetPrecheckCallback(multi_head_precheck_callback);
+    curlmulti.SetSuccessCallback(multi_head_callback);
+    curlmulti.SetRetryCallback(multi_head_retry_callback);
+
+    // Start parallel processing
+    if(is_head_req){
+        if(!curlmulti.StartParallelThread()){
+            return -EIO;
+        }
     }
 
     while(truncated){
@@ -2656,23 +2599,34 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         each_query += query_prefix;
 
         // request
-        int result; 
         if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
             S3FS_PRN_ERR("ListBucketRequest returns with error.");
-            return result;
+            result = -EIO;
+            break;
         }
         BodyData* body = s3fscurl.GetBodyData();
 
         // xmlDocPtr
         if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
             S3FS_PRN_ERR("xmlReadMemory returns with error.");
-            return -EIO;
+            result = -EIO;
+            break;
         }
-        if(0 != append_objects_from_xml(path, doc, head)){
+        if(0 != append_objects_from_xml(path, doc, tmphead)){
             S3FS_PRN_ERR("append_objects_from_xml returns with error.");
             xmlFreeDoc(doc);
-            return -EIO;
+            result = -EIO;
+            break;
         }
+
+        // Head request
+        if(is_head_req){
+            // create s3fscurl object for each, and it is set s3fsmulticurl.
+            add_multi_head(curlmulti, path, tmphead, fillerlist, buf, pfiller);
+        }
+        head.append(tmphead);
+        tmphead.clear();
+
         if(true == (truncated = is_truncated(doc))){
             xmlChar* tmpch = get_next_marker(doc);
             if(tmpch){
@@ -2699,14 +2653,104 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
         // reset(initialize) curl object
         s3fscurl.DestroyCurlHandle();
+    }
 
-        if(check_content_only){
-            break;
+    // Stop parallel processing
+    if(is_head_req){
+        // wait thread exit
+        int rc;
+        if(0 != (rc = curlmulti.WaitParallelThread())){
+            S3FS_PRN_ERR("Failed wait thread exit for parallel multirequest - rc(%d)", rc);
+            if(0 == result){
+                result = rc;
+            }
+        }
+
+        // populate fuse buffer
+        // here is best position, because a case is cache size < files in directory
+        //
+        if(pfiller && buf){
+            for(s3obj_list_t::const_iterator iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
+                struct stat st;
+                bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
+                std::string bpath = mybasename((*iter));
+                if(use_wtf8){
+                    bpath = s3fs_wtf8_decode(bpath);
+                }
+                if(in_cache){
+                    (*pfiller)(buf, bpath.c_str(), &st, 0);
+                }else{
+                    S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
+                    (*pfiller)(buf, bpath.c_str(), 0, 0);
+                }
+            }
         }
     }
+
     S3FS_MALLOCTRIM(0);
 
-    return 0;
+    return result;
+}
+
+static int add_multi_head(S3fsMultiCurl& curlmulti, const char* path, const S3ObjList& head, s3obj_list_t& fillerlist, void* buf, fuse_fill_dir_t* pfiller)
+{
+    s3obj_list_t  headlist;                     // converted from head objets list to name list
+    std::string   strpath = path;
+    int           result  = 0;
+
+    S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
+
+    if('/' != strpath[strpath.length() - 1]){
+        strpath += "/";
+    }
+
+    // Make base path list.
+    head.GetNameList(headlist, true, false);    // get name with "/".
+
+    // Make single head request(with max).
+    for(s3obj_list_t::iterator iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+        std::string disppath = strpath + (*iter);
+        std::string etag     = head.GetETag((*iter).c_str());
+
+        std::string fillpath = disppath;
+        if('/' == disppath[disppath.length() - 1]){
+            fillpath.erase(fillpath.length() -1);
+        }
+
+        // Check existed stat cache
+        if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
+            // If the cache exists, immediately copy it to the buffer with the filler
+            struct stat st;
+            if(StatCache::getStatCacheData()->GetStat(fillpath, &st)){
+                if(pfiller && buf){
+                    std::string bpath    = mybasename(fillpath);
+                    if(use_wtf8){
+                        bpath = s3fs_wtf8_decode(bpath);
+                    }
+                    (*pfiller)(buf, bpath.c_str(), &st, 0);
+                }
+                continue;
+            }
+        }
+        fillerlist.push_back(fillpath);
+
+        // First check for directory, start checking "not SSE-C".
+        // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
+        S3fsCurl* s3fscurl = new S3fsCurl();
+        if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
+            S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
+            delete s3fscurl;
+            continue;
+        }
+
+        // add head request to curlmulti
+        if(!curlmulti.SetS3fsCurlObject(s3fscurl)){
+            S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
+            delete s3fscurl;
+            continue;
+        }
+    }
+    return result;
 }
 
 static int remote_mountpath_exists(const char* path)

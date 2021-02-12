@@ -42,6 +42,7 @@ class Semaphore
             dispatch_release(sem);
         }
         void wait() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
+        bool trywait() { return (0 == dispatch_semaphore_wait(sem, DISPATCH_TIME_NOW)); }
         void post() { dispatch_semaphore_signal(sem); }
         int get_value() const { return value; }
 
@@ -67,6 +68,7 @@ class Semaphore
                 r = sem_wait(&mutex);
             } while (r == -1 && errno == EINTR);
         }
+        bool trywait() { return (0 == sem_trywait(&mutex)); }
         void post() { sem_post(&mutex); }
         int get_value() const { return value; }
 
