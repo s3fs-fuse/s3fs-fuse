@@ -32,6 +32,12 @@
 #define S3FS_CLOCK_MONOTONIC    CLOCK_MONOTONIC
 #endif
 
+#if defined(__APPLE__)
+#define S3FSLOG_TIME_FMT        "%s.%03dZ"
+#else
+#define S3FSLOG_TIME_FMT        "%s.%03ldZ"
+#endif
+
 //-------------------------------------------------------------------
 // S3fsLog class
 //-------------------------------------------------------------------
@@ -91,7 +97,7 @@ class S3fsLog
                 gettimeofday(&now, NULL);
             }
             strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
-            snprintf(current_time, sizeof(current_time), "%s.%03ldZ", tmp, (now.tv_usec / 1000));
+            snprintf(current_time, sizeof(current_time), S3FSLOG_TIME_FMT, tmp, (now.tv_usec / 1000));
             return current_time;
         }
 
