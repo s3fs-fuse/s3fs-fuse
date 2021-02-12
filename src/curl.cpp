@@ -81,7 +81,6 @@ const long       S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR;
 const int        S3fsCurl::S3FSCURL_PERFORM_RESULT_NOTSET;
 pthread_mutex_t  S3fsCurl::curl_warnings_lock;
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
-pthread_mutex_t  S3fsCurl::cryptfunc_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
 CurlHandlerPool* S3fsCurl::sCurlPool           = NULL;
@@ -162,9 +161,6 @@ bool S3fsCurl::InitS3fsCurl()
     if(0 != pthread_mutex_init(&S3fsCurl::callback_locks.ssl_session, &attr)){
         return false;
     }
-    if(0 != pthread_mutex_init(&S3fsCurl::cryptfunc_lock, &attr)){
-        return false;
-    }
     if(!S3fsCurl::InitGlobalCurl()){
         return false;
     }
@@ -203,9 +199,6 @@ bool S3fsCurl::DestroyS3fsCurl()
         result = false;
     }
     if(!S3fsCurl::DestroyGlobalCurl()){
-        result = false;
-    }
-    if(0 != pthread_mutex_destroy(&S3fsCurl::cryptfunc_lock)){
         result = false;
     }
     if(0 != pthread_mutex_destroy(&S3fsCurl::callback_locks.dns)){
@@ -2607,12 +2600,6 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
 void S3fsCurl::insertV4Headers()
 {
-    // [NOTE]
-    // When using the SSL(crypt) library from multiple threads,
-    // there was a case where "double free" occurred.
-    //
-    AutoLock   lock(&S3fsCurl::cryptfunc_lock);
-
     std::string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;
     std::string payload_hash;
     switch (type) {
@@ -2669,12 +2656,6 @@ void S3fsCurl::insertV4Headers()
 
 void S3fsCurl::insertV2Headers()
 {
-    // [NOTE]
-    // When using the SSL(crypt) library from multiple threads,
-    // there was a case where "double free" occurred.
-    //
-    AutoLock   lock(&S3fsCurl::cryptfunc_lock);
-
     std::string resource;
     std::string turl;
     std::string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;

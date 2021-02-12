@@ -114,7 +114,6 @@ class S3fsCurl
             pthread_mutex_t dns;
             pthread_mutex_t ssl_session;
         } callback_locks;
-        static pthread_mutex_t  cryptfunc_lock;       // [NOTE] exclusive control of cryption libraries(for openssl)
         static bool             is_initglobal_done;
         static CurlHandlerPool* sCurlPool;
         static int              sCurlPoolSize;
