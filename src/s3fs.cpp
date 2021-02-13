@@ -4742,6 +4742,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         //
+        // no time stamp in debug message
+        //
+        if(0 == strcmp(arg, "no_time_stamp_msg")){
+            S3fsLog::SetTimeStamp(false);
+            return 0;
+        }
+        //
         // Check cache file, using SIGUSR1
         //
         if(0 == strcmp(arg, "set_check_cache_sigusr1")){

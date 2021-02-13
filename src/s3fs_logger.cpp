@@ -30,11 +30,13 @@
 const int               S3fsLog::NEST_MAX;
 const char*             S3fsLog::nest_spaces[S3fsLog::NEST_MAX] = {"", "  ", "    ", "      "};
 const char*             S3fsLog::LOGFILEENV       = "S3FS_LOGFILE";
+const char*             S3fsLog::MSGTIMESTAMP     = "S3FS_MSGTIMESTAMP";
 S3fsLog*                S3fsLog::pSingleton       = NULL;
 S3fsLog::s3fs_log_level S3fsLog::debug_level      = S3fsLog::LEVEL_CRIT;
 FILE*                   S3fsLog::logfp            = NULL;
 std::string*            S3fsLog::plogfile         = NULL;
 char                    S3fsLog::current_time[64] = "";
+bool                    S3fsLog::time_stamp       = true;
 
 //-------------------------------------------------------------------
 // S3fsLog class : class methods
@@ -89,6 +91,13 @@ S3fsLog::s3fs_log_level S3fsLog::BumpupLogLevel()
     return S3fsLog::pSingleton->LowBumpupLogLevel();
 }
 
+bool S3fsLog::SetTimeStamp(bool value)
+{
+    bool old = S3fsLog::time_stamp;
+    S3fsLog::time_stamp = value;
+    return old;
+}
+
 //-------------------------------------------------------------------
 // S3fsLog class : methods
 //-------------------------------------------------------------------
@@ -133,11 +142,19 @@ bool S3fsLog::LowLoadEnv()
         return false;
     }
     char*    pEnvVal;
-    if(NULL == (pEnvVal = getenv(S3fsLog::LOGFILEENV))){
-        return true;
+    if(NULL != (pEnvVal = getenv(S3fsLog::LOGFILEENV))){
+        if(!SetLogfile(pEnvVal)){
+            return false;
+        }
     }
-    if(!SetLogfile(pEnvVal)){
-        return false;
+    if(NULL != (pEnvVal = getenv(S3fsLog::MSGTIMESTAMP))){
+        if(0 == strcasecmp(pEnvVal, "true") || 0 == strcasecmp(pEnvVal, "yes") || 0 == strcasecmp(pEnvVal, "1")){
+            S3fsLog::time_stamp = true;
+        }else if(0 == strcasecmp(pEnvVal, "false") || 0 == strcasecmp(pEnvVal, "no") || 0 == strcasecmp(pEnvVal, "0")){
+            S3fsLog::time_stamp = false;
+        }else{
+            S3FS_PRN_WARN("Unknown %s environment value(%s) is specified, skip to set time stamp mode.", S3fsLog::MSGTIMESTAMP, pEnvVal);
+        }
     }
     return true;
 }
