@@ -2310,8 +2310,13 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         break;
 
                     case 400:
-                        S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
-                        result = -EIO;
+                        if(op == "HEAD"){
+                            S3FS_PRN_ERR("HEAD HTTP response code %ld, returning EPERM. Body Text: %s", responseCode, bodydata.str());
+                            result = -EPERM;
+                        }else{
+                            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
+                            result = -EIO;
+                        }
                         break;
 
                     case 403:
