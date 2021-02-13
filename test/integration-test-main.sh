@@ -494,6 +494,7 @@ function test_special_characters {
     )
 
     mkdir "TOYOTA TRUCK 8.2.2"
+    rm -rf "TOYOTA TRUCK 8.2.2"
 }
 
 function test_hardlink {
@@ -507,6 +508,9 @@ function test_hardlink {
         set +o pipefail
         ln $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE 2>&1 | grep -q 'Operation not supported'
     )
+
+    rm_test_file
+    rm_test_file $ALT_TEST_TEXT_FILE
 }
 
 function test_symlink {
@@ -864,7 +868,8 @@ function test_update_directory_time() {
        return 1
     fi
 
-    rm -r $TIME_TEST_DIR
+    rm -rf $TIME_TEST_SUBDIR
+    rm -rf $TIME_TEST_DIR
 }
 
 function test_rm_rf_dir {
@@ -1029,6 +1034,11 @@ function test_content_type() {
         echo "Unexpected Content-Type: $CONTENT_TYPE"
         return 1;
     fi
+
+    rm -f test.txt
+    rm -f test.jpg
+    rm -f test.bin
+    rm -rf test.dir
 }
 
 # create more files than -o max_stat_cache_size
@@ -1042,6 +1052,8 @@ function test_truncate_cache() {
         done
         ls $dir
     done
+
+    rm -rf `seq 2`
 }
 
 function test_cache_file_stat() {
