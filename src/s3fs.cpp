@@ -399,7 +399,26 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     s3fscurl.DestroyCurlHandle();
 
     // if not found target path object, do over checking
-    if(0 != result){
+    if(-EPERM == result){
+        // [NOTE]
+        // In case of a permission error, it exists in directory
+        // file list but inaccessible. So there is a problem that
+        // it will send a HEAD request every time, because it is
+        // not registered in the Stats cache.
+        // Therefore, even if the file has a permission error, it
+        // should be registered in the Stats cache. However, if
+        // the response without modifiying is registered in the
+        // cache, the file permission will be 0644(umask dependent)
+        // because the meta header does not exist.
+        // Thus, set the mode of 0000 here in the meta header so
+        // that s3fs can print a permission error when the file
+        // is actually accessed.
+        // It is better not to set meta header other than mode,
+        // so do not do it.
+        //
+        (*pheader)["x-amz-meta-mode"] = str(0);
+
+    }else if(0 != result){
         if(overcheck){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
             if('/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0)){
@@ -447,7 +466,11 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }
     }
 
-    if(0 != result){
+    // [NOTE]
+    // If the file is listed but not allowed access, put it in
+    // the positive cache instead of the negative cache.
+    // 
+    if(0 != result && -EPERM != result){
         // finally, "path" object did not find. Add no object cache.
         strpath = path;  // reset original
         StatCache::getStatCacheData()->AddNoObjectCache(strpath);
