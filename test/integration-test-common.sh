@@ -31,7 +31,9 @@
 # TEST_BUCKET_1=bucketname           Name of bucket to use 
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
 # S3_URL="https://s3.amazonaws.com"  Specify Amazon AWS as the S3 provider
-# S3_ENDPOINT="us-east-1"             Specify region
+# S3_ENDPOINT="us-east-1"            Specify region
+# TMPDIR="/var/tmp"                  Set to use a temporary directory different
+#                                    from /var/tmp
 #
 # Example of running against Amazon S3 using a bucket named "bucket":
 #
