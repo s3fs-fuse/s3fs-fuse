@@ -305,6 +305,10 @@ If this option is specified with nocopyapi, then s3fs ignores it.
 \fB\-o\fR use_path_request_style (use legacy API calling style)
 Enable compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .TP
+\fB\-o\fR listobjectsv2 (use ListObjectsV2)
+Issue ListObjectsV2 instead of ListObjects, useful on object
+stores without ListObjects support.
+.TP
 \fB\-o\fR noua (suppress User-Agent header)
 Usually s3fs outputs of the User-Agent in "s3fs/<version> (commit hash <hash>; <using ssl library name>)" format.
 If this option is specified, s3fs suppresses the output of the User-Agent.

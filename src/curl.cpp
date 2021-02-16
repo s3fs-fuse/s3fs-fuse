@@ -136,6 +136,7 @@ off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
 signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
 bool             S3fsCurl::is_ua               = true;           // default
+bool             S3fsCurl::listobjectsv2       = false;          // default
 bool             S3fsCurl::is_use_session_token= false;          // default
 bool             S3fsCurl::requester_pays      = false;          // default
 
@@ -2666,7 +2667,7 @@ void S3fsCurl::insertV2Headers()
     std::string turl;
     std::string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;
     MakeUrlResource(server_path.c_str(), resource, turl);
-    if(!query_string.empty() && type != REQTYPE_LISTBUCKET){
+    if(!query_string.empty() && type != REQTYPE_CHKBUCKET && type != REQTYPE_LISTBUCKET){
         resource += "?" + query_string;
     }
 
@@ -3365,10 +3366,16 @@ int S3fsCurl::CheckBucket()
     if(!CreateCurlHandle()){
         return -EIO;
     }
+    std::string urlargs;
+    if(S3fsCurl::IsListObjectsV2()){
+        query_string = "list-type=2";
+        urlargs = "?" + query_string;
+    }
     std::string resource;
     std::string turl;
     MakeUrlResource(get_realpath("/").c_str(), resource, turl);
 
+    turl           += urlargs;
     url             = prepare_url(turl.c_str());
     path            = get_realpath("/");
     requestHeaders  = NULL;

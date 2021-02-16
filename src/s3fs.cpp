@@ -2642,6 +2642,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     std::string query_delimiter;
     std::string query_prefix;
     std::string query_maxkey;
+    std::string next_continuation_token;
     std::string next_marker;
     bool truncated = true;
     S3fsCurl  s3fscurl;
@@ -2672,7 +2673,16 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     }
 
     while(truncated){
-        std::string each_query = query_delimiter;
+        // append parameters to query in alphabetical order
+        std::string each_query = "";
+        if(!next_continuation_token.empty()){
+            each_query += "continuation-token=" + urlEncode(next_continuation_token) + "&";
+            next_continuation_token = "";
+        }
+        each_query += query_delimiter;
+        if(S3fsCurl::IsListObjectsV2()){
+            each_query += "list-type=2&";
+        }
         if(!next_marker.empty()){
             each_query += "marker=" + urlEncode(next_marker) + "&";
             next_marker = "";
@@ -2699,11 +2709,16 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             return -EIO;
         }
         if(true == (truncated = is_truncated(doc))){
-            xmlChar* tmpch = get_next_marker(doc);
-            if(tmpch){
+            xmlChar* tmpch;
+            if(NULL != (tmpch = get_next_contination_token(doc))){
+                next_continuation_token = (char*)tmpch;
+                xmlFree(tmpch);
+            }else if(NULL != (tmpch = get_next_marker(doc))){
                 next_marker = (char*)tmpch;
                 xmlFree(tmpch);
-            }else{
+            }
+
+            if(next_continuation_token.empty() && next_marker.empty()){
                 // If did not specify "delimiter", s3 did not return "NextMarker".
                 // On this case, can use last name for next marker.
                 //
@@ -4632,6 +4647,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(0 == strcmp(arg, "noua")){
             S3fsCurl::SetUserAgentFlag(false);
+            return 0;
+        }
+        if(0 == strcmp(arg, "listobjectsv2")){
+            S3fsCurl::SetListObjectsV2(true);
             return 0;
         }
         if(0 == strcmp(arg, "use_xattr")){
