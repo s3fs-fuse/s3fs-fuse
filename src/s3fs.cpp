@@ -1234,9 +1234,10 @@ static int s3fs_symlink(const char* _from, const char* _to)
 
 static int rename_object(const char* from, const char* to, bool update_ctime)
 {
-    int result;
+    int         result;
     std::string s3_realpath;
-    headers_t meta;
+    headers_t   meta;
+    struct stat buf;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
@@ -1248,7 +1249,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         // not permit removing "from" object parent dir.
         return result;
     }
-    if(0 != (result = get_object_attribute(from, NULL, &meta))){
+    if(0 != (result = get_object_attribute(from, &buf, &meta))){
         return result;
     }
     s3_realpath = get_realpath(from);
@@ -1260,17 +1261,51 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    if(0 != (result = put_headers(to, meta, true))){
-        return result;
-    }
+    // [NOTE]
+    // If it has a cache, open it first and leave it open until rename.
+    // The cache is renamed after put_header, because it must be open
+    // at the time of renaming.
+    {
+        // update time
+        AutoFdEntity autoent;
+        FdEntity*    ent;
+        if(NULL == (ent = autoent.ExistOpen(from, -1, !FdManager::IsCacheDir()))){
+            // no opened fd
+            if(FdManager::IsCacheDir()){
+                // create cache file if be needed
+                ent = autoent.Open(from, &meta, buf.st_size, -1, false, true);
+            }
+            if(ent){
+                time_t mtime = get_mtime(meta);
+                time_t ctime = get_ctime(meta);
+                time_t atime = get_atime(meta);
+                if(mtime < 0){
+                    mtime = 0L;
+                }
+                if(ctime < 0){
+                    ctime = 0L;
+                }
+                if(atime < 0){
+                    atime = 0L;
+                }
+                ent->SetMCtime(mtime, ctime);
+                ent->SetAtime(atime);
+            }
+        }
 
-    FdManager::get()->Rename(from, to);
+        // copy
+        if(0 != (result = put_headers(to, meta, true, false))){
+            return result;
+        }
+
+        // rename
+        FdManager::get()->Rename(from, to);
+    }
 
     // Remove file
     result = s3fs_unlink(from);
 
     StatCache::getStatCacheData()->DelStat(to);
-    FdManager::DeleteCacheFile(to);
 
     return result;
 }
@@ -1323,7 +1358,6 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
 
     // Stats
     StatCache::getStatCacheData()->DelStat(to);
-    FdManager::DeleteCacheFile(to);
 
     return result;
 }
