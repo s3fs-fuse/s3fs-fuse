@@ -337,6 +337,16 @@ function wait_for_port() {
     done
 }
 
+function make_random_string() {
+    if [ -n "$1" ]; then
+        END_POS=$1
+    else
+        END_POS=8
+    fi
+    RANDOM_STR=`cat /dev/urandom | base64 | sed 's#[/|+]##g' | head -1 | cut -c 1-${END_POS}`
+    echo "${RANDOM_STR}"
+}
+
 #
 # Local variables:
 # tab-width: 4
