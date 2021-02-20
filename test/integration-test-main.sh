@@ -354,6 +354,8 @@ function test_update_metadata_external_small_object() {
     TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
+    TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
+    TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
 
     TEST_INPUT="TEST_STRING_IN_SMALL_FILE"
 
@@ -381,9 +383,29 @@ function test_update_metadata_external_small_object() {
     touch ${TEST_UTIMENS_FILE}
     cmp ${TEST_UTIMENS_FILE} <(echo "${TEST_INPUT}")
 
+    #
+    # set xattr
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_SETXATTR_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    set_xattr key value ${TEST_SETXATTR_FILE}
+    cmp ${TEST_SETXATTR_FILE} <(echo "${TEST_INPUT}")
+
+    #
+    # remove xattr
+    #
+    # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_RMXATTR_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+    del_xattr key ${TEST_RMXATTR_FILE}
+    cmp ${TEST_RMXATTR_FILE} <(echo "${TEST_INPUT}")
+
     rm -f ${TEST_CHMOD_FILE}
     rm -f ${TEST_CHOWN_FILE}
     rm -f ${TEST_UTIMENS_FILE}
+    rm -f ${TEST_SETXATTR_FILE}
+    rm -f ${TEST_RMXATTR_FILE}
 }
 
 function test_update_metadata_external_large_object() {
@@ -396,6 +418,8 @@ function test_update_metadata_external_large_object() {
     TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
+    TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
+    TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
 
     dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
@@ -423,10 +447,30 @@ function test_update_metadata_external_large_object() {
     touch ${TEST_UTIMENS_FILE}
     cmp ${TEST_UTIMENS_FILE} ${TEMP_DIR}/${BIG_FILE}
 
+    #
+    # set xattr
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_SETXATTR_FILE}"
+    aws_cli s3 cp ${TEMP_DIR}/${BIG_FILE} "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    set_xattr key value ${TEST_SETXATTR_FILE}
+    cmp ${TEST_SETXATTR_FILE} ${TEMP_DIR}/${BIG_FILE}
+
+    #
+    # remove xattr
+    #
+    # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_RMXATTR_FILE}"
+    aws_cli s3 cp ${TEMP_DIR}/${BIG_FILE} "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+    del_xattr key ${TEST_RMXATTR_FILE}
+    cmp ${TEST_RMXATTR_FILE} ${TEMP_DIR}/${BIG_FILE}
+
     rm -f ${TEMP_DIR}/${BIG_FILE}
     rm -f ${TEST_CHMOD_FILE}
     rm -f ${TEST_CHOWN_FILE}
     rm -f ${TEST_UTIMENS_FILE}
+    rm -f ${TEST_SETXATTR_FILE}
+    rm -f ${TEST_RMXATTR_FILE}
 }
 
 function test_rename_before_close {
