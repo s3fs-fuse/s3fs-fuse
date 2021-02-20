@@ -1581,7 +1581,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 }
 
 // global function in s3fs.cpp
-int put_headers(const char* path, headers_t& meta, bool is_copy, bool update_mtime);
+int put_headers(const char* path, headers_t& meta, bool is_copy);
 
 int FdEntity::UploadPendingMeta()
 {
@@ -1593,7 +1593,7 @@ int FdEntity::UploadPendingMeta()
     headers_t updatemeta = orgmeta;
     updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(path.c_str()));
     // put headers, no need to update mtime to avoid dead lock
-    int result = put_headers(path.c_str(), updatemeta, true, false);
+    int result = put_headers(path.c_str(), updatemeta, true);
     if(0 != result){
         S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
     }
