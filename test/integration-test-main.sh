@@ -344,6 +344,91 @@ function test_read_external_object() {
     rm -f ${TEST_TEXT_FILE}
 }
 
+function test_update_metadata_external_small_object() {
+    describe "update meta to small file after created file by aws cli"
+
+    # [NOTE]
+    # Use the only filename in the test to avoid being affected by noobjcache.
+    #
+    TEST_FILE_EXT=`make_random_string`
+    TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
+    TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
+    TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
+
+    TEST_INPUT="TEST_STRING_IN_SMALL_FILE"
+
+    #
+    # chmod
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_CHMOD_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    chmod +x ${TEST_CHMOD_FILE}
+    cmp ${TEST_CHMOD_FILE} <(echo "${TEST_INPUT}")
+
+    #
+    # chown
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_CHOWN_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    chown $UID ${TEST_CHOWN_FILE}
+    cmp ${TEST_CHOWN_FILE} <(echo "${TEST_INPUT}")
+
+    #
+    # utimens
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_UTIMENS_FILE}"
+    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    touch ${TEST_UTIMENS_FILE}
+    cmp ${TEST_UTIMENS_FILE} <(echo "${TEST_INPUT}")
+
+    rm -f ${TEST_CHMOD_FILE}
+    rm -f ${TEST_CHOWN_FILE}
+    rm -f ${TEST_UTIMENS_FILE}
+}
+
+function test_update_metadata_external_large_object() {
+    describe "update meta to large file after created file by aws cli"
+
+    # [NOTE]
+    # Use the only filename in the test to avoid being affected by noobjcache.
+    #
+    TEST_FILE_EXT=`make_random_string`
+    TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
+    TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
+    TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
+
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+
+    #
+    # chmod
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_CHMOD_FILE}"
+    aws_cli s3 cp ${TEMP_DIR}/${BIG_FILE} "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    chmod +x ${TEST_CHMOD_FILE}
+    cmp ${TEST_CHMOD_FILE} ${TEMP_DIR}/${BIG_FILE}
+
+    #
+    # chown
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_CHOWN_FILE}"
+    aws_cli s3 cp ${TEMP_DIR}/${BIG_FILE} "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    chown $UID ${TEST_CHOWN_FILE}
+    cmp ${TEST_CHOWN_FILE} ${TEMP_DIR}/${BIG_FILE}
+
+    #
+    # utimens
+    #
+    OBJECT_NAME="$(basename $PWD)/${TEST_UTIMENS_FILE}"
+    aws_cli s3 cp ${TEMP_DIR}/${BIG_FILE} "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    touch ${TEST_UTIMENS_FILE}
+    cmp ${TEST_UTIMENS_FILE} ${TEMP_DIR}/${BIG_FILE}
+
+    rm -f ${TEMP_DIR}/${BIG_FILE}
+    rm -f ${TEST_CHMOD_FILE}
+    rm -f ${TEST_CHOWN_FILE}
+    rm -f ${TEST_UTIMENS_FILE}
+}
+
 function test_rename_before_close {
     describe "Testing rename before close ..."
     (
@@ -1315,6 +1400,8 @@ function add_all_tests {
     fi
     add_tests test_external_modification
     add_tests test_read_external_object
+    add_tests test_update_metadata_external_small_object
+    add_tests test_update_metadata_external_large_object
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy

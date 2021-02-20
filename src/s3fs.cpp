@@ -1680,24 +1680,21 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         //
         AutoFdEntity autoent;
         FdEntity*    ent;
+        bool         need_put_header = true;
         if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
-            // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
-                // now uploading
-                // the meta is pending and accumulated to be put after the upload is complete.
+                // meta is changed, but now uploading.
+                // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
-            }else{
-                // allow to put header
-                // updatemeta already merged the orgmeta of the opened files.
-                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
-                    return result;
-                }
-                StatCache::getStatCacheData()->DelStat(nowcache);
+                need_put_header = false;
             }
-        }else{
-            // not opened file, then put headers
+        }
+        if(need_put_header){
+            // not found opened file.
             merge_headers(meta, updatemeta, true);
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+
+            // upload meta directly.
+            if(0 != (result = put_headers(strpath.c_str(), meta, true, false))){
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
@@ -1856,24 +1853,21 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         //
         AutoFdEntity autoent;
         FdEntity*    ent;
+        bool         need_put_header = true;
         if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
-            // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
-                // now uploading
-                // the meta is pending and accumulated to be put after the upload is complete.
+                // meta is changed, but now uploading.
+                // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
-            }else{
-                // allow to put header
-                // updatemeta already merged the orgmeta of the opened files.
-                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
-                    return result;
-                }
-                StatCache::getStatCacheData()->DelStat(nowcache);
+                need_put_header = false;
             }
-        }else{
-            // not opened file, then put headers
+        }
+        if(need_put_header){
+            // not found opened file.
             merge_headers(meta, updatemeta, true);
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+
+            // upload meta directly.
+            if(0 != (result = put_headers(strpath.c_str(), meta, true, false))){
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
@@ -2036,34 +2030,39 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         //
         AutoFdEntity autoent;
         FdEntity*    ent;
+        bool         need_put_header = true;
+        bool         keep_mtime      = false;
         if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
-            // the file is opened now.
             if(ent->MergeOrgMeta(updatemeta)){
-                // now uploading
-                // the meta is pending and accumulated to be put after the upload is complete.
+                // meta is changed, but now uploading.
+                // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
+                need_put_header = false;
+
             }else{
-                // allow to put header
-                // updatemeta already merged the orgmeta of the opened files.
-                if(0 != (result = put_headers(strpath.c_str(), updatemeta, true))){
-                    return result;
-                }
-                StatCache::getStatCacheData()->DelStat(nowcache);
+                S3FS_PRN_INFO("meta is not pending, but need to keep current mtime.");
 
                 // [NOTE]
                 // Depending on the order in which write/flush and utimens are called,
                 // the mtime updated here may be overwritten at the time of flush.
                 // To avoid that, set a special flag.
                 //
-                ent->SetHoldingMtime(ts[1].tv_sec);     // ts[1].tv_sec is mtime
+                keep_mtime = true;
             }
-        }else{
-            // not opened file, then put headers
+        }
+        if(need_put_header){
+            // not found opened file.
             merge_headers(meta, updatemeta, true);
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+
+            // upload meta directly.
+            if(0 != (result = put_headers(strpath.c_str(), meta, true, false))){
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(nowcache);
+
+            if(keep_mtime){
+                ent->SetHoldingMtime(ts[1].tv_sec);     // ts[1].tv_sec is mtime
+            }
         }
     }
     S3FS_MALLOCTRIM(0);
