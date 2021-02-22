@@ -1,8 +1,15 @@
 ChangeLog for S3FS
 ------------------
 
-Version 1.88 -- 4 Jan, 2021 (major changes only)
+Version 1.89 -- 22 Feb, 2021 (major changes only)
+#1520 - #1525 - #1534 - #1549 - Propagate S3 errors to errno more accurately
+#1546 - #1559 - Allow writing > 5 GB single-part objects supported by some non-AWS S3
+#1553 - #1555 - Allow configuration of multipart copy size and limit to 5 GB
+#1562 - Allow configuration of multipart upload threshold and reduce default to 25 MB
+#1565 - Set default stat timeout to 900 seconds correctly
+#1579 - #1582 - Fix data corruption while updating metadata with use_cache
 
+Version 1.88 -- 4 Jan, 2021 (major changes only)
 #1349 - Fixed a bug about move file over limit of ensure space
 #1363 - #1366 - #1439 - Fix multiple race conditions
 #1365 - Dynamically determine whether lseek extended options are supported
@@ -23,7 +30,6 @@ Version 1.88 -- 4 Jan, 2021 (major changes only)
 #1502 - #1503 - #1505 - Fix multiple issues when retrying requests
 
 Version 1.87 -- 10 Aug, 2020 (major changes only)
-
 #1244 - use correct content-type when complete multipart upload
 #1265 - Fixed a bug of stats cache compression
 #1271 - Fixed the truncation bug of stat file for cache file
