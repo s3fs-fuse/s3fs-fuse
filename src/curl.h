@@ -164,6 +164,7 @@ class S3fsCurl
         static off_t            multipart_copy_size;
         static signature_type_t signature_type;
         static bool             is_ua;             // User-Agent
+        static bool             listobjectsv2;
         static bool             requester_pays;
 
         // variables
@@ -359,6 +360,8 @@ class S3fsCurl
         static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
         static bool IsUserAgentFlag() { return S3fsCurl::is_ua; }
         static void InitUserAgent();
+        static bool SetListObjectsV2(bool isset) { bool bresult = S3fsCurl::listobjectsv2; S3fsCurl::listobjectsv2 = isset; return bresult; }
+        static bool IsListObjectsV2() { return S3fsCurl::listobjectsv2; }
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
         static bool SetIMDSVersion(int version);
