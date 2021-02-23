@@ -197,6 +197,7 @@ java -version
 #
 echo "${PRGNAME} [INFO] Install awscli package."
 ${PIP_BIN} install ${PIP_OPTIONS} ${INSTALL_AWSCLI_PACKAGES}
+${PIP_BIN} install ${PIP_OPTIONS} rsa
 
 #-----------------------------------------------------------
 # Set environment for configure
