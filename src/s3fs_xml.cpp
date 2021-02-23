@@ -109,6 +109,11 @@ static xmlChar* get_prefix(xmlDocPtr doc)
     return get_base_exp(doc, "Prefix");
 }
 
+xmlChar* get_next_contination_token(xmlDocPtr doc)
+{
+    return get_base_exp(doc, "NextContinuationToken");
+}
+
 xmlChar* get_next_marker(xmlDocPtr doc)
 {
     return get_base_exp(doc, "NextMarker");
