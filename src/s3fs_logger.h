@@ -227,6 +227,17 @@ class S3fsLog
             } \
         }while(0)
 
+#define S3FS_PRN_LAUNCH_INFO(fmt, ...) \
+        do{ \
+            if(foreground || S3fsLog::IsSetLogFile()){ \
+                S3fsLog::SeekEnd(); \
+                fprintf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime(), S3fsLog::GetLevelString(S3fsLog::LEVEL_INFO), __VA_ARGS__, ""); \
+                S3fsLog::Flush(); \
+            }else{ \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_INFO), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__, ""); \
+            } \
+        }while(0)
+
 // Special macro for checking cache files
 #define S3FS_LOW_CACHE(fp, fmt, ...) \
         do{ \

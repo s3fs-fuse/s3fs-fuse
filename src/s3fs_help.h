@@ -27,6 +27,7 @@
 void show_usage();
 void show_help();
 void show_version();
+const char* short_version();
 
 #endif // S3FS_S3FS_HELP_H_
 

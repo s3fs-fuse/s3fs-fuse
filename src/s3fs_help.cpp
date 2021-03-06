@@ -558,6 +558,12 @@ void show_version()
     VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
 }
 
+const char* short_version()
+{
+    static const char short_ver[] = "s3fs version " VERSION "(" COMMIT_HASH_VAL ")";
+    return short_ver;
+}
+
 /*
 * Local variables:
 * tab-width: 4

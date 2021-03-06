@@ -4888,6 +4888,8 @@ int main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
         }
     }
+    // print launch message
+    print_launch_message(argc, argv);
 
     // Load SSE environment
     if(!S3fsCurl::LoadEnvSse()){

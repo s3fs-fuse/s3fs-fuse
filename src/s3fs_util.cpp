@@ -36,6 +36,7 @@
 #include "s3fs.h"
 #include "s3fs_util.h"
 #include "string_util.h"
+#include "s3fs_help.h"
 
 //-------------------------------------------------------------------
 // Global variables
@@ -366,6 +367,29 @@ bool compare_sysname(const char* target)
         return false;
     }
     return true;
+}
+
+//-------------------------------------------------------------------
+// Utility for print message at launching
+//-------------------------------------------------------------------
+void print_launch_message(int argc, char** argv)
+{
+    std::string  message = short_version();
+
+    if(argv){
+        message += " :";
+        for(int cnt = 0; cnt < argc; ++cnt){
+            if(argv[cnt]){
+                message += " ";
+                if(0 == cnt){
+                    message += basename(argv[cnt]);
+                }else{
+                    message += argv[cnt];
+                }
+            }
+        }
+    }
+    S3FS_PRN_LAUNCH_INFO("%s", message.c_str());
 }
 
 /*

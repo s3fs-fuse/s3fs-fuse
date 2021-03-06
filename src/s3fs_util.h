@@ -42,6 +42,8 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
 bool compare_sysname(const char* target);
 
+void print_launch_message(int argc, char** argv);
+
 #endif // S3FS_S3FS_UTIL_H_
 
 /*
