@@ -2297,6 +2297,9 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         if(value == "EntityTooLarge"){
                             result = -EFBIG;
                             break;
+                        }else if(value == "KeyTooLongError"){
+                            result = -ENAMETOOLONG;
+                            break;
                         }
                     }
                 }
@@ -2312,7 +2315,11 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
                     case 400:
                         if(op == "HEAD"){
-                            S3FS_PRN_ERR("HEAD HTTP response code %ld, returning EPERM. Body Text: %s", responseCode, bodydata.str());
+                            if(path.size() > 1024){
+                                S3FS_PRN_ERR("HEAD HTTP response code %ld with path longer than 1024, returning ENAMETOOLONG.", responseCode);
+                                return -ENAMETOOLONG;
+                            }
+                            S3FS_PRN_ERR("HEAD HTTP response code %ld, returning EPERM.", responseCode);
                             result = -EPERM;
                         }else{
                             S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
