@@ -1545,6 +1545,9 @@ static int s3fs_rename(const char* _from, const char* _to)
     if(0 != (result = get_object_attribute(from, &buf, NULL))){
         return result;
     }
+    if(0 != (result = directory_empty(to))){
+        return result;
+    }
 
     // flush pending writes if file is open
     {   // scope for AutoFdEntity
