@@ -114,12 +114,6 @@ You can also mount on boot by entering the following line to `/etc/fstab`:
 mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
 ```
 
-or
-
-```
-mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other 0 0
-```
-
 If you use s3fs with a non-Amazon S3 implementation, specify the URL and path-style requests:
 
 ```
