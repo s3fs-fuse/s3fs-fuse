@@ -579,7 +579,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
 
     if(X_OK == (mask & X_OK)){
         if(0 == (mode & (S_IXUSR | S_IXGRP | S_IXOTH))){
-            return -EPERM;
+            return -EACCES;
         }
     }
     if(W_OK == (mask & W_OK)){
