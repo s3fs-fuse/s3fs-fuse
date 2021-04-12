@@ -2203,6 +2203,10 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
     S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
+    if ((fi->flags & O_ACCMODE) == O_RDONLY && fi->flags & O_TRUNC) {
+        return -EACCES;
+    }
+
     // clear stat for reading fresh stat.
     // (if object stat is changed, we refresh it. then s3fs gets always
     // stat when s3fs open the object).
