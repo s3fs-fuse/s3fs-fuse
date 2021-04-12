@@ -414,10 +414,10 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
         S3fsCurl::mimeTypes.clear();
 
         while(getline(MT, line)){
-            if(line[0]=='#'){
+            if(line.empty()){
                 continue;
             }
-            if(line.empty()){
+            if(line[0]=='#'){
                 continue;
             }
 
@@ -3302,7 +3302,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
     requestHeaders  = NULL;
     responseHeaders.clear();
 
-    if(-1 != start && 0 < size){
+    if(0 < size){
         std::string range = "bytes=";
         range       += str(start);
         range       += "-";
@@ -3563,28 +3563,30 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     }
 
     // make contents
-    std::string postContent;
-    postContent += "<CompleteMultipartUpload>\n";
+    std::string* pPostContent = new std::string();
+    (*pPostContent) += "<CompleteMultipartUpload>\n";
     int cnt = 0;
     for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it, ++cnt){
         if(it->empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", cnt + 1);
+            delete pPostContent;
             return -EIO;
         }
-        postContent += "<Part>\n";
-        postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
-        postContent += "  <ETag>" + *it + "</ETag>\n";
-        postContent += "</Part>\n";
+        (*pPostContent) += "<Part>\n";
+        (*pPostContent) += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
+        (*pPostContent) += "  <ETag>" + *it + "</ETag>\n";
+        (*pPostContent) += "</Part>\n";
     }
-    postContent += "</CompleteMultipartUpload>\n";
+    (*pPostContent) += "</CompleteMultipartUpload>\n";
 
     // set postdata
-    postdata             = reinterpret_cast<const unsigned char*>(postContent.c_str());
+    postdata             = reinterpret_cast<const unsigned char*>(pPostContent->c_str());
     b_postdata           = postdata;
-    postdata_remaining   = postContent.size(); // without null
+    postdata_remaining   = pPostContent->size(); // without null
     b_postdata_remaining = postdata_remaining;
 
     if(!CreateCurlHandle()){
+        delete pPostContent;
         return -EIO;
     }
     std::string resource;
@@ -3623,6 +3625,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     int result = RequestPerform();
     bodydata.Clear();
     postdata = NULL;
+    delete pPostContent;
 
     return result;
 }
