@@ -2161,6 +2161,7 @@ static int s3fs_truncate(const char* _path, off_t size)
             return result;
         }
 
+        ent->UpdateCtime();
     }else{
         // Not found -> Make tmpfile(with size)
 
