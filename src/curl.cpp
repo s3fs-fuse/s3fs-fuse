@@ -2876,6 +2876,8 @@ int S3fsCurl::GetIAMCredentials()
         result = -EIO;
     }
     bodydata.Clear();
+    postdata = NULL;
+    b_postdata = NULL;
 
     return result;
 }
@@ -3562,6 +3564,10 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
         return -EINVAL;
     }
 
+    if(!CreateCurlHandle()){
+        return -EIO;
+    }
+
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
@@ -3584,9 +3590,6 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     postdata_remaining   = postContent.size(); // without null
     b_postdata_remaining = postdata_remaining;
 
-    if(!CreateCurlHandle()){
-        return -EIO;
-    }
     std::string resource;
     std::string turl;
     MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
@@ -3623,6 +3626,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     int result = RequestPerform();
     bodydata.Clear();
     postdata = NULL;
+    b_postdata = NULL;
 
     return result;
 }
