@@ -77,10 +77,10 @@ bool AdditionalHeader::Load(const char* file)
     std::string line;
     ADDHEAD *paddhead;
     while(getline(AH, line)){
-        if('#' == line[0]){
+        if(line.empty()){
             continue;
         }
-        if(line.empty()){
+        if('#' == line[0]){
             continue;
         }
         // load a line
