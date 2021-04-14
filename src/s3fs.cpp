@@ -2253,6 +2253,8 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     }
 
     if (needs_flush){
+        time_t now = time(NULL);
+        ent->SetMCtime(now, now, true);
         if(0 != (result = ent->RowFlush(path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             StatCache::getStatCacheData()->DelStat(path);
