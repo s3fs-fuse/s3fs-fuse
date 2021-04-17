@@ -55,6 +55,17 @@ template std::string str(unsigned long value);
 template std::string str(long long value);
 template std::string str(unsigned long long value);
 
+template<> std::string str(struct timespec value) {
+    std::ostringstream s;
+    s << value.tv_sec;
+    if(value.tv_nsec != 0){
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%09lld", static_cast<long long>(value.tv_nsec));
+        s << "." << buf;
+    }
+    return s.str();
+}
+
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------

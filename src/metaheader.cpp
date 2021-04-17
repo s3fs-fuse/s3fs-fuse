@@ -31,7 +31,7 @@
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
-static time_t cvt_string_to_time(const char *str)
+static struct timespec cvt_string_to_time(const char *str)
 {
     // [NOTE]
     // In rclone, there are cases where ns is set to x-amz-meta-mtime
@@ -40,63 +40,65 @@ static time_t cvt_string_to_time(const char *str)
     // correspond to this.
     //
     std::string strmtime;
+    long nsec = 0;
     if(str && '\0' != *str){
         strmtime = str;
         std::string::size_type pos = strmtime.find('.', 0);
         if(std::string::npos != pos){
+            nsec = cvt_strtoofft(strmtime.substr(pos + 1).c_str());
             strmtime.erase(pos);
         }
     }
-    return static_cast<time_t>(cvt_strtoofft(strmtime.c_str()));
+    return {cvt_strtoofft(strmtime.c_str()), nsec};
 }
 
-static time_t get_time(const headers_t& meta, const char *header)
+static struct timespec get_time(const headers_t& meta, const char *header)
 {
     headers_t::const_iterator iter;
     if(meta.end() == (iter = meta.find(header))){
-        return -1;
+        return {-1, 0};
     }
     return cvt_string_to_time((*iter).second.c_str());
 }
 
-time_t get_mtime(const headers_t& meta, bool overcheck)
+struct timespec get_mtime(const headers_t& meta, bool overcheck)
 {
-    time_t t = get_time(meta, "x-amz-meta-mtime");
-    if(0 < t){
+    struct timespec t = get_time(meta, "x-amz-meta-mtime");
+    if(0 < t.tv_sec){
         return t;
     }
     t = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
-    if(0 < t){
+    if(0 < t.tv_sec){
         return t;
     }
     if(overcheck){
-        return get_lastmodified(meta);
+        return {get_lastmodified(meta), 0};
     }
-    return -1;
+    return {-1, 0};
 }
 
-time_t get_ctime(const headers_t& meta, bool overcheck)
+struct timespec get_ctime(const headers_t& meta, bool overcheck)
 {
-    time_t t = get_time(meta, "x-amz-meta-ctime");
-    if(0 < t){
+    struct timespec t = get_time(meta, "x-amz-meta-ctime");
+    if(0 < t.tv_sec){
         return t;
     }
     if(overcheck){
-        return get_lastmodified(meta);
+        return {get_lastmodified(meta), 0};
     }
-    return -1;
+    return {-1, 0};
 }
 
-time_t get_atime(const headers_t& meta, bool overcheck)
+struct timespec get_atime(const headers_t& meta, bool overcheck)
 {
-    time_t t = get_time(meta, "x-amz-meta-atime");
-    if(0 < t){
+    struct timespec t = get_time(meta, "x-amz-meta-atime");
+    if(0 < t.tv_sec){
         return t;
     }
     if(overcheck){
-        return get_lastmodified(meta);
+        return {get_lastmodified(meta), 0};
     }
-    return -1;
+    return {-1, 0};
 }
 
 off_t get_size(const char *s)

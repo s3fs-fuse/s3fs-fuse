@@ -96,8 +96,10 @@ ino_t FdEntity::GetInode(int fd)
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
     fd(-1), pfile(NULL), inode(0), size_orgmeta(0), mp_start(0), mp_size(0),
-    cachepath(SAFESTRPTR(cpath)), is_meta_pending(false), holding_mtime(-1)
+    cachepath(SAFESTRPTR(cpath)), is_meta_pending(false)
 {
+    holding_mtime.tv_sec = -1;
+    holding_mtime.tv_nsec = 0;
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
 #if S3FS_PTHREAD_ERRORCHECK
@@ -526,7 +528,8 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
 
     // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
     if(-1 != time){
-        if(0 != SetMCtime(time, time, /*lock_already_held=*/ true)){
+        struct timespec ts = {time, 0};
+        if(0 != SetMCtime(ts, ts, /*lock_already_held=*/ true)){
             S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
             fclose(pfile);
             pfile = NULL;
@@ -644,26 +647,26 @@ bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
     return true;
 }
 
-int FdEntity::SetCtime(time_t time, bool lock_already_held)
+int FdEntity::SetCtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time));
+    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time.tv_sec));
 
-    if(-1 == time){
+    if(-1 == time.tv_sec){
         return 0;
     }
     orgmeta["x-amz-meta-ctime"] = str(time);
     return 0;
 }
 
-int FdEntity::SetAtime(time_t time, bool lock_already_held)
+int FdEntity::SetAtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time));
+    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time.tv_sec));
 
-    if(-1 == time){
+    if(-1 == time.tv_sec){
         return 0;
     }
     orgmeta["x-amz-meta-atime"] = str(time);
@@ -673,22 +676,22 @@ int FdEntity::SetAtime(time_t time, bool lock_already_held)
 // [NOTE]
 // This method updates mtime as well as ctime.
 //
-int FdEntity::SetMCtime(time_t mtime, time_t ctime, bool lock_already_held)
+int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), fd, static_cast<long long>(mtime), static_cast<long long>(ctime));
+    S3FS_PRN_INFO3("[path=%s][fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), fd, static_cast<long long>(mtime.tv_sec), static_cast<long long>(ctime.tv_sec));
 
-    if(mtime < 0 || ctime < 0){
+    if(mtime.tv_sec < 0 || ctime.tv_sec < 0){
         return 0;
     }
 
     if(-1 != fd){
         struct timeval tv[2];
-        tv[0].tv_sec = mtime;
-        tv[0].tv_usec= 0L;
-        tv[1].tv_sec = ctime;
-        tv[1].tv_usec= 0L;
+        tv[0].tv_sec = mtime.tv_sec;
+        tv[0].tv_usec = mtime.tv_nsec / 1000;
+        tv[1].tv_sec = ctime.tv_sec;
+        tv[1].tv_usec = ctime.tv_nsec / 1000;
         if(-1 == futimes(fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
             return -errno;
@@ -696,8 +699,8 @@ int FdEntity::SetMCtime(time_t mtime, time_t ctime, bool lock_already_held)
     }else if(!cachepath.empty()){
         // not opened file yet.
         struct utimbuf n_time;
-        n_time.modtime = mtime;
-        n_time.actime  = ctime;
+        n_time.modtime = mtime.tv_sec;
+        n_time.actime  = ctime.tv_sec;
         if(-1 == utime(cachepath.c_str(), &n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return -errno;
@@ -735,7 +738,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 {
     AutoLock auto_lock(&fdent_lock);
 
-    if(0 <= holding_mtime){
+    if(0 <= holding_mtime.tv_sec){
         // [NOTE]
         // This conditional statement is very special.
         // If you copy a file with "cp -p" etc., utimens or chown will be
@@ -760,11 +763,11 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
     return true;
 }
 
-bool FdEntity::SetHoldingMtime(time_t mtime, bool lock_already_held)
+bool FdEntity::SetHoldingMtime(struct timespec mtime, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    if(mtime < 0){
+    if(mtime.tv_sec < 0){
         return false;
     }
     holding_mtime = mtime;
@@ -775,7 +778,7 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    if(holding_mtime < 0){
+    if(holding_mtime.tv_sec < 0){
         return false;
     }
     struct stat st;
@@ -784,10 +787,10 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
     }
     if(-1 != fd){
         struct timeval tv[2];
-        tv[0].tv_sec = holding_mtime;
-        tv[0].tv_usec= 0L;
+        tv[0].tv_sec = holding_mtime.tv_sec;
+        tv[0].tv_usec = holding_mtime.tv_nsec / 1000;
         tv[1].tv_sec = st.st_ctime;
-        tv[1].tv_usec= 0L;
+        tv[1].tv_usec = 0;
         if(-1 == futimes(fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
             return false;
@@ -795,14 +798,15 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
     }else if(!cachepath.empty()){
         // not opened file yet.
         struct utimbuf n_time;
-        n_time.modtime = holding_mtime;
+        n_time.modtime = holding_mtime.tv_sec;
         n_time.actime  = st.st_ctime;
         if(-1 == utime(cachepath.c_str(), &n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return false;
         }
     }
-    holding_mtime = -1;
+    holding_mtime.tv_sec = -1;
+    holding_mtime.tv_nsec = 0;
 
     return true;
 }
@@ -1570,13 +1574,13 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     orgmeta.erase("x-amz-copy-source");
 
     // update ctime/mtime/atime
-    time_t mtime = get_mtime(updatemeta, false);      // not overcheck
-    time_t ctime = get_ctime(updatemeta, false);      // not overcheck
-    time_t atime = get_atime(updatemeta, false);      // not overcheck
-    if(0 <= mtime){
-        SetMCtime(mtime, (ctime < 0 ? mtime : ctime), true);
+    struct timespec mtime = get_mtime(updatemeta, false);      // not overcheck
+    struct timespec ctime = get_ctime(updatemeta, false);      // not overcheck
+    struct timespec atime = get_atime(updatemeta, false);      // not overcheck
+    if(0 <= mtime.tv_sec){
+        SetMCtime(mtime, (ctime.tv_sec < 0 ? mtime : ctime), true);
     }
-    if(0 <= atime){
+    if(0 <= atime.tv_sec){
         SetAtime(atime, true);
     }
     is_meta_pending |= !upload_id.empty();

@@ -1245,17 +1245,20 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 ent = autoent.Open(from, &meta, buf.st_size, -1, false, true);
             }
             if(ent){
-                time_t mtime = get_mtime(meta);
-                time_t ctime = get_ctime(meta);
-                time_t atime = get_atime(meta);
-                if(mtime < 0){
-                    mtime = 0L;
+                struct timespec mtime = get_mtime(meta);
+                struct timespec ctime = get_ctime(meta);
+                struct timespec atime = get_atime(meta);
+                if(mtime.tv_sec < 0){
+                    mtime.tv_sec = 0L;
+                    mtime.tv_nsec = 0L;
                 }
-                if(ctime < 0){
-                    ctime = 0L;
+                if(ctime.tv_sec < 0){
+                    ctime.tv_sec = 0L;
+                    ctime.tv_nsec = 0L;
                 }
-                if(atime < 0){
-                    atime = 0L;
+                if(atime.tv_sec < 0){
+                    atime.tv_sec = 0L;
+                    atime.tv_nsec = 0L;
                 }
                 ent->SetMCtime(mtime, ctime);
                 ent->SetAtime(atime);
@@ -1311,7 +1314,8 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
 
         // update ctime
         if(update_ctime){
-            ent->SetCtime(time(NULL));
+            struct timespec ts = {time(NULL), 0};
+            ent->SetCtime(ts);
         }
 
         // upload
@@ -1737,7 +1741,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
             return result;
         }
 
-        ent->SetCtime(time(NULL));
+        struct timespec ts = {time(NULL), 0};
+        ent->SetCtime(ts);
 
         // Change file mode
         ent->SetMode(mode);
@@ -1917,7 +1922,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
             return result;
         }
 
-        ent->SetCtime(time(NULL));
+        struct timespec ts = {time(NULL), 0};
+        ent->SetCtime(ts);
 
         // Change owner
         ent->SetUId(uid);
@@ -1988,9 +1994,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         }
     }else{
         headers_t updatemeta;
-        updatemeta["x-amz-meta-mtime"]         = str(ts[1].tv_sec);
-        updatemeta["x-amz-meta-ctime"]         = str(ts[0].tv_sec);
-        updatemeta["x-amz-meta-atime"]         = str(ts[0].tv_sec);
+        updatemeta["x-amz-meta-mtime"]         = str(ts[1]);
+        updatemeta["x-amz-meta-ctime"]         = str(ts[0]);
+        updatemeta["x-amz-meta-atime"]         = str(ts[0]);
         updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -2033,7 +2039,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             StatCache::getStatCacheData()->DelStat(nowcache);
 
             if(keep_mtime){
-                ent->SetHoldingMtime(ts[1].tv_sec);     // ts[1].tv_sec is mtime
+                ent->SetHoldingMtime(ts[1]);     // ts[1].tv_sec is mtime
             }
         }
     }
@@ -2105,13 +2111,13 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         }
 
         // set mtime/ctime
-        if(0 != (result = ent->SetMCtime(ts[1].tv_sec, ts[0].tv_sec))){
+        if(0 != (result = ent->SetMCtime(ts[1], ts[0]))){
             S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
 
         // set atime
-        if(0 != (result = ent->SetAtime(ts[0].tv_sec))){
+        if(0 != (result = ent->SetAtime(ts[0]))){
             S3FS_PRN_ERR("could not set atime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2254,7 +2260,8 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
     if (needs_flush){
         time_t now = time(NULL);
-        ent->SetMCtime(now, now, true);
+        struct timespec ts = {now, 0};
+        ent->SetMCtime(ts, ts, true);
         if(0 != (result = ent->RowFlush(path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             StatCache::getStatCacheData()->DelStat(path);
