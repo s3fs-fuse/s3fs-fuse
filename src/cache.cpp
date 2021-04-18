@@ -770,21 +770,42 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
     pst->st_blksize = 4096;
 
     // mtime
-    pst->st_mtime = get_mtime(meta);
+    struct timespec mtime = get_mtime(meta);
     if(pst->st_mtime < 0){
         pst->st_mtime = 0L;
+    }else{
+#if defined(__APPLE__)
+        pst->st_mtime = mtime.tv_sec;
+#else
+        pst->st_mtim.tv_sec = mtime.tv_sec;
+        pst->st_mtim.tv_nsec = mtime.tv_nsec;
+#endif
     }
 
     // ctime
-    pst->st_ctime = get_ctime(meta);
+    struct timespec ctime = get_ctime(meta);
     if(pst->st_ctime < 0){
         pst->st_ctime = 0L;
+    }else{
+#if defined(__APPLE__)
+        pst->st_ctime = ctime.tv_sec;
+#else
+        pst->st_ctim.tv_sec = ctime.tv_sec;
+        pst->st_ctim.tv_nsec = ctime.tv_nsec;
+#endif
     }
 
     // atime
-    pst->st_atime = get_atime(meta);
+    struct timespec atime = get_atime(meta);
     if(pst->st_atime < 0){
         pst->st_atime = 0L;
+    }else{
+#if defined(__APPLE__)
+        pst->st_atime = atime.tv_sec;
+#else
+        pst->st_atim.tv_sec = atime.tv_sec;
+        pst->st_atim.tv_nsec = atime.tv_nsec;
+#endif
     }
 
     // size
