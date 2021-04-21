@@ -337,7 +337,7 @@ static const char help_string[] =
     "      In this mode, the AWSAccessKey and AWSSecretKey will be used as\n"
     "      IBM's Service-Instance-ID and APIKey, respectively.\n"
     "\n"
-    "   ibm_iam_endpoint (default is https://iam.bluemix.net)\n"
+    "   ibm_iam_endpoint (default is https://iam.cloud.ibm.com)\n"
     "      - sets the URL to use for IBM IAM authentication.\n"
     "\n"
     "   use_xattr (default is not handling the extended attribute)\n"
