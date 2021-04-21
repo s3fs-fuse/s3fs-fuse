@@ -4378,7 +4378,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(0 == strcmp(arg, "ibm_iam_auth")){
             S3fsCurl::SetIsIBMIAMAuth(true);
-            S3fsCurl::SetIAMCredentialsURL("https://iam.bluemix.net/oidc/token");
+            S3fsCurl::SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
             S3fsCurl::SetIAMTokenField("\"access_token\"");
             S3fsCurl::SetIAMExpiryField("\"expiration\"");
             S3fsCurl::SetIAMFieldCount(2);
@@ -4398,7 +4398,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                  S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
                  return -1;
             }
-            endpoint_url = std::string(iam_endpoint) + "/oidc/token";
+            endpoint_url = std::string(iam_endpoint) + "/identity/token";
             S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
             return 0;
         }
