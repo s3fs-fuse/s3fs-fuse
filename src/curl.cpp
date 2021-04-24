@@ -1259,6 +1259,33 @@ S3fsCurl* S3fsCurl::MixMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     return pcurl;
 }
 
+int S3fsCurl::MapPutErrorResponse(int result)
+{
+    if(result != 0){
+        return result;
+    }
+    // PUT returns 200 status code with something error, thus
+    // we need to check body.
+    //
+    // example error body:
+    //     <?xml version="1.0" encoding="UTF-8"?>
+    //     <Error>
+    //       <Code>AccessDenied</Code>
+    //       <Message>Access Denied</Message>
+    //       <RequestId>E4CA6F6767D6685C</RequestId>
+    //       <HostId>BHzLOATeDuvN8Es1wI8IcERq4kl4dc2A9tOB8Yqr39Ys6fl7N4EJ8sjGiVvu6wLP</HostId>
+    //     </Error>
+    //
+    const char* pstrbody = bodydata.str();
+    if(!pstrbody || NULL != strcasestr(pstrbody, "<Error>")){
+        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or NULL). The request failed during copying the object in S3.");
+        S3FS_PRN_DBG("Put request Response Body : %s", (pstrbody ? pstrbody : "(null)"));
+        // TODO: parse more specific error from <Code>
+        result = -EIO;
+    }
+    return result;
+}
+
 int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd)
 {
     int            result;
@@ -3143,26 +3170,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     S3FS_PRN_INFO3("copying... [path=%s]", tpath);
 
     int result = RequestPerform();
-    if(0 == result){
-        // PUT returns 200 status code with something error, thus
-        // we need to check body.
-        //
-        // example error body:
-        //     <?xml version="1.0" encoding="UTF-8"?>
-        //     <Error>
-        //       <Code>AccessDenied</Code>
-        //       <Message>Access Denied</Message>
-        //       <RequestId>E4CA6F6767D6685C</RequestId>
-        //       <HostId>BHzLOATeDuvN8Es1wI8IcERq4kl4dc2A9tOB8Yqr39Ys6fl7N4EJ8sjGiVvu6wLP</HostId>
-        //     </Error>
-        //
-        const char* pstrbody = bodydata.str();
-        if(!pstrbody || NULL != strcasestr(pstrbody, "<Error>")){
-            S3FS_PRN_ERR("PutHeadRequest get 200 status response, but it included error body(or NULL). The request failed during copying the object in S3.");
-            S3FS_PRN_DBG("PutHeadRequest Response Body : %s", (pstrbody ? pstrbody : "(null)"));
-            result = -EIO;
-        }
-    }
+    result = MapPutErrorResponse(result);
     bodydata.Clear();
 
     return result;
@@ -3278,6 +3286,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     S3FS_PRN_INFO3("uploading... [path=%s][fd=%d][size=%lld]", tpath, fd, static_cast<long long int>(-1 != fd ? st.st_size : 0));
 
     int result = RequestPerform();
+    result = MapPutErrorResponse(result);
     bodydata.Clear();
     if(file){
         fclose(file);

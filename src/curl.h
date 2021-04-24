@@ -278,6 +278,7 @@ class S3fsCurl
         bool UploadMultipartPostComplete();
         bool CopyMultipartPostComplete();
         bool MixMultipartPostComplete();
+        int MapPutErrorResponse(int result);
 
     public:
         // class methods
