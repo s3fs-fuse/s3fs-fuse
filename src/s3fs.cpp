@@ -3459,6 +3459,24 @@ static bool check_region_error(const char* pbody, size_t len, std::string& expec
     return true;
 }
 
+static bool check_endpoint_error(const char* pbody, size_t len, std::string& expectendpoint)
+{
+    if(!pbody){
+        return false;
+    }
+
+    std::string code;
+    if(!simple_parse_xml(pbody, len, "Code", code) || code != "PermanentRedirect"){
+        return false;
+    }
+
+    if(!simple_parse_xml(pbody, len, "Endpoint", expectendpoint)){
+        return false;
+    }
+
+    return true;
+}
+
 static int s3fs_check_service()
 {
     S3FS_PRN_INFO("check services.");
@@ -3481,6 +3499,7 @@ static int s3fs_check_service()
             // check region error(for putting message or retrying)
             BodyData* body = s3fscurl.GetBodyData();
             std::string expectregion;
+            std::string expectendpoint;
             if(check_region_error(body->str(), body->size(), expectregion)){
                 // [NOTE]
                 // If endpoint is not specified(using us-east-1 region) and
@@ -3510,6 +3529,9 @@ static int s3fs_check_service()
                     res          = s3fscurl.CheckBucket();
                     responseCode = s3fscurl.GetLastResponseCode();
                 }
+            }else if(check_endpoint_error(body->str(), body->size(), expectendpoint)){
+                S3FS_PRN_ERR("S3 service returned PermanentRedirect with endpoint: %s", expectendpoint.c_str());
+                return EXIT_FAILURE;
             }
         }
 
