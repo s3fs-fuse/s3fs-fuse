@@ -1404,7 +1404,7 @@ function test_ensurespace_move_file() {
         return 1
     fi
     if [ ${MOVED_FILE_LENGTH} -ne ${BIG_FILE_LENGTH} ]; then
-        echo "Failed to move file with file length"
+        echo "Failed to move file with file length: ${MOVED_FILE_LENGTH} ${BIG_FILE_LENGTH}"
         return 1
     fi
 

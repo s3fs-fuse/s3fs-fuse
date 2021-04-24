@@ -94,6 +94,18 @@ class OssfsUnitTest(unittest.TestCase):
         self.assertEqual(len(data1), len(data2))
         self.assertEqual(data1, data2)
 
+    def test_truncate_open_file(self):
+        filename = "%s" % (self.random_string(10))
+        fd = os.open(filename, os.O_CREAT|os.O_RDWR)
+        try:
+            os.write(fd, 'a' * 42)
+            self.assertEqual(os.fstat(fd).st_size, 42)
+            os.ftruncate(fd, 100)
+            self.assertEqual(os.fstat(fd).st_size, 100)
+        finally:
+            os.close(fd)
+        self.assertEqual(100, os.stat(filename).st_size)
+
 
 if __name__ == '__main__':
     unittest.main()
