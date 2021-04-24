@@ -474,8 +474,11 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
         ent = (*iter).second;
         ent->Dup();
         if(ent->IsModified()){
-            // If the file is being modified, it will not be resized.
-            size = -1;
+            // If the file is being modified and it's size is larger than size parameter, it will not be resized.
+            off_t cur_size = 0;
+            if(ent->GetSize(cur_size) && size <= cur_size){
+                size = -1;
+            }
         }
         close = true;
 
