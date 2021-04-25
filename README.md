@@ -75,6 +75,9 @@ Many systems provide pre-built packages:
   brew install s3fs
   ```
 
+Note: Homebrew has deprecated osxfuse and s3fs may not install any more, see
+[#1618](https://github.com/s3fs-fuse/s3fs-fuse/issues/1618).
+
 Otherwise consult the [compilation instructions](COMPILATION.md).
 
 ## Examples
