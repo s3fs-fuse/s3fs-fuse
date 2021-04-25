@@ -1614,19 +1614,26 @@ int FdEntity::UploadPendingMeta()
 // ex. OSX
 //
 #ifndef HAVE_FALLOCATE
-// We need the symbols defined in fallocate, so we define them here.
-// The definitions are copied from linux/falloc.h, but if HAVE_FALLOCATE is undefined,
-// these values can be anything.
-//
-#define FALLOC_FL_PUNCH_HOLE     0x02 /* de-allocates range */
-#define FALLOC_FL_KEEP_SIZE      0x01
-
 static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 {
     errno = ENOSYS;     // This is a bad idea, but the caller can handle it simply.
     return -1;
 }
 #endif  // HAVE_FALLOCATE
+
+// [NOTE]
+// If HAVE_FALLOCATE is undefined, or versions prior to 2.6.38(fallocate function exists),
+// following flags are undefined. Then we need these symbols defined in fallocate, so we
+// define them here.
+// The definitions are copied from linux/falloc.h, but if HAVE_FALLOCATE is undefined,
+// these values can be anything.
+//
+#ifndef FALLOC_FL_PUNCH_HOLE
+#define FALLOC_FL_PUNCH_HOLE     0x02 /* de-allocates range */
+#endif
+#ifndef FALLOC_FL_KEEP_SIZE
+#define FALLOC_FL_KEEP_SIZE      0x01
+#endif
 
 // [NOTE]
 // This method punches an area(on cache file) that has no data at the time it is called.
