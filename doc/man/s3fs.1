@@ -366,7 +366,7 @@ If you specify a log file with this option, it will reopen the log file when s3f
 \fB\-o\fR dbglevel (default="crit")
 Set the debug message level. set value as crit (critical), err (error), warn (warning), info (information) to debug level. default debug level is critical.
 If s3fs run with "-d" option, the debug level is set information.
-When s3fs catch the signal SIGUSR2, the debug level is bumpup.
+When s3fs catch the signal SIGUSR2, the debug level is bump up.
 .TP
 \fB\-o\fR curldbg - put curl debug message
 Put the debug message from libcurl when this option is specified.
@@ -401,15 +401,28 @@ For example, "1Y6M10D12h30m30s".
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
+.SH LOCAL STORAGE CONSUMPTION
+.TP
+s3fs requires local caching for operation. You can enable a local cache with "\-o use_cache" or s3fs uses temporary files to cache pending requests to s3.
+.TP
+Apart from the requirements discussed below, it is recommended to keep enough cache resp. temporary storage to allow one copy each of all files open for reading and writing at any one time.
+.TP
+.SS Local cache with \[dq]\-o use_cache\[dq]
+.TP
+s3fs automatically maintains a local cache of files. The cache folder is specified by the parameter of "\-o use_cache". It is only a local cache that can be deleted at any time. s3fs rebuilds it if necessary.
+.TP
+Whenever s3fs needs to read or write a file on S3, it first creates the file in the cache directory and operates on it.
+.TP
+The amount of local cache storage used can be indirectly controlled  with "\-o ensure_diskfree".
+.TP
+.SS Without local cache
+.TP
+Since s3fs always requires some storage space for operation, it creates temporary files to store incoming write requests until the required s3 request size is reached and the segment has been uploaded. After that, this data is truncated in the temporary file to free up storage space.
+.TP
+Per file you need at least twice the part size (default 5MB or "-o multipart_size") for writing multipart requests or space for the whole file if single requests are enabled ("\-o nomultipart").
 .SH NOTES
 .TP
 The maximum size of objects that s3fs can handle depends on Amazon S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
-.TP
-If enabled via the "use_cache" option, s3fs automatically maintains a local cache of files in the folder specified by use_cache. Whenever s3fs needs to read or write a file on S3, it first downloads the entire file locally to the folder specified by use_cache and operates on it. When fuse_release() is called, s3fs will re-upload the file to S3 if it has been changed. s3fs uses MD5 checksums to minimize downloads from S3.
-.TP
-The folder specified by use_cache is just a local cache. It can be deleted at any time. s3fs rebuilds it on demand.
-.TP
-Local file caching works by calculating and comparing MD5 checksums (ETag HTTP header).
 .TP
 s3fs leverages /etc/mime.types to "guess" the "correct" content-type based on file name extension. This means that you can copy a website to S3 and serve it up directly from S3 with correct content-types!
 .SH SEE ALSO
