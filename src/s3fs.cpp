@@ -2332,7 +2332,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
         if(0 != (flushres = ent->RowFlush(path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
-            return -EIO;
+            return flushres;
         }
         // Punch a hole in the file to recover disk space.
         if(!ent->PunchHole()){

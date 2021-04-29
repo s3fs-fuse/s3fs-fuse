@@ -335,7 +335,7 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wa
                 if(0 < refcnt){
                     refcnt--;
                 }
-                return -EIO;
+                return -errno;
             }
             // resize page list
             if(!pagelist.Resize(size, false, true)){      // Areas with increased size are modified
@@ -1426,7 +1426,7 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
 
         if(0 != result){
             S3FS_PRN_ERR("could not download. start(%lld), size(%zu), errno(%d)", static_cast<long long int>(start), size, result);
-            return -EIO;
+            return result;
         }
     }
 
@@ -1456,7 +1456,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
         // grow file size
         if(-1 == ftruncate(fd, start)){
             S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
-            return -EIO;
+            return -errno;
         }
         // add new area
         pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), PageList::PAGE_MODIFIED);
@@ -1540,7 +1540,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
             //
             if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, (mp_start + mp_size))){
                 S3FS_PRN_ERR("failed to truncate file(%d).", fd);
-                return -EIO;
+                return -errno;
             }
             mp_start += mp_size;
             mp_size   = 0;
