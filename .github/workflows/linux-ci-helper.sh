@@ -58,7 +58,15 @@ CONFIGURE_OPTIONS="CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/u
 #-----------------------------------------------------------
 # OS dependent variables
 #-----------------------------------------------------------
-if [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
+if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.04" ]; then
+    PACKAGE_MANAGER_BIN="apt-get"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
+    INSTALL_CPPCHECK_OPTIONS=""
+    INSTALL_JDK_PACKAGES="openjdk-8-jdk"
+
+elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
