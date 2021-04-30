@@ -118,6 +118,12 @@ class FdEntity
 
         bool ReserveDiskSpace(off_t size);
         bool PunchHole(off_t start = 0, size_t size = 0);
+
+        // Indicate that a new file's is dirty.  This ensures that both metadata and data are synced during flush.
+        void MarkDirtyNewFile() {
+            pagelist.SetPageLoadedStatus(0, 1, PageList::PAGE_LOAD_MODIFIED);
+            is_meta_pending = true;
+        }
 };
 
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*

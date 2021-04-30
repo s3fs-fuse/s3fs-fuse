@@ -970,20 +970,27 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     }else if(0 != result){
         return result;
     }
-    result = create_file_object(path, mode, pcxt->uid, pcxt->gid);
-    StatCache::getStatCacheData()->DelStat(path);
-    if(result != 0){
-        return result;
+
+    time_t now = time(NULL);
+    headers_t meta;
+    meta["Content-Length"] = "0";
+    meta["x-amz-meta-uid"]   = str(pcxt->uid);
+    meta["x-amz-meta-gid"]   = str(pcxt->gid);
+    meta["x-amz-meta-mode"]  = str(mode);
+    meta["x-amz-meta-atime"] = str(now);
+    meta["x-amz-meta-mtime"] = str(now);
+    meta["x-amz-meta-ctime"] = str(now);
+    if(!StatCache::getStatCacheData()->AddStat(path, meta)){
+        return -EIO;
     }
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    headers_t    meta;
-    get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
     if(NULL == (ent = autoent.Open(path, &meta, 0, -1, false, true))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
+    ent->MarkDirtyNewFile();
     autoent.Detach();       // KEEP fdentity open
     fi->fh = ent->GetFd();
 
@@ -2016,6 +2023,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
+                ent->SetHoldingMtime(ts[1]);     // ts[1] is mtime
 
             }else{
                 S3FS_PRN_INFO("meta is not pending, but need to keep current mtime.");
