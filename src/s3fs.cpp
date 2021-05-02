@@ -2699,7 +2699,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
     while(truncated){
         // append parameters to query in alphabetical order
-        std::string each_query = "";
+        std::string each_query;
         if(!next_continuation_token.empty()){
             each_query += "continuation-token=" + urlEncode(next_continuation_token) + "&";
             next_continuation_token = "";
