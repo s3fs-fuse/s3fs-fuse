@@ -192,9 +192,11 @@ std::string get_canonical_headers(const struct curl_slist* list)
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
             }
-            strhead       = strkey + ":" + strval;
+            strhead = strkey;
+            strhead += ":";
+            strhead += strval;
         }else{
-            strhead       = trim(lower(strhead));
+            strhead = trim(lower(strhead));
         }
         canonical_headers += strhead;
         canonical_headers += "\n";
@@ -221,9 +223,11 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
             }
-            strhead       = strkey + ":" + strval;
+            strhead = strkey;
+            strhead += ":";
+            strhead += strval;
         }else{
-            strhead       = trim(lower(strhead));
+            strhead = trim(lower(strhead));
         }
         if(only_amz && strhead.substr(0, 5) != "x-amz"){
             continue;

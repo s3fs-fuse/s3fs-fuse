@@ -471,7 +471,7 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
 
 // Base location for transform.  The range 0xE000 - 0xF8ff
 // is a private range, se use the start of this range.
-static unsigned int escape_base = 0xe000;
+static const unsigned int escape_base = 0xe000;
 
 // encode bytes into wobbly utf8.  
 // 'result' can be null. returns true if transform was needed.
