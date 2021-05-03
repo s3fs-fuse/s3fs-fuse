@@ -41,6 +41,7 @@ S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism
 #endif
     if (0 != (result = pthread_mutex_init(&completed_tids_lock, &attr))) {
         S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", result);
+        abort();
     }
 }
 

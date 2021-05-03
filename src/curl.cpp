@@ -64,8 +64,8 @@ static const std::string IAMCRED_ROLEARN            = "RoleArn";
 // If the mime.types file is not found, s3fs will exit with an
 // error.
 //
-static const char* DEFAULT_MIME_FILE                = "/etc/mime.types";
-static const char* SPECIAL_DARWIN_MIME_FILE         = "/etc/apache2/mime.types";
+static const char DEFAULT_MIME_FILE[]               = "/etc/mime.types";
+static const char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.types";
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -1910,7 +1910,7 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
-    sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL)
+    sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL), curlCode(CURLE_OK)
 {
 }
 

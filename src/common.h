@@ -29,8 +29,9 @@
 // Global variables
 //-------------------------------------------------------------------
 // TODO: namespace these
-extern int64_t        FIVE_GB;
-extern off_t          MIN_MULTIPART_SIZE;
+static const int64_t  FIVE_GB            = 5LL * 1024LL * 1024LL * 1024LL;
+static const off_t    MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
+
 extern bool           foreground;
 extern bool           nomultipart;
 extern bool           pathrequeststyle;

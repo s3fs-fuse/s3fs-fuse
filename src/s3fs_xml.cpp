@@ -29,7 +29,7 @@
 //-------------------------------------------------------------------
 // Variables
 //-------------------------------------------------------------------
-static const char* c_strErrorObjectName = "FILE or SUBDIR in DIR";
+static const char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
 
 //-------------------------------------------------------------------
 // Functions
