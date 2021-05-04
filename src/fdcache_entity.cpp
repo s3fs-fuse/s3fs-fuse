@@ -1489,6 +1489,10 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
                 S3FS_PRN_WARN("Not enough local storage to cache write request: [path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
                 return -ENOSPC;   // No space left on device
             }
+            if ((start + static_cast<off_t>(size)) <= S3fsCurl::GetMultipartSize()) {
+                S3FS_PRN_WARN("Not enough local storage to cache write request till multipart upload can start: [path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+                return -ENOSPC;   // No space left on device
+            }
             if(0 != (result = NoCachePreMultipartPost())){
                 S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                 return static_cast<ssize_t>(result);
