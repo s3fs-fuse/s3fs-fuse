@@ -50,10 +50,12 @@ if [ `uname` = "Darwin" ]; then
     export STDBUF_BIN="gstdbuf"
     export TRUNCATE_BIN="gtruncate"
     export SED_BIN="gsed"
+    export BASE64_BIN="gbase64"
 else
     export STDBUF_BIN="stdbuf"
     export TRUNCATE_BIN="truncate"
     export SED_BIN="sed"
+    export BASE64_BIN="base64"
 fi
 export SED_BUFFER_FLAG="--unbuffered"
 
@@ -343,8 +345,10 @@ function make_random_string() {
     else
         END_POS=8
     fi
-    RANDOM_STR=`cat /dev/urandom | base64 | sed 's#[/|+]##g' | head -1 | cut -c 1-${END_POS}`
-    echo "${RANDOM_STR}"
+
+    ${BASE64_BIN} --wrap=0 < /dev/urandom | tr -d /+ | head -c ${END_POS}
+
+    return 0
 }
 
 #

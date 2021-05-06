@@ -1460,14 +1460,7 @@ function add_all_tests {
     add_tests test_external_modification
     add_tests test_read_external_object
     add_tests test_update_metadata_external_small_object
-    if ! uname | grep -q Darwin; then
-        # [NOTE]
-        # This test is very time consuming on OSX and will not run.
-        # And this test should be no different between OSX and
-        # other OSs. so skip this test on OSX.
-        #
-        add_tests test_update_metadata_external_large_object
-    fi
+    add_tests test_update_metadata_external_large_object
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
