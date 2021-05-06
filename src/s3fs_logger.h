@@ -53,10 +53,11 @@ class S3fsLog
         };
 
     protected:
-        static const int      NEST_MAX = 4;
-        static const char*    nest_spaces[NEST_MAX];
-        static const char*    LOGFILEENV;
-        static const char*    MSGTIMESTAMP;
+        static const int         NEST_MAX = 4;
+        static const char* const nest_spaces[NEST_MAX];
+        static const char        LOGFILEENV[];
+        static const char        MSGTIMESTAMP[];
+
         static S3fsLog*       pSingleton;
         static s3fs_log_level debug_level;
         static FILE*          logfp;

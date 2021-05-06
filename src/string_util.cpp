@@ -379,7 +379,7 @@ std::string s3fs_hex(const unsigned char* input, size_t length, bool lower)
 
 char* s3fs_base64(const unsigned char* input, size_t length)
 {
-    static const char* base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    static const char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     char* result;
 
     if(!input || 0 == length){

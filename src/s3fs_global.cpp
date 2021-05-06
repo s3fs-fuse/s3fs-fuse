@@ -24,9 +24,6 @@
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
-int64_t FIVE_GB                   = 5LL * 1024LL * 1024LL * 1024LL;
-off_t MIN_MULTIPART_SIZE          = 5 * 1024 * 1024;
-
 bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;

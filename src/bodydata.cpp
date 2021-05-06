@@ -106,7 +106,7 @@ bool BodyData::Append(void* ptr, size_t bytes)
 const char* BodyData::str() const
 {
     if(!text){
-        static const char* strnull = "";
+        static const char strnull[] = "";
         return strnull;
     }
     return text;
