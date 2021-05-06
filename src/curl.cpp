@@ -2784,11 +2784,9 @@ int S3fsCurl::GetIAMv2ApiToken()
     responseHeaders.clear();
     bodydata.Clear();
 
-    // maximum allowed value is 21600, so 6 bytes for the C string
-    char ttlstr[6];
-    snprintf(ttlstr, sizeof(ttlstr), "%d", S3fsCurl::IAMv2_token_ttl);
+    std::string ttlstr = str(S3fsCurl::IAMv2_token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
-                                            ttlstr);
+                                            ttlstr.c_str());
     curl_easy_setopt(hCurl, CURLOPT_PUT, true);
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);

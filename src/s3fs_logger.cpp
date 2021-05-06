@@ -19,6 +19,8 @@
  */
 
 #include <cstdlib>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "common.h"
@@ -35,7 +37,6 @@ S3fsLog*                S3fsLog::pSingleton       = NULL;
 S3fsLog::s3fs_log_level S3fsLog::debug_level      = S3fsLog::LEVEL_CRIT;
 FILE*                   S3fsLog::logfp            = NULL;
 std::string*            S3fsLog::plogfile         = NULL;
-char                    S3fsLog::current_time[64] = "";
 bool                    S3fsLog::time_stamp       = true;
 
 //-------------------------------------------------------------------
@@ -44,6 +45,26 @@ bool                    S3fsLog::time_stamp       = true;
 bool S3fsLog::IsS3fsLogLevel(s3fs_log_level level)
 {
     return (level == (S3fsLog::debug_level & level));
+}
+
+std::string S3fsLog::GetCurrentTime()
+{
+    std::ostringstream current_time;
+    if(time_stamp){
+        struct timeval  now;
+        struct timespec tsnow;
+        struct tm res;
+        char   tmp[32];
+        if(-1 == clock_gettime(S3FS_CLOCK_MONOTONIC, &tsnow)){
+            now.tv_sec  = tsnow.tv_sec;
+            now.tv_usec = (tsnow.tv_nsec / 1000);
+        }else{
+            gettimeofday(&now, NULL);
+        }
+        strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
+        current_time << tmp << "." << std::setfill('0') << std::setw(3) << (now.tv_usec / 1000) << "Z ";
+    }
+    return current_time.str();
 }
 
 bool S3fsLog::SetLogfile(const char* pfile)

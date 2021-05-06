@@ -23,6 +23,7 @@
 #include <cstring>
 #include <cerrno>
 #include <climits>
+#include <iomanip>
 
 #include <stdexcept>
 #include <sstream>
@@ -59,9 +60,7 @@ template<> std::string str(struct timespec value) {
     std::ostringstream s;
     s << value.tv_sec;
     if(value.tv_nsec != 0){
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%09lld", static_cast<long long>(value.tv_nsec));
-        s << "." << buf;
+        s << "." << std::setfill('0') << std::setw(9) << value.tv_nsec;
     }
     return s.str();
 }
