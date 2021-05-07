@@ -385,7 +385,6 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         strpath += "/";
     }
     if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
-        StatCache::getStatCacheData()->ChangeNoTruncateFlag(strpath, add_no_truncate_cache);
         return 0;
     }
     if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
@@ -980,7 +979,16 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     meta["x-amz-meta-atime"] = str(now);
     meta["x-amz-meta-mtime"] = str(now);
     meta["x-amz-meta-ctime"] = str(now);
-    if(!StatCache::getStatCacheData()->AddStat(path, meta)){
+
+    // [NOTE] set no_truncate flag
+    // At this point, the file has not been created(uploaded) and
+    // the data is only present in the Stats cache.
+    // The Stats cache should not be deleted automatically by
+    // timeout. If this stats is deleted, s3fs will try to get it
+    // from the server with a Head request and will get an
+    // unexpected error because the result object does not exist.
+    //
+    if(!StatCache::getStatCacheData()->AddStat(path, meta, false, true)){
         return -EIO;
     }
 
@@ -1066,9 +1074,9 @@ static int s3fs_unlink(const char* _path)
     }
     S3fsCurl s3fscurl;
     result = s3fscurl.DeleteRequest(path);
-    FdManager::DeleteCacheFile(path);
     StatCache::getStatCacheData()->DelStat(path);
     StatCache::getStatCacheData()->DelSymlink(path);
+    FdManager::DeleteCacheFile(path);
     S3FS_MALLOCTRIM(0);
 
     return result;
@@ -1671,6 +1679,9 @@ static int s3fs_chmod(const char* _path, mode_t mode)
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
+
+                // If there is data in the Stats cache, update the Stats cache.
+                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
             }
         }
         if(need_put_header){
@@ -1845,6 +1856,9 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
+
+                // If there is data in the Stats cache, update the Stats cache.
+                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
             }
         }
         if(need_put_header){
@@ -2025,6 +2039,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
                 ent->SetHoldingMtime(ts[1]);     // ts[1] is mtime
+
+                // If there is data in the Stats cache, update the Stats cache.
+                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
 
             }else{
                 S3FS_PRN_INFO("meta is not pending, but need to keep current mtime.");
@@ -2223,15 +2240,20 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         return -EACCES;
     }
 
-    // clear stat for reading fresh stat.
-    // (if object stat is changed, we refresh it. then s3fs gets always
-    // stat when s3fs open the object).
+    // [NOTE]
+    // Delete the Stats cache only if the file is not open.
+    // If the file is open, the stats cache will not be deleted as
+    // there are cases where the object does not exist on the server
+    // and only the Stats cache exists.
+    //
     if(StatCache::getStatCacheData()->HasStat(path)){
-        // flush any dirty data so that subsequent stat gets correct size
-        if((result = s3fs_flush(_path, fi)) != 0){
-            S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
+        AutoFdEntity autoent_local;
+        if(NULL == autoent_local.ExistOpen(path, -1, true)){
+            if((result = s3fs_flush(_path, fi)) != 0){
+                S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
+            }
+            StatCache::getStatCacheData()->DelStat(path);
         }
-        StatCache::getStatCacheData()->DelStat(path);
     }
 
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
@@ -2390,6 +2412,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
         ent->UpdateMtime(true);         // clear the flag not to update mtime.
         ent->UpdateCtime();
         result = ent->Flush(false);
+        StatCache::getStatCacheData()->DelStat(path);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -3048,6 +3071,9 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             // then the meta is pending and accumulated to be put after the upload is complete.
             S3FS_PRN_INFO("meta pending until upload is complete");
             need_put_header = false;
+
+            // If there is data in the Stats cache, update the Stats cache.
+            StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
         }
     }
     if(need_put_header){
@@ -3318,6 +3344,9 @@ static int s3fs_removexattr(const char* path, const char* name)
             // then the meta is pending and accumulated to be put after the upload is complete.
             S3FS_PRN_INFO("meta pending until upload is complete");
             need_put_header = false;
+
+            // If there is data in the Stats cache, update the Stats cache.
+            StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
         }
     }
     if(need_put_header){

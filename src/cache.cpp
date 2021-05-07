@@ -100,7 +100,9 @@ inline bool IsExpireStatCacheTime(const struct timespec& ts, const time_t& expir
 {
     struct timespec nowts;
     SetStatCacheTime(nowts);
-    return ((ts.tv_sec + expire) < nowts.tv_sec);
+    nowts.tv_sec -= expire;
+
+    return (0 < CompareStatCacheTime(nowts, ts));
 }
 
 //
@@ -258,7 +260,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
 
     if(iter != stat_cache.end() && (*iter).second){
         stat_cache_entry* ent = (*iter).second;
-        if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
+        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
             if(ent->noobjcache){
                 if(!IsCacheNoObject){
                     // need to delete this cache.
@@ -343,7 +345,8 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     }
 
     if(iter != stat_cache.end() && (*iter).second) {
-        if(!IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
+        stat_cache_entry* ent = (*iter).second;
+        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
             if((*iter).second->noobjcache){
                 // noobjcache = true means no object.
                 SetStatCacheTime((*iter).second->cache_date);
@@ -431,6 +434,47 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
             DelSymlink(key.c_str(), true);
         }
     }
+    return true;
+}
+
+// [NOTE]
+// Updates only meta data if cached data exists.
+// And when these are updated, it also updates the cache time.
+//
+bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
+{
+    if(CacheSize < 1){
+        return true;
+    }
+    S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
+
+    AutoLock lock(&StatCache::stat_cache_lock);
+    stat_cache_t::iterator iter = stat_cache.find(key);
+    if(stat_cache.end() == iter || !(iter->second)){
+        return true;
+    }
+    stat_cache_entry* ent = iter->second;
+
+    // update only meta keys
+    for(headers_t::iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
+        std::string tag   = lower(metaiter->first);
+        std::string value = metaiter->second;
+        if(tag == "content-type"){
+            ent->meta[metaiter->first] = value;
+        }else if(tag == "content-length"){
+            ent->meta[metaiter->first] = value;
+        }else if(tag == "etag"){
+            ent->meta[metaiter->first] = value;
+        }else if(tag == "last-modified"){
+            ent->meta[metaiter->first] = value;
+        }else if(is_prefix(tag.c_str(), "x-amz")){
+            ent->meta[tag] = value;      // key is lower case for "x-amz"
+        }
+    }
+
+    // Update time.
+    SetStatCacheTime(ent->cache_date);
+
     return true;
 }
 
