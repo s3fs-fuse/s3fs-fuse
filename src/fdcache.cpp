@@ -909,7 +909,7 @@ bool FdManager::CheckAllCache()
     }
 
     // print head message
-    S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD, S3fsLog::GetCurrentTime());
+    S3FS_PRN_CACHE(fp, CACHEDBG_FMT_HEAD, S3fsLog::GetCurrentTime().c_str());
 
     // Loop in directory of cache file's stats
     std::string top_path  = CacheFileStat::GetCacheFileStatTopDir();
