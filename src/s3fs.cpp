@@ -122,7 +122,7 @@ static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
+static int readdir_multi_head(const char* path, const s3obj_list_t& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
@@ -339,6 +339,15 @@ static int remove_old_type_dir(const std::string& path, dirtype type)
     return 0;
 }
 
+int get_object_attribute_fill_dir(void *buf, const char *name, const struct stat *stbuf, off_t off)
+{
+    if(stbuf != NULL){
+        struct stat* pstat = reinterpret_cast<struct stat*>(buf);
+        *pstat = *stbuf;
+    }
+    return 0;
+}
+
 //
 // Get object attributes with stat cache.
 // This function is base for s3fs_getattr().
@@ -393,78 +402,24 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         return -ENOENT;
     }
 
-    // At first, check path
-    strpath     = path;
-    result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-    s3fscurl.DestroyCurlHandle();
-
-    // if not found target path object, do over checking
-    if(-EPERM == result){
-        // [NOTE]
-        // In case of a permission error, it exists in directory
-        // file list but inaccessible. So there is a problem that
-        // it will send a HEAD request every time, because it is
-        // not registered in the Stats cache.
-        // Therefore, even if the file has a permission error, it
-        // should be registered in the Stats cache. However, if
-        // the response without modifiying is registered in the
-        // cache, the file permission will be 0644(umask dependent)
-        // because the meta header does not exist.
-        // Thus, set the mode of 0000 here in the meta header so
-        // that s3fs can print a permission error when the file
-        // is actually accessed.
-        // It is better not to set meta header other than mode,
-        // so do not do it.
-        //
-        (*pheader)["x-amz-meta-mode"] = str(0);
-
-    }else if(0 != result){
-        if(overcheck){
-            // when support_compat_dir is disabled, strpath maybe have "_$folder$".
-            if('/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0)){
-                // now path is "object", do check "object/" for over checking
-                strpath    += "/";
-                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-                s3fscurl.DestroyCurlHandle();
-            }
-            if(support_compat_dir && 0 != result){
-                // now path is "object/", do check "object_$folder$" for over checking
-                strpath.erase(strpath.length() - 1);
-                strpath    += "_$folder$";
-                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-                s3fscurl.DestroyCurlHandle();
-
-              if(0 != result){
-                  // cut "_$folder$" for over checking "no dir object" after here
-                  if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-                      strpath.erase(Pos);
-                  }
-              }
-            }
-        }
-        if(support_compat_dir && 0 != result && std::string::npos == strpath.find("_$folder$", 0)){
-            // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
-            if('/' == strpath[strpath.length() - 1]){
-                strpath.erase(strpath.length() - 1);
-            }
-            if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-                // found "no dir object".
-                strpath  += "/";
-                *pisforce = true;
-                result    = 0;
-            }
-        }
+    s3obj_list_t headlist;
+    std::string parent;
+    std::string child;
+    size_t pos = strpath.rfind('/');
+    if(pos == std::string::npos){
+        parent = "/";
+        child = strpath;
     }else{
-        if(support_compat_dir && '/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
-            // check a case of that "object" does not have attribute and "object" is possible to be directory.
-            if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-                // found "no dir object".
-                strpath  += "/";
-                *pisforce = true;
-                result    = 0;
-            }
-        }
+        parent = strpath.substr(0, pos + 1);
+        child = strpath.substr(pos + 1);
     }
+    headlist.push_back(child);
+    headlist.push_back(child + "/");
+    if(support_compat_dir){
+        headlist.push_back(child + "_$folder$");
+    }
+    pstat->st_ino = -1;
+    result = readdir_multi_head(parent.c_str(), headlist, pstat, get_object_attribute_fill_dir);
 
     // [NOTE]
     // If the file is listed but not allowed access, put it in
@@ -477,10 +432,19 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         return result;
     }
 
-    // if path has "_$folder$", need to cut it.
-    if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-        strpath.erase(Pos);
-        strpath += "/";
+    // TODO: more robust way to check this?
+    if(pstat->st_ino == static_cast<ino_t>(-1)){
+        if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+            // found "no dir object".
+            *pisforce = true;
+            (*pheader)["x-amz-meta-mode"] = str(0750);
+            if(!StatCache::getStatCacheData()->AddStat(strpath, *pheader, /*forcedir=*/ true, add_no_truncate_cache)){
+                S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
+                return -ENOENT;
+            }
+        } else {
+            return -ENOENT;
+        }
     }
 
     // Set into cache
@@ -492,11 +456,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // (ex. getxattr() is called while writing to the opened file.)
     //
     if(add_no_truncate_cache || 0 != StatCache::getStatCacheData()->GetCacheSize()){
-        // add into stat cache
-        if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir, add_no_truncate_cache)){
-            S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
-            return -ENOENT;
-        }
+        // readdir_multi_head calls AddStat but check it again
         if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
             // There is not in cache.(why?) -> retry to convert.
             if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
@@ -511,6 +471,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             return -ENOENT;
         }
     }
+
     return 0;
 }
 
@@ -2538,29 +2499,23 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     return newcurl;
 }
 
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
+static int readdir_multi_head(const char* path, const s3obj_list_t& headlist, void* buf, fuse_fill_dir_t filler)
 {
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
-    s3obj_list_t  headlist;
     s3obj_list_t  fillerlist;
     int           result = 0;
 
     S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
 
-    // Make base path list.
-    head.GetNameList(headlist, true, false);  // get name with "/".
-
     // Initialize S3fsMultiCurl
     curlmulti.SetSuccessCallback(multi_head_callback);
     curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-    s3obj_list_t::iterator iter;
+    s3obj_list_t::const_iterator iter;
 
-    fillerlist.clear();
     // Make single head request(with max).
-    for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+    for(iter = headlist.begin(); headlist.end() != iter; ++iter){
         std::string disppath = path + (*iter);
-        std::string etag     = head.GetETag((*iter).c_str());
 
         std::string fillpath = disppath;
         if('/' == disppath[disppath.length() - 1]){
@@ -2568,7 +2523,8 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         }
         fillerlist.push_back(fillpath);
 
-        if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
+        // TODO: ETag?
+        if(StatCache::getStatCacheData()->HasStat(disppath)){
             continue;
         }
 
@@ -2653,7 +2609,11 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     if(strcmp(path, "/") != 0){
         strpath += "/";
     }
-    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
+
+    // Make base path list.
+    s3obj_list_t headlist;
+    head.GetNameList(headlist, true, false);  // get name with "/".
+    if(0 != (result = readdir_multi_head(strpath.c_str(), headlist, buf, filler))){
         S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
     }
     S3FS_MALLOCTRIM(0);

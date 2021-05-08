@@ -99,7 +99,7 @@ function check_file_size() {
     size=$(get_size ${FILE_NAME})
     if [ $size -ne $EXPECTED_SIZE ]
     then
-        echo "error: expected ${FILE_NAME} to be zero length"
+        echo "error: expected ${FILE_NAME} to be $EXPECTED_SIZE length, got $size"
         return 1
     fi
 
