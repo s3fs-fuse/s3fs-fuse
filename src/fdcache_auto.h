@@ -26,9 +26,9 @@
 //------------------------------------------------
 // class AutoFdEntity
 //------------------------------------------------
-// A class that opens fdentiry and closes it automatically.
+// A class that opens fdentry and closes it automatically.
 // This class object is used to prevent inconsistencies in
-// the number of references in fdentiry.
+// the number of references in fdentry.
 // The methods are wrappers to the method of the FdManager class.
 //
 class AutoFdEntity
@@ -52,7 +52,7 @@ class AutoFdEntity
 
       FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
-      FdEntity* OpenExistFdEntiy(const char* path, int flags = O_RDONLY);
+      FdEntity* OpenExistFdEntity(const char* path, int flags = O_RDONLY);
 };
 
 #endif // S3FS_FDCACHE_AUTO_H_

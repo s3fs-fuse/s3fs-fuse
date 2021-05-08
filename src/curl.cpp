@@ -393,7 +393,7 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
         if(0 == stat(DEFAULT_MIME_FILE, &st)){
             MimeFile = DEFAULT_MIME_FILE;
         }else if(compare_sysname("Darwin")){
-            // for macos, search another default file.
+            // for macOS, search another default file.
             if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
                 MimeFile = SPECIAL_DARWIN_MIME_FILE;
             }else{

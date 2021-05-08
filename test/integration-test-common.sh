@@ -138,7 +138,7 @@ function start_s3proxy {
     if [ -n "${S3PROXY_BINARY}" ]
     then
         if [ ! -e "${S3PROXY_BINARY}" ]; then
-            wget "https://github.com/andrewgaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
+            wget "https://github.com/gaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
                 --quiet -O "${S3PROXY_BINARY}"
             chmod +x "${S3PROXY_BINARY}"
         fi

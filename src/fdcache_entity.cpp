@@ -1063,7 +1063,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
     if(!pseudo_obj){
-        S3FS_PRN_ERR("Pseudo obejct is NULL.");
+        S3FS_PRN_ERR("Pseudo object is NULL.");
         return -EIO;
     }
 
@@ -1488,7 +1488,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
             // So the file has already been removed, skip error.
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
-        // put pading headers
+        // put pending headers
         if(0 != (result = UploadPendingMeta())){
             return result;
         }

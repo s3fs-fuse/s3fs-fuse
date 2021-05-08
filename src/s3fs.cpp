@@ -406,7 +406,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         // not registered in the Stats cache.
         // Therefore, even if the file has a permission error, it
         // should be registered in the Stats cache. However, if
-        // the response without modifiying is registered in the
+        // the response without modifying is registered in the
         // cache, the file permission will be 0644(umask dependent)
         // because the meta header does not exist.
         // Thus, set the mode of 0000 here in the meta header so
@@ -780,7 +780,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     if(stbuf){
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+        if(NULL != (ent = autoent.OpenExistFdEntity(path))){
             struct stat tmpstbuf;
             if(ent->GetStats(tmpstbuf)){
                 stbuf->st_size = tmpstbuf.st_size;
@@ -1260,7 +1260,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         // update time
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = autoent.OpenExistFdEntiy(from))){
+        if(NULL == (ent = autoent.OpenExistFdEntity(from))){
             // no opened fd
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
@@ -1579,7 +1579,7 @@ static int s3fs_rename(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL != (ent = autoent.OpenExistFdEntiy(from, O_RDWR))){
+        if(NULL != (ent = autoent.OpenExistFdEntity(from, O_RDWR))){
             if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
                 return result;
@@ -1679,7 +1679,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+        if(NULL != (ent = autoent.OpenExistFdEntity(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -1856,7 +1856,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+        if(NULL != (ent = autoent.OpenExistFdEntity(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -2038,7 +2038,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         FdEntity*    ent;
         bool         need_put_header = true;
         bool         keep_mtime      = false;
-        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+        if(NULL != (ent = autoent.OpenExistFdEntity(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -2456,7 +2456,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     // At first, we remove stats cache.
     // Because fuse does not wait for response from "release" function. :-(
     // And fuse runs next command before this function returns.
-    // Thus we call deleting stats function ASSAP.
+    // Thus we call deleting stats function ASAP.
     //
     if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
         StatCache::getStatCacheData()->DelStat(path);
@@ -2466,7 +2466,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         AutoFdEntity autoent;
 
         // [NOTE]
-        // The pseudo fd stored in fi->fh is attached to AutoFdEntiry so that it can be
+        // The pseudo fd stored in fi->fh is attached to AutoFdEntry so that it can be
         // destroyed here.
         //
         if(!autoent.Attach(path, static_cast<int>(fi->fh))){
@@ -2507,7 +2507,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl)
     if(!s3fscurl){
         return false;
     }
-    std::string saved_path = s3fscurl->GetSpacialSavedPath();
+    std::string saved_path = s3fscurl->GetSpecialSavedPath();
     if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
         S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
         return false;
@@ -2528,7 +2528,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     ssec_key_pos = (ssec_key_pos == static_cast<size_t>(-1) ? 0 : ssec_key_pos + 1);
     if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
         if(s3fscurl->IsOverMultipartRetryCount()){
-            S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
+            S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpecialSavedPath().c_str());
             return NULL;
         }
         ssec_key_pos = -1;
@@ -2538,7 +2538,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
     std::string path       = s3fscurl->GetPath();
     std::string base_path  = s3fscurl->GetBasePath();
-    std::string saved_path = s3fscurl->GetSpacialSavedPath();
+    std::string saved_path = s3fscurl->GetSpecialSavedPath();
 
     if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
@@ -2747,7 +2747,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         }
         if(true == (truncated = is_truncated(doc))){
             xmlChar* tmpch;
-            if(NULL != (tmpch = get_next_contination_token(doc))){
+            if(NULL != (tmpch = get_next_continuation_token(doc))){
                 next_continuation_token = (char*)tmpch;
                 xmlFree(tmpch);
             }else if(NULL != (tmpch = get_next_marker(doc))){
@@ -3039,7 +3039,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+    if(NULL != (ent = autoent.OpenExistFdEntity(path))){
         // get xattr and make new xattr
         std::string strxattr;
         if(ent->GetXattr(strxattr)){
@@ -3326,7 +3326,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
+    if(NULL != (ent = autoent.OpenExistFdEntity(path))){
         if(ent->MergeOrgMeta(updatemeta)){
             // meta is changed, but now uploading.
             // then the meta is pending and accumulated to be put after the upload is complete.

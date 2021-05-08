@@ -84,7 +84,7 @@ class FdManager
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true, bool lock_already_held = false);
       FdEntity* Open(int& fd, const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
-      FdEntity* OpenExistFdEntiy(const char* path, int& fd, int flags = O_RDONLY);
+      FdEntity* OpenExistFdEntity(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);
       bool Close(FdEntity* ent, int fd);
       bool ChangeEntityToTempPath(FdEntity* ent, const char* path);

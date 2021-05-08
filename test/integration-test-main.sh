@@ -996,7 +996,7 @@ function test_update_directory_time() {
     fi
 
     #
-    # mv -> update ctime, not update atime/mtime for taget directory
+    # mv -> update ctime, not update atime/mtime for target directory
     #       not update any for sub-directory and a file
     #
     TIME_TEST_DIR=timetestdir

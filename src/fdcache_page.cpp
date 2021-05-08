@@ -101,7 +101,7 @@ static fdpage_list_t raw_compress_fdpage_list(const fdpage_list_t& pages, bool i
             tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
         }
     }
-    // add lastest area
+    // add last area
     if(!is_first){
         raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
     }
@@ -673,7 +673,7 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
             }
         }
     }
-    // lastest area
+    // last area
     if(0 < prev_page.bytes){
         mixupload_pages.push_back(prev_page);
     }
