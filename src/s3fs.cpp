@@ -1045,7 +1045,8 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         }
         return result;
     }
-    result = create_directory_object(path, mode, time(NULL), time(NULL), time(NULL), pcxt->uid, pcxt->gid);
+    time_t now = time(NULL);
+    result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid);
 
     StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
