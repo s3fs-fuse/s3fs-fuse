@@ -183,8 +183,8 @@ bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& spars
     }
 
     bool is_hole   = false;
-    int  hole_pos  = lseek(fd, 0, SEEK_HOLE);
-    int  data_pos  = lseek(fd, 0, SEEK_DATA);
+    off_t hole_pos = lseek(fd, 0, SEEK_HOLE);
+    off_t data_pos = lseek(fd, 0, SEEK_DATA);
     if(-1 == hole_pos && -1 == data_pos){
         S3FS_PRN_ERR("Could not find the first position both HOLE and DATA in the file(fd=%d).", fd);
         return false;
@@ -198,7 +198,7 @@ bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& spars
         is_hole   = false;
     }
 
-    for(int cur_pos = 0, next_pos = 0; 0 <= cur_pos; cur_pos = next_pos, is_hole = !is_hole){
+    for(off_t cur_pos = 0, next_pos = 0; 0 <= cur_pos; cur_pos = next_pos, is_hole = !is_hole){
         fdpage page;
         page.offset   = cur_pos;
         page.loaded   = !is_hole;
