@@ -418,12 +418,11 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
-    if(stat_cache.end() != iter){
-        delete iter->second;
-        stat_cache.erase(iter);
+    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.insert(std::make_pair(key, ent));
+    if(!pair.second){
+        delete pair.first->second;
+        pair.first->second = ent;
     }
-    stat_cache[key] = ent;
 
     // check symbolic link cache
     if(!S_ISLNK(ent->stbuf.st_mode)){
@@ -476,12 +475,11 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    stat_cache_t::iterator iter = stat_cache.find(key);   // recheck for same key exists
-    if(stat_cache.end() != iter){
-        delete iter->second;
-        stat_cache.erase(iter);
+    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.insert(std::make_pair(key, ent));
+    if(!pair.second){
+        delete pair.first->second;
+        pair.first->second = ent;
     }
-    stat_cache[key] = ent;
 
     // check symbolic link cache
     if(symlink_cache.end() != symlink_cache.find(key)){
@@ -671,12 +669,11 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    symlink_cache_t::iterator iter = symlink_cache.find(key);   // recheck for same key exists
-    if(symlink_cache.end() != iter){
-        delete iter->second;
-        symlink_cache.erase(iter);
+    std::pair<symlink_cache_t::iterator, bool> pair = symlink_cache.insert(std::make_pair(key, ent));
+    if(!pair.second){
+        delete pair.first->second;
+        pair.first->second = ent;
     }
-    symlink_cache[key] = ent;
 
     return true;
 }
