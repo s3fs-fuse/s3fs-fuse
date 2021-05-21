@@ -94,7 +94,7 @@ time_t           S3fsCurl::readwrite_timeout   = 120;  // default
 int              S3fsCurl::retries             = 5;    // default
 bool             S3fsCurl::is_public_bucket    = false;
 acl_t            S3fsCurl::default_acl         = acl_t::PRIVATE;
-storage_class_t  S3fsCurl::storage_class       = storage_class_t::STANDARD;
+std::string      S3fsCurl::storage_class       = "STANDARD";
 sseckeylist_t    S3fsCurl::sseckeys;
 std::string      S3fsCurl::ssekmsid;
 sse_type_t       S3fsCurl::ssetype             = sse_type_t::SSE_DISABLE;
@@ -774,9 +774,9 @@ acl_t S3fsCurl::GetDefaultAcl()
     return S3fsCurl::default_acl;
 }
 
-storage_class_t S3fsCurl::SetStorageClass(storage_class_t storage_class)
+std::string S3fsCurl::SetStorageClass(const std::string& storage_class)
 {
-    storage_class_t old = S3fsCurl::storage_class;
+    std::string old = S3fsCurl::storage_class;
     S3fsCurl::storage_class = storage_class;
     return old;
 }
@@ -3138,8 +3138,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
     }
-    if(GetStorageClass() != storage_class_t::STANDARD){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
+    if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
     if(!is_copy){
@@ -3248,8 +3248,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
     }
-    if(GetStorageClass() != storage_class_t::STANDARD){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
+    if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
     std::string ssevalue;
@@ -3514,8 +3514,8 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
     }
-    if(GetStorageClass() != storage_class_t::STANDARD){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().str());
+    if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
     if(!is_copy){

@@ -4296,9 +4296,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
             }
             if(0 == rrs){
-                S3fsCurl::SetStorageClass(storage_class_t::STANDARD);
+                S3fsCurl::SetStorageClass("STANDARD");
             }else if(1 == rrs){
-                S3fsCurl::SetStorageClass(storage_class_t::REDUCED_REDUNDANCY);
+                S3fsCurl::SetStorageClass("REDUCED_REDUNDANCY");
             }else{
                 S3FS_PRN_EXIT("poorly formed argument to option: use_rrs");
                 return -1;
@@ -4306,12 +4306,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "storage_class=")){
-            const char *storage_class_str = strchr(arg, '=') + sizeof(char);
-            storage_class_t storage_class = storage_class_t::from_str(storage_class_str);
-            if(storage_class == storage_class_t::UNKNOWN){
-                S3FS_PRN_EXIT("unknown value for storage_class: %s", storage_class_str);
-                return -1;
-            }
+            const char *storage_class = strchr(arg, '=') + sizeof(char);
             S3fsCurl::SetStorageClass(storage_class);
             return 0;
         }
@@ -5023,7 +5018,7 @@ int main(int argc, char* argv[])
     // [NOTE]
     // exclusive option check here.
     //
-    if(storage_class_t::REDUCED_REDUNDANCY == S3fsCurl::GetStorageClass() && !S3fsCurl::IsSseDisable()){
+    if(strcasecmp(S3fsCurl::GetStorageClass().c_str(), "REDUCED_REDUNDANCY") == 0 && !S3fsCurl::IsSseDisable()){
         S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
