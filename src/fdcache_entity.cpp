@@ -1073,7 +1073,6 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
             }else{
                 // already loaded area
             }
-
             // single area upload by multipart post
             if(0 != (result = NoCacheMultipartPost(upload_fd, offset, oneread))){
               S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
@@ -1221,15 +1220,25 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
                 FdManager::FreeReservedDiskSpace(restsize);
                 if(0 != result){
                     S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
-                    return static_cast<ssize_t>(result);
+                    return result;
                 }
             }else{
-              // no enough disk space
-              // upload all by multipart uploading
-              if(0 != (result = NoCacheLoadAndPost())){
-                  S3FS_PRN_ERR("failed to upload all area by multipart uploading(errno=%d)", result);
-                  return static_cast<ssize_t>(result);
-              }
+                // no enough disk space
+                if(nomultipart){
+                    S3FS_PRN_WARN("Not enough local storage to flush: [path=%s][fd=%d]", path.c_str(), fd);
+                    return -ENOSPC;   // No space left on device
+                }
+                if(0 != (result = NoCachePreMultipartPost())){
+                    S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
+                    return result;
+                }
+                // upload all by multipart uploading
+                if(0 != (result = NoCacheLoadAndPost())){
+                    S3FS_PRN_ERR("failed to upload all area by multipart uploading(errno=%d)", result);
+                    return result;
+                }
+                mp_start = 0;
+                mp_size  = 0;
           }
       }else{
           // already start multipart uploading
@@ -1481,7 +1490,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
             FdManager::FreeReservedDiskSpace(restsize);
             if(0 != result){
                 S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
-                return static_cast<ssize_t>(result);
+                return result;
             }
         }else{
             // no enough disk space
@@ -1491,12 +1500,12 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
             }
             if(0 != (result = NoCachePreMultipartPost())){
                 S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
-                return static_cast<ssize_t>(result);
+                return result;
             }
             // start multipart uploading
             if(0 != (result = NoCacheLoadAndPost(0, start))){
                 S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
-                return static_cast<ssize_t>(result);
+                return result;
             }
             mp_start = start;
             mp_size  = 0;
@@ -1520,7 +1529,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
             result = Load(start + size, pagelist.Size(), /*lock_already_held=*/ true);
             if(0 != result){
                 S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
-                return static_cast<ssize_t>(result);
+                return result;
             }
         }
     }
