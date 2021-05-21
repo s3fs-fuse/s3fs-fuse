@@ -127,7 +127,7 @@ class S3fsCurl
         static int              retries;
         static bool             is_public_bucket;
         static acl_t            default_acl;
-        static storage_class_t  storage_class;
+        static std::string      storage_class;
         static sseckeylist_t    sseckeys;
         static std::string      ssekmsid;
         static sse_type_t       ssetype;
@@ -303,8 +303,8 @@ class S3fsCurl
         static bool IsPublicBucket() { return S3fsCurl::is_public_bucket; }
         static acl_t SetDefaultAcl(acl_t acl);
         static acl_t GetDefaultAcl();
-        static storage_class_t SetStorageClass(storage_class_t storage_class);
-        static storage_class_t GetStorageClass() { return S3fsCurl::storage_class; }
+        static std::string SetStorageClass(const std::string& storage_class);
+        static std::string GetStorageClass() { return S3fsCurl::storage_class; }
         static bool LoadEnvSse() { return (S3fsCurl::LoadEnvSseCKeys() && S3fsCurl::LoadEnvSseKmsid()); }
         static sse_type_t SetSseType(sse_type_t type);
         static sse_type_t GetSseType() { return S3fsCurl::ssetype; }
