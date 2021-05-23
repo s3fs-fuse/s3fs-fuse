@@ -2316,7 +2316,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
+    if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
     }
@@ -2344,7 +2344,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
+    if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
     }
@@ -2403,7 +2403,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL != (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
+    if(NULL != (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         ent->UpdateMtime(true);         // clear the flag not to update mtime.
         ent->UpdateCtime();
         result = ent->Flush(static_cast<int>(fi->fh), false);
@@ -2426,7 +2426,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL != (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
+    if(NULL != (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         if(0 == datasync){
             ent->UpdateMtime();
             ent->UpdateCtime();
