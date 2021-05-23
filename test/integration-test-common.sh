@@ -191,7 +191,8 @@ function start_s3proxy {
             S3PROXY_CACERT_FILE=""
         fi
 
-        "${STDBUF_COMMAND_LINE[@]}" java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
+        mkdir /var/tmp/blobstore || true
+        "${STDBUF_COMMAND_LINE[@]}" java -Dfile.encoding=UTF8 -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
