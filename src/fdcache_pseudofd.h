@@ -18,44 +18,42 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef S3FS_FDCACHE_AUTO_H_
-#define S3FS_FDCACHE_AUTO_H_
-
-#include "fdcache_entity.h"
+#ifndef S3FS_FDCACHE_PSEUDOFD_H_
+#define S3FS_FDCACHE_PSEUDOFD_H_
 
 //------------------------------------------------
-// class AutoFdEntity
+// Typdefs
 //------------------------------------------------
-// A class that opens fdentiry and closes it automatically.
-// This class object is used to prevent inconsistencies in
-// the number of references in fdentiry.
-// The methods are wrappers to the method of the FdManager class.
+// List of pseudo fd in use
 //
-class AutoFdEntity
+typedef std::vector<int>    pseudofd_list_t;
+
+//------------------------------------------------
+// Class PseudoFdManager
+//------------------------------------------------
+class PseudoFdManager
 {
-  private:
-      FdEntity* pFdEntity;
-      int       pseudo_fd;
+    private:
+        pseudofd_list_t pseudofd_list;
+        bool            is_lock_init;
+        pthread_mutex_t pseudofd_list_lock;    // protects pseudofd_list
 
-  private:
-      AutoFdEntity(AutoFdEntity& other);
-      bool operator=(AutoFdEntity& other);
+    private:
+        static PseudoFdManager& GetManager();
 
-  public:
-      AutoFdEntity();
-      ~AutoFdEntity();
+        PseudoFdManager();
+        ~PseudoFdManager();
 
-      bool Close();
-      int Detach();
-      bool Attach(const char* path, int existfd);
-      int GetPseudoFd() const { return pseudo_fd; }
+        int GetUnusedMinPseudoFd() const;
+        int CreatePseudoFd();
+        bool ReleasePseudoFd(int fd);
 
-      FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
-      FdEntity* GetExistFdEntiy(const char* path, int existfd = -1);
-      FdEntity* OpenExistFdEntiy(const char* path, int flags = O_RDONLY);
+    public:
+        static int Get();
+        static bool Release(int fd);
 };
 
-#endif // S3FS_FDCACHE_AUTO_H_
+#endif // S3FS_FDCACHE_PSEUDOFD_H_
 
 /*
 * Local variables:

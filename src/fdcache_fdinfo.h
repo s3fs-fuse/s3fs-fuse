@@ -18,44 +18,38 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef S3FS_FDCACHE_AUTO_H_
-#define S3FS_FDCACHE_AUTO_H_
-
-#include "fdcache_entity.h"
+#ifndef S3FS_FDCACHE_FDINFO_H_
+#define S3FS_FDCACHE_FDINFO_H_
 
 //------------------------------------------------
-// class AutoFdEntity
+// Class PseudoFdInfo
 //------------------------------------------------
-// A class that opens fdentiry and closes it automatically.
-// This class object is used to prevent inconsistencies in
-// the number of references in fdentiry.
-// The methods are wrappers to the method of the FdManager class.
-//
-class AutoFdEntity
+class PseudoFdInfo
 {
-  private:
-      FdEntity* pFdEntity;
-      int       pseudo_fd;
+    private:
+        int             pseudo_fd;
+        int             physical_fd;
+        int             flags;              // flags at open
 
-  private:
-      AutoFdEntity(AutoFdEntity& other);
-      bool operator=(AutoFdEntity& other);
+    private:
+        bool Clear();
 
-  public:
-      AutoFdEntity();
-      ~AutoFdEntity();
+    public:
+        PseudoFdInfo(int fd = -1, int open_flags = 0);
+        ~PseudoFdInfo();
 
-      bool Close();
-      int Detach();
-      bool Attach(const char* path, int existfd);
-      int GetPseudoFd() const { return pseudo_fd; }
+        int GetPhysicalFd() const { return physical_fd; }
+        int GetPseudoFd() const { return pseudo_fd; }
+        int GetFlags() const { return flags; }
+        bool Writable() const;
+        bool Readable() const;
 
-      FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
-      FdEntity* GetExistFdEntiy(const char* path, int existfd = -1);
-      FdEntity* OpenExistFdEntiy(const char* path, int flags = O_RDONLY);
+        bool Set(int fd, int open_flags);
 };
 
-#endif // S3FS_FDCACHE_AUTO_H_
+typedef std::map<int, class PseudoFdInfo*> fdinfo_map_t;
+
+#endif // S3FS_FDCACHE_FDINFO_H_
 
 /*
 * Local variables:

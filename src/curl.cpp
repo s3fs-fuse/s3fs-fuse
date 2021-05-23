@@ -3980,67 +3980,6 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     return 0;
 }
 
-int S3fsCurl::MultipartUploadRequest(const char* tpath, headers_t& meta, int fd, bool is_copy)
-{
-    int            result;
-    std::string    upload_id;
-    struct stat    st;
-    int            fd2;
-    etaglist_t     list;
-    off_t          remaining_bytes;
-    off_t          chunk;
-
-    S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
-
-    // duplicate fd
-    if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-        S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
-        if(-1 != fd2){
-            close(fd2);
-        }
-        return -errno;
-    }
-    if(-1 == fstat(fd2, &st)){
-        S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
-        close(fd2);
-        return -errno;
-    }
-
-    if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, is_copy))){
-        close(fd2);
-        return result;
-    }
-    DestroyCurlHandle();
-
-    // cycle through open fd, pulling off 10MB chunks at a time
-    for(remaining_bytes = st.st_size; 0 < remaining_bytes; remaining_bytes -= chunk){
-        // chunk size
-        chunk = remaining_bytes > S3fsCurl::multipart_size ? S3fsCurl::multipart_size : remaining_bytes;
-
-        // set
-        partdata.fd         = fd2;
-        partdata.startpos   = st.st_size - remaining_bytes;
-        partdata.size       = chunk;
-        b_partdata_startpos = partdata.startpos;
-        b_partdata_size     = partdata.size;
-        partdata.add_etag_list(&list);
-
-        // upload part
-        if(0 != (result = UploadMultipartPostRequest(tpath, list.size(), upload_id))){
-            S3FS_PRN_ERR("failed uploading part(%d)", result);
-            close(fd2);
-            return result;
-        }
-        DestroyCurlHandle();
-    }
-    close(fd2);
-
-    if(0 != (result = CompleteMultipartPostRequest(tpath, upload_id, list))){
-        return result;
-    }
-    return 0;
-}
-
 int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etaglist_t& list)
 {
     S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%lld][size=%lld]", upload_id.c_str(), SAFESTRPTR(tpath), fd, static_cast<long long int>(offset), static_cast<long long int>(size));
