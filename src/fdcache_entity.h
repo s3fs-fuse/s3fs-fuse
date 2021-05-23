@@ -46,10 +46,6 @@ class FdEntity
 
         pthread_mutex_t fdent_data_lock;// protects the following members
         PageList        pagelist;
-        std::string     upload_id;      // for no cached multipart uploading when no disk space
-        etaglist_t      etaglist;       // for no cached multipart uploading when no disk space
-        off_t           mp_start;       // start position for no cached multipart(write method only)
-        off_t           mp_size;        // size for no cached multipart(write method only)
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
@@ -63,10 +59,14 @@ class FdEntity
         void Clear();
         ino_t GetInode();
         int OpenMirrorFile();
-        int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);    // size=0 means loading to end
-        bool CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held = false);
+        int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0);  // size=0 means loading to end
+        PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held = false);
+        bool IsUploading(bool lock_already_held = false);
         bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
         bool SetAllStatusUnloaded() { return SetAllStatus(false); }
+        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
+        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size);
+        int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj);
         int UploadPendingMeta();
 
     public:
@@ -109,9 +109,6 @@ class FdEntity
         bool SetContentType(const char* path);
 
         int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false, bool is_modified_flag = false);  // size=0 means loading to end
-        int NoCachePreMultipartPost();
-        int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
-        int NoCacheCompleteMultipartPost();
 
         off_t BytesModified();
         int RowFlush(int fd, const char* tpath, bool force_sync = false);

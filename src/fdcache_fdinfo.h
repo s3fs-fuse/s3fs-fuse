@@ -22,6 +22,22 @@
 #define S3FS_FDCACHE_FDINFO_H_
 
 //------------------------------------------------
+// Structure
+//------------------------------------------------
+typedef struct _mppart_info
+{
+    off_t       start;
+    size_t      size;
+    bool        is_copy;
+    std::string etag;
+
+    _mppart_info(off_t part_start = -1, off_t part_size = 0, bool is_copy_part = false, const char* petag = NULL) : start(part_start), size(part_size), is_copy(is_copy_part), etag(NULL == petag ? "" : petag) {}
+
+}MPPART_INFO;
+
+typedef std::list<MPPART_INFO> mppart_list_t;
+
+//------------------------------------------------
 // Class PseudoFdInfo
 //------------------------------------------------
 class PseudoFdInfo
@@ -30,6 +46,13 @@ class PseudoFdInfo
         int             pseudo_fd;
         int             physical_fd;
         int             flags;              // flags at open
+        std::string     upload_id;
+        mppart_list_t   upload_list;
+        off_t           untreated_start;    // untreated start position
+        off_t           untreated_size;     // untreated size
+
+        bool            is_lock_init;
+        pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
 
     private:
         bool Clear();
@@ -45,6 +68,18 @@ class PseudoFdInfo
         bool Readable() const;
 
         bool Set(int fd, int open_flags);
+        bool ClearUploadInfo(bool is_clear_part = false, bool lock_already_held = false);
+        bool InitialUploadInfo(const std::string& id);
+
+        bool IsUploading() const { return !upload_id.empty(); }
+        bool GetUploadId(std::string& id) const;
+        bool GetEtaglist(etaglist_t& list);
+
+        bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, int* ppartnum = NULL, std::string** ppetag = NULL);
+
+        void ClearUntreated(bool lock_already_held = false);
+        bool GetUntreated(off_t& start, off_t& size);
+        bool SetUntreated(off_t start, off_t size);
 };
 
 typedef std::map<int, class PseudoFdInfo*> fdinfo_map_t;

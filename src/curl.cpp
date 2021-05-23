@@ -3984,7 +3984,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     return 0;
 }
 
-int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etaglist_t& list)
+int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, int part_num, std::string* petag)
 {
     S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%lld][size=%lld]", upload_id.c_str(), SAFESTRPTR(tpath), fd, static_cast<long long int>(offset), static_cast<long long int>(size));
 
@@ -4004,12 +4004,12 @@ int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* t
     partdata.size       = size;
     b_partdata_startpos = partdata.startpos;
     b_partdata_size     = partdata.size;
-    partdata.add_etag_list(&list);
+    partdata.add_etag(petag);
 
     // upload part
     int   result;
-    if(0 != (result = UploadMultipartPostRequest(tpath, list.size(), upload_id))){
-        S3FS_PRN_ERR("failed uploading part(%d)", result);
+    if(0 != (result = UploadMultipartPostRequest(tpath, part_num, upload_id))){
+        S3FS_PRN_ERR("failed uploading %d part by error(%d)", part_num, result);
         close(fd2);
         return result;
     }

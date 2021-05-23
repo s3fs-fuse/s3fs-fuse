@@ -112,12 +112,12 @@ FdEntity* AutoFdEntity::Open(const char* path, headers_t* pmeta, off_t size, tim
 // [NOTE]
 // the fd obtained by this method is not a newly created pseudo fd.
 //
-FdEntity* AutoFdEntity::GetExistFdEntiy(const char* path, int existfd)
+FdEntity* AutoFdEntity::GetExistFdEntity(const char* path, int existfd)
 {
     Close();
 
     FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->GetExistFdEntiy(path, existfd))){
+    if(NULL == (ent = FdManager::get()->GetExistFdEntity(path, existfd))){
         return NULL;
     }
     return ent;

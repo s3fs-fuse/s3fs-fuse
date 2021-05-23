@@ -208,6 +208,11 @@ struct filepart
         list->push_back(std::string());
         petag = &list->back();
     }
+
+    void add_etag(std::string* petagobj)
+    {
+        petag = petagobj;
+    }
 };
 
 //-------------------------------------------------------------------

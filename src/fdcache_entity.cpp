@@ -1594,7 +1594,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
     PseudoFdInfo* pseudo_obj = NULL;
-    if(-1 == physical_fd || NULL == (pseudo_obj = CheckPseudoFdFlags(fd, true))){
+    if(-1 == physical_fd || NULL == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
         S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
