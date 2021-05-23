@@ -28,6 +28,7 @@
 #include "common.h"
 #include "s3fs.h"
 #include "fdcache.h"
+#include "fdcache_pseudofd.h"
 #include "s3fs_util.h"
 #include "s3fs_logger.h"
 #include "string_util.h"
@@ -344,6 +345,16 @@ bool FdManager::HaveLseekHole()
     return FdManager::have_lseek_hole;
 }
 
+bool FdManager::HasOpenEntityFd(const char* path)
+{
+    FdEntity*   ent;
+    int         fd = -1;
+    if(NULL == (ent = FdManager::singleton.GetFdEntity(path, fd, false))){
+        return false;
+    }
+    return (0 < ent->GetOpenCount());
+}
+
 //------------------------------------------------
 // FdManager methods
 //------------------------------------------------
@@ -379,7 +390,7 @@ FdManager::~FdManager()
     if(this == FdManager::get()){
         for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
             FdEntity* ent = (*iter).second;
-            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath(), ent->GetRefCnt());
+            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath(), ent->GetOpenCount());
             delete ent;
         }
         fent.clear();
@@ -405,7 +416,7 @@ FdManager::~FdManager()
     }
 }
 
-FdEntity* FdManager::GetFdEntity(const char* path, int existfd, bool increase_ref)
+FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd)
 {
     S3FS_PRN_INFO3("[path=%s][fd=%d]", SAFESTRPTR(path), existfd);
 
@@ -415,22 +426,29 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd, bool increase_re
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     fdent_map_t::iterator iter = fent.find(std::string(path));
-    if(fent.end() != iter && (-1 == existfd || (*iter).second->GetFd() == existfd)){
-        if(increase_ref){
-            iter->second->Dup();
+    if(fent.end() != iter && iter->second){
+        if(-1 == existfd){
+            if(newfd){
+                existfd = iter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
+            }
+            return iter->second;
+        }else if(iter->second->FindPseudoFd(existfd)){
+            if(newfd){
+                existfd = iter->second->Dup(existfd);
+            }
+            return iter->second;
         }
-        return (*iter).second;
     }
 
     if(-1 != existfd){
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if((*iter).second && (*iter).second->GetFd() == existfd){
+            if(iter->second && iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
-                if(0 == strcmp((*iter).second->GetPath(), path)){
-                    if(increase_ref){
-                        iter->second->Dup();
+                if(0 == strcmp(iter->second->GetPath(), path)){
+                    if(newfd){
+                        existfd = iter->second->Dup(existfd);
                     }
-                    return (*iter).second;
+                    return iter->second;
                 }
                 // found fd, but it is used another file(file descriptor is recycled)
                 // so returns NULL.
@@ -438,24 +456,30 @@ FdEntity* FdManager::GetFdEntity(const char* path, int existfd, bool increase_re
             }
         }
     }
+
+    // If the cache directory is not specified, s3fs opens a temporary file
+    // when the file is opened.
+    if(!FdManager::IsCacheDir()){
+        for(iter = fent.begin(); iter != fent.end(); ++iter){
+            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), path)){
+                return iter->second;
+            }
+        }
+    }
     return NULL;
 }
 
-FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
 {
-    S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time));
+    S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld][flags=0x%x]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time), flags);
 
     if(!path || '\0' == path[0]){
         return NULL;
     }
-    bool close = false;
-    FdEntity* ent;
-
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     // search in mapping by key(path)
     fdent_map_t::iterator iter = fent.find(std::string(path));
-
     if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
         // If the cache directory is not specified, s3fs opens a temporary file
         // when the file is opened.
@@ -463,16 +487,17 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), path)){
+            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), path)){
                 break;      // found opened fd in mapping
             }
         }
     }
 
+    FdEntity* ent;
     if(fent.end() != iter){
         // found
-        ent = (*iter).second;
-        ent->Dup();
+        ent = iter->second;
+
         if(ent->IsModified()){
             // If the file is being modified and it's size is larger than size parameter, it will not be resized.
             off_t cur_size = 0;
@@ -480,7 +505,12 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
                 size = -1;
             }
         }
-        close = true;
+
+        // (re)open
+        if(-1 == (fd = ent->Open(pmeta, size, time, flags, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NON))){
+            S3FS_PRN_ERR("failed to (re)open and create new pseudo fd for path(%s).", path);
+            return NULL;
+        }
 
     }else if(is_create){
         // not found
@@ -491,6 +521,12 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
         }
         // make new obj
         ent = new FdEntity(path, cache_path.c_str());
+
+        // open
+        if(-1 == (fd = ent->Open(pmeta, size, time, flags, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NON))){
+            delete ent;
+            return NULL;
+        }
 
         if(!cache_path.empty()){
             // using cache
@@ -507,47 +543,43 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
             FdManager::MakeRandomTempPath(path, tmppath);
             fent[tmppath] = ent;
         }
+
     }else{
         return NULL;
-    }
-
-    // open
-    if(0 != ent->Open(pmeta, size, time, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE)){
-        if(close){
-            ent->Close();
-        }
-        return NULL;
-    }
-    if(close){
-        ent->Close();
     }
     return ent;
 }
 
-FdEntity* FdManager::ExistOpen(const char* path, int existfd, bool ignore_existfd)
+// [NOTE]
+// This method does not create a new pseudo fd.
+// It just finds existfd and returns the corresponding entity.
+//
+FdEntity* FdManager::GetExistFdEntiy(const char* path, int existfd)
 {
-    S3FS_PRN_DBG("[path=%s][fd=%d][ignore_existfd=%s]", SAFESTRPTR(path), existfd, ignore_existfd ? "true" : "false");
+    S3FS_PRN_DBG("[path=%s][existfd=%d]", SAFESTRPTR(path), existfd);
 
-    // search by real path
-    FdEntity* ent = Open(path, NULL, -1, -1, false, false);
+    AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    if(!ent && (ignore_existfd || (-1 != existfd))){
-        // search from all fdentity because of not using cache.
-        AutoLock auto_lock(&FdManager::fd_manager_lock);
-
-        for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
-            if((*iter).second && (*iter).second->IsOpen() && (ignore_existfd || ((*iter).second->GetFd() == existfd))){
-                // found opened fd in map
-                if(0 == strcmp((*iter).second->GetPath(), path)){
-                    ent = (*iter).second;
-                    ent->Dup();
-                }else{
-                    // found fd, but it is used another file(file descriptor is recycled)
-                    // so returns NULL.
-                }
-                break;
-            }
+    // search from all entity.
+    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+        if(iter->second && iter->second->FindPseudoFd(existfd)){
+            // found existfd in entity
+            return iter->second;
         }
+    }
+    // not found entity
+    return NULL;
+}
+
+FdEntity* FdManager::OpenExistFdEntiy(const char* path, int& fd, int flags)
+{
+    S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);
+
+    // search entity by path, and create pseudo fd
+    FdEntity* ent = Open(fd, path, NULL, -1, -1, flags, false, false);
+    if(!ent){
+        // Not found entity
+        return NULL;
     }
     return ent;
 }
@@ -564,7 +596,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if((*iter).second && (*iter).second->IsOpen() && 0 == strcmp((*iter).second->GetPath(), from.c_str())){
+            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), from.c_str())){
                 break;              // found opened fd in mapping
             }
         }
@@ -574,7 +606,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // found
         S3FS_PRN_DBG("[from=%s][to=%s]", from.c_str(), to.c_str());
 
-        FdEntity* ent = (*iter).second;
+        FdEntity* ent = iter->second;
 
         // retrieve old fd entity from map
         fent.erase(iter);
@@ -591,34 +623,33 @@ void FdManager::Rename(const std::string &from, const std::string &to)
     }
 }
 
-bool FdManager::Close(FdEntity* ent)
+bool FdManager::Close(FdEntity* ent, int fd)
 {
-    S3FS_PRN_DBG("[ent->file=%s][ent->fd=%d]", ent ? ent->GetPath() : "", ent ? ent->GetFd() : -1);
+    S3FS_PRN_DBG("[ent->file=%s][pseudo_fd=%d]", ent ? ent->GetPath() : "", fd);
 
-    if(!ent){
+    if(!ent || -1 == fd){
         return true;  // returns success
     }
-
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
-        if((*iter).second == ent){
-            ent->Close();
+        if(iter->second == ent){
+            ent->Close(fd);
             if(!ent->IsOpen()){
                 // remove found entity from map.
                 fent.erase(iter++);
 
                 // check another key name for entity value to be on the safe side
                 for(; iter != fent.end(); ){
-                    if((*iter).second == ent){
+                    if(iter->second == ent){
                         fent.erase(iter++);
                     }else{
                         ++iter;
                     }
                 }
                 delete ent;
-          }
-          return true;
+            }
+            return true;
         }
     }
     return false;
@@ -629,7 +660,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
-        if((*iter).second == ent){
+        if(iter->second == ent){
             fent.erase(iter++);
 
             std::string tmppath;

@@ -29,7 +29,7 @@
 //------------------------------------------------
 // AutoFdEntity methods
 //------------------------------------------------
-AutoFdEntity::AutoFdEntity() : pFdEntity(NULL)
+AutoFdEntity::AutoFdEntity() : pFdEntity(NULL), pseudo_fd(-1)
 {
 }
 
@@ -38,13 +38,16 @@ AutoFdEntity::AutoFdEntity() : pFdEntity(NULL)
 // Even if it is called, the consistency of the number of
 // references can be maintained, but this case is not assumed.
 //
-AutoFdEntity::AutoFdEntity(AutoFdEntity& other) : pFdEntity(NULL)
+AutoFdEntity::AutoFdEntity(AutoFdEntity& other) : pFdEntity(NULL), pseudo_fd(-1)
 {
     S3FS_PRN_WARN("This method should not be called. Please check the caller.");
 
     if(other.pFdEntity){
-        other.pFdEntity->Dup();
-        pFdEntity = other.pFdEntity;
+        if(-1 != (pseudo_fd = other.pFdEntity->Dup(other.pseudo_fd))){
+            pFdEntity = other.pFdEntity;
+        }else{
+            S3FS_PRN_ERR("Failed duplicating fd in AutoFdEntity.");
+        }
     }
 }
 
@@ -56,11 +59,12 @@ AutoFdEntity::~AutoFdEntity()
 bool AutoFdEntity::Close()
 {
     if(pFdEntity){
-        if(!FdManager::get()->Close(pFdEntity)){
+        if(!FdManager::get()->Close(pFdEntity, pseudo_fd)){
             S3FS_PRN_ERR("Failed to close fdentity.");
             return false;
         }
         pFdEntity = NULL;
+        pseudo_fd = -1;
     }
     return true;
 }
@@ -69,48 +73,61 @@ bool AutoFdEntity::Close()
 // This method touches the internal fdentity with.
 // This is used to keep the file open.
 //
-bool AutoFdEntity::Detach()
+int AutoFdEntity::Detach()
 {
     if(!pFdEntity){
         S3FS_PRN_ERR("Does not have a associated FdEntity.");
+        return -1;
+    }
+    int fd    = pseudo_fd;
+    pseudo_fd = -1;
+    pFdEntity = NULL;
+
+    return fd;
+}
+
+bool AutoFdEntity::Attach(const char* path, int existfd)
+{
+    Close();
+
+    if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, false))){
+        S3FS_PRN_DBG("Could not find fd entity object(file=%s, existfd=%d)", path, existfd);
         return false;
     }
-    pFdEntity = NULL;
+    pseudo_fd = existfd;
     return true;
 }
 
+FdEntity* AutoFdEntity::Open(const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+{
+    Close();
+
+    if(NULL == (pFdEntity = FdManager::get()->Open(pseudo_fd, path, pmeta, size, time, flags, force_tmpfile, is_create, no_fd_lock_wait))){
+        pseudo_fd = -1;
+        return NULL;
+    }
+    return pFdEntity;
+}
+
 // [NOTE]
-// This method calls the FdManager method without incrementing the
-// reference count.
-// This means that it will only be used to map to a file descriptor
-// that was already open.
+// the fd obtained by this method is not a newly created pseudo fd.
 //
-FdEntity* AutoFdEntity::GetFdEntity(const char* path, int existfd, bool increase_ref)
+FdEntity* AutoFdEntity::GetExistFdEntiy(const char* path, int existfd)
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, increase_ref))){
-        S3FS_PRN_DBG("Could not find fd(file=%s, existfd=%d)", path, existfd);
+    FdEntity* ent;
+    if(NULL == (ent = FdManager::get()->GetExistFdEntiy(path, existfd))){
         return NULL;
     }
-    return pFdEntity;
+    return ent;
 }
 
-FdEntity* AutoFdEntity::Open(const char* path, headers_t* pmeta, off_t size, time_t time, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+FdEntity* AutoFdEntity::OpenExistFdEntiy(const char* path, int flags)
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->Open(path, pmeta, size, time, force_tmpfile, is_create, no_fd_lock_wait))){
-        return NULL;
-    }
-    return pFdEntity;
-}
-
-FdEntity* AutoFdEntity::ExistOpen(const char* path, int existfd, bool ignore_existfd)
-{
-    Close();
-
-    if(NULL == (pFdEntity = FdManager::get()->ExistOpen(path, existfd, ignore_existfd))){
+    if(NULL == (pFdEntity = FdManager::get()->OpenExistFdEntiy(path, pseudo_fd, flags))){
         return NULL;
     }
     return pFdEntity;
@@ -128,8 +145,12 @@ bool AutoFdEntity::operator=(AutoFdEntity& other)
     Close();
 
     if(other.pFdEntity){
-        other.pFdEntity->Dup();
-        pFdEntity = other.pFdEntity;
+        if(-1 != (pseudo_fd = other.pFdEntity->Dup(other.pseudo_fd))){
+            pFdEntity = other.pFdEntity;
+        }else{
+            S3FS_PRN_ERR("Failed duplicating fd in AutoFdEntity.");
+            return false;
+        }
     }
     return true;
 }

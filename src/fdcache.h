@@ -67,7 +67,7 @@ class FdManager
       static bool MakeRandomTempPath(const char* path, std::string& tmppath);
       static bool SetCheckCacheDirExist(bool is_check);
       static bool CheckCacheDirExist();
-
+      static bool HasOpenEntityFd(const char* path);
       static off_t GetEnsureFreeDiskSpace();
       static off_t SetEnsureFreeDiskSpace(off_t size);
       static bool IsSafeDiskSpace(const char* path, off_t size);
@@ -76,11 +76,12 @@ class FdManager
       static bool HaveLseekHole();
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
-      FdEntity* GetFdEntity(const char* path, int existfd = -1, bool increase_ref = true);
-      FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
-      FdEntity* ExistOpen(const char* path, int existfd = -1, bool ignore_existfd = false);
+      FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true);
+      FdEntity* Open(int& fd, const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
+      FdEntity* GetExistFdEntiy(const char* path, int existfd = -1);
+      FdEntity* OpenExistFdEntiy(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);
-      bool Close(FdEntity* ent);
+      bool Close(FdEntity* ent, int fd);
       bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
       void CleanupCacheDir();
 

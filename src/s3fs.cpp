@@ -119,7 +119,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
-static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load = false);
+static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
@@ -700,7 +700,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
     return true;
 }
 
-static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, bool is_load)
+static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags, bool is_load)
 {
     int         result;
     struct stat stobj;
@@ -717,12 +717,12 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     time_t mtime         = (!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, force_tmpfile, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, flags, force_tmpfile, true))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
         return -EIO;
     }
     // load
-    if(is_load && !ent->OpenAndLoadAll(&meta)){
+    if(is_load && !ent->LoadAll(autoent.GetPseudoFd(), &meta)){
         S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
         autoent.Close();
         return -EIO;
@@ -780,7 +780,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     if(stbuf){
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL != (ent = autoent.ExistOpen(path))){
+        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
             struct stat tmpstbuf;
             if(ent->GetStats(tmpstbuf)){
                 stbuf->st_size = tmpstbuf.st_size;
@@ -811,7 +811,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
             AutoFdEntity autoent;
             FdEntity*    ent;
             int          result;
-            if(0 != (result = get_local_fent(autoent, &ent, path))){
+            if(0 != (result = get_local_fent(autoent, &ent, path, O_RDONLY))){
                 S3FS_PRN_ERR("could not get fent(file=%s)", path);
                 return result;
             }
@@ -826,7 +826,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
             }
             // Read
             ssize_t ressize;
-            if(0 > (ressize = ent->Read(buf, 0, readsize))){
+            if(0 > (ressize = ent->Read(autoent.GetPseudoFd(), buf, 0, readsize))){
                 S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
                 return static_cast<int>(ressize);
             }
@@ -994,13 +994,12 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.Open(path, &meta, 0, -1, false, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, 0, -1, fi->flags, false, true))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
     ent->MarkDirtyNewFile();
-    autoent.Detach();       // KEEP fdentity open
-    fi->fh = ent->GetFd();
+    fi->fh = autoent.Detach();       // KEEP fdentity open;
 
     S3FS_MALLOCTRIM(0);
 
@@ -1191,19 +1190,25 @@ static int s3fs_symlink(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = autoent.Open(to, &headers, 0, -1, true, true))){
+        if(NULL == (ent = autoent.Open(to, &headers, 0, -1, O_RDWR, true, true))){
             S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
             return -errno;
         }
         // write(without space words)
         strFrom           = trim(std::string(from));
         ssize_t from_size = static_cast<ssize_t>(strFrom.length());
-        if(from_size != ent->Write(strFrom.c_str(), 0, from_size)){
-            S3FS_PRN_ERR("could not write tmpfile(errno=%d)", errno);
-            return -errno;
+        ssize_t ressize;
+        if(from_size != (ressize = ent->Write(autoent.GetPseudoFd(), strFrom.c_str(), 0, from_size))){
+            if(ressize < 0){
+                S3FS_PRN_ERR("could not write tmpfile(errno=%d)", static_cast<int>(ressize));
+                return static_cast<int>(ressize);
+            }else{
+                S3FS_PRN_ERR("could not write tmpfile %zd byte(errno=%d)", ressize, errno);
+                return (0 == errno ? -EIO : -errno);
+            }
         }
         // upload
-        if(0 != (result = ent->Flush(true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
         }
     }
@@ -1254,11 +1259,11 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         // update time
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = autoent.ExistOpen(from, -1, !FdManager::IsCacheDir()))){
+        if(NULL == (ent = autoent.OpenExistFdEntiy(from))){
             // no opened fd
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
-                ent = autoent.Open(from, &meta, buf.st_size, -1, false, true);
+                ent = autoent.Open(from, &meta, buf.st_size, -1, O_RDONLY, false, true);
             }
             if(ent){
                 struct timespec mtime = get_mtime(meta);
@@ -1317,7 +1322,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, from, true))){
+        if(0 != (result = get_local_fent(autoent, &ent, from, O_RDWR, true))){
             S3FS_PRN_ERR("could not open and read file(%s)", from);
             return result;
         }
@@ -1335,7 +1340,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
         }
 
         // upload
-        if(0 != (result = ent->RowFlush(to, true))){
+        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), to, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
             return result;
         }
@@ -1573,8 +1578,8 @@ static int s3fs_rename(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL != (ent = autoent.ExistOpen(from))){
-            if(0 != (result = ent->Flush(true))){
+        if(NULL != (ent = autoent.OpenExistFdEntiy(from, O_RDWR))){
+            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
                 return result;
             }
@@ -1673,7 +1678,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
+        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -1755,7 +1760,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return result;
         }
@@ -1767,7 +1772,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         ent->SetMode(mode);
 
         // upload
-        if(0 != (result = ent->Flush(true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -1850,7 +1855,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
+        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -1939,7 +1944,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return result;
         }
@@ -1952,7 +1957,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         ent->SetGId(gid);
   
         // upload
-        if(0 != (result = ent->Flush(true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2032,7 +2037,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         FdEntity*    ent;
         bool         need_put_header = true;
         bool         keep_mtime      = false;
-        if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
+        if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -2131,7 +2136,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), true))){
+        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
             S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
             return result;
         }
@@ -2149,7 +2154,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         }
 
         // upload
-        if(0 != (result = ent->Flush(true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2184,7 +2189,7 @@ static int s3fs_truncate(const char* _path, off_t size)
     // Get file information
     if(0 == (result = get_object_attribute(path, NULL, &meta))){
         // Exists -> Get file(with size)
-        if(NULL == (ent = autoent.Open(path, &meta, size, -1, false, true))){
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, false, true))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -2209,14 +2214,14 @@ static int s3fs_truncate(const char* _path, off_t size)
         meta["x-amz-meta-uid"]   = str(pcxt->uid);
         meta["x-amz-meta-gid"]   = str(pcxt->gid);
 
-        if(NULL == (ent = autoent.Open(path, &meta, size, -1, true, true))){
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, true, true))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
     }
 
     // upload
-    if(0 != (result = ent->Flush(true))){
+    if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
         S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
         return result;
     }
@@ -2247,11 +2252,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     // and only the Stats cache exists.
     //
     if(StatCache::getStatCacheData()->HasStat(path)){
-        AutoFdEntity autoent_local;
-        if(NULL == autoent_local.ExistOpen(path, -1, true)){
-            if((result = s3fs_flush(_path, fi)) != 0){
-                S3FS_PRN_ERR("could not flush(%s): result=%d", path, result);
-            }
+        if(!FdManager::HasOpenEntityFd(path)){
             StatCache::getStatCacheData()->DelStat(path);
         }
     }
@@ -2284,7 +2285,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     FdEntity*    ent;
     headers_t    meta;
     get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-    if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, false, true))){
+    if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, fi->flags, false, true))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
@@ -2293,14 +2294,13 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         time_t now = time(NULL);
         struct timespec ts = {now, 0};
         ent->SetMCtime(ts, ts);
-        if(0 != (result = ent->RowFlush(path, true))){
+        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             StatCache::getStatCacheData()->DelStat(path);
             return result;
         }
     }
-    autoent.Detach();       // KEEP fdentity open
-    fi->fh = ent->GetFd();
+    fi->fh = autoent.Detach();       // KEEP fdentity open;
 
     S3FS_MALLOCTRIM(0);
 
@@ -2316,12 +2316,9 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
+    if(NULL == (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
-    }
-    if(ent->GetFd() != static_cast<int>(fi->fh)){
-        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
     }
 
     // check real file size
@@ -2331,7 +2328,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
         return 0;
     }
 
-    if(0 > (res = ent->Read(buf, offset, size, false))){
+    if(0 > (res = ent->Read(static_cast<int>(fi->fh), buf, offset, size, false))){
         S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
     }
 
@@ -2347,20 +2344,18 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
+    if(NULL == (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
         S3FS_PRN_ERR("could not find opened fd(%s)", path);
         return -EIO;
     }
-    if(ent->GetFd() != static_cast<int>(fi->fh)){
-        S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
-    }
-    if(0 > (res = ent->Write(buf, offset, size))){
+
+    if(0 > (res = ent->Write(static_cast<int>(fi->fh), buf, offset, size))){
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
     }
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
         int flushres;
-        if(0 != (flushres = ent->RowFlush(path, true))){
+        if(0 != (flushres = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
             return flushres;
@@ -2408,10 +2403,10 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
+    if(NULL != (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
         ent->UpdateMtime(true);         // clear the flag not to update mtime.
         ent->UpdateCtime();
-        result = ent->Flush(false);
+        result = ent->Flush(static_cast<int>(fi->fh), false);
         StatCache::getStatCacheData()->DelStat(path);
     }
     S3FS_MALLOCTRIM(0);
@@ -2431,12 +2426,12 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL != (ent = autoent.ExistOpen(path, static_cast<int>(fi->fh)))){
+    if(NULL != (ent = autoent.GetExistFdEntiy(path, static_cast<int>(fi->fh)))){
         if(0 == datasync){
             ent->UpdateMtime();
             ent->UpdateCtime();
         }
-        result = ent->Flush(false);
+        result = ent->Flush(static_cast<int>(fi->fh), false);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2468,29 +2463,21 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
-        FdEntity*    ent;
 
         // [NOTE]
-        // The number of references to fdEntity corresponding to fi-> fh is already incremented
-        // when it is opened. Therefore, when an existing fdEntity is detected here, the reference
-        // count must not be incremented. And if detected, the number of references incremented
-        // when opened will be decremented when the AutoFdEntity object is subsequently destroyed.
+        // The pseudo fd stored in fi->fh is attached to AutoFdEntiry so that it can be
+        // destroyed here.
         //
-        if(NULL == (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh), false))){
-            S3FS_PRN_ERR("could not find fd(file=%s)", path);
+        if(!autoent.Attach(path, static_cast<int>(fi->fh))){
+            S3FS_PRN_ERR("could not find pseudo fd(file=%s, fd=%d)", path, static_cast<int>(fi->fh));
             return -EIO;
-        }
-        if(ent->GetFd() != static_cast<int>(fi->fh)){
-            S3FS_PRN_WARN("different fd(%d - %llu)", ent->GetFd(), (unsigned long long)(fi->fh));
         }
     }
 
     // check - for debug
     if(S3fsLog::IsS3fsLogDbg()){
-        AutoFdEntity autoent;
-        FdEntity*    ent;
-        if(NULL != (ent = autoent.GetFdEntity(path, static_cast<int>(fi->fh)))){
-            S3FS_PRN_WARN("file(%s),fd(%d) is still opened.", path, ent->GetFd());
+        if(FdManager::HasOpenEntityFd(path)){
+            S3FS_PRN_WARN("file(%s) is still opened(another pseudo fd is opend).", path);
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -3051,7 +3038,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
+    if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
         // get xattr and make new xattr
         std::string strxattr;
         if(ent->GetXattr(strxattr)){
@@ -3338,7 +3325,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(NULL != (ent = autoent.ExistOpen(path, -1, true))){
+    if(NULL != (ent = autoent.OpenExistFdEntiy(path))){
         if(ent->MergeOrgMeta(updatemeta)){
             // meta is changed, but now uploading.
             // then the meta is pending and accumulated to be put after the upload is complete.

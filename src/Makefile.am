@@ -47,6 +47,8 @@ s3fs_SOURCES = \
     fdcache_page.cpp \
     fdcache_stat.cpp \
     fdcache_auto.cpp \
+    fdcache_fdinfo.cpp \
+    fdcache_pseudofd.cpp \
     addhead.cpp \
     sighandlers.cpp \
     autolock.cpp \

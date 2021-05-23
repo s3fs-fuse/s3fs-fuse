@@ -94,8 +94,8 @@ ino_t FdEntity::GetInode(int fd)
 // FdEntity methods
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
-    is_lock_init(false), refcnt(0), path(SAFESTRPTR(tpath)),
-    fd(-1), pfile(NULL), inode(0), size_orgmeta(0), mp_start(0), mp_size(0),
+    is_lock_init(false), path(SAFESTRPTR(tpath)),
+    physical_fd(-1), pfile(NULL), inode(0), size_orgmeta(0),
     cachepath(SAFESTRPTR(cpath)), is_meta_pending(false)
 {
     holding_mtime.tv_sec = -1;
@@ -140,7 +140,15 @@ void FdEntity::Clear()
     AutoLock auto_lock(&fdent_lock);
     AutoLock auto_data_lock(&fdent_data_lock);
 
-    if(-1 != fd){
+    for(fdinfo_map_t::iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
+        PseudoFdInfo* ppseudofdinfo = iter->second;
+        if(ppseudofdinfo){
+            delete ppseudofdinfo;
+        }
+    }
+    pseudo_fd_map.clear();
+
+    if(-1 != physical_fd){
         if(!cachepath.empty()){
             // [NOTE]
             // Compare the inode of the existing cache file with the inode of
@@ -159,8 +167,8 @@ void FdEntity::Clear()
             fclose(pfile);
             pfile = NULL;
         }
-        fd    = -1;
-        inode = 0;
+        physical_fd = -1;
+        inode       = 0;
 
         if(!mirrorpath.empty()){
             if(-1 == unlink(mirrorpath.c_str())){
@@ -170,9 +178,8 @@ void FdEntity::Clear()
         }
     }
     pagelist.Init(0, false, false);
-    refcnt        = 0;
-    path          = "";
-    cachepath     = "";
+    path      = "";
+    cachepath = "";
 }
 
 // [NOTE]
@@ -195,62 +202,98 @@ ino_t FdEntity::GetInode()
     return st.st_ino;
 }
 
-void FdEntity::Close()
+void FdEntity::Close(int fd)
 {
     AutoLock auto_lock(&fdent_lock);
 
-    S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt - 1 : refcnt));
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
-    if(-1 != fd){
-        if(0 < refcnt){
-            refcnt--;
-        }else{
-            S3FS_PRN_EXIT("reference count underflow");
-            abort();
+    // search pseudo fd and close it.
+    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.end() != iter){
+        PseudoFdInfo* ppseudoinfo = iter->second;
+        pseudo_fd_map.erase(iter);
+        delete ppseudoinfo;
+    }else{
+        S3FS_PRN_WARN("Not found pseudo_fd(%d) in entity object(%s)", fd, path.c_str());
+    }
+
+    // check pseudo fd count
+    if(-1 != physical_fd && 0 == GetOpenCount(true)){
+        AutoLock auto_data_lock(&fdent_data_lock);
+        if(!cachepath.empty()){
+            // [NOTE]
+            // Compare the inode of the existing cache file with the inode of
+            // the cache file output by this object, and if they are the same,
+            // serialize the pagelist.
+            //
+            ino_t cur_inode = GetInode();
+            if(0 != cur_inode && cur_inode == inode){
+                CacheFileStat cfstat(path.c_str());
+                if(!pagelist.Serialize(cfstat, true, inode)){
+                    S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+                }
+            }
         }
-        if(0 == refcnt){
-            AutoLock auto_data_lock(&fdent_data_lock);
-            if(!cachepath.empty()){
-                // [NOTE]
-                // Compare the inode of the existing cache file with the inode of
-                // the cache file output by this object, and if they are the same,
-                // serialize the pagelist.
-                //
-                ino_t cur_inode = GetInode();
-                if(0 != cur_inode && cur_inode == inode){
-                    CacheFileStat cfstat(path.c_str());
-                    if(!pagelist.Serialize(cfstat, true, inode)){
-                        S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
-                    }
-                }
-            }
-            if(pfile){
-                fclose(pfile);
-                pfile = NULL;
-            }
-            fd    = -1;
-            inode = 0;
+        if(pfile){
+            fclose(pfile);
+            pfile = NULL;
+        }
+        physical_fd = -1;
+        inode       = 0;
 
-            if(!mirrorpath.empty()){
-                if(-1 == unlink(mirrorpath.c_str())){
-                    S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
-                }
-                mirrorpath.erase();
+        if(!mirrorpath.empty()){
+            if(-1 == unlink(mirrorpath.c_str())){
+                S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
             }
+            mirrorpath.erase();
         }
     }
 }
 
-int FdEntity::Dup(bool lock_already_held)
+int FdEntity::Dup(int fd, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_DBG("[path=%s][fd=%d][refcnt=%d]", path.c_str(), fd, (-1 != fd ? refcnt + 1 : refcnt));
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), fd, physical_fd, pseudo_fd_map.size());
 
-    if(-1 != fd){
-        refcnt++;
+    if(-1 == physical_fd){
+        return -1;
     }
-    return fd;
+    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.end() == iter){
+        S3FS_PRN_ERR("Not found pseudo_fd(%d) in entity object(%s) for physical_fd(%d)", fd, path.c_str(), physical_fd);
+        return -1;
+    }
+    PseudoFdInfo*   org_pseudoinfo = iter->second;
+    PseudoFdInfo*   ppseudoinfo    = new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
+    int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
+    pseudo_fd_map[pseudo_fd]       = ppseudoinfo;
+
+    return pseudo_fd;
+}
+
+int FdEntity::OpenPseudoFd(int flags, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), physical_fd, pseudo_fd_map.size());
+
+    if(-1 == physical_fd){
+        return -1;
+    }
+    PseudoFdInfo*   ppseudoinfo = new PseudoFdInfo(physical_fd, flags);
+    int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
+    pseudo_fd_map[pseudo_fd]    = ppseudoinfo;
+
+    return pseudo_fd;
+}
+
+int FdEntity::GetOpenCount(bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    return static_cast<int>(pseudo_fd_map.size());
 }
 
 //
@@ -310,11 +353,64 @@ int FdEntity::OpenMirrorFile()
     return mirrorfd;
 }
 
-int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type type)
+bool FdEntity::FindPseudoFd(int fd, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(-1 == fd){
+        return false;
+    }
+    if(pseudo_fd_map.end() == pseudo_fd_map.find(fd)){
+        return false;
+    }
+    return true;
+}
+
+PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    if(-1 == fd){
+        return NULL;
+    }
+    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.end() == iter || NULL == iter->second){
+        return NULL;
+    }
+    if(writable){
+        if(!iter->second->Writable()){
+            return NULL;
+        }
+    }else{
+        if(!iter->second->Readable()){
+            return NULL;
+        }
+    }
+    return iter->second;
+}
+
+bool FdEntity::IsUploading(bool lock_already_held)
+{
+    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
+        PseudoFdInfo* ppseudoinfo = iter->second;
+        if(ppseudoinfo && ppseudoinfo->IsUploading()){
+            return true;
+        }
+    }
+    return false;
+}
+
+// [NOTE]
+// If the open is successful, returns pseudo fd.
+// If it fails, it returns an error code with a negative value.
+//
+int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
 {
     AutoLock auto_lock(&fdent_lock, type);
 
-    S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%lld]", path.c_str(), fd, static_cast<long long>(size), static_cast<long long>(time));
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][time=%lld][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), static_cast<long long>(time), flags);
 
     if (!auto_lock.isLockAcquired()) {
         // had to wait for fd lock, return
@@ -323,26 +419,22 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type typ
     }
 
     AutoLock auto_data_lock(&fdent_data_lock);
-    if(-1 != fd){
-        // already opened, needs to increment refcnt.
-        Dup(/*lock_already_held=*/ true);
+
+    if(-1 != physical_fd){
+        //
+        // already open file
+        //
 
         // check only file size(do not need to save cfs and time.
         if(0 <= size && pagelist.Size() != size){
             // truncate temporary file size
-            if(-1 == ftruncate(fd, size)){
-                S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", fd, errno);
-                if(0 < refcnt){
-                    refcnt--;
-                }
+            if(-1 == ftruncate(physical_fd, size)){
+                S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", physical_fd, errno);
                 return -errno;
             }
             // resize page list
             if(!pagelist.Resize(size, false, true)){      // Areas with increased size are modified
-                S3FS_PRN_ERR("failed to truncate temporary file information(%d).", fd);
-                if(0 < refcnt){
-                    refcnt--;
-                }
+                S3FS_PRN_ERR("failed to truncate temporary file information(%d).", physical_fd);
                 return -EIO;
             }
         }
@@ -355,78 +447,129 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type typ
         if(new_size < size_orgmeta){
             size_orgmeta = new_size;
         }
-        return 0;
-    }
 
-    bool  need_save_csf = false;  // need to save(reset) cache stat file
-    bool  is_truncate   = false;  // need to truncate
+    }else{
+        //
+        // file is not opened yet
+        //
+        bool  need_save_csf = false;  // need to save(reset) cache stat file
+        bool  is_truncate   = false;  // need to truncate
 
-    if(!cachepath.empty()){
-        // using cache
+        if(!cachepath.empty()){
+            // using cache
+            struct stat st;
+            if(stat(cachepath.c_str(), &st) == 0){
+                if(st.st_mtime < time){
+                    S3FS_PRN_DBG("cache file stale, removing: %s", cachepath.c_str());
+                    if(unlink(cachepath.c_str()) != 0){
+                        return (0 == errno ? -EIO : -errno);
+                    }
+                }
+            }
 
-        struct stat st;
-        if(stat(cachepath.c_str(), &st) == 0){
-            if(st.st_mtime < time){
-                S3FS_PRN_DBG("cache file stale, removing: %s", cachepath.c_str());
-                if(unlink(cachepath.c_str()) != 0){
+            // open cache and cache stat file, load page info.
+            CacheFileStat cfstat(path.c_str());
+
+            // try to open cache file
+            if( -1 != (physical_fd = open(cachepath.c_str(), O_RDWR)) &&
+                0 != (inode = FdEntity::GetInode(physical_fd))        &&
+                pagelist.Serialize(cfstat, false, inode)          )
+            {
+                // succeed to open cache file and to load stats data
+                memset(&st, 0, sizeof(struct stat));
+                if(-1 == fstat(physical_fd, &st)){
+                    S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
+                    physical_fd = -1;
+                    inode       = 0;
                     return (0 == errno ? -EIO : -errno);
                 }
-            }
-        }
-
-        // open cache and cache stat file, load page info.
-        CacheFileStat cfstat(path.c_str());
-
-        // try to open cache file
-        if( -1 != (fd = open(cachepath.c_str(), O_RDWR)) &&
-            0 != (inode = FdEntity::GetInode(fd))        &&
-            pagelist.Serialize(cfstat, false, inode)     )
-        {
-            // succeed to open cache file and to load stats data
-            memset(&st, 0, sizeof(struct stat));
-            if(-1 == fstat(fd, &st)){
-                S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
-                fd    = -1;
-                inode = 0;
-                return (0 == errno ? -EIO : -errno);
-            }
-            // check size, st_size, loading stat file
-            if(-1 == size){
-                if(st.st_size != pagelist.Size()){
-                    pagelist.Resize(st.st_size, false, true); // Areas with increased size are modified
-                    need_save_csf = true;     // need to update page info
+                // check size, st_size, loading stat file
+                if(-1 == size){
+                    if(st.st_size != pagelist.Size()){
+                        pagelist.Resize(st.st_size, false, true); // Areas with increased size are modified
+                        need_save_csf = true;     // need to update page info
+                    }
+                    size = st.st_size;
+                }else{
+                    if(size != pagelist.Size()){
+                        pagelist.Resize(size, false, true);       // Areas with increased size are modified
+                        need_save_csf = true;     // need to update page info
+                    }
+                    if(size != st.st_size){
+                        is_truncate = true;
+                    }
                 }
-                size = st.st_size;
+
             }else{
-                if(size != pagelist.Size()){
-                    pagelist.Resize(size, false, true);       // Areas with increased size are modified
-                    need_save_csf = true;     // need to update page info
+                if(-1 != physical_fd){
+                    close(physical_fd);
                 }
-                if(size != st.st_size){
+                inode = 0;
+
+                // could not open cache file or could not load stats data, so initialize it.
+                if(-1 == (physical_fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
+                    S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
+
+                    // remove cache stat file if it is existed
+                    if(!CacheFileStat::DeleteCacheFileStat(path.c_str())){
+                        if(ENOENT != errno){
+                            S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), errno);
+                        }
+                    }
+                    return (0 == errno ? -EIO : -errno);
+                }
+                need_save_csf = true;       // need to update page info
+                inode         = FdEntity::GetInode(physical_fd);
+                if(-1 == size){
+                    size = 0;
+                    pagelist.Init(0, false, false);
+                }else{
+                    // [NOTE]
+                    // The modify flag must not be set when opening a file,
+                    // if the time parameter(mtime) is specified(not -1) and
+                    // the cache file does not exist.
+                    // If mtime is specified for the file and the cache file
+                    // mtime is older than it, the cache file is removed and
+                    // the processing comes here.
+                    //
+                    pagelist.Resize(size, false, (0 <= time ? false : true));
+
                     is_truncate = true;
                 }
             }
 
-        }else{
-            if(-1 != fd){
-                close(fd);
+            // open mirror file
+            int mirrorfd;
+            if(0 >= (mirrorfd = OpenMirrorFile())){
+                S3FS_PRN_ERR("failed to open mirror file linked cache file(%s).", cachepath.c_str());
+                return (0 == mirrorfd ? -EIO : mirrorfd);
             }
+            // switch fd
+            close(physical_fd);
+            physical_fd = mirrorfd;
+
+            // make file pointer(for being same tmpfile)
+            if(NULL == (pfile = fdopen(physical_fd, "wb"))){
+                S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
+                close(physical_fd);
+                physical_fd = -1;
+                inode       = 0;
+                return (0 == errno ? -EIO : -errno);
+            }
+
+        }else{
+            // not using cache
             inode = 0;
 
-            // could not open cache file or could not load stats data, so initialize it.
-            if(-1 == (fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
-                S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
-
-                // remove cache stat file if it is existed
-                if(!CacheFileStat::DeleteCacheFileStat(path.c_str())){
-                    if(ENOENT != errno){
-                        S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), errno);
-                    }
+            // open temporary file
+            if(NULL == (pfile = tmpfile()) || -1 ==(physical_fd = fileno(pfile))){
+                S3FS_PRN_ERR("failed to open tmp file. err(%d)", errno);
+                if(pfile){
+                    fclose(pfile);
+                    pfile = NULL;
                 }
                 return (0 == errno ? -EIO : -errno);
             }
-            need_save_csf = true;       // need to update page info
-            inode         = FdEntity::GetInode(fd);
             if(-1 == size){
                 size = 0;
                 pagelist.Init(0, false, false);
@@ -440,124 +583,77 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type typ
                 // the processing comes here.
                 //
                 pagelist.Resize(size, false, (0 <= time ? false : true));
-
                 is_truncate = true;
             }
         }
 
-        // open mirror file
-        int mirrorfd;
-        if(0 >= (mirrorfd = OpenMirrorFile())){
-            S3FS_PRN_ERR("failed to open mirror file linked cache file(%s).", cachepath.c_str());
-            return (0 == mirrorfd ? -EIO : mirrorfd);
-        }
-        // switch fd
-        close(fd);
-        fd = mirrorfd;
-
-        // make file pointer(for being same tmpfile)
-        if(NULL == (pfile = fdopen(fd, "wb"))){
-            S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
-            close(fd);
-            fd    = -1;
-            inode = 0;
-            return (0 == errno ? -EIO : -errno);
-        }
-
-    }else{
-        // not using cache
-        inode = 0;
-
-        // open temporary file
-        if(NULL == (pfile = tmpfile()) || -1 ==(fd = fileno(pfile))){
-            S3FS_PRN_ERR("failed to open tmp file. err(%d)", errno);
-            if(pfile){
+        // truncate cache(tmp) file
+        if(is_truncate){
+            if(0 != ftruncate(physical_fd, size) || 0 != fsync(physical_fd)){
+                S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
                 fclose(pfile);
-                pfile = NULL;
+                pfile       = NULL;
+                physical_fd = -1;
+                inode       = 0;
+                return (0 == errno ? -EIO : -errno);
             }
-            return (0 == errno ? -EIO : -errno);
         }
-        if(-1 == size){
-            size = 0;
-            pagelist.Init(0, false, false);
+
+        // reset cache stat file
+        if(need_save_csf){
+            CacheFileStat cfstat(path.c_str());
+            if(!pagelist.Serialize(cfstat, true, inode)){
+                S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
+            }
+        }
+
+        // set original headers and size in it.
+        if(pmeta){
+            orgmeta      = *pmeta;
+            size_orgmeta = get_size(orgmeta);
         }else{
-            // [NOTE]
-            // The modify flag must not be set when opening a file,
-            // if the time parameter(mtime) is specified(not -1) and
-            // the cache file does not exist.
-            // If mtime is specified for the file and the cache file
-            // mtime is older than it, the cache file is removed and
-            // the processing comes here.
-            //
-            pagelist.Resize(size, false, (0 <= time ? false : true));
-            is_truncate = true;
+            orgmeta.clear();
+            size_orgmeta = 0;
+        }
+
+        // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
+        if(-1 != time){
+            struct timespec ts = {time, 0};
+            if(0 != SetMCtime(ts, ts, /*lock_already_held=*/ true)){
+                S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
+                fclose(pfile);
+                pfile       = NULL;
+                physical_fd = -1;
+                inode       = 0;
+                return (0 == errno ? -EIO : -errno);
+            }
         }
     }
 
-    // truncate cache(tmp) file
-    if(is_truncate){
-        if(0 != ftruncate(fd, size) || 0 != fsync(fd)){
-            S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
-            fclose(pfile);
-            pfile = NULL;
-            fd    = -1;
-            inode = 0;
-            return (0 == errno ? -EIO : -errno);
-        }
-    }
+    // create new pseudo fd, and set it to map
+    PseudoFdInfo*   ppseudoinfo = new PseudoFdInfo(physical_fd, flags);
+    int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
+    pseudo_fd_map[pseudo_fd]    = ppseudoinfo;
 
-    // reset cache stat file
-    if(need_save_csf){
-        CacheFileStat cfstat(path.c_str());
-        if(!pagelist.Serialize(cfstat, true, inode)){
-            S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
-        }
-    }
-
-    // init internal data
-    refcnt = 1;
-
-    // set original headers and size in it.
-    if(pmeta){
-        orgmeta      = *pmeta;
-        size_orgmeta = get_size(orgmeta);
-    }else{
-        orgmeta.clear();
-        size_orgmeta = 0;
-    }
-
-    // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
-    if(-1 != time){
-        struct timespec ts = {time, 0};
-        if(0 != SetMCtime(ts, ts, /*lock_already_held=*/ true)){
-            S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
-            fclose(pfile);
-            pfile = NULL;
-            fd    = -1;
-            inode = 0;
-            return (0 == errno ? -EIO : -errno);
-        }
-    }
-    return 0;
+    return pseudo_fd;
 }
 
 // [NOTE]
-// This method is called from only nocopyapi functions.
+// This method is called for only nocopyapi functions.
 // So we do not check disk space for this option mode, if there is no enough
 // disk space this method will be failed.
 //
-bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
+bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 {
     AutoLock auto_lock(&fdent_lock);
-    int result;
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d]", path.c_str(), fd);
+    S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
-    if(-1 == fd){
-        if(0 != Open(pmeta, /*size=*/ -1, /*time=*/ -1, AutoLock::ALREADY_LOCKED)){
-            return false;
-        }
+    if(-1 == physical_fd || !FindPseudoFd(fd, true)){
+        S3FS_PRN_ERR("pseudo_fd(%d) and physical_fd(%d) for path(%s) is not opened yet", fd, physical_fd, path.c_str());
+        return false;
     }
+
     AutoLock auto_data_lock(&fdent_data_lock);
 
     if(force_load){
@@ -566,6 +662,7 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
     //
     // TODO: possibly do background for delay loading
     //
+    int result;
     if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true))){
         S3FS_PRN_ERR("could not download, result(%d)", result);
         return false;
@@ -635,12 +732,12 @@ bool FdEntity::IsModified() const
 bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return false;
     }
 
     memset(&st, 0, sizeof(struct stat)); 
-    if(-1 == fstat(fd, &st)){
+    if(-1 == fstat(physical_fd, &st)){
         S3FS_PRN_ERR("fstat failed. errno(%d)", errno);
         return false;
     }
@@ -651,7 +748,7 @@ int FdEntity::SetCtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%lld]", path.c_str(), physical_fd, static_cast<long long>(time.tv_sec));
 
     if(-1 == time.tv_sec){
         return 0;
@@ -664,7 +761,7 @@ int FdEntity::SetAtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][time=%lld]", path.c_str(), fd, static_cast<long long>(time.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%lld]", path.c_str(), physical_fd, static_cast<long long>(time.tv_sec));
 
     if(-1 == time.tv_sec){
         return 0;
@@ -680,19 +777,19 @@ int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), fd, static_cast<long long>(mtime.tv_sec), static_cast<long long>(ctime.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), physical_fd, static_cast<long long>(mtime.tv_sec), static_cast<long long>(ctime.tv_sec));
 
     if(mtime.tv_sec < 0 || ctime.tv_sec < 0){
         return 0;
     }
 
-    if(-1 != fd){
+    if(-1 != physical_fd){
         struct timeval tv[2];
         tv[0].tv_sec = mtime.tv_sec;
         tv[0].tv_usec = mtime.tv_nsec / 1000;
         tv[1].tv_sec = ctime.tv_sec;
         tv[1].tv_usec = ctime.tv_nsec / 1000;
-        if(-1 == futimes(fd, tv)){
+        if(-1 == futimes(physical_fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
             return -errno;
         }
@@ -785,13 +882,13 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
     if(!GetStats(st, true)){
         return false;
     }
-    if(-1 != fd){
+    if(-1 != physical_fd){
         struct timeval tv[2];
         tv[0].tv_sec = holding_mtime.tv_sec;
         tv[0].tv_usec = holding_mtime.tv_nsec / 1000;
         tv[1].tv_sec = st.st_ctime;
         tv[1].tv_usec = 0;
-        if(-1 == futimes(fd, tv)){
+        if(-1 == futimes(physical_fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
             return false;
         }
@@ -814,7 +911,7 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
 bool FdEntity::GetSize(off_t& size)
 {
     AutoLock auto_lock(&fdent_lock);
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return false;
     }
 
@@ -875,9 +972,9 @@ bool FdEntity::SetContentType(const char* path)
 
 bool FdEntity::SetAllStatus(bool is_loaded)
 {
-    S3FS_PRN_INFO3("[path=%s][fd=%d][%s]", path.c_str(), fd, is_loaded ? "loaded" : "unloaded");
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][%s]", path.c_str(), physical_fd, is_loaded ? "loaded" : "unloaded");
 
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return false;
     }
     // [NOTE]
@@ -889,7 +986,7 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     // get file size
     struct stat st;
     memset(&st, 0, sizeof(struct stat));
-    if(-1 == fstat(fd, &st)){
+    if(-1 == fstat(physical_fd, &st)){
         S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
         return false;
     }
@@ -903,9 +1000,9 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held, bool is_modi
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return -EBADF;
     }
     AutoLock auto_data_lock(&fdent_data_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
@@ -930,12 +1027,12 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held, bool is_modi
             // download
             if(S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){
                 // parallel request
-                result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), fd, iter->offset, need_load_size);
+                result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), physical_fd, iter->offset, need_load_size);
             }else{
                 // single request
                 if(0 < need_load_size){
                     S3fsCurl s3fscurl;
-                    result = s3fscurl.GetObjectRequest(path.c_str(), fd, iter->offset, need_load_size);
+                    result = s3fscurl.GetObjectRequest(path.c_str(), physical_fd, iter->offset, need_load_size);
                 }else{
                     result = 0;
                 }
@@ -959,13 +1056,18 @@ int FdEntity::Load(off_t start, off_t size, bool lock_already_held, bool is_modi
 // [NOTICE]
 // Need to lock before calling this method.
 //
-int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
+int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t size)
 {
     int result = 0;
 
-    S3FS_PRN_INFO3("[path=%s][fd=%d][offset=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
-    if(-1 == fd){
+    if(!pseudo_obj){
+        S3FS_PRN_ERR("Pseudo obejct is NULL.");
+        return -EIO;
+    }
+
+    if(-1 == physical_fd){
         return -EBADF;
     }
 
@@ -1004,7 +1106,7 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
         }
         // download each multipart size(default 10MB) in unit
         for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < static_cast<off_t>(iter->bytes); totalread += oneread){
-            int   upload_fd = fd;
+            int   upload_fd = physical_fd;
             off_t offset    = iter->offset + totalread;
             oneread         = std::min(static_cast<off_t>(iter->bytes) - totalread, S3fsCurl::GetMultipartSize());
 
@@ -1074,9 +1176,9 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
                 // already loaded area
             }
             // single area upload by multipart post
-            if(0 != (result = NoCacheMultipartPost(upload_fd, offset, oneread))){
-              S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
-              break;
+            if(0 != (result = NoCacheMultipartPost(pseudo_obj, upload_fd, offset, oneread))){
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
+                break;
             }
         }
         if(0 != result){
@@ -1107,8 +1209,8 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
         pagelist.Compress();
 
         // fd data do empty
-        if(-1 == ftruncate(fd, 0)){
-            S3FS_PRN_ERR("failed to truncate file(%d), but continue...", fd);
+        if(-1 == ftruncate(physical_fd, 0)){
+            S3FS_PRN_ERR("failed to truncate file(%d), but continue...", physical_fd);
         }
     }
 
@@ -1122,18 +1224,28 @@ int FdEntity::NoCacheLoadAndPost(off_t start, off_t size)
 // At no disk space for caching object.
 // This method is starting multipart uploading.
 //
-int FdEntity::NoCachePreMultipartPost()
+int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
 {
-    // initialize multipart upload values
-    upload_id.erase();
-    etaglist.clear();
+    if(!pseudo_obj){
+        S3FS_PRN_ERR("Internal error, pseudo fd object pointer is null.");
+        return -EIO;
+    }
 
-    S3fsCurl s3fscurl(true);
-    int      result;
+    // initialize multipart upload values
+    pseudo_obj->ClearUploadInfo(true);
+
+    S3fsCurl    s3fscurl(true);
+    std::string upload_id;
+    int         result;
     if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id, false))){
         return result;
     }
     s3fscurl.DestroyCurlHandle();
+
+    // reset upload_id
+    if(!pseudo_obj->InitialUploadInfo(upload_id)){
+        return -EIO;
+    }
     return 0;
 }
 
@@ -1141,24 +1253,45 @@ int FdEntity::NoCachePreMultipartPost()
 // At no disk space for caching object.
 // This method is uploading one part of multipart.
 //
-int FdEntity::NoCacheMultipartPost(int tgfd, off_t start, off_t size)
+int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size)
 {
-    if(-1 == tgfd || upload_id.empty()){
+    if(-1 == tgfd || !pseudo_obj || !pseudo_obj->IsUploading()){
         S3FS_PRN_ERR("Need to initialize for multipart post.");
         return -EIO;
     }
+
+    // get upload id
+    std::string upload_id("");
+    if(!pseudo_obj->GetUploadId(upload_id)){
+        return -EIO;
+    }
+
+    // append new part and get it's etag string pointer
+    int          partnum = 0;
+    std::string* petag   = NULL;
+    if(!pseudo_obj->AppendUploadPart(start, size, false, &partnum, &petag)){
+        return -EIO;
+    }
+
     S3fsCurl s3fscurl(true);
-    return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, etaglist);
+    return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, partnum, petag);
 }
 
 // [NOTE]
 // At no disk space for caching object.
 // This method is finishing multipart uploading.
 //
-int FdEntity::NoCacheCompleteMultipartPost()
+int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
 {
-    if(upload_id.empty() || etaglist.empty()){
+    etaglist_t etaglist;
+    if(!pseudo_obj || !pseudo_obj->IsUploading() || !pseudo_obj->GetEtaglist(etaglist)){
         S3FS_PRN_ERR("There is no upload id or etag list.");
+        return -EIO;
+    }
+
+    // get upload id
+    std::string upload_id("");
+    if(!pseudo_obj->GetUploadId(upload_id)){
         return -EIO;
     }
 
@@ -1169,33 +1302,42 @@ int FdEntity::NoCacheCompleteMultipartPost()
     }
     s3fscurl.DestroyCurlHandle();
 
-    // reset values
-    upload_id.erase();
-    etaglist.clear();
-    mp_start = 0;
-    mp_size  = 0;
+    // clear multipart upload info
+    pseudo_obj->ClearUploadInfo(false);
 
     return 0;
 }
 
-off_t FdEntity::BytesModified() {
+off_t FdEntity::BytesModified()
+{
     AutoLock auto_lock(&fdent_data_lock);
     return pagelist.BytesModified();
 }
 
-int FdEntity::RowFlush(const char* tpath, bool force_sync)
+int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
 {
-    int result = 0;
+    S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd, physical_fd);
 
-    AutoLock auto_lock(&fdent_lock);
-    std::string tmppath = path;
-    headers_t tmporgmeta = orgmeta;
-
-    S3FS_PRN_INFO3("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), tmppath.c_str(), fd);
-
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return -EBADF;
     }
+    int         result     = 0;
+    std::string tmppath    = path;
+    headers_t   tmporgmeta = orgmeta;
+
+    AutoLock auto_lock(&fdent_lock);
+
+    // check pseudo fd and its flag
+    fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.end() == miter || NULL == miter->second){
+        return -EBADF;
+    }
+    if(!miter->second->Writable()){
+        // If the entity is opened read-only, it will end normally without updating.
+        return 0;
+    }
+    PseudoFdInfo* pseudo_obj = miter->second;
+
     AutoLock auto_lock2(&fdent_data_lock);
 
     if(!force_sync && !pagelist.IsModified()){
@@ -1206,7 +1348,7 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
     // If there is no loading all of the area, loading all area.
     off_t restsize = pagelist.GetTotalUnloadedPageSize();
     if(0 < restsize){
-        if(0 == upload_id.length()){
+        if(!pseudo_obj->IsUploading()){
             // check disk space
             if(ReserveDiskSpace(restsize)){
                 // enough disk space
@@ -1225,24 +1367,22 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
                     S3FS_PRN_WARN("Not enough local storage to flush: [path=%s][fd=%d]", path.c_str(), fd);
                     return -ENOSPC;   // No space left on device
                 }
-                if(0 != (result = NoCachePreMultipartPost())){
+                if(0 != (result = NoCachePreMultipartPost(pseudo_obj))){
                     S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                     return result;
                 }
                 // upload all by multipart uploading
-                if(0 != (result = NoCacheLoadAndPost())){
+                if(0 != (result = NoCacheLoadAndPost(pseudo_obj))){
                     S3FS_PRN_ERR("failed to upload all area by multipart uploading(errno=%d)", result);
                     return result;
                 }
-                mp_start = 0;
-                mp_size  = 0;
-          }
-      }else{
-          // already start multipart uploading
-      }
+            }
+        }else{
+            // already start multipart uploading
+        }
     }
 
-    if(0 == upload_id.length()){
+    if(!pseudo_obj->IsUploading()){
         // normal uploading
         //
         // Make decision to do multi upload (or not) based upon file size
@@ -1265,14 +1405,14 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
         }
 
         // seek to head of file.
-        if(0 != lseek(fd, 0, SEEK_SET)){
+        if(0 != lseek(physical_fd, 0, SEEK_SET)){
             S3FS_PRN_ERR("lseek error(%d)", errno);
             return -errno;
         }
         // backup upload file size
         struct stat st;
         memset(&st, 0, sizeof(struct stat));
-        if(-1 == fstat(fd, &st)){
+        if(-1 == fstat(physical_fd, &st)){
             S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
         }
 
@@ -1299,11 +1439,11 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
                 }
 
                 // multipart uploading with copy api
-                result = S3fsCurl::ParallelMixMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, fd, mixuppages);
+                result = S3fsCurl::ParallelMixMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, physical_fd, mixuppages);
 
             }else{
                 // multipart uploading not using copy api
-                result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, fd);
+                result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, physical_fd);
             }
         }else{
             // If there are unloaded pages, they are loaded at here.
@@ -1313,11 +1453,11 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
             }
 
             S3fsCurl s3fscurl(true);
-            result = s3fscurl.PutRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, fd);
+            result = s3fscurl.PutRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, physical_fd);
         }
 
         // seek to head of file.
-        if(0 == result && 0 != lseek(fd, 0, SEEK_SET)){
+        if(0 == result && 0 != lseek(physical_fd, 0, SEEK_SET)){
             S3FS_PRN_ERR("lseek error(%d)", errno);
             return -errno;
         }
@@ -1327,25 +1467,27 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
 
     }else{
         // upload rest data
-        if(0 < mp_size){
-            if(0 != (result = NoCacheMultipartPost(fd, mp_start, mp_size))){
-                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(mp_start), static_cast<long long int>(mp_size), fd);
+        off_t untreated_start = 0;
+        off_t untreated_size  = 0;
+        pseudo_obj->GetUntreated(untreated_start, untreated_size);
+
+        if(0 < untreated_size){
+            if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
-            mp_start = 0;
-            mp_size  = 0;
+            pseudo_obj->ClearUntreated();
         }
         // complete multipart uploading.
-        if(0 != (result = NoCacheCompleteMultipartPost())){
-            S3FS_PRN_ERR("failed to complete(finish) multipart post for file(%d).", fd);
+        if(0 != (result = NoCacheCompleteMultipartPost(pseudo_obj))){
+            S3FS_PRN_ERR("failed to complete(finish) multipart post for file(%d).", physical_fd);
             return result;
         }
         // truncate file to zero
-        if(-1 == ftruncate(fd, 0)){
+        if(-1 == ftruncate(physical_fd, 0)){
             // So the file has already been removed, skip error.
-            S3FS_PRN_ERR("failed to truncate file(%d) to zero, but continue...", fd);
+            S3FS_PRN_ERR("failed to truncate file(%d) to zero, but continue...", physical_fd);
         }
-    
         // put pading headers
         if(0 != (result = UploadPendingMeta())){
             return result;
@@ -1369,8 +1511,8 @@ bool FdEntity::ReserveDiskSpace(off_t size)
     if(!pagelist.IsModified()){
         // try to clear all cache for this fd.
         pagelist.Init(pagelist.Size(), false, false);
-        if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, pagelist.Size())){
-            S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
+        if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, pagelist.Size())){
+            S3FS_PRN_ERR("failed to truncate temporary file(%d).", physical_fd);
             return false;
         }
 
@@ -1384,13 +1526,15 @@ bool FdEntity::ReserveDiskSpace(off_t size)
     return FdManager::ReserveDiskSpace(size);
 }
 
-ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
+ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force_load)
 {
-    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    if(-1 == fd){
+    if(-1 == physical_fd || NULL == CheckPseudoFdFlags(fd, false)){
+        S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not readable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
+
     AutoLock auto_lock(&fdent_lock);
     AutoLock auto_lock2(&fdent_data_lock);
 
@@ -1438,20 +1582,23 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     }
 
     // Reading
-    if(-1 == (rsize = pread(fd, bytes, size, start))){
+    if(-1 == (rsize = pread(physical_fd, bytes, size, start))){
         S3FS_PRN_ERR("pread failed. errno(%d)", errno);
         return -errno;
     }
     return rsize;
 }
 
-ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
+ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 {
-    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    if(-1 == fd){
+    PseudoFdInfo* pseudo_obj = NULL;
+    if(-1 == physical_fd || NULL == (pseudo_obj = CheckPseudoFdFlags(fd, true))){
+        S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
+
     // check if not enough disk space left BEFORE locking fd
     if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(NULL, size)){
         FdManager::get()->CleanupCacheDir();
@@ -1462,8 +1609,8 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     // check file size
     if(pagelist.Size() < start){
         // grow file size
-        if(-1 == ftruncate(fd, start)){
-            S3FS_PRN_ERR("failed to truncate temporary file(%d).", fd);
+        if(-1 == ftruncate(physical_fd, start)){
+            S3FS_PRN_ERR("failed to truncate temporary file(%d).", physical_fd);
             return -errno;
         }
         // add new area
@@ -1473,7 +1620,7 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     int     result = 0;
     ssize_t wsize;
 
-    if(0 == upload_id.length()){
+    if(!pseudo_obj->IsUploading()){
         // check disk space
         off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
         if(ReserveDiskSpace(restsize)){
@@ -1494,31 +1641,30 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
         }else{
             // no enough disk space
             if (nomultipart) {
-                S3FS_PRN_WARN("Not enough local storage to cache write request: [path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+                S3FS_PRN_WARN("Not enough local storage to cache write request: [path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
                 return -ENOSPC;   // No space left on device
             }
             if ((start + static_cast<off_t>(size)) <= S3fsCurl::GetMultipartSize()) {
-                S3FS_PRN_WARN("Not enough local storage to cache write request till multipart upload can start: [path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+                S3FS_PRN_WARN("Not enough local storage to cache write request till multipart upload can start: [path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
                 return -ENOSPC;   // No space left on device
             }
-            if(0 != (result = NoCachePreMultipartPost())){
+            if(0 != (result = NoCachePreMultipartPost(pseudo_obj))){
                 S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                 return result;
             }
             // start multipart uploading
-            if(0 != (result = NoCacheLoadAndPost(0, start))){
+            if(0 != (result = NoCacheLoadAndPost(pseudo_obj, 0, start))){
                 S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
                 return result;
             }
-            mp_start = start;
-            mp_size  = 0;
+            pseudo_obj->SetUntreated(start, 0);
         }
     }else{
         // already start multipart uploading
     }
 
     // Writing
-    if(-1 == (wsize = pwrite(fd, bytes, size, start))){
+    if(-1 == (wsize = pwrite(physical_fd, bytes, size, start))){
         S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
         return -errno;
     }
@@ -1538,24 +1684,28 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     }
 
     // check multipart uploading
-    if(0 < upload_id.length()){
-        mp_size += wsize;
-        if(S3fsCurl::GetMultipartSize() <= mp_size){
+    if(pseudo_obj->IsUploading()){
+        off_t untreated_start = 0;
+        off_t untreated_size  = 0;
+        pseudo_obj->GetUntreated(untreated_start, untreated_size);
+
+        untreated_size += wsize;
+        if(S3fsCurl::GetMultipartSize() <= untreated_size){
             // over one multipart size
-            if(0 != (result = NoCacheMultipartPost(fd, mp_start, mp_size))){
-                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(mp_start), static_cast<long long int>(mp_size), fd);
+            if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
+
             // [NOTE]
             // truncate file to zero and set length to part offset + size
             // after this, file length is (offset + size), but file does not use any disk space.
             //
-            if(-1 == ftruncate(fd, 0) || -1 == ftruncate(fd, (mp_start + mp_size))){
-                S3FS_PRN_ERR("failed to truncate file(%d).", fd);
+            if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, (untreated_start + untreated_size))){
+                S3FS_PRN_ERR("failed to truncate file(%d).", physical_fd);
                 return -errno;
             }
-            mp_start += mp_size;
-            mp_size   = 0;
+            pseudo_obj->SetUntreated(untreated_start + untreated_size, 0);
         }
     }
     return wsize;
@@ -1595,7 +1745,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     if(0 <= atime.tv_sec){
         SetAtime(atime, true);
     }
-    is_meta_pending |= !upload_id.empty();
+    is_meta_pending |= IsUploading(true);
 
     return is_meta_pending;
 }
@@ -1656,9 +1806,9 @@ static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 // 
 bool FdEntity::PunchHole(off_t start, size_t size)
 {
-    S3FS_PRN_DBG("[path=%s][fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, static_cast<long long int>(start), size);
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
-    if(-1 == fd){
+    if(-1 == physical_fd){
         return false;
     }
     AutoLock auto_lock(&fdent_data_lock);
@@ -1676,7 +1826,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 
     // try to punch hole to file
     for(fdpage_list_t::const_iterator iter = nodata_pages.begin(); iter != nodata_pages.end(); ++iter){
-        if(0 != fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
+        if(0 != fallocate(physical_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
             if(ENOSYS == errno || EOPNOTSUPP == errno){
                 S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);
             }else{

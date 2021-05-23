@@ -23,6 +23,7 @@
 
 #include "autolock.h"
 #include "fdcache_page.h"
+#include "fdcache_fdinfo.h"
 #include "metaheader.h"
 
 //------------------------------------------------
@@ -35,9 +36,9 @@ class FdEntity
 
         pthread_mutex_t fdent_lock;
         bool            is_lock_init;
-        int             refcnt;         // reference count
         std::string     path;           // object path
-        int             fd;             // file descriptor(tmp file or cache file)
+        int             physical_fd;    // physical file(cache or temporary file) descriptor
+        fdinfo_map_t    pseudo_fd_map;  // pseudo file descriptor information map
         FILE*           pfile;          // file pointer(tmp file or cache file)
         ino_t           inode;          // inode number for cache file
         headers_t       orgmeta;        // original headers at opening
@@ -62,6 +63,8 @@ class FdEntity
         void Clear();
         ino_t GetInode();
         int OpenMirrorFile();
+        int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);    // size=0 means loading to end
+        bool CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held = false);
         bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
         bool SetAllStatusUnloaded() { return SetAllStatus(false); }
         int UploadPendingMeta();
@@ -73,16 +76,17 @@ class FdEntity
         explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
         ~FdEntity();
 
-        void Close();
-        bool IsOpen() const { return (-1 != fd); }
-        int Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type type);
-        bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
-        int Dup(bool lock_already_held = false);
-        int GetRefCnt() const { return refcnt; }                // [NOTE] Use only debugging
-
+        void Close(int fd);
+        bool IsOpen() const { return (-1 != physical_fd); }
+        bool FindPseudoFd(int fd, bool lock_already_held = false);
+        int Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type);
+        bool LoadAll(int fd, headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
+        int Dup(int fd, bool lock_already_held = false);
+        int OpenPseudoFd(int flags = O_RDONLY, bool lock_already_held = false);
+        int GetOpenCount(bool lock_already_held = false);
         const char* GetPath() const { return path.c_str(); }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
-        int GetFd() const { return fd; }
+        int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
 
@@ -105,17 +109,16 @@ class FdEntity
         bool SetContentType(const char* path);
 
         int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false, bool is_modified_flag = false);  // size=0 means loading to end
-        int NoCacheLoadAndPost(off_t start = 0, off_t size = 0);   // size=0 means loading to end
         int NoCachePreMultipartPost();
         int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost();
 
         off_t BytesModified();
-        int RowFlush(const char* tpath, bool force_sync = false);
-        int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }
+        int RowFlush(int fd, const char* tpath, bool force_sync = false);
+        int Flush(int fd, bool force_sync = false) { return RowFlush(fd, NULL, force_sync); }
 
-        ssize_t Read(char* bytes, off_t start, size_t size, bool force_load = false);
-        ssize_t Write(const char* bytes, off_t start, size_t size);
+        ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
+        ssize_t Write(int fd, const char* bytes, off_t start, size_t size);
 
         bool ReserveDiskSpace(off_t size);
         bool PunchHole(off_t start = 0, size_t size = 0);
