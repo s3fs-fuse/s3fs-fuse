@@ -512,7 +512,7 @@ FdEntity* FdManager::Open(const char* path, headers_t* pmeta, off_t size, time_t
     }
 
     // open
-    if(0 != ent->Open(pmeta, size, time, no_fd_lock_wait)){
+    if(0 != ent->Open(pmeta, size, time, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE)){
         if(close){
             ent->Close();
         }
