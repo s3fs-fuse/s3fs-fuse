@@ -108,7 +108,7 @@ class FdEntity
         bool SetGId(gid_t gid);
         bool SetContentType(const char* path);
 
-        int Load(off_t start = 0, off_t size = 0, bool lock_already_held = false, bool is_modified_flag = false);  // size=0 means loading to end
+        int Load(off_t start, off_t size, AutoLock::Type type, bool is_modified_flag = false);  // size=0 means loading to end
 
         off_t BytesModified();
         int RowFlush(int fd, const char* tpath, bool force_sync = false);
