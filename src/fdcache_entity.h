@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_ENTITY_H_
 #define S3FS_FDCACHE_ENTITY_H_
 
+#include "autolock.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
 
@@ -74,7 +75,7 @@ class FdEntity
 
         void Close();
         bool IsOpen() const { return (-1 != fd); }
-        int Open(headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, bool no_fd_lock_wait = false);
+        int Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type type);
         bool OpenAndLoadAll(headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
         int Dup(bool lock_already_held = false);
         int GetRefCnt() const { return refcnt; }                // [NOTE] Use only debugging
@@ -109,7 +110,7 @@ class FdEntity
         int NoCacheMultipartPost(int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost();
 
-        off_t BytesModified() const;
+        off_t BytesModified();
         int RowFlush(const char* tpath, bool force_sync = false);
         int Flush(bool force_sync = false) { return RowFlush(NULL, force_sync); }
 

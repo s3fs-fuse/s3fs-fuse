@@ -310,9 +310,9 @@ int FdEntity::OpenMirrorFile()
     return mirrorfd;
 }
 
-int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, bool no_fd_lock_wait)
+int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, AutoLock::Type type)
 {
-    AutoLock auto_lock(&fdent_lock, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, type);
 
     S3FS_PRN_DBG("[path=%s][fd=%d][size=%lld][time=%lld]", path.c_str(), fd, static_cast<long long>(size), static_cast<long long>(time));
 
@@ -554,7 +554,7 @@ bool FdEntity::OpenAndLoadAll(headers_t* pmeta, off_t* size, bool force_load)
     S3FS_PRN_INFO3("[path=%s][fd=%d]", path.c_str(), fd);
 
     if(-1 == fd){
-        if(0 != Open(pmeta)){
+        if(0 != Open(pmeta, /*size=*/ -1, /*time=*/ -1, AutoLock::ALREADY_LOCKED)){
             return false;
         }
     }
@@ -1178,7 +1178,8 @@ int FdEntity::NoCacheCompleteMultipartPost()
     return 0;
 }
 
-off_t FdEntity::BytesModified() const {
+off_t FdEntity::BytesModified() {
+    AutoLock auto_lock(&fdent_data_lock);
     return pagelist.BytesModified();
 }
 
@@ -1186,20 +1187,16 @@ int FdEntity::RowFlush(const char* tpath, bool force_sync)
 {
     int result = 0;
 
-    std::string tmppath;
-    headers_t tmporgmeta;
-    {
-        AutoLock auto_lock(&fdent_lock);
-        tmppath = path;
-        tmporgmeta = orgmeta;
-    }
+    AutoLock auto_lock(&fdent_lock);
+    std::string tmppath = path;
+    headers_t tmporgmeta = orgmeta;
 
     S3FS_PRN_INFO3("[tpath=%s][path=%s][fd=%d]", SAFESTRPTR(tpath), tmppath.c_str(), fd);
 
     if(-1 == fd){
         return -EBADF;
     }
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
 
     if(!force_sync && !pagelist.IsModified()){
         // nothing to update.
@@ -1394,7 +1391,8 @@ ssize_t FdEntity::Read(char* bytes, off_t start, size_t size, bool force_load)
     if(-1 == fd){
         return -EBADF;
     }
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
 
     if(force_load){
         pagelist.SetPageLoadedStatus(start, size, PageList::PAGE_NOT_LOAD_MODIFIED);
@@ -1458,7 +1456,8 @@ ssize_t FdEntity::Write(const char* bytes, off_t start, size_t size)
     if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(NULL, size)){
         FdManager::get()->CleanupCacheDir();
     }
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
 
     // check file size
     if(pagelist.Size() < start){
