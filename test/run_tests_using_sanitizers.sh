@@ -52,7 +52,7 @@ TSAN_OPTIONS='halt_on_error=1' make check -C test/
 
 # run tests under UndefinedBehaviorSanitizer, https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 make clean
-./configure CXX=clang++ CXXFLAGS="-$COMMON_FLAGS fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
+./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
 make
 make check -C test/
 
