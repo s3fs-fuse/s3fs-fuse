@@ -424,12 +424,8 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
             std::istringstream tmp(line);
             std::string mimeType;
             tmp >> mimeType;
-            while(tmp){
-                std::string ext;
-                tmp >> ext;
-                if(ext.empty()){
-                    continue;
-                }
+            std::string ext;
+            while(tmp >> ext){
                 S3fsCurl::mimeTypes[ext] = mimeType;
             }
         }
