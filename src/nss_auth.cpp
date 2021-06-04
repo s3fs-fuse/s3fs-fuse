@@ -198,7 +198,7 @@ size_t get_sha256_digest_length()
     return SHA256_LENGTH;
 }
 
-bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
+bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
     (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
     *digest      = new unsigned char[*digestlen];

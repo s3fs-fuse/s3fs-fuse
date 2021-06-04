@@ -542,7 +542,7 @@ off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
     return restsize;
 }
 
-int PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t size) const
+size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off_t size) const
 {
     // If size is 0, it means loading to end.
     if(0 == size){
@@ -801,7 +801,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             return true;
         }
         char* ptmp = new char[st.st_size + 1];
-        int result;
+        ssize_t result;
         // read from file
         if(0 >= (result = pread(file.GetFd(), ptmp, st.st_size, 0))){
             S3FS_PRN_ERR("failed to read stats(%d)", errno);
