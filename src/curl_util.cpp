@@ -145,7 +145,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list)
             }
             strkey.erase(pos);
         }
-        if(0 < sorted_headers.length()){
+        if(!sorted_headers.empty()){
             sorted_headers += ";";
         }
         sorted_headers += lower(strkey);
@@ -317,7 +317,7 @@ bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5)
     }
     // base64 md5
     md5 = s3fs_get_content_md5(fd);
-    if(0 == md5.length()){
+    if(md5.empty()){
         S3FS_PRN_ERR("Failed to make MD5.");
         fclose(fp);
         return false;

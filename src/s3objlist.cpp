@@ -165,7 +165,7 @@ std::string S3ObjList::GetNormalizedName(const char* name) const
     if(NULL == (ps3obj = GetS3Obj(name))){
         return std::string("");
     }
-    if(0 == (ps3obj->normalname).length()){
+    if(ps3obj->normalname.empty()){
         return std::string(name);
     }
     return ps3obj->normalname;
@@ -219,7 +219,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
     s3obj_t::const_iterator iter;
 
     for(iter = objects.begin(); objects.end() != iter; ++iter){
-        if(OnlyNormalized && 0 != (*iter).second.normalname.length()){
+        if(OnlyNormalized && !iter->second.normalname.empty()){
             continue;
         }
         std::string name = (*iter).first;
@@ -250,7 +250,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
         // check hierarchized directory
         for(std::string::size_type pos = strtmp.find_last_of('/'); std::string::npos != pos; pos = strtmp.find_last_of('/')){
             strtmp.erase(pos);
-            if(0 == strtmp.length() || "/" == strtmp){
+            if(strtmp.empty() || "/" == strtmp){
                 break;
             }
             if(h_map.end() == h_map.find(strtmp)){

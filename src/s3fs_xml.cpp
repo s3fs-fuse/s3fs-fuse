@@ -175,7 +175,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
                 if(strlen(dirpath) > strlen(basepath)){
                     withdirname = &dirpath[strlen(basepath)];
                 }
-                if(0 < withdirname.length() && '/' != *withdirname.rbegin()){
+                if(!withdirname.empty() && '/' != *withdirname.rbegin()){
                     withdirname += "/";
                 }
                 withdirname += mybname;
@@ -378,7 +378,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
                     xmlXPathFreeObject(ETag);
                 }
             }
-            if(!head.insert(name, (0 < stretag.length() ? stretag.c_str() : NULL), is_dir)){
+            if(!head.insert(name, (!stretag.empty() ? stretag.c_str() : NULL), is_dir)){
                 S3FS_PRN_ERR("insert_object returns with error.");
                 xmlXPathFreeObject(key);
                 xmlXPathFreeObject(contents_xp);

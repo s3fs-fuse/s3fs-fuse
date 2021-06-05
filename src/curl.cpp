@@ -953,7 +953,7 @@ bool S3fsCurl::LoadEnvSseKmsid()
 bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
 {
     for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter){
-        if(0 == md5.length() || md5 == (*iter).begin()->first){
+        if(md5.empty() || md5 == (*iter).begin()->first){
             md5    = iter->begin()->first;
             ssekey = iter->begin()->second;
             return true;
@@ -2658,7 +2658,7 @@ void S3fsCurl::insertV4Headers()
             break;
     }
 
-    if(b_infile != NULL && 0 == payload_hash.length()){
+    if(b_infile != NULL && payload_hash.empty()){
         S3FS_PRN_ERR("Failed to make SHA256.");
         // TODO: propagate error
     }
