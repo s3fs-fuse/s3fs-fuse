@@ -387,11 +387,11 @@ const char* getCurlDebugHead(curl_infotype type)
 //
 bool etag_equals(std::string s1, std::string s2)
 {
-    if(s1.length() > 1 && s1[0] == '\"' && s1[s1.length() - 1] == '\"'){
+    if(s1.length() > 1 && s1[0] == '\"' && *s1.rbegin() == '\"'){
         s1.erase(s1.size() - 1);
         s1.erase(0, 1);
     }
-    if(s2.length() > 1 && s2[0] == '\"' && s2[s2.length() - 1] == '\"'){
+    if(s2.length() > 1 && s2[0] == '\"' && *s2.rbegin() == '\"'){
         s2.erase(s2.size() - 1);
         s2.erase(0, 1);
     }
