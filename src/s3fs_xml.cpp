@@ -175,7 +175,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
                 if(strlen(dirpath) > strlen(basepath)){
                     withdirname = &dirpath[strlen(basepath)];
                 }
-                if(0 < withdirname.length() && '/' != withdirname[withdirname.length() - 1]){
+                if(0 < withdirname.length() && '/' != *withdirname.rbegin()){
                     withdirname += "/";
                 }
                 withdirname += mybname;

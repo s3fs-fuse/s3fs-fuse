@@ -54,11 +54,11 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         newname = orgname;
     }
     if(is_dir){
-        if('/' != newname[newname.length() - 1]){
+        if('/' != *newname.rbegin()){
             newname += "/";
         }
     }else{
-        if('/' == newname[newname.length() - 1]){
+        if('/' == *newname.rbegin()){
             is_dir = true;
         }
     }
@@ -223,7 +223,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
             continue;
         }
         std::string name = (*iter).first;
-        if(CutSlash && 1 < name.length() && '/' == name[name.length() - 1]){
+        if(CutSlash && 1 < name.length() && '/' == *name.rbegin()){
             // only "/" std::string is skipped this.
             name.erase(name.length() - 1);
         }
@@ -242,7 +242,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
 
     for(liter = list.begin(); list.end() != liter; ++liter){
         std::string strtmp = (*liter);
-        if(1 < strtmp.length() && '/' == strtmp[strtmp.length() - 1]){
+        if(1 < strtmp.length() && '/' == *strtmp.rbegin()){
             strtmp.erase(strtmp.length() - 1);
         }
         h_map[strtmp] = true;

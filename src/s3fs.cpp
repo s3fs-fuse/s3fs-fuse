@@ -219,7 +219,7 @@ static bool is_special_name_folder_object(const char* path)
     headers_t header;
 
     if(std::string::npos == strpath.find("_$folder$", 0)){
-        if('/' == strpath[strpath.length() - 1]){
+        if('/' == *strpath.rbegin()){
             strpath.erase(strpath.length() - 1);
         }
         strpath += "_$folder$";
@@ -254,7 +254,7 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
 
     // Normalize new path.
     newpath = path;
-    if('/' != newpath[newpath.length() - 1]){
+    if('/' != *newpath.rbegin()){
         std::string::size_type Pos;
         if(std::string::npos != (Pos = newpath.find("_$folder$", 0))){
             newpath.erase(Pos);
@@ -277,7 +277,7 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
             nowpath  = "";
         }else{
             nowpath = newpath;
-            if(0 < nowpath.length() && '/' == nowpath[nowpath.length() - 1]){
+            if(0 < nowpath.length() && '/' == *nowpath.rbegin()){
                 // "dir/" type
                 (*pType) = DIRTYPE_NEW;
             }else{
@@ -420,7 +420,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }else if(0 != result){
         if(overcheck){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
-            if('/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0)){
+            if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
                 // now path is "object", do check "object/" for over checking
                 strpath    += "/";
                 result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
@@ -443,7 +443,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }
         if(support_compat_dir && 0 != result && std::string::npos == strpath.find("_$folder$", 0)){
             // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
-            if('/' == strpath[strpath.length() - 1]){
+            if('/' == *strpath.rbegin()){
                 strpath.erase(strpath.length() - 1);
             }
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
@@ -454,7 +454,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             }
         }
     }else{
-        if(support_compat_dir && '/' != strpath[strpath.length() - 1] && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
+        if(support_compat_dir && '/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
             // check a case of that "object" does not have attribute and "object" is possible to be directory.
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
                 // found "no dir object".
@@ -1014,7 +1014,7 @@ static int create_directory_object(const char* path, mode_t mode, time_t atime, 
         return -EINVAL;
     }
     std::string tpath = path;
-    if('/' != tpath[tpath.length() - 1]){
+    if('/' != *tpath.rbegin()){
         tpath += "/";
     }
 
@@ -1115,7 +1115,7 @@ static int s3fs_rmdir(const char* _path)
     }
 
     strpath = path;
-    if('/' != strpath[strpath.length() - 1]){
+    if('/' != *strpath.rbegin()){
         strpath += "/";
     }
     S3fsCurl s3fscurl;
@@ -1128,7 +1128,7 @@ static int s3fs_rmdir(const char* _path)
     // A case, there is only "dir", the first removing object is "dir/".
     // Then "dir/" is not exists, but curl_delete returns 0.
     // So need to check "dir" and should be removed it.
-    if('/' == strpath[strpath.length() - 1]){
+    if('/' == *strpath.rbegin()){
         strpath.erase(strpath.length() - 1);
     }
     if(0 == get_object_attribute(strpath.c_str(), &stbuf, NULL, false)){
@@ -2574,7 +2574,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         std::string etag     = head.GetETag((*iter).c_str());
 
         std::string fillpath = disppath;
-        if('/' == disppath[disppath.length() - 1]){
+        if('/' == *disppath.rbegin()){
             fillpath.erase(fillpath.length() -1);
         }
         fillerlist.push_back(fillpath);
@@ -2694,7 +2694,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
     query_prefix += "&prefix=";
     s3_realpath = get_realpath(path);
-    if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+    if(0 == s3_realpath.length() || '/' != *s3_realpath.rbegin()){
         // last word must be "/"
         query_prefix += urlEncode(s3_realpath.substr(1) + "/");
     }else{
@@ -2764,7 +2764,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                     truncated = false;
                 }else{
                     next_marker = s3_realpath.substr(1);
-                    if(0 == s3_realpath.length() || '/' != s3_realpath[s3_realpath.length() - 1]){
+                    if(0 == s3_realpath.length() || '/' != *s3_realpath.rbegin()){
                         next_marker += "/";
                     }
                     next_marker += lastname;
