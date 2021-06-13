@@ -34,20 +34,6 @@
 #include "string_util.h"
 #include "autolock.h"
 
-//------------------------------------------------
-// Symbols
-//------------------------------------------------
-#define TMPFILE_FOR_CHECK_HOLE  "/tmp/.s3fs_hole_check.tmp"
-
-//
-// For cache directory top path
-//
-#if defined(P_tmpdir)
-#define TMPFILE_DIR_0PATH   P_tmpdir
-#else
-#define TMPFILE_DIR_0PATH   "/tmp"
-#endif
-
 //
 // The following symbols are used by FdManager::RawCheckAllCache().
 //
@@ -99,6 +85,7 @@ off_t           FdManager::free_disk_space = 0;
 std::string     FdManager::check_cache_output;
 bool            FdManager::checked_lseek(false);
 bool            FdManager::have_lseek_hole(false);
+std::string     FdManager::tmp_dir = "/tmp";
 
 //------------------------------------------------
 // FdManager class methods
@@ -250,17 +237,7 @@ bool FdManager::CheckCacheDirExist()
     if(FdManager::cache_dir.empty()){
         return true;
     }
-    // check the directory
-    struct stat st;
-    if(0 != stat(cache_dir.c_str(), &st)){
-        S3FS_PRN_ERR("could not access to cache directory(%s) by errno(%d).", cache_dir.c_str(), errno);
-        return false;
-    }
-    if(!S_ISDIR(st.st_mode)){
-        S3FS_PRN_ERR("the cache directory(%s) is not directory.", cache_dir.c_str());
-        return false;
-    }
-    return true;
+    return IsDir(&cache_dir);
 }
 
 off_t FdManager::GetEnsureFreeDiskSpace()
@@ -288,7 +265,7 @@ off_t FdManager::GetFreeDiskSpace(const char* path)
             ctoppath += "/";
         }
     }else{
-        ctoppath = TMPFILE_DIR_0PATH "/";
+        ctoppath = tmp_dir + "/";
     }
     if(path && '\0' != *path){
         ctoppath += path;
@@ -314,10 +291,14 @@ bool FdManager::HaveLseekHole()
         return FdManager::have_lseek_hole;
     }
 
-    // create tempolary file
-    int fd;
-    if(-1 == (fd = open(TMPFILE_FOR_CHECK_HOLE, O_CREAT|O_RDWR, 0600))){
-        S3FS_PRN_ERR("failed to open tempolary file(%s) - errno(%d)", TMPFILE_FOR_CHECK_HOLE, errno);
+    // create temporary file
+    FILE* ptmpfp;
+    int   fd;
+    if(NULL == (ptmpfp = MakeTempFile()) || -1 == (fd = fileno(ptmpfp))){
+        S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
+        if(ptmpfp){
+            fclose(ptmpfp);
+        }
         FdManager::checked_lseek   = true;
         FdManager::have_lseek_hole = false;
         return FdManager::have_lseek_hole;
@@ -338,11 +319,62 @@ bool FdManager::HaveLseekHole()
         }
     }
     close(fd);
-    unlink(TMPFILE_FOR_CHECK_HOLE);
 
     FdManager::checked_lseek   = true;
     FdManager::have_lseek_hole = result;
     return FdManager::have_lseek_hole;
+}
+
+bool FdManager::SetTmpDir(const char *dir)
+{
+    if(!dir || '\0' == dir[0]){
+        tmp_dir = "/tmp";
+    }else{
+        tmp_dir = dir;
+    }
+    return true;
+}
+
+bool FdManager::IsDir(const std::string* dir)
+{
+    // check the directory
+    struct stat st;
+    if(0 != stat(dir->c_str(), &st)){
+        S3FS_PRN_ERR("could not stat() directory %s by errno(%d).", dir->c_str(), errno);
+        return false;
+    }
+    if(!S_ISDIR(st.st_mode)){
+        S3FS_PRN_ERR("the directory %s is not a directory.", dir->c_str());
+        return false;
+    }
+    return true;
+}
+
+bool FdManager::CheckTmpDirExist()
+{
+    if(FdManager::tmp_dir.empty()){
+        return true;
+    }
+    return IsDir(&tmp_dir);
+}
+
+FILE* FdManager::MakeTempFile() {
+    int fd;
+    char cfn[PATH_MAX];
+    std::string fn = tmp_dir + "/s3fstmp.XXXXXX";
+    strncpy(cfn, fn.c_str(), sizeof(cfn) - 1);
+    cfn[sizeof(cfn) - 1] = '\0';
+
+    fd = mkstemp(cfn);
+    if (-1 == fd) {
+        S3FS_PRN_ERR("failed to create tmp file. errno(%d)", errno);
+        return NULL;
+    }
+    if (-1 == unlink(cfn)) {
+        S3FS_PRN_ERR("failed to delete tmp file. errno(%d)", errno);
+        return NULL;
+    }
+    return fdopen(fd, "rb+");
 }
 
 bool FdManager::HasOpenEntityFd(const char* path)

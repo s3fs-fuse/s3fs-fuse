@@ -40,6 +40,7 @@ class FdManager
       static std::string     check_cache_output;
       static bool            checked_lseek;
       static bool            have_lseek_hole;
+      static std::string     tmp_dir;
 
       fdent_map_t            fent;
 
@@ -47,6 +48,7 @@ class FdManager
       static off_t GetFreeDiskSpace(const char* path);
       void CleanupCacheDirInternal(const std::string &path = "");
       bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);
+      static bool IsDir(const std::string* dir);
 
   public:
       FdManager();
@@ -74,6 +76,9 @@ class FdManager
       static void FreeReservedDiskSpace(off_t size);
       static bool ReserveDiskSpace(off_t size);
       static bool HaveLseekHole();
+      static bool SetTmpDir(const char* dir);
+      static bool CheckTmpDirExist();
+      static FILE* MakeTempFile();
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true, bool lock_already_held = false);
