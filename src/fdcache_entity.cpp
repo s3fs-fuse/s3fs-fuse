@@ -562,8 +562,8 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLoc
             inode = 0;
 
             // open temporary file
-            if(NULL == (pfile = tmpfile()) || -1 ==(physical_fd = fileno(pfile))){
-                S3FS_PRN_ERR("failed to open tmp file. err(%d)", errno);
+            if(NULL == (pfile = FdManager::MakeTempFile()) || -1 ==(physical_fd = fileno(pfile))){
+                S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
                 if(pfile){
                     fclose(pfile);
                     pfile = NULL;
@@ -1088,8 +1088,8 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     // open temporary file
     FILE* ptmpfp;
     int   tmpfd;
-    if(NULL == (ptmpfp = tmpfile()) || -1 ==(tmpfd = fileno(ptmpfp))){
-        S3FS_PRN_ERR("failed to open tmp file. err(%d)", errno);
+    if(NULL == (ptmpfp = FdManager::MakeTempFile()) || -1 ==(tmpfd = fileno(ptmpfp))){
+        S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
         if(ptmpfp){
             fclose(ptmpfp);
         }
