@@ -1323,9 +1323,9 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
     }
     int         result     = 0;
     std::string tmppath    = path;
-    headers_t   tmporgmeta = orgmeta;
 
     AutoLock auto_lock(&fdent_lock);
+    headers_t tmporgmeta = orgmeta;
 
     // check pseudo fd and its flag
     fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
