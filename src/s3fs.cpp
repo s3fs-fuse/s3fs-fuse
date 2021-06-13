@@ -277,7 +277,7 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
             nowpath  = "";
         }else{
             nowpath = newpath;
-            if(0 < nowpath.length() && '/' == *nowpath.rbegin()){
+            if(!nowpath.empty() && '/' == *nowpath.rbegin()){
                 // "dir/" type
                 (*pType) = DIRTYPE_NEW;
             }else{
@@ -2694,7 +2694,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 
     query_prefix += "&prefix=";
     s3_realpath = get_realpath(path);
-    if(0 == s3_realpath.length() || '/' != *s3_realpath.rbegin()){
+    if(s3_realpath.empty() || '/' != *s3_realpath.rbegin()){
         // last word must be "/"
         query_prefix += urlEncode(s3_realpath.substr(1) + "/");
     }else{
@@ -2764,7 +2764,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                     truncated = false;
                 }else{
                     next_marker = s3_realpath.substr(1);
-                    if(0 == s3_realpath.length() || '/' != *s3_realpath.rbegin()){
+                    if(s3_realpath.empty() || '/' != *s3_realpath.rbegin()){
                         next_marker += "/";
                     }
                     next_marker += lastname;
@@ -2858,7 +2858,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     }
 
     // parse each key:val
-    for(size_t pair_nextpos = restxattrs.find_first_of(','); 0 < restxattrs.length(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : std::string("")), pair_nextpos = restxattrs.find_first_of(',')){
+    for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : std::string("")), pair_nextpos = restxattrs.find_first_of(',')){
         std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
         std::string key;
         PXATTRVAL pval = NULL;
@@ -3190,7 +3190,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     // calculate total name length
     size_t total = 0;
     for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
-        if(0 < xiter->first.length()){
+        if(!xiter->first.empty()){
             total += xiter->first.length() + 1;
         }
     }
@@ -3213,7 +3213,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     // copy to list
     char* setpos = list;
     for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
-        if(0 < xiter->first.length()){
+        if(!xiter->first.empty()){
             strcpy(setpos, xiter->first.c_str());
             setpos = &setpos[strlen(setpos) + 1];
         }

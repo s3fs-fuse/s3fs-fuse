@@ -205,7 +205,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
         }else{
             // directly comparing
             if(paddhead->basestring.length() < pathlength){
-                if(0 == paddhead->basestring.length() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
+                if(paddhead->basestring.empty() || 0 == strcmp(&path[pathlength - paddhead->basestring.length()], paddhead->basestring.c_str())){
                     // match -> adding header
                     meta[paddhead->headkey] = paddhead->headvalue;
                 }

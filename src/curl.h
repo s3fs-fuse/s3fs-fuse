@@ -329,11 +329,11 @@ class S3fsCurl
         static bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
         static bool IsSetAccessKeyID()
         {
-            return (0 < S3fsCurl::AWSAccessKeyId.size());
+            return !S3fsCurl::AWSAccessKeyId.empty();
         }
         static bool IsSetAccessKeys()
         {
-            return (0 < S3fsCurl::IAM_role.size() || ((0 < S3fsCurl::AWSAccessKeyId.size() || S3fsCurl::is_ibm_iam_auth) && 0 < S3fsCurl::AWSSecretAccessKey.size()));
+            return !S3fsCurl::IAM_role.empty() || ((!S3fsCurl::AWSAccessKeyId.empty() || S3fsCurl::is_ibm_iam_auth) && !S3fsCurl::AWSSecretAccessKey.empty());
         }
         static long SetSslVerifyHostname(long value);
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
