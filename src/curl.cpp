@@ -607,10 +607,10 @@ size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
     if(0 >= pCurl->postdata_remaining){
         return 0;
     }
-    int copysize = std::min((int)(size * nmemb), pCurl->postdata_remaining);
+    size_t copysize = std::min(static_cast<off_t>(size * nmemb), pCurl->postdata_remaining);
     memcpy(ptr, pCurl->postdata, copysize);
 
-    pCurl->postdata_remaining = (pCurl->postdata_remaining > copysize ? (pCurl->postdata_remaining - copysize) : 0);
+    pCurl->postdata_remaining = (pCurl->postdata_remaining > static_cast<off_t>(copysize) ? (pCurl->postdata_remaining - copysize) : 0);
     pCurl->postdata          += static_cast<size_t>(copysize);
 
     return copysize;
@@ -962,15 +962,12 @@ bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
     return false;
 }
 
-bool S3fsCurl::GetSseKeyMd5(int pos, std::string& md5)
+bool S3fsCurl::GetSseKeyMd5(size_t pos, std::string& md5)
 {
-    if(pos < 0){
-        return false;
-    }
     if(S3fsCurl::sseckeys.size() <= static_cast<size_t>(pos)){
         return false;
     }
-    int cnt = 0;
+    size_t cnt = 0;
     for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter, ++cnt){
         if(pos == cnt){
             md5 = iter->begin()->first;
@@ -980,7 +977,7 @@ bool S3fsCurl::GetSseKeyMd5(int pos, std::string& md5)
     return false;
 }
 
-int S3fsCurl::GetSseKeyCount()
+size_t S3fsCurl::GetSseKeyCount()
 {
     return S3fsCurl::sseckeys.size();
 }
@@ -1157,7 +1154,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     // parse and get part_num, upload_id.
     std::string upload_id;
     std::string part_num_str;
-    int    part_num;
+    int part_num;
     off_t  tmp_part_num = 0;
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
         return NULL;
@@ -1168,7 +1165,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
-    part_num = static_cast<off_t>(tmp_part_num);
+    part_num = static_cast<int>(tmp_part_num);
 
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
@@ -1204,7 +1201,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     // parse and get part_num, upload_id.
     std::string upload_id;
     std::string part_num_str;
-    int    part_num;
+    int part_num;
     off_t  tmp_part_num = 0;
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
         return NULL;
@@ -1215,7 +1212,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
         return NULL;
     }
-    part_num = static_cast<off_t>(tmp_part_num);
+    part_num = static_cast<int>(tmp_part_num);
 
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
@@ -1333,7 +1330,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         s3fscurl_para->partdata.add_etag_list(&list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
+        if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, static_cast<int>(list.size()), upload_id))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             close(fd2);
             delete s3fscurl_para;
@@ -1430,7 +1427,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             S3FS_PRN_INFO3("Upload Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset), static_cast<long long>(iter->bytes), list.size());
 
             // initiate upload part for parallel
-            if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, list.size(), upload_id))){
+            if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, static_cast<int>(list.size()), upload_id))){
                 S3FS_PRN_ERR("failed uploading part setup(%d)", result);
                 close(fd2);
                 delete s3fscurl_para;
@@ -1461,7 +1458,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
                 S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset + i), static_cast<long long>(bytes), list.size());
 
                 // initiate upload part for parallel
-                if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
+                if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size()), upload_id, meta))){
                     S3FS_PRN_ERR("failed uploading part setup(%d)", result);
                     close(fd2);
                     delete s3fscurl_para;
@@ -2550,9 +2547,9 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
     StringToSign += resource;
 
     const void* key            = S3fsCurl::AWSSecretAccessKey.data();
-    int key_len                = S3fsCurl::AWSSecretAccessKey.size();
+    size_t key_len             = S3fsCurl::AWSSecretAccessKey.size();
     const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
-    int sdata_len              = StringToSign.size();
+    size_t sdata_len           = StringToSign.size();
     unsigned char* md          = NULL;
     unsigned int md_len        = 0;;
 
@@ -2611,7 +2608,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     delete[] kService;
 
     const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
-    unsigned int         cRequest_len = StringCQ.size();
+    size_t               cRequest_len = StringCQ.size();
     s3fs_sha256(cRequest, cRequest_len, &sRequest, &sRequest_len);
 
     StringToSign  = "AWS4-HMAC-SHA256\n";
@@ -2621,7 +2618,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     delete[] sRequest;
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
-    unsigned int         cscope_len = StringToSign.size();
+    size_t               cscope_len = StringToSign.size();
     unsigned char*       md         = NULL;
     unsigned int         md_len     = 0;
 
@@ -2645,7 +2642,7 @@ void S3fsCurl::insertV4Headers()
 
         case REQTYPE_COMPLETEMULTIPOST:
             {
-                unsigned int    cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
+                size_t          cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
                 unsigned char*  sRequest     = NULL;
                 unsigned int    sRequest_len = 0;
                 s3fs_sha256(b_postdata, cRequest_len, &sRequest, &sRequest_len);
@@ -2988,9 +2985,9 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, b
 // ssekey_pos : -1    means "not" SSE-C type
 //              0 - X means SSE-C type and position for SSE-C key(0 is latest key)
 //
-bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath, int ssekey_pos)
+bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath, size_t ssekey_pos)
 {
-    S3FS_PRN_INFO3("[tpath=%s][bpath=%s][save=%s][sseckeypos=%d]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath), ssekey_pos);
+    S3FS_PRN_INFO3("[tpath=%s][bpath=%s][save=%s][sseckeypos=%zu]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath), ssekey_pos);
 
     if(!tpath){
         return false;
@@ -3008,10 +3005,10 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
     responseHeaders.clear();
 
     // requestHeaders
-    if(0 <= ssekey_pos){
+    if(0 == ssekey_pos){
         std::string md5;
         if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, true, false)){
-            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%d)(=md5(%s)).", ssekey_pos, md5.c_str());
+            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, md5.c_str());
             return false;
         }
     }
@@ -3035,7 +3032,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     // At first, try to get without SSE-C headers
     if(!PreHeadRequest(tpath) || !fpLazySetup || !fpLazySetup(this) || 0 != (result = RequestPerform())){
         // If has SSE-C keys, try to get with all SSE-C keys.
-        for(int pos = 0; static_cast<size_t>(pos) < S3fsCurl::sseckeys.size(); pos++){
+        for(size_t pos = 0; pos < S3fsCurl::sseckeys.size(); pos++){
             if(!DestroyCurlHandle()){
                 break;
             }
@@ -3947,7 +3944,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
         s3fscurl_para->partdata.add_etag_list(&list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, list.size(), upload_id, meta))){
+        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size()), upload_id, meta))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             delete s3fscurl_para;
             return result;
@@ -4056,7 +4053,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
         s3fscurl_para->partdata.add_etag_list(&list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(from, to, list.size(), upload_id, meta))){
+        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(from, to, static_cast<int>(list.size()), upload_id, meta))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             delete s3fscurl_para;
             return result;

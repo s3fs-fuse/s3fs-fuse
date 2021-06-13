@@ -2519,18 +2519,18 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     if(!s3fscurl){
         return NULL;
     }
-    int ssec_key_pos= s3fscurl->GetLastPreHeadSeecKeyPos();
+    size_t ssec_key_pos= s3fscurl->GetLastPreHeadSeecKeyPos();
     int retry_count = s3fscurl->GetMultipartRetryCount();
 
     // retry next sse key.
     // if end of sse key, set retry master count is up.
-    ssec_key_pos = (ssec_key_pos < 0 ? 0 : ssec_key_pos + 1);
+    ssec_key_pos = (ssec_key_pos == -1 ? 0 : ssec_key_pos + 1);
     if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
         if(s3fscurl->IsOverMultipartRetryCount()){
             S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
             return NULL;
         }
-        ssec_key_pos= -1;
+        ssec_key_pos = -1;
         retry_count++;
     }
 
@@ -3203,7 +3203,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     // check parameters
     if(0 == size){
         free_xattrs(xattrs);
-        return total;
+        return static_cast<int>(total);
     }
     if(!list || size < total){
         free_xattrs(xattrs);
@@ -3220,7 +3220,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     }
     free_xattrs(xattrs);
 
-    return total;
+    return static_cast<int>(total);
 }
 
 static int s3fs_removexattr(const char* path, const char* name)
@@ -4216,8 +4216,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 1; // continue for fuse option
         }
         if(is_prefix(arg, "umask=")){
-            s3fs_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
-            s3fs_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+            off_t s3fs_umask_tmp = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
+            s3fs_umask = s3fs_umask_tmp & (S_IRWXU | S_IRWXG | S_IRWXO);
             is_s3fs_umask = true;
             return 1; // continue for fuse option
         }
@@ -4226,8 +4226,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 1; // continue for fuse option
         }
         if(is_prefix(arg, "mp_umask=")){
-            mp_umask = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
-            mp_umask &= (S_IRWXU | S_IRWXG | S_IRWXO);
+            off_t mp_umask_tmp = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
+            mp_umask = mp_umask_tmp & (S_IRWXU | S_IRWXG | S_IRWXO);
             is_mp_umask = true;
             return 0;
         }
@@ -4242,12 +4242,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "retries=")){
-            off_t retries = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t retries = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
             if(retries == 0){
                 S3FS_PRN_EXIT("retries must be greater than zero");
                 return -1;
             }
-            S3fsCurl::SetRetries(retries);
+            S3fsCurl::SetRetries(static_cast<int>(retries));
             return 0;
         }
         if(is_prefix(arg, "use_cache=")){

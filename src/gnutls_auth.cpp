@@ -281,7 +281,7 @@ size_t get_sha256_digest_length()
 }
 
 #ifdef USE_GNUTLS_NETTLE
-bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
+bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
     (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
     *digest = new unsigned char[*digestlen];
@@ -325,7 +325,7 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
 
 #else // USE_GNUTLS_NETTLE
 
-bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
+bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
     size_t len = (*digestlen) = static_cast<unsigned int>(get_sha256_digest_length());
     *digest = new unsigned char[len];

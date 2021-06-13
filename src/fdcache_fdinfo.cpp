@@ -195,7 +195,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* 
 
     // set part number
     if(ppartnum){
-        *ppartnum = upload_list.size();
+        *ppartnum = static_cast<int>(upload_list.size());
     }
 
     // set etag pointer

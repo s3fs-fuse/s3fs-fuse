@@ -180,16 +180,16 @@ class S3fsCurl
         BodyData             headdata;             // header data by WriteMemoryCallback
         volatile long        LastResponseCode;
         const unsigned char* postdata;             // use by post method and read callback function.
-        int                  postdata_remaining;   // use by post method and read callback function.
+        off_t                postdata_remaining;   // use by post method and read callback function.
         filepart             partdata;             // use by multipart upload/get object callback
         bool                 is_use_ahbe;          // additional header by extension
         int                  retry_count;          // retry count for multipart
         FILE*                b_infile;             // backup for retrying
         const unsigned char* b_postdata;           // backup for retrying
-        int                  b_postdata_remaining; // backup for retrying
+        off_t                b_postdata_remaining; // backup for retrying
         off_t                b_partdata_startpos;  // backup for retrying
         off_t                b_partdata_size;      // backup for retrying
-        int                  b_ssekey_pos;         // backup for retrying
+        size_t               b_ssekey_pos;         // backup for retrying
         std::string          b_ssevalue;           // backup for retrying
         sse_type_t           b_ssetype;            // backup for retrying
         std::string          b_from;               // backup for retrying(for copy request)
@@ -318,8 +318,8 @@ class S3fsCurl
         static bool IsSetSseKmsId() { return !S3fsCurl::ssekmsid.empty(); }
         static const char* GetSseKmsId() { return S3fsCurl::ssekmsid.c_str(); }
         static bool GetSseKey(std::string& md5, std::string& ssekey);
-        static bool GetSseKeyMd5(int pos, std::string& md5);
-        static int GetSseKeyCount();
+        static bool GetSseKeyMd5(size_t pos, std::string& md5);
+        static size_t GetSseKeyCount();
         static bool SetContentMd5(bool flag);
         static bool SetVerbose(bool flag);
         static bool GetVerbose() { return S3fsCurl::is_verbose; }
@@ -376,8 +376,8 @@ class S3fsCurl
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
-        bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, int ssekey_pos = -1);
-        bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, int ssekey_pos = -1) {
+        bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, size_t ssekey_pos = -1);
+        bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, size_t ssekey_pos = -1) {
           return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
         }
         int HeadRequest(const char* tpath, headers_t& meta);
@@ -415,7 +415,7 @@ class S3fsCurl
         int GetMultipartRetryCount() const { return retry_count; }
         void SetMultipartRetryCount(int retrycnt) { retry_count = retrycnt; }
         bool IsOverMultipartRetryCount() const { return (retry_count >= S3fsCurl::retries); }
-        int GetLastPreHeadSeecKeyPos() const { return b_ssekey_pos; }
+        size_t GetLastPreHeadSeecKeyPos() const { return b_ssekey_pos; }
 };
 
 #endif // S3FS_CURL_H_

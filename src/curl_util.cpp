@@ -258,9 +258,9 @@ std::string prepare_url(const char* url)
     std::string path;
     std::string url_str = std::string(url);
     std::string token = std::string("/") + bucket;
-    int bucket_pos;
-    int bucket_length = token.size();
-    int uri_length = 0;
+    size_t bucket_pos;
+    size_t bucket_length = token.size();
+    size_t uri_length = 0;
 
     if(!strncasecmp(url_str.c_str(), "https://", 8)){
         uri_length = 8;

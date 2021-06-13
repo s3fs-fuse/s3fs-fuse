@@ -227,9 +227,9 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
     (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
     *digest      = new unsigned char[*digestlen];
     if(is_sha256){
-        HMAC(EVP_sha256(), key, keylen, data, datalen, *digest, digestlen);
+        HMAC(EVP_sha256(), key, static_cast<int>(keylen), data, datalen, *digest, digestlen);
     }else{
-        HMAC(EVP_sha1(), key, keylen, data, datalen, *digest, digestlen);
+        HMAC(EVP_sha1(), key, static_cast<int>(keylen), data, datalen, *digest, digestlen);
     }
 
     return true;
@@ -299,7 +299,7 @@ size_t get_sha256_digest_length()
     return SHA256_DIGEST_LENGTH;
 }
 
-bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen)
+bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
 {
     (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
     *digest      = new unsigned char[*digestlen];

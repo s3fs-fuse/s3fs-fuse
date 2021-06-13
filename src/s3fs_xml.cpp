@@ -458,7 +458,7 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     value.clear();
 
     xmlDocPtr doc;
-    if(NULL == (doc = xmlReadMemory(data, len, "", NULL, 0))){
+    if(NULL == (doc = xmlReadMemory(data, static_cast<int>(len), "", NULL, 0))){
         return false;
     }
 

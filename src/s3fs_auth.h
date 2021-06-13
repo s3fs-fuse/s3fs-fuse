@@ -45,7 +45,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
 size_t get_md5_digest_length();
 unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size);
-bool s3fs_sha256(const unsigned char* data, unsigned int datalen, unsigned char** digest, unsigned int* digestlen);
+bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
 size_t get_sha256_digest_length();
 unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size);
 

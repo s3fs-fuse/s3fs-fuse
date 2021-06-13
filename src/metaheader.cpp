@@ -49,7 +49,7 @@ static struct timespec cvt_string_to_time(const char *str)
             strmtime.erase(pos);
         }
     }
-    return {cvt_strtoofft(strmtime.c_str()), nsec};
+    return {static_cast<time_t>(cvt_strtoofft(strmtime.c_str())), nsec};
 }
 
 static struct timespec get_time(const headers_t& meta, const char *header)
