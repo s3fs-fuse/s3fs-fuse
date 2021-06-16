@@ -4242,7 +4242,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "retries=")){
-            off_t retries = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            off_t retries = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(retries == 0){
                 S3FS_PRN_EXIT("retries must be greater than zero");
                 return -1;
@@ -4267,7 +4267,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multireq_max=")){
-            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetMaxMultiRequest(maxreq);
             return 0;
         }
@@ -4284,7 +4284,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             off_t rrs = 1;
             // for an old format.
             if(is_prefix(arg, "use_rrs=")){
-                rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+                rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             }
             if(0 == rrs){
                 S3fsCurl::SetStorageClass("STANDARD");
@@ -4411,7 +4411,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "ssl_verify_hostname=")){
-            long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
                 S3FS_PRN_EXIT("poorly formed argument to option: ssl_verify_hostname.");
                 return -1;
@@ -4487,7 +4487,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "public_bucket=")){
-            off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(1 == pubbucket){
                 S3fsCurl::SetPublicBucket(true);
                 // [NOTE]
@@ -4515,17 +4515,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "connect_timeout=")){
-            long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetConnectTimeout(contimeout);
             return 0;
         }
         if(is_prefix(arg, "readwrite_timeout=")){
-            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetReadwriteTimeout(rwtimeout);
             return 0;
         }
         if(is_prefix(arg, "list_object_max_keys=")){
-            int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(max_keys < 1000){
                 S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
                 return -1;
@@ -4534,19 +4534,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "max_stat_cache_size=")){
-            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetCacheSize(cache_size);
             return 0;
         }
         if(is_prefix(arg, "stat_cache_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time);
             return 0;
         }
         // [NOTE]
         // This option is for compatibility old version.
         if(is_prefix(arg, "stat_cache_interval_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
             return 0;
         }
@@ -4563,7 +4563,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){
-            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(0 >= maxpara){
                 S3FS_PRN_EXIT("argument should be over 1: parallel_count");
                 return -1;
@@ -4576,7 +4576,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(!S3fsCurl::SetMultipartSize(size)){
                 S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
                 return -1;
@@ -4584,7 +4584,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_copy_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(!S3fsCurl::SetMultipartCopySize(size)){
                 S3FS_PRN_EXIT("multipart_copy_size option must be at least 5 MB.");
                 return -1;
@@ -4592,7 +4592,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "max_dirty_data=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(size >= 50){
                 size *= 1024 * 1024;
             }else if(size != -1){
@@ -4603,7 +4603,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "ensure_diskfree=")){
-            off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
+            off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10) * 1024 * 1024;
             if(dfsize < S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
                 dfsize = S3fsCurl::GetMultipartSize();
@@ -4612,7 +4612,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_threshold=")){
-            multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
+            multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             if(multipart_threshold <= MIN_MULTIPART_SIZE){
                 S3FS_PRN_EXIT("multipart_threshold must be at least %lld, was: %lld", static_cast<long long>(MIN_MULTIPART_SIZE), static_cast<long long>(multipart_threshold));
                 return -1;
@@ -4620,7 +4620,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "singlepart_copy_limit=")){
-            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
+            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             return 0;
         }
         if(is_prefix(arg, "ahbe_conf=")){

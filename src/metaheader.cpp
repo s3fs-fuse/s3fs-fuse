@@ -45,11 +45,11 @@ static struct timespec cvt_string_to_time(const char *str)
         strmtime = str;
         std::string::size_type pos = strmtime.find('.', 0);
         if(std::string::npos != pos){
-            nsec = cvt_strtoofft(strmtime.substr(pos + 1).c_str(), 10);
+            nsec = cvt_strtoofft(strmtime.substr(pos + 1).c_str(), /*base=*/ 10);
             strmtime.erase(pos);
         }
     }
-    return {static_cast<time_t>(cvt_strtoofft(strmtime.c_str())), nsec};
+    return {static_cast<time_t>(cvt_strtoofft(strmtime.c_str(), /*base=*/ 10)), nsec};
 }
 
 static struct timespec get_time(const headers_t& meta, const char *header)
@@ -103,7 +103,7 @@ struct timespec get_atime(const headers_t& meta, bool overcheck)
 
 off_t get_size(const char *s)
 {
-    return cvt_strtoofft(s);
+    return cvt_strtoofft(s, /*base=*/ 10);
 }
 
 off_t get_size(const headers_t& meta)
@@ -202,7 +202,7 @@ mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool for
 
 uid_t get_uid(const char *s)
 {
-    return static_cast<uid_t>(cvt_strtoofft(s));
+    return static_cast<uid_t>(cvt_strtoofft(s, /*base=*/ 0));
 }
 
 uid_t get_uid(const headers_t& meta)
@@ -221,7 +221,7 @@ uid_t get_uid(const headers_t& meta)
 
 gid_t get_gid(const char *s)
 {
-    return static_cast<gid_t>(cvt_strtoofft(s));
+    return static_cast<gid_t>(cvt_strtoofft(s, /*base=*/ 0));
 }
 
 gid_t get_gid(const headers_t& meta)
