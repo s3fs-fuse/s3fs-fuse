@@ -45,7 +45,7 @@ static struct timespec cvt_string_to_time(const char *str)
         strmtime = str;
         std::string::size_type pos = strmtime.find('.', 0);
         if(std::string::npos != pos){
-            nsec = cvt_strtoofft(strmtime.substr(pos + 1).c_str());
+            nsec = cvt_strtoofft(strmtime.substr(pos + 1).c_str(), 10);
             strmtime.erase(pos);
         }
     }
