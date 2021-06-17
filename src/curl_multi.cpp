@@ -133,7 +133,7 @@ int S3fsMultiCurl::MultiPerform()
                 } else {
                     int int_retval = (int)(intptr_t)(retval);
                     if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                        S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
+                        S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
                     }
                 }
             }
@@ -169,7 +169,7 @@ int S3fsMultiCurl::MultiPerform()
         } else {
             int int_retval = (int)(intptr_t)(retval);
             if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                S3FS_PRN_WARN("thread failed - rc(%d)", int_retval);
+                S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
             }
         }
     }
