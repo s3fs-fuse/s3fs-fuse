@@ -37,7 +37,6 @@ cppcheck:
             -D HAVE_SYS_EXTATTR_H \
             -D HAVE_MALLOC_TRIM \
             -U CURLE_PEER_FAILED_VERIFICATION \
-            -U P_tmpdir \
             -U ENOATTR \
             --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
