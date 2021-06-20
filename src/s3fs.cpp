@@ -804,7 +804,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     WTF8_ENCODE(path)
     std::string strValue;
 
-    // check symblic link cache
+    // check symbolic link cache
     if(!StatCache::getStatCacheData()->GetSymlink(std::string(path), strValue)){
         // not found in cache, then open the path
         {   // scope for AutoFdEntity
@@ -841,13 +841,14 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
           strValue = s3fs_wtf8_decode(strValue);
         }
 
-        // add symblic link cache
+        // add symbolic link cache
         if(!StatCache::getStatCacheData()->AddSymlink(std::string(path), strValue)){
           S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
         }
     }
     // copy result
-    strncpy(buf, strValue.c_str(), size);
+    strncpy(buf, strValue.c_str(), size - 1);
+    buf[size - 1] = '\0';
 
     S3FS_MALLOCTRIM(0);
 
