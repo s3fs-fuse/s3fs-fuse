@@ -624,6 +624,20 @@ function test_multipart_mix {
     rm_test_file "${BIG_FILE}-mix"
 }
 
+function test_utimens_during_multipart {
+    describe "Testing utimens calling during multipart copy ..."
+
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+
+    cp ${TEMP_DIR}/${BIG_FILE} ${BIG_FILE}
+
+    # The second copy of the "-p" option calls utimens during multipart upload.
+    cp -p ${TEMP_DIR}/${BIG_FILE} ${BIG_FILE}
+
+    rm -f "${TEMP_DIR}/${BIG_FILE}"
+    rm_test_file "${BIG_FILE}"
+}
+
 function test_special_characters {
     describe "Testing special characters ..."
 
@@ -1465,6 +1479,7 @@ function add_all_tests {
     add_tests test_multipart_upload
     add_tests test_multipart_copy
     add_tests test_multipart_mix
+    add_tests test_utimens_during_multipart
     add_tests test_special_characters
     add_tests test_hardlink
     add_tests test_symlink
