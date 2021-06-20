@@ -37,8 +37,8 @@ BIG_FILE_BLOCK_SIZE=$((25 * 1024 * 1024))
 BIG_FILE_COUNT=1
 # This should be greater than the multipart size
 BIG_FILE_LENGTH=$(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT))
-# Use C locale, because some tests check for English expressions
-export LC_ALL=C
+# Set locale because some tests check for English expressions
+export LC_ALL=en_US.UTF-8
 export RUN_DIR
 
 # [NOTE]

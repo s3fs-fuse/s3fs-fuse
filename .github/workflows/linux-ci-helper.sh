@@ -62,7 +62,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="openjdk-8-jdk"
 
@@ -70,7 +70,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="openjdk-8-jdk"
 
@@ -78,7 +78,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="openjdk-8-jdk"
 
@@ -86,7 +86,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="openjdk-8-jdk"
 
@@ -94,7 +94,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget python2 procps python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="adoptopenjdk-8-hotspot"
 
@@ -102,7 +102,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev mime-support libtool pkg-config libssl-dev attr wget procps python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="openjdk-8-jdk"
 
@@ -110,7 +110,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel attr diffutils wget python2 python3"
+    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ glibc-langpack-en fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel attr diffutils wget python2 python3"
     INSTALL_CPPCHECK_OPTIONS="--enablerepo=powertools"
     INSTALL_JDK_PACKAGES="java-1.8.0-openjdk"
 
@@ -123,7 +123,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     PACKAGE_MANAGER_BIN="yum"
     PACKAGE_UPDATE_OPTIONS="update -y"
 
-    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel attr wget python3 epel-release"
+    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ glibc-langpack-en fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel attr wget python3 epel-release"
     INSTALL_CPPCHECK_OPTIONS="--enablerepo=epel"
     INSTALL_JDK_PACKAGES="java-1.8.0-openjdk"
 
@@ -136,7 +136,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:34" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel wget attr diffutils python2 procps python3-pip"
+    INSTALL_PACKAGES="gcc libstdc++-devel gcc-c++ glibc-langpack-en fuse fuse-devel curl-devel libxml2-devel mailcap git automake make openssl-devel wget attr diffutils python2 procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
     INSTALL_JDK_PACKAGES="java-1.8.0-openjdk"
 
