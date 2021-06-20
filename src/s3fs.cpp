@@ -2524,7 +2524,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
 
     // retry next sse key.
     // if end of sse key, set retry master count is up.
-    ssec_key_pos = (ssec_key_pos == -1 ? 0 : ssec_key_pos + 1);
+    ssec_key_pos = (ssec_key_pos == static_cast<size_t>(-1) ? 0 : ssec_key_pos + 1);
     if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
         if(s3fscurl->IsOverMultipartRetryCount()){
             S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
