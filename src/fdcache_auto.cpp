@@ -91,7 +91,7 @@ bool AutoFdEntity::Attach(const char* path, int existfd)
     Close();
 
     if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, false))){
-        S3FS_PRN_DBG("Could not find fd entity object(file=%s, existfd=%d)", path, existfd);
+        S3FS_PRN_DBG("Could not find fd entity object(file=%s, pseudo_fd=%d)", path, existfd);
         return false;
     }
     pseudo_fd = existfd;

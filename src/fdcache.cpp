@@ -452,7 +452,7 @@ FdManager::~FdManager()
 
 FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, bool lock_already_held)
 {
-    S3FS_PRN_INFO3("[path=%s][fd=%d]", SAFESTRPTR(path), existfd);
+    S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
     if(!path || '\0' == path[0]){
         return NULL;
@@ -590,7 +590,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
 //
 FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 {
-    S3FS_PRN_DBG("[path=%s][existfd=%d]", SAFESTRPTR(path), existfd);
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 

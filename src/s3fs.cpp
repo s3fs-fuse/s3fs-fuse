@@ -2313,12 +2313,12 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        S3FS_PRN_ERR("could not find opened pseudo_fd(=%llu) for path(%s)", (unsigned long long)(fi->fh), path);
         return -EIO;
     }
 
@@ -2341,12 +2341,12 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
         return -EIO;
     }
 
@@ -2387,7 +2387,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     WTF8_ENCODE(path)
     int result;
 
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
     if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -2423,7 +2423,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     WTF8_ENCODE(path)
     int result = 0;
 
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -2445,7 +2445,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     // [NOTE]
     // All opened file's stats is cached with no truncate flag.
@@ -2470,7 +2470,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         // destroyed here.
         //
         if(!autoent.Attach(path, static_cast<int>(fi->fh))){
-            S3FS_PRN_ERR("could not find pseudo fd(file=%s, fd=%d)", path, static_cast<int>(fi->fh));
+            S3FS_PRN_ERR("could not find pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
             return -EIO;
         }
     }
