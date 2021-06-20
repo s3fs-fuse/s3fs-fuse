@@ -84,7 +84,7 @@ ino_t FdEntity::GetInode(int fd)
 
     struct stat st;
     if(0 != fstat(fd, &st)){
-        S3FS_PRN_ERR("could not get stat for file descriptor(%d) by errno(%d).", fd, errno);
+        S3FS_PRN_ERR("could not get stat for physical file descriptor(%d) by errno(%d).", fd, errno);
         return 0;
     }
     return st.st_ino;
@@ -429,12 +429,12 @@ int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLoc
         if(0 <= size && pagelist.Size() != size){
             // truncate temporary file size
             if(-1 == ftruncate(physical_fd, size)){
-                S3FS_PRN_ERR("failed to truncate temporary file(%d) by errno(%d).", physical_fd, errno);
+                S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", physical_fd, errno);
                 return -errno;
             }
             // resize page list
             if(!pagelist.Resize(size, false, true)){      // Areas with increased size are modified
-                S3FS_PRN_ERR("failed to truncate temporary file information(%d).", physical_fd);
+                S3FS_PRN_ERR("failed to truncate temporary file information(physical_fd=%d).", physical_fd);
                 return -EIO;
             }
         }
@@ -1152,7 +1152,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
                 // after this, file length is (offset + size), but file does not use any disk space.
                 //
                 if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (offset + oneread))){
-                    S3FS_PRN_ERR("failed to truncate temporary file(%d).", tmpfd);
+                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", tmpfd);
                     result = -EIO;
                     break;
                 }
@@ -1161,14 +1161,14 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
                 if(0 < need_load_size){
                     S3fsCurl s3fscurl;
                     if(0 != (result = s3fscurl.GetObjectRequest(path.c_str(), tmpfd, offset, oneread))){
-                        S3FS_PRN_ERR("failed to get object(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), tmpfd);
+                        S3FS_PRN_ERR("failed to get object(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), tmpfd);
                         break;
                     }
                 }
                 // initialize fd without loading
                 if(0 < over_size){
                     if(0 != (result = FdEntity::FillFile(tmpfd, 0, over_size, offset + need_load_size))){
-                        S3FS_PRN_ERR("failed to fill rest bytes for fd(%d). errno(%d)", tmpfd, result);
+                        S3FS_PRN_ERR("failed to fill rest bytes for physical_fd(%d). errno(%d)", tmpfd, result);
                         break;
                     }
                 }
@@ -1177,7 +1177,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
             }
             // single area upload by multipart post
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, upload_fd, offset, oneread))){
-                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
                 break;
             }
         }
@@ -1210,7 +1210,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
 
         // fd data do empty
         if(-1 == ftruncate(physical_fd, 0)){
-            S3FS_PRN_ERR("failed to truncate file(%d), but continue...", physical_fd);
+            S3FS_PRN_ERR("failed to truncate file(physical_fd=%d), but continue...", physical_fd);
         }
     }
 
@@ -1364,7 +1364,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
             }else{
                 // no enough disk space
                 if(nomultipart){
-                    S3FS_PRN_WARN("Not enough local storage to flush: [path=%s][fd=%d]", path.c_str(), fd);
+                    S3FS_PRN_WARN("Not enough local storage to flush: [path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
                     return -ENOSPC;   // No space left on device
                 }
                 if(0 != (result = NoCachePreMultipartPost(pseudo_obj))){
@@ -1473,20 +1473,20 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
 
         if(0 < untreated_size){
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
-                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
             pseudo_obj->ClearUntreated();
         }
         // complete multipart uploading.
         if(0 != (result = NoCacheCompleteMultipartPost(pseudo_obj))){
-            S3FS_PRN_ERR("failed to complete(finish) multipart post for file(%d).", physical_fd);
+            S3FS_PRN_ERR("failed to complete(finish) multipart post for file(physical_fd=%d).", physical_fd);
             return result;
         }
         // truncate file to zero
         if(-1 == ftruncate(physical_fd, 0)){
             // So the file has already been removed, skip error.
-            S3FS_PRN_ERR("failed to truncate file(%d) to zero, but continue...", physical_fd);
+            S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pading headers
         if(0 != (result = UploadPendingMeta())){
@@ -1512,7 +1512,7 @@ bool FdEntity::ReserveDiskSpace(off_t size)
         // try to clear all cache for this fd.
         pagelist.Init(pagelist.Size(), false, false);
         if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, pagelist.Size())){
-            S3FS_PRN_ERR("failed to truncate temporary file(%d).", physical_fd);
+            S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", physical_fd);
             return false;
         }
 
@@ -1610,7 +1610,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     if(pagelist.Size() < start){
         // grow file size
         if(-1 == ftruncate(physical_fd, start)){
-            S3FS_PRN_ERR("failed to truncate temporary file(%d).", physical_fd);
+            S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", physical_fd);
             return -errno;
         }
         // add new area
@@ -1693,7 +1693,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
         if(S3fsCurl::GetMultipartSize() <= untreated_size){
             // over one multipart size
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
-                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
+                S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
 
@@ -1702,7 +1702,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
             // after this, file length is (offset + size), but file does not use any disk space.
             //
             if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, (untreated_start + untreated_size))){
-                S3FS_PRN_ERR("failed to truncate file(%d).", physical_fd);
+                S3FS_PRN_ERR("failed to truncate file(physical_fd=%d).", physical_fd);
                 return -errno;
             }
             pseudo_obj->SetUntreated(untreated_start + untreated_size, 0);

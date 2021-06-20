@@ -186,7 +186,7 @@ bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& spars
     off_t hole_pos = lseek(fd, 0, SEEK_HOLE);
     off_t data_pos = lseek(fd, 0, SEEK_DATA);
     if(-1 == hole_pos && -1 == data_pos){
-        S3FS_PRN_ERR("Could not find the first position both HOLE and DATA in the file(fd=%d).", fd);
+        S3FS_PRN_ERR("Could not find the first position both HOLE and DATA in the file(physical_fd=%d).", fd);
         return false;
     }else if(-1 == hole_pos){
         is_hole   = false;
@@ -231,7 +231,7 @@ bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
         bool    found_bad_data = false;
         ssize_t read_bytes;
         if(-1 == (read_bytes = pread(fd, readbuff, check_bytes, (start + comp_bytes)))){
-            S3FS_PRN_ERR("Something error is occurred in reading %zu bytes at %lld from file(%d).", check_bytes, static_cast<long long int>(start + comp_bytes), fd);
+            S3FS_PRN_ERR("Something error is occurred in reading %zu bytes at %lld from file(physical_fd=%d).", check_bytes, static_cast<long long int>(start + comp_bytes), fd);
             found_bad_data = true;
         }else{
             check_bytes = static_cast<size_t>(read_bytes);
@@ -941,7 +941,7 @@ bool PageList::CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_ar
     // are assigned to any holes.
     fdpage_list_t sparse_list;
     if(!PageList::GetSparseFilePages(fd, file_size, sparse_list)){
-        S3FS_PRN_ERR("Something error is occurred in parsing hole/data of the cache file(%d).", fd);
+        S3FS_PRN_ERR("Something error is occurred in parsing hole/data of the cache file(physical_fd=%d).", fd);
 
         fdpage page(0, static_cast<off_t>(file_size), false, false);
         err_area_list.push_back(page);
