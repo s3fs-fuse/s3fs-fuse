@@ -2355,7 +2355,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
         int flushres;
-        if(0 != (flushres = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
+        if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
             return flushres;
