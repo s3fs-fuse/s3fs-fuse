@@ -1745,7 +1745,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     if(0 <= atime.tv_sec){
         SetAtime(atime, true);
     }
-    is_meta_pending |= IsUploading(true);
+    is_meta_pending |= (IsUploading(true) || pagelist.IsModified());
 
     return is_meta_pending;
 }
