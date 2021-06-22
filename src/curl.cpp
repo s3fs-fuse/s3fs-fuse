@@ -3528,7 +3528,6 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     }
 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     op = "POST";
@@ -3540,6 +3539,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
     curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
+    curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);           // Content-Length
     S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
     // request
