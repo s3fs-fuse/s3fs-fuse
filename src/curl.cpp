@@ -41,6 +41,7 @@
 // Symbols
 //-------------------------------------------------------------------
 static const std::string empty_payload_hash         = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+static const std::string empty_md5_base64_hash      = "1B2M2Y8AsgTpgAmY7PhCfg==";
 
 //-------------------------------------------------------------------
 // Class S3fsCurl
@@ -3210,11 +3211,15 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
     // Make request headers
     std::string strMD5;
-    if(-1 != fd && S3fsCurl::is_content_md5){
-        strMD5         = s3fs_get_content_md5(fd);
-        if(0 == strMD5.length()){
-            S3FS_PRN_ERR("Failed to make MD5.");
-            return -EIO;
+    if(S3fsCurl::is_content_md5){
+        if(-1 != fd){
+            strMD5 = s3fs_get_content_md5(fd);
+            if(0 == strMD5.length()){
+                S3FS_PRN_ERR("Failed to make MD5.");
+                return -EIO;
+            }
+        }else{
+            strMD5 = empty_md5_base64_hash;
         }
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
     }
@@ -3524,7 +3529,6 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     }
 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Length", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     op = "POST";
@@ -3536,6 +3540,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
     curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, 0);
+    curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0);           // Content-Length
     S3fsCurl::AddUserAgent(hCurl);                            // put User-Agent
 
     // request

@@ -804,7 +804,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     WTF8_ENCODE(path)
     std::string strValue;
 
-    // check symblic link cache
+    // check symbolic link cache
     if(!StatCache::getStatCacheData()->GetSymlink(std::string(path), strValue)){
         // not found in cache, then open the path
         {   // scope for AutoFdEntity
@@ -841,13 +841,14 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
           strValue = s3fs_wtf8_decode(strValue);
         }
 
-        // add symblic link cache
+        // add symbolic link cache
         if(!StatCache::getStatCacheData()->AddSymlink(std::string(path), strValue)){
           S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
         }
     }
     // copy result
-    strncpy(buf, strValue.c_str(), size);
+    strncpy(buf, strValue.c_str(), size - 1);
+    buf[size - 1] = '\0';
 
     S3FS_MALLOCTRIM(0);
 
@@ -2312,12 +2313,12 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        S3FS_PRN_ERR("could not find opened pseudo_fd(=%llu) for path(%s)", (unsigned long long)(fi->fh), path);
         return -EIO;
     }
 
@@ -2340,12 +2341,12 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
     if(NULL == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened fd(%s)", path);
+        S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
         return -EIO;
     }
 
@@ -2355,7 +2356,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
         int flushres;
-        if(0 != (flushres = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
+        if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
             return flushres;
@@ -2386,7 +2387,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     WTF8_ENCODE(path)
     int result;
 
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
     if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -2422,7 +2423,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     WTF8_ENCODE(path)
     int result = 0;
 
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -2444,7 +2445,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
-    S3FS_PRN_INFO("[path=%s][fd=%llu]", path, (unsigned long long)(fi->fh));
+    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     // [NOTE]
     // All opened file's stats is cached with no truncate flag.
@@ -2469,7 +2470,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         // destroyed here.
         //
         if(!autoent.Attach(path, static_cast<int>(fi->fh))){
-            S3FS_PRN_ERR("could not find pseudo fd(file=%s, fd=%d)", path, static_cast<int>(fi->fh));
+            S3FS_PRN_ERR("could not find pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
             return -EIO;
         }
     }
@@ -2524,7 +2525,7 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
 
     // retry next sse key.
     // if end of sse key, set retry master count is up.
-    ssec_key_pos = (ssec_key_pos == -1 ? 0 : ssec_key_pos + 1);
+    ssec_key_pos = (ssec_key_pos == static_cast<size_t>(-1) ? 0 : ssec_key_pos + 1);
     if(0 == S3fsCurl::GetSseKeyCount() || S3fsCurl::GetSseKeyCount() <= ssec_key_pos){
         if(s3fscurl->IsOverMultipartRetryCount()){
             S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->GetMultipartRetryCount(), s3fscurl->GetSpacialSavedPath().c_str());
@@ -4242,7 +4243,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "retries=")){
-            off_t retries = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            off_t retries = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(retries == 0){
                 S3FS_PRN_EXIT("retries must be greater than zero");
                 return -1;
@@ -4267,7 +4268,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multireq_max=")){
-            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetMaxMultiRequest(maxreq);
             return 0;
         }
@@ -4284,7 +4285,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             off_t rrs = 1;
             // for an old format.
             if(is_prefix(arg, "use_rrs=")){
-                rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+                rrs = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             }
             if(0 == rrs){
                 S3fsCurl::SetStorageClass("STANDARD");
@@ -4411,7 +4412,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "ssl_verify_hostname=")){
-            long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            long sslvh = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(-1 == S3fsCurl::SetSslVerifyHostname(sslvh)){
                 S3FS_PRN_EXIT("poorly formed argument to option: ssl_verify_hostname.");
                 return -1;
@@ -4487,7 +4488,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "public_bucket=")){
-            off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char));
+            off_t pubbucket = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(1 == pubbucket){
                 S3fsCurl::SetPublicBucket(true);
                 // [NOTE]
@@ -4515,17 +4516,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "connect_timeout=")){
-            long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            long contimeout = static_cast<long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetConnectTimeout(contimeout);
             return 0;
         }
         if(is_prefix(arg, "readwrite_timeout=")){
-            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetReadwriteTimeout(rwtimeout);
             return 0;
         }
         if(is_prefix(arg, "list_object_max_keys=")){
-            int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int max_keys = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(max_keys < 1000){
                 S3FS_PRN_EXIT("argument should be over 1000: list_object_max_keys");
                 return -1;
@@ -4534,19 +4535,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "max_stat_cache_size=")){
-            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetCacheSize(cache_size);
             return 0;
         }
         if(is_prefix(arg, "stat_cache_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time);
             return 0;
         }
         // [NOTE]
         // This option is for compatibility old version.
         if(is_prefix(arg, "stat_cache_interval_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
             return 0;
         }
@@ -4563,7 +4564,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){
-            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(0 >= maxpara){
                 S3FS_PRN_EXIT("argument should be over 1: parallel_count");
                 return -1;
@@ -4576,7 +4577,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(!S3fsCurl::SetMultipartSize(size)){
                 S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
                 return -1;
@@ -4584,7 +4585,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_copy_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(!S3fsCurl::SetMultipartCopySize(size)){
                 S3FS_PRN_EXIT("multipart_copy_size option must be at least 5 MB.");
                 return -1;
@@ -4592,7 +4593,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "max_dirty_data=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char)));
+            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             if(size >= 50){
                 size *= 1024 * 1024;
             }else if(size != -1){
@@ -4603,7 +4604,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "ensure_diskfree=")){
-            off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char)) * 1024 * 1024;
+            off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10) * 1024 * 1024;
             if(dfsize < S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
                 dfsize = S3fsCurl::GetMultipartSize();
@@ -4612,7 +4613,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "multipart_threshold=")){
-            multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
+            multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             if(multipart_threshold <= MIN_MULTIPART_SIZE){
                 S3FS_PRN_EXIT("multipart_threshold must be at least %lld, was: %lld", static_cast<long long>(MIN_MULTIPART_SIZE), static_cast<long long>(multipart_threshold));
                 return -1;
@@ -4620,7 +4621,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "singlepart_copy_limit=")){
-            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char))) * 1024 * 1024;
+            singlepart_copy_limit = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             return 0;
         }
         if(is_prefix(arg, "ahbe_conf=")){

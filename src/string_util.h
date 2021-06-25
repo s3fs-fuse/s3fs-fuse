@@ -63,7 +63,7 @@ bool s3fs_strtoofft(off_t* value, const char* str, int base = 0);
 // This function returns 0 if a value that cannot be converted is specified.
 // Only call if 0 is considered an error and the operation can continue.
 //
-off_t cvt_strtoofft(const char* str, int base = 0);
+off_t cvt_strtoofft(const char* str, int base);
 
 //
 // String Manipulation
