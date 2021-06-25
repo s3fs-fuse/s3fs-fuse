@@ -3400,6 +3400,7 @@ int S3fsCurl::CheckBucket()
     curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata);
     curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(hCurl, CURLOPT_UNRESTRICTED_AUTH, 1L);
     S3fsCurl::AddUserAgent(hCurl);        // put User-Agent
 
     int result = RequestPerform();
