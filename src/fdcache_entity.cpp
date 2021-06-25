@@ -1751,7 +1751,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 }
 
 // global function in s3fs.cpp
-int put_headers(const char* path, headers_t& meta, bool is_copy);
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size = true);
 
 int FdEntity::UploadPendingMeta()
 {
