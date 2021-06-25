@@ -139,6 +139,19 @@ function test_mv_file {
     rm_test_file $ALT_TEST_TEXT_FILE
 }
 
+function test_mv_to_exist_file {
+    describe "Testing mv file to exist file function ..."
+
+    BIG_MV_FILE_BLOCK_SIZE=$((BIG_FILE_BLOCK_SIZE + 1))
+
+    dd if=/dev/urandom of="${BIG_FILE}" bs=${BIG_FILE_BLOCK_SIZE} count=${BIG_FILE_COUNT}
+    dd if=/dev/urandom of="${BIG_FILE}-mv" bs=${BIG_MV_FILE_BLOCK_SIZE} count=${BIG_FILE_COUNT}
+
+    mv ${BIG_FILE} ${BIG_FILE}-mv
+
+    rm_test_file "${BIG_FILE}-mv"
+}
+
 function test_mv_empty_directory {
     describe "Testing mv directory function ..."
     if [ -e $TEST_DIR ]; then
@@ -1459,6 +1472,7 @@ function add_all_tests {
     add_tests test_truncate_upload
     add_tests test_truncate_empty_file
     add_tests test_mv_file
+    add_tests test_mv_to_exist_file
     add_tests test_mv_empty_directory
     add_tests test_mv_nonempty_directory
     add_tests test_redirects

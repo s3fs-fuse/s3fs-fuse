@@ -107,7 +107,7 @@ static const std::string aws_secretkey         = "AWSSecretKey";
 //-------------------------------------------------------------------
 // Global functions : prototype
 //-------------------------------------------------------------------
-int put_headers(const char* path, headers_t& meta, bool is_copy);       // [NOTE] global function because this is called from FdEntity class
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size = true);       // [NOTE] global function because this is called from FdEntity class
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -736,21 +736,27 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
 // ow_sse_flg is for over writing sse header by use_sse option.
 // @return fuse return code
 //
-int put_headers(const char* path, headers_t& meta, bool is_copy)
+int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size)
 {
     int         result;
     S3fsCurl    s3fscurl(true);
-    struct stat buf;
+    off_t       size;
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
     // files larger than 5GB must be modified via the multipart interface
     // *** If there is not target object(a case of move command),
     //     get_object_attribute() returns error with initializing buf.
-    (void)get_object_attribute(path, &buf);
+    if(use_st_size){
+        struct stat buf;
+        (void)get_object_attribute(path, &buf);
+        size = buf.st_size;
+    }else{
+        size = get_size(meta);
+    }
 
-    if(!nocopyapi && !nomultipart && buf.st_size >= multipart_threshold){
-        if(0 != (result = s3fscurl.MultipartHeadRequest(path, buf.st_size, meta, is_copy))){
+    if(!nocopyapi && !nomultipart && size >= multipart_threshold){
+        if(0 != (result = s3fscurl.MultipartHeadRequest(path, size, meta, is_copy))){
             return result;
         }
     }else{
@@ -1288,7 +1294,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         }
 
         // copy
-        if(0 != (result = put_headers(to, meta, true))){
+        if(0 != (result = put_headers(to, meta, true, /* use_st_size= */ false))){
             return result;
         }
 
