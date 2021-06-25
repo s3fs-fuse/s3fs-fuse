@@ -56,6 +56,8 @@ class OssfsUnitTest(unittest.TestCase):
         self.assertEqual(len(data), 100)
         f.close()
 
+        os.remove(filename)
+
     def test_rename_file(self):
         filename1 = "%s" % (self.random_string(10))
         filename2 = "%s" % (self.random_string(10))
@@ -73,6 +75,8 @@ class OssfsUnitTest(unittest.TestCase):
 
         self.assertEqual(len(data1), len(data2))
         self.assertEqual(data1, data2)
+
+        os.remove(filename2)
 
     def test_rename_file2(self):
         filename1 = "%s" % (self.random_string(10))
@@ -94,6 +98,8 @@ class OssfsUnitTest(unittest.TestCase):
         self.assertEqual(len(data1), len(data2))
         self.assertEqual(data1, data2)
 
+        os.remove(filename2)
+
     def test_truncate_open_file(self):
         filename = "%s" % (self.random_string(10))
         fd = os.open(filename, os.O_CREAT|os.O_RDWR)
@@ -106,6 +112,7 @@ class OssfsUnitTest(unittest.TestCase):
             os.close(fd)
         self.assertEqual(100, os.stat(filename).st_size)
 
+        os.remove(filename)
 
 if __name__ == '__main__':
     unittest.main()
