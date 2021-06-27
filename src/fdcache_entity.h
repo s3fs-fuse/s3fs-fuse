@@ -49,7 +49,7 @@ class FdEntity
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
-        volatile bool   is_meta_pending;
+        bool            is_meta_pending;
         struct timespec holding_mtime;  // if mtime is updated while the file is open, it is set time_t value
 
     private:
