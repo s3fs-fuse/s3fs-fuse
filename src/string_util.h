@@ -25,7 +25,7 @@
 // A collection of string utilities for manipulating URLs and HTTP responses.
 //
 //-------------------------------------------------------------------
-// Gloval variables
+// Global variables
 //-------------------------------------------------------------------
 extern const std::string SPACES;
 

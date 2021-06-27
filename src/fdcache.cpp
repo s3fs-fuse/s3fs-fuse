@@ -605,7 +605,7 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
     return NULL;
 }
 
-FdEntity* FdManager::OpenExistFdEntiy(const char* path, int& fd, int flags)
+FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
 {
     S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);
 

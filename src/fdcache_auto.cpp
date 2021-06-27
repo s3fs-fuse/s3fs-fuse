@@ -123,11 +123,11 @@ FdEntity* AutoFdEntity::GetExistFdEntity(const char* path, int existfd)
     return ent;
 }
 
-FdEntity* AutoFdEntity::OpenExistFdEntiy(const char* path, int flags)
+FdEntity* AutoFdEntity::OpenExistFdEntity(const char* path, int flags)
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->OpenExistFdEntiy(path, pseudo_fd, flags))){
+    if(NULL == (pFdEntity = FdManager::get()->OpenExistFdEntity(path, pseudo_fd, flags))){
         return NULL;
     }
     return pFdEntity;

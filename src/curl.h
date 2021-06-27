@@ -400,7 +400,7 @@ class S3fsCurl
         CURL* GetCurlHandle() const { return hCurl; }
         std::string GetPath() const { return path; }
         std::string GetBasePath() const { return base_path; }
-        std::string GetSpacialSavedPath() const { return saved_path; }
+        std::string GetSpecialSavedPath() const { return saved_path; }
         std::string GetUrl() const { return url; }
         std::string GetOp() const { return op; }
         headers_t* GetResponseHeaders() { return &responseHeaders; }
