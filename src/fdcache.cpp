@@ -503,7 +503,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, boo
     return NULL;
 }
 
-FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool no_fd_lock_wait)
+FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, AutoLock::Type type)
 {
     S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld][flags=0x%x]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time), flags);
 
@@ -542,7 +542,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         }
 
         // (re)open
-        if(-1 == (fd = ent->Open(pmeta, size, time, flags, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE))){
+        if(-1 == (fd = ent->Open(pmeta, size, time, flags, type))){
             S3FS_PRN_ERR("failed to (re)open and create new pseudo fd for path(%s).", path);
             return NULL;
         }
@@ -558,7 +558,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         ent = new FdEntity(path, cache_path.c_str());
 
         // open
-        if(-1 == (fd = ent->Open(pmeta, size, time, flags, no_fd_lock_wait ? AutoLock::NO_WAIT : AutoLock::NONE))){
+        if(-1 == (fd = ent->Open(pmeta, size, time, flags, type))){
             delete ent;
             return NULL;
         }
@@ -610,7 +610,7 @@ FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
     S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);
 
     // search entity by path, and create pseudo fd
-    FdEntity* ent = Open(fd, path, NULL, -1, -1, flags, false, false);
+    FdEntity* ent = Open(fd, path, NULL, -1, -1, flags, false, false, AutoLock::NONE);
     if(!ent){
         // Not found entity
         return NULL;

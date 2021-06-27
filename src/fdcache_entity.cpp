@@ -663,7 +663,7 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
     // TODO: possibly do background for delay loading
     //
     int result;
-    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true))){
+    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
         S3FS_PRN_ERR("could not download, result(%d)", result);
         return false;
     }
@@ -996,16 +996,16 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     return true;
 }
 
-int FdEntity::Load(off_t start, off_t size, bool lock_already_held, bool is_modified_flag)
+int FdEntity::Load(off_t start, off_t size, AutoLock::Type type, bool is_modified_flag)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, type);
 
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
     if(-1 == physical_fd){
         return -EBADF;
     }
-    AutoLock auto_data_lock(&fdent_data_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_data_lock(&fdent_data_lock, type);
 
     int result = 0;
 
@@ -1354,7 +1354,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
                 // enough disk space
                 // Load all uninitialized area(no mix multipart uploading)
                 if(!FdEntity::mixmultipart){
-                    result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true);
+                    result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED);
                 }
                 FdManager::FreeReservedDiskSpace(restsize);
                 if(0 != result){
@@ -1432,7 +1432,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
                 // [TODO] should use parallel downloading
                 //
                 for(fdpage_list_t::const_iterator iter = dlpages.begin(); iter != dlpages.end(); ++iter){
-                    if(0 != (result = Load(iter->offset, iter->bytes, /*lock_already_held=*/ true, /*is_modified_flag=*/ true))){  // set loaded and modified flag
+                    if(0 != (result = Load(iter->offset, iter->bytes, AutoLock::ALREADY_LOCKED, /*is_modified_flag=*/ true))){  // set loaded and modified flag
                         S3FS_PRN_ERR("failed to get parts(start=%lld, size=%lld) before uploading.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
                         return result;
                     }
@@ -1447,7 +1447,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
             }
         }else{
             // If there are unloaded pages, they are loaded at here.
-            if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, /*lock_already_held=*/ true))){
+            if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
                 S3FS_PRN_ERR("failed to load parts before uploading object(%d)", result);
                 return result;
             }
@@ -1570,7 +1570,7 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
         // Loading
         int result = 0;
         if(0 < size){
-            result = Load(start, load_size, /*lock_already_held=*/ true);
+            result = Load(start, load_size, AutoLock::ALREADY_LOCKED);
         }
 
         FdManager::FreeReservedDiskSpace(load_size);
@@ -1629,7 +1629,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
             // Load uninitialized area which starts from 0 to (start + size) before writing.
             if(!FdEntity::mixmultipart){
                 if(0 < start){
-                    result = Load(0, start, /*lock_already_held=*/ true);
+                    result = Load(0, start, AutoLock::ALREADY_LOCKED);
                 }
             }
 
@@ -1675,7 +1675,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     // Load uninitialized area which starts from (start + size) to EOF after writing.
     if(!FdEntity::mixmultipart){
         if(pagelist.Size() > start + static_cast<off_t>(size)){
-            result = Load(start + size, pagelist.Size(), /*lock_already_held=*/ true);
+            result = Load(start + size, pagelist.Size(), AutoLock::ALREADY_LOCKED);
             if(0 != result){
                 S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
                 return result;

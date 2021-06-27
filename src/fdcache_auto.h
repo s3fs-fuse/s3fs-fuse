@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_AUTO_H_
 #define S3FS_FDCACHE_AUTO_H_
 
+#include "autolock.h"
 #include "fdcache_entity.h"
 
 //------------------------------------------------
@@ -50,7 +51,7 @@ class AutoFdEntity
       bool Attach(const char* path, int existfd);
       int GetPseudoFd() const { return pseudo_fd; }
 
-      FdEntity* Open(const char* path, headers_t* pmeta = NULL, off_t size = -1, time_t time = -1, int flags = O_RDONLY, bool force_tmpfile = false, bool is_create = true, bool no_fd_lock_wait = false);
+      FdEntity* Open(const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, AutoLock::Type type);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
       FdEntity* OpenExistFdEntity(const char* path, int flags = O_RDONLY);
 };
