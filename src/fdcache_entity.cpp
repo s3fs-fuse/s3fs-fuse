@@ -1755,11 +1755,12 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
 
 int FdEntity::UploadPendingMeta()
 {
+    AutoLock auto_lock(&fdent_lock);
+
     if(!is_meta_pending) {
        return 0;
     }
 
-    AutoLock auto_lock(&fdent_lock);
     headers_t updatemeta = orgmeta;
     updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(path.c_str()));
     // put headers, no need to update mtime to avoid dead lock
