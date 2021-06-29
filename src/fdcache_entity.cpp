@@ -142,9 +142,7 @@ void FdEntity::Clear()
 
     for(fdinfo_map_t::iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
         PseudoFdInfo* ppseudofdinfo = iter->second;
-        if(ppseudofdinfo){
-            delete ppseudofdinfo;
-        }
+        delete ppseudofdinfo;
     }
     pseudo_fd_map.clear();
 
@@ -1261,7 +1259,7 @@ int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t sta
     }
 
     // get upload id
-    std::string upload_id("");
+    std::string upload_id;
     if(!pseudo_obj->GetUploadId(upload_id)){
         return -EIO;
     }
@@ -1290,7 +1288,7 @@ int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
     }
 
     // get upload id
-    std::string upload_id("");
+    std::string upload_id;
     if(!pseudo_obj->GetUploadId(upload_id)){
         return -EIO;
     }
