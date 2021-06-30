@@ -47,6 +47,7 @@ static const std::string empty_md5_base64_hash      = "1B2M2Y8AsgTpgAmY7PhCfg=="
 // Class S3fsCurl
 //-------------------------------------------------------------------
 static const int MULTIPART_SIZE                     = 10 * 1024 * 1024;
+static const int GET_OBJECT_RESPONSE_LIMIT          = 1024;
 
 static const int IAM_EXPIRE_MERGIN                  = 20 * 60;  // update timing
 static const std::string ECS_IAM_ENV_VAR            = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
@@ -679,6 +680,11 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     }
     if(-1 == pCurl->partdata.fd || 0 >= pCurl->partdata.size){
         return 0;
+    }
+
+    // Buffer initial bytes in case it is an XML error response.
+    if(pCurl->bodydata.size() < GET_OBJECT_RESPONSE_LIMIT){
+        pCurl->bodydata.Append(ptr, std::min(size * nmemb, GET_OBJECT_RESPONSE_LIMIT - pCurl->bodydata.size()));
     }
 
     // write size
@@ -2319,6 +2325,9 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         // TODO: other error codes
                         if(value == "EntityTooLarge"){
                             result = -EFBIG;
+                            break;
+                        }else if(value == "InvalidObjectState"){
+                            result = -EREMOTE;
                             break;
                         }else if(value == "KeyTooLongError"){
                             result = -ENAMETOOLONG;
