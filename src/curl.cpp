@@ -775,6 +775,8 @@ std::string S3fsCurl::SetStorageClass(const std::string& storage_class)
 {
     std::string old = S3fsCurl::storage_class;
     S3fsCurl::storage_class = storage_class;
+    // AWS requires uppercase storage class values
+    transform(S3fsCurl::storage_class.begin(), S3fsCurl::storage_class.end(), S3fsCurl::storage_class.begin(), ::toupper);
     return old;
 }
 
