@@ -54,19 +54,25 @@ fi
 
 export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
-FLAGS=(
-    "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE}"
-    enable_content_md5
-    enable_noobj_cache
-    max_stat_cache_size=100
-    nocopyapi
-    nomultipart
-    notsup_compat_dir
-    sigv2
-    sigv4
-    singlepart_copy_limit=10  # limit size to exercise multipart code paths
-    #use_sse  # TODO: S3Proxy does not support SSE
-)
+if [ -n "${ALL_TESTS}" ]; then
+    FLAGS=(
+        "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE}"
+        enable_content_md5
+        enable_noobj_cache
+        max_stat_cache_size=100
+        nocopyapi
+        nomultipart
+        notsup_compat_dir
+        sigv2
+        sigv4
+        singlepart_copy_limit=10  # limit size to exercise multipart code paths
+        #use_sse  # TODO: S3Proxy does not support SSE
+    )
+else
+    FLAGS=(
+        sigv4
+    )
+fi
 
 start_s3proxy
 
