@@ -2379,11 +2379,10 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 {
     // WTF8_ENCODE(path)
-    // 256T
-    stbuf->f_bsize  = 0X1000000;
-    stbuf->f_blocks = 0X1000000;
-    stbuf->f_bfree  = 0x1000000;
-    stbuf->f_bavail = 0x1000000;
+    stbuf->f_bsize  = 16 * 1024 * 1024;
+    stbuf->f_blocks = static_cast<fsblkcnt_t>(~0) / stbuf->f_bsize;
+    stbuf->f_bfree  = stbuf->f_blocks;
+    stbuf->f_bavail = stbuf->f_blocks;
     stbuf->f_namemax = NAME_MAX;
     return 0;
 }
