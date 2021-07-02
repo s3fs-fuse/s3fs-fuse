@@ -115,8 +115,7 @@ jobs:
 
       - name: Test suite
         run: |
-          make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
-
+          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   # [NOTE]
   # A case of "runs-on: macos-11.0" does not work,
