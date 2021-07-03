@@ -185,9 +185,11 @@ struct filepart
     int          fd;          // base file(temporary full file) descriptor
     off_t        startpos;    // seek fd point for uploading
     off_t        size;        // uploading size
+    bool         is_copy;     // whether is copy multipart
     std::string* petag;       // use only parallel upload
 
-    filepart() : uploaded(false), fd(-1), startpos(0), size(-1), petag(NULL) {}
+    filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, std::string* petag = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petag) {}
+
     ~filepart()
     {
       clear();
@@ -200,6 +202,7 @@ struct filepart
         fd       = -1;
         startpos = 0;
         size     = -1;
+        is_copy  = false;
         petag    = NULL;
     }
 
@@ -214,6 +217,8 @@ struct filepart
         petag = petagobj;
     }
 };
+
+typedef std::list<filepart> filepart_list_t;
 
 //-------------------------------------------------------------------
 // mimes_t
