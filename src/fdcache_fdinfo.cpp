@@ -159,8 +159,13 @@ bool PseudoFdInfo::GetEtaglist(etaglist_t& list)
     AutoLock auto_lock(&upload_list_lock);
 
     list.clear();
-    for(mppart_list_t::const_iterator iter = upload_list.begin(); iter != upload_list.end(); ++iter){
-        list.push_back(iter->etag);
+    for(filepart_list_t::const_iterator iter = upload_list.begin(); iter != upload_list.end(); ++iter){
+        if(iter->petag){
+            list.push_back(*(iter->petag));
+        }else{
+            S3FS_PRN_ERR("The pointer to the etag string is null(internal error).");
+            return false;
+        }
     }
     return !list.empty();
 }
@@ -182,7 +187,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* 
     AutoLock auto_lock(&upload_list_lock);
     off_t    next_start_pos = 0;
     if(!upload_list.empty()){
-        next_start_pos = upload_list.back().start + upload_list.back().size;
+        next_start_pos = upload_list.back().startpos + upload_list.back().size;
     }
     if(start != next_start_pos){
         S3FS_PRN_ERR("The expected starting position for the next part is %lld, but %lld was specified.", static_cast<long long int>(next_start_pos), static_cast<long long int>(start));
@@ -190,7 +195,9 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* 
     }
 
     // add new part
-    MPPART_INFO newpart(start, size, is_copy, NULL);
+    etag_entities.push_back(std::string(""));                   // [NOTE] Create the etag entity and register it in the list.
+    std::string&    etag_entity = etag_entities.back();
+    filepart        newpart(false, physical_fd, start, size, is_copy, &etag_entity);
     upload_list.push_back(newpart);
 
     // set part number
@@ -200,7 +207,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* 
 
     // set etag pointer
     if(ppetag){
-        *ppetag = &(upload_list.back().etag);
+        *ppetag = &etag_entity;
     }
     return true;
 }
