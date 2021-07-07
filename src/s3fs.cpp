@@ -4024,13 +4024,11 @@ static int get_access_keys()
     if(AWS_CREDENTIAL_FILE != NULL){
         passwd_file = AWS_CREDENTIAL_FILE;
         if(!passwd_file.empty()){
-            std::ifstream PF(passwd_file.c_str());
-            if(PF.good()){
-                 PF.close();
-                 return read_passwd_file();
-            }else{
-                S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
-                return EXIT_FAILURE;
+            if(read_aws_credentials_file(passwd_file) == EXIT_SUCCESS) {
+                return EXIT_SUCCESS;
+            }else if(aws_profile != "default"){
+                S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), passwd_file.c_str());
+            return EXIT_FAILURE;
             }
         }
     }
