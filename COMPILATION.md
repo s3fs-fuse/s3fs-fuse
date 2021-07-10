@@ -21,6 +21,7 @@ Keep in mind using the pre-built packages when available.
 	* s3fs exits with an error if these files are not exist
 	* Alternatively, you can set mime.types file path with `mime` option without detecting these default files
 * pkg-config (or your OS equivalent)
+	* If macOS throws an error on configure `No package 'libcrypto' found` try exporting the following variable and running configure again `export PKG_CONFIG_PATH="/usr/local/opt/openssl@1.1/lib/pkgconfig"` 
 
 2. Then compile from master via the following commands:
 
