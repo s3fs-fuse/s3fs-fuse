@@ -535,6 +535,8 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
     if(NULL == (pcxt = fuse_get_context())){
         return -EIO;
     }
+    S3FS_PRN_DBG("[pid=%u,uid=%u,gid=%u]", (unsigned int)(pcxt->pid), (unsigned int)(pcxt->uid), (unsigned int)(pcxt->gid));
+
     if(0 != (result = get_object_attribute(path, pst))){
         // If there is not the target file(object), result is -ENOENT.
         return result;
