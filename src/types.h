@@ -171,7 +171,7 @@ enum signature_type_t {
 };
 
 //----------------------------------------------
-// etaglist_t / filepart
+// etaglist_t / filepart / untreatedpart
 //----------------------------------------------
 typedef std::list<std::string> etaglist_t;
 
@@ -219,6 +219,60 @@ struct filepart
 };
 
 typedef std::list<filepart> filepart_list_t;
+
+//
+// Each part information for Untreated parts
+//
+struct untreatedpart
+{
+    off_t start;            // untreated start position
+    off_t size;             // number of untreated bytes
+    long  untreated_tag;    // untreated part tag
+
+    untreatedpart(off_t part_start = 0, off_t part_size = 0, long part_untreated_tag = 0) : start(part_start), size(part_size), untreated_tag(part_untreated_tag)
+    {
+        if(part_start < 0 || part_size <= 0){
+            clear();        // wrong parameter, so clear value.
+        }
+    }
+
+    ~untreatedpart()
+    {
+        clear();
+    }
+
+    void clear()
+    {
+        start  = 0;
+        size   = 0;
+        untreated_tag = 0;
+    }
+
+    bool check_overlap(off_t chk_start, off_t chk_size)
+    {
+        if(chk_start < 0 || chk_size <= 0 || (chk_start + chk_size) < start || (start + size) < chk_start){
+            return false;
+        }
+        return true;
+    }
+
+    bool stretch(off_t add_start, off_t add_size, long tag)
+    {
+        if(!check_overlap(add_start, add_size)){
+            return false;
+        }
+        off_t new_start      = std::min(start, add_start);
+        off_t new_next_start = std::max((start + size), (add_start + add_size));
+
+        start         = new_start;
+        size          = new_next_start - new_start;
+        untreated_tag = tag;
+
+        return true;
+    }
+};
+
+typedef std::list<untreatedpart> untreated_list_t;
 
 //-------------------------------------------------------------------
 // mimes_t

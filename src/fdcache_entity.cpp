@@ -1426,6 +1426,8 @@ int FdEntity::RowFlushNoMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
     // reset uploaded file size
     size_orgmeta = st.st_size;
 
+    pseudo_obj->ClearUntreated();
+
     if(0 == result){
         pagelist.ClearAllModified();
     }
@@ -1501,6 +1503,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             // reset uploaded file size
             size_orgmeta = st.st_size;
        }
+        pseudo_obj->ClearUntreated();
 
     }else{
         // Already start uploading
@@ -1508,14 +1511,12 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // upload rest data
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        pseudo_obj->GetUntreated(untreated_start, untreated_size);
-
-        if(0 < untreated_size){
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && 0 < untreated_size){
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
-            pseudo_obj->ClearUntreated();
+            pseudo_obj->ClearUntreated(untreated_start, untreated_size);
         }
         // complete multipart uploading.
         if(0 != (result = NoCacheCompleteMultipartPost(pseudo_obj))){
@@ -1629,6 +1630,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             // reset uploaded file size
             size_orgmeta = st.st_size;
         }
+        pseudo_obj->ClearUntreated();
 
     }else{
         // Already start uploading
@@ -1636,15 +1638,13 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // upload rest data
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        pseudo_obj->GetUntreated(untreated_start, untreated_size);
-
-        if(0 < untreated_size){
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && 0 < untreated_size){
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
-            pseudo_obj->ClearUntreated();
-        }
+            pseudo_obj->ClearUntreated(untreated_start, untreated_size);
+	    }
         // complete multipart uploading.
         if(0 != (result = NoCacheCompleteMultipartPost(pseudo_obj))){
             S3FS_PRN_ERR("failed to complete(finish) multipart post for file(physical_fd=%d).", physical_fd);
@@ -1845,6 +1845,7 @@ ssize_t FdEntity::WriteNoMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, 
     }
     if(0 < wsize){
         pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pseudo_obj->AddUntreated(start, wsize);
     }
 
     // Load uninitialized area which starts from (start + size) to EOF after writing.
@@ -1904,7 +1905,8 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
                 S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
                 return result;
             }
-            pseudo_obj->SetUntreated(start, 0);
+
+            pseudo_obj->ClearUntreated();
         }
     }else{
         // already start multipart uploading
@@ -1918,6 +1920,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
     }
     if(0 < wsize){
         pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pseudo_obj->AddUntreated(start, wsize);
     }
 
     // Load uninitialized area which starts from (start + size) to EOF after writing.
@@ -1931,13 +1934,11 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
 
     // check multipart uploading
     if(pseudo_obj->IsUploading()){
+        // get last untreated part(maximum size is multipart size)
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        pseudo_obj->GetUntreated(untreated_start, untreated_size);
-
-        untreated_size += wsize;
-        if(S3fsCurl::GetMultipartSize() <= untreated_size){
-            // over one multipart size
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize())){
+            // when multipart max size is reached
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
@@ -1951,7 +1952,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
                 S3FS_PRN_ERR("failed to truncate file(physical_fd=%d).", physical_fd);
                 return -errno;
             }
-            pseudo_obj->SetUntreated(untreated_start + untreated_size, 0);
+            pseudo_obj->ClearUntreated(untreated_start, untreated_size);
         }
     }
     return wsize;
@@ -1992,7 +1993,8 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
                 S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
                 return result;
             }
-            pseudo_obj->SetUntreated(start, 0);
+
+            pseudo_obj->ClearUntreated();
         }
     }else{
         // already start multipart uploading
@@ -2006,17 +2008,16 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
     }
     if(0 < wsize){
         pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pseudo_obj->AddUntreated(start, wsize);
     }
 
     // check multipart uploading
     if(pseudo_obj->IsUploading()){
+        // get last untreated part(maximum size is multipart size)
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        pseudo_obj->GetUntreated(untreated_start, untreated_size);
-
-        untreated_size += wsize;
-        if(S3fsCurl::GetMultipartSize() <= untreated_size){
-            // over one multipart size
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize())){
+            // when multipart max size is reached
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
@@ -2030,7 +2031,7 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
                 S3FS_PRN_ERR("failed to truncate file(physical_fd=%d).", physical_fd);
                 return -errno;
             }
-            pseudo_obj->SetUntreated(untreated_start + untreated_size, 0);
+            pseudo_obj->ClearUntreated(untreated_start, untreated_size);
         }
     }
     return wsize;
