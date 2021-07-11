@@ -143,7 +143,7 @@ function start_s3proxy {
             chmod +x "${S3PROXY_BINARY}"
         fi
 
-        ${STDBUF_BIN} -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
+        ${STDBUF_BIN} -oL -eL java -Dfile.encoding=UTF8 -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
