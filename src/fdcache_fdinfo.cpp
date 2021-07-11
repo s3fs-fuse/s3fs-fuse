@@ -216,28 +216,35 @@ void PseudoFdInfo::ClearUntreated(bool lock_already_held)
 {
     AutoLock auto_lock(&upload_list_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    untreated_start = 0;
-    untreated_size  = 0;
+    untreated_list.ClearAll();
 }
 
-bool PseudoFdInfo::GetUntreated(off_t& start, off_t& size)
+bool PseudoFdInfo::ClearUntreated(off_t start, off_t size)
 {
     AutoLock auto_lock(&upload_list_lock);
 
-    start = untreated_start;
-    size  = untreated_size;
-
-    return true;
+    return untreated_list.ClearParts(start, size);
 }
 
-bool PseudoFdInfo::SetUntreated(off_t start, off_t size)
+bool PseudoFdInfo::GetUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size)
 {
     AutoLock auto_lock(&upload_list_lock);
 
-    untreated_start = start;
-    untreated_size  = size;
+    return untreated_list.GetPart(start, size, max_size, min_size);
+}
 
-    return true;
+bool PseudoFdInfo::GetLastUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size)
+{
+    AutoLock auto_lock(&upload_list_lock);
+
+    return untreated_list.GetLastUpdatedPart(start, size, max_size, min_size);
+}
+
+bool PseudoFdInfo::AddUntreated(off_t start, off_t size)
+{
+    AutoLock auto_lock(&upload_list_lock);
+
+    return untreated_list.AddPart(start, size);
 }
 
 /*

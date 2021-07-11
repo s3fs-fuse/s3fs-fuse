@@ -21,6 +21,8 @@
 #ifndef S3FS_FDCACHE_FDINFO_H_
 #define S3FS_FDCACHE_FDINFO_H_
 
+#include "fdcache_untreated.h"
+
 //------------------------------------------------
 // Class PseudoFdInfo
 //------------------------------------------------
@@ -32,9 +34,9 @@ class PseudoFdInfo
         int             flags;              // flags at open
         std::string     upload_id;
         filepart_list_t upload_list;
-        off_t           untreated_start;    // untreated start position
-        off_t           untreated_size;     // untreated size
+        UntreatedParts  untreated_list;     // list of untreated parts that have been written and not yet uploaded(for streamupload)
         etaglist_t      etag_entities;      // list of etag string entities(to maintain the etag entity even if MPPART_INFO is destroyed)
+
         bool            is_lock_init;
         pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
 
@@ -62,8 +64,10 @@ class PseudoFdInfo
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, int* ppartnum = NULL, std::string** ppetag = NULL);
 
         void ClearUntreated(bool lock_already_held = false);
-        bool GetUntreated(off_t& start, off_t& size);
-        bool SetUntreated(off_t start, off_t size);
+        bool ClearUntreated(off_t start, off_t size);
+        bool GetUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE);
+        bool GetLastUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE);
+        bool AddUntreated(off_t start, off_t size);
 };
 
 typedef std::map<int, class PseudoFdInfo*> fdinfo_map_t;
