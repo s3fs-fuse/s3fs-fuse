@@ -34,23 +34,20 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
     char *p_old_path;
     char *p_new_path;
 
-    p = new MVNODE();
-
     if(NULL == (p_old_path = strdup(old_path))){
-        delete p;
         printf("create_mvnode: could not allocation memory for p_old_path\n");
         S3FS_FUSE_EXIT();
         return NULL;
     }
 
     if(NULL == (p_new_path = strdup(new_path))){
-        delete p;
         free(p_old_path);
         printf("create_mvnode: could not allocation memory for p_new_path\n");
         S3FS_FUSE_EXIT();
         return NULL;
     }
 
+    p = new MVNODE();
     p->old_path   = p_old_path;
     p->new_path   = p_new_path;
     p->is_dir     = is_dir;
