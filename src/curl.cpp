@@ -2284,7 +2284,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
     }
 
     LastResponseCode  = S3FSCURL_RESPONSECODE_NOTSET;
-    long responseCode;
+    long responseCode = S3FSCURL_RESPONSECODE_NOTSET;
     int result        = S3FSCURL_PERFORM_RESULT_NOTSET;
 
     // 1 attempt + retries...
