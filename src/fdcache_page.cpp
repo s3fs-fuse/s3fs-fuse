@@ -509,10 +509,20 @@ bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) co
     return false;
 }
 
-off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
+// [NOTE]
+// Accumulates the range of unload that is smaller than the Limit size.
+// If you want to integrate all unload ranges, set the limit size to 0.
+//
+off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size, off_t limit_size) const
 {
-    off_t restsize = 0;
+    // If size is 0, it means loading to end.
+    if(0 == size){
+        if(start < Size()){
+            size = Size() - start;
+        }
+    }
     off_t next     = start + size;
+    off_t restsize = 0;
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
         if(iter->next() <= start){
             continue;
@@ -537,7 +547,9 @@ off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size) const
                 tmpsize = next - iter->offset;
             }
         }
-        restsize += tmpsize;
+        if(0 == limit_size || tmpsize < limit_size){
+            restsize += tmpsize;
+        }
     }
     return restsize;
 }
