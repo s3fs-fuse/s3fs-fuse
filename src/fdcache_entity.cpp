@@ -1557,7 +1557,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // Start uploading
 
         // If there is no loading all of the area, loading all area.
-        off_t restsize = pagelist.GetTotalUnloadedPageSize();
+        off_t restsize = pagelist.GetTotalUnloadedPageSize(/* start */ 0, /* size = all */ 0, MIN_MULTIPART_SIZE);
 
         // Check rest size and free disk space
         if(0 < restsize && !ReserveDiskSpace(restsize)){
@@ -1974,7 +1974,7 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
 
     if(!pseudo_obj->IsUploading()){
         // check disk space
-        off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
+        off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start, MIN_MULTIPART_SIZE) + size;
         if(ReserveDiskSpace(restsize)){
             // enough disk space
             FdManager::FreeReservedDiskSpace(restsize);
