@@ -55,7 +55,7 @@ Many systems provide pre-built packages:
   sudo emerge net-fs/s3fs
   ```
 
-* RHEL and CentOS 7 or newer through via EPEL:
+* RHEL and CentOS 7 or newer via EPEL:
 
   ```
   sudo yum install epel-release
