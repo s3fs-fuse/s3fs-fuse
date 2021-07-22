@@ -98,6 +98,7 @@ static bool support_compat_dir    = true;// default supports compatibility direc
 static int max_keys_list_object   = 1000;// default is 1000
 static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
+static off_t fake_diskfree_size   = -1; // default is not set(-1)
 
 static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
 static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
@@ -4620,6 +4621,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             FdManager::SetEnsureFreeDiskSpace(dfsize);
             return 0;
         }
+        if(is_prefix(arg, "fake_diskfree=")){
+            S3FS_PRN_WARN("The fake_diskfree option was specified. Use this option for testing or debugging.");
+
+            // [NOTE] This value is used for initializing to FdManager after parsing all options.
+            fake_diskfree_size = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10) * 1024 * 1024;
+            return 0;
+        }
         if(is_prefix(arg, "multipart_threshold=")){
             multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             if(multipart_threshold <= MIN_MULTIPART_SIZE){
@@ -5126,6 +5134,11 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);
+    }
+
+    // set fake free disk space
+    if(-1 != fake_diskfree_size){
+        FdManager::InitFakeUsedDiskSize(fake_diskfree_size);
     }
 
     // check IBM IAM requirements
