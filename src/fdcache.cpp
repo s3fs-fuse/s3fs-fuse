@@ -82,6 +82,7 @@ bool            FdManager::is_lock_init(false);
 std::string     FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
+off_t           FdManager::fake_used_disk_space = 0;
 std::string     FdManager::check_cache_output;
 bool            FdManager::checked_lseek(false);
 bool            FdManager::have_lseek_hole(false);
@@ -254,6 +255,20 @@ off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
     return old;
 }
 
+bool FdManager::InitFakeUsedDiskSize(off_t fake_freesize)
+{
+    FdManager::fake_used_disk_space = 0;    // At first, clear this value because this value is used in GetFreeDiskSpace.
+
+    off_t actual_freesize = FdManager::GetFreeDiskSpace(NULL);
+
+    if(fake_freesize < actual_freesize){
+        FdManager::fake_used_disk_space = actual_freesize - fake_freesize;
+    }else{
+        FdManager::fake_used_disk_space = 0;
+    }
+    return true;
+}
+
 off_t FdManager::GetFreeDiskSpace(const char* path)
 {
     struct statvfs vfsbuf;
@@ -276,7 +291,10 @@ off_t FdManager::GetFreeDiskSpace(const char* path)
         S3FS_PRN_ERR("could not get vfs stat by errno(%d)", errno);
         return 0;
     }
-    return (vfsbuf.f_bavail * vfsbuf.f_frsize);
+
+    off_t actual_freesize = vfsbuf.f_bavail * vfsbuf.f_frsize;
+
+    return (FdManager::fake_used_disk_space < actual_freesize ? (actual_freesize - FdManager::fake_used_disk_space) : 0);
 }
 
 bool FdManager::IsSafeDiskSpace(const char* path, off_t size)

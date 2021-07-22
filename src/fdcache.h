@@ -36,7 +36,8 @@ class FdManager
       static bool            is_lock_init;
       static std::string     cache_dir;
       static bool            check_cache_dir_exist;
-      static off_t           free_disk_space; // limit free disk space
+      static off_t           free_disk_space;       // limit free disk space
+      static off_t           fake_used_disk_space;  // difference between fake free disk space and actual at startup(for test/debug)
       static std::string     check_cache_output;
       static bool            checked_lseek;
       static bool            have_lseek_hole;
@@ -72,6 +73,7 @@ class FdManager
       static bool HasOpenEntityFd(const char* path);
       static off_t GetEnsureFreeDiskSpace();
       static off_t SetEnsureFreeDiskSpace(off_t size);
+      static bool InitFakeUsedDiskSize(off_t fake_freesize);
       static bool IsSafeDiskSpace(const char* path, off_t size);
       static void FreeReservedDiskSpace(off_t size);
       static bool ReserveDiskSpace(off_t size);
