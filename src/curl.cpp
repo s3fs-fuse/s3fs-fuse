@@ -3397,11 +3397,11 @@ int S3fsCurl::CheckBucket()
     }
     std::string resource;
     std::string turl;
-    MakeUrlResource(get_realpath("/").c_str(), resource, turl);
+    MakeUrlResource("/", resource, turl);
 
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
-    path            = get_realpath("/");
+    path            = "/";  // Only check the presence of the bucket, not the entire virtual path.
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
