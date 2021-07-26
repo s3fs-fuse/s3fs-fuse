@@ -3990,13 +3990,14 @@ static int get_access_keys()
     }
 
     // 3  - environment variables
-    char* AWSACCESSKEYID     = getenv("AWSACCESSKEYID");
-    char* AWSSECRETACCESSKEY = getenv("AWSSECRETACCESSKEY");
-    char* AWSSESSIONTOKEN    = getenv("AWSSESSIONTOKEN");
+    char* AWSACCESSKEYID     = getenv("AWS_ACCESS_KEY_ID") ? getenv("AWS_ACCESS_KEY_ID") : getenv("AWSACCESSKEYID");
+    char* AWSSECRETACCESSKEY = getenv("AWS_SECRET_ACCESS_KEY") ? getenv("AWS_SECRET_ACCESS_KEY") : getenv("AWSSECRETACCESSKEY");
+    char* AWSSESSIONTOKEN    = getenv("AWS_SESSION_TOKEN") ? getenv("AWS_SESSION_TOKEN") : getenv("AWSSESSIONTOKEN");
+
     if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
         if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
             (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
-            S3FS_PRN_EXIT("if environment variable AWSACCESSKEYID is set then AWSSECRETACCESSKEY must be set too.");
+            S3FS_PRN_EXIT("both environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together.");
             return EXIT_FAILURE;
         }
         S3FS_PRN_INFO2("access key from env variables");
@@ -4009,7 +4010,7 @@ static int get_access_keys()
         } else {
             S3FS_PRN_INFO2("session token is not available");
             if (is_use_session_token) {
-                S3FS_PRN_EXIT("environment variable AWSSESSIONTOKEN is expected to be set.");
+                S3FS_PRN_EXIT("environment variable AWS_SESSION_TOKEN is expected to be set.");
                 return EXIT_FAILURE;
             }
         }

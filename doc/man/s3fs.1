@@ -40,7 +40,7 @@ Password files can be stored in two locations:
  \fB$HOME/.passwd-s3fs\fP   [0600]
 .RE
 .PP
-s3fs also recognizes the \fBAWSACCESSKEYID\fP and \fBAWSSECRETACCESSKEY\fP environment variables.
+s3fs also recognizes the \fBAWS_ACCESS_KEY_ID\fP and \fBAWS_SECRET_ACCESS_KEY\fP environment variables.
 .SH OPTIONS
 .SS "general options"
 .TP
@@ -274,7 +274,7 @@ AWS instance metadata service, used with IAM role authentication,
 supports the use of an API token.  If you're using an IAM role in an
 environment that does not support IMDSv2, setting this flag will skip
 retrieval and usage of the API token when retrieving IAM credentials.
-
+.TP
 \fB\-o\fR ibm_iam_auth (default is not using IBM IAM authentication)
 This option instructs s3fs to use IBM IAM authentication. In this mode, the AWSAccessKey and AWSSecretKey will be used as IBM's Service-Instance-ID and APIKey, respectively.
 .TP
@@ -350,7 +350,7 @@ Useful on clients not using UTF-8 as their file system encoding.
 .TP
 \fB\-o\fR use_session_token - indicate that session token should be provided.
 If credentials are provided by environment variables this switch
-forces presence check of AWSSESSIONTOKEN variable.
+forces presence check of AWS_SESSION_TOKEN variable.
 Otherwise an error is returned.
 .TP
 \fB\-o\fR requester_pays (default is disable)
