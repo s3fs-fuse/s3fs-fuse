@@ -62,7 +62,7 @@ std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)
         return std::string("");
     }
 
-    std::string sha256hex = s3fs_hex(sha256, digestlen);
+    std::string sha256hex = s3fs_hex_lower(sha256, digestlen);
     delete[] sha256;
 
     return sha256hex;

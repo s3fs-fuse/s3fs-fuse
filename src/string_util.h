@@ -96,7 +96,8 @@ bool get_keyword_value(const std::string& target, const char* keyword, std::stri
 //
 // For binary string
 //
-std::string s3fs_hex(const unsigned char* input, size_t length, bool lower = true);
+std::string s3fs_hex_lower(const unsigned char* input, size_t length);
+std::string s3fs_hex_upper(const unsigned char* input, size_t length);
 char* s3fs_base64(const unsigned char* input, size_t length);
 unsigned char* s3fs_decode64(const char* input, size_t* plength);
 
