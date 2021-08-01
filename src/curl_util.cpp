@@ -330,14 +330,14 @@ std::string url_to_host(const std::string &url)
 {
     S3FS_PRN_INFO3("url is %s", url.c_str());
 
-    static const std::string http = "http://";
-    static const std::string https = "https://";
+    static const char HTTP[] = "http://";
+    static const char HTTPS[] = "https://";
     std::string hostname;
 
-    if (is_prefix(url.c_str(), http.c_str())) {
-        hostname = url.substr(http.size());
-    } else if (is_prefix(url.c_str(), https.c_str())) {
-        hostname = url.substr(https.size());
+    if (is_prefix(url.c_str(), HTTP)) {
+        hostname = url.substr(sizeof(HTTP) - 1);
+    } else if (is_prefix(url.c_str(), HTTPS)) {
+        hostname = url.substr(sizeof(HTTPS) - 1);
     } else {
         S3FS_PRN_EXIT("url does not begin with http:// or https://");
         abort();
