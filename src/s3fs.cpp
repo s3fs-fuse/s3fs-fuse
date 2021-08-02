@@ -100,10 +100,10 @@ static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 
-static const std::string allbucket_fields_type;              // special key for mapping(This name is absolutely not used as a bucket name)
-static const std::string keyval_fields_type    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
-static const std::string aws_accesskeyid       = "AWSAccessKeyId";
-static const std::string aws_secretkey         = "AWSSecretKey";
+static const char ALLBUCKET_FIELDS_TYPE[] = "";         // special key for mapping(This name is absolutely not used as a bucket name)
+static const char KEYVAL_FIELDS_TYPE[]    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
+static const char AWS_ACCESSKEYID[]       = "AWSAccessKeyId";
+static const char AWS_SECRETKEY[]         = "AWSSecretKey";
 
 //-------------------------------------------------------------------
 // Global functions : prototype
@@ -3682,7 +3682,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
         kv[key] = val;
     }
     // set special key name
-    resmap[std::string(keyval_fields_type)] = kv;
+    resmap[KEYVAL_FIELDS_TYPE] = kv;
 
     // read ':' type
     for(iter = linelist.begin(); iter != linelist.end(); ++iter){
@@ -3701,7 +3701,7 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
             secret    = trim(iter->substr(last_pos + 1, std::string::npos));
         }else{
             // formatted by "accesskey:secretkey"
-            bucketname    = allbucket_fields_type;
+            bucketname    = ALLBUCKET_FIELDS_TYPE;
             accesskey = trim(iter->substr(0, first_pos));
             secret    = trim(iter->substr(first_pos + 1, std::string::npos));
         }
@@ -3710,8 +3710,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
             return -1;
         }
         kv.clear();
-        kv[std::string(aws_accesskeyid)] = accesskey;
-        kv[std::string(aws_secretkey)] = secret;
+        kv[AWS_ACCESSKEYID] = accesskey;
+        kv[AWS_SECRETKEY] = secret;
         resmap[bucketname] = kv;
     }
     return (resmap.empty() ? 0 : 1);
@@ -3724,8 +3724,8 @@ static int parse_passwd_file(bucketkvmap_t& resmap)
 //
 static int check_for_aws_format(const kvmap_t& kvmap)
 {
-    std::string str1(aws_accesskeyid);
-    std::string str2(aws_secretkey);
+    std::string str1(AWS_ACCESSKEYID);
+    std::string str2(AWS_SECRETKEY);
 
     if(kvmap.empty()){
         return 0;
@@ -3909,7 +3909,7 @@ static int read_passwd_file()
     //
     // check key=value type format.
     //
-    bucketkvmap_t::iterator it = bucketmap.find(keyval_fields_type);
+    bucketkvmap_t::iterator it = bucketmap.find(KEYVAL_FIELDS_TYPE);
     if(bucketmap.end() != it){
         // aws format
         result = check_for_aws_format(it->second);
@@ -3921,7 +3921,7 @@ static int read_passwd_file()
         }
     }
 
-    std::string bucket_key = allbucket_fields_type;
+    std::string bucket_key = ALLBUCKET_FIELDS_TYPE;
     if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
         bucket_key = bucket;
     }
@@ -3931,8 +3931,8 @@ static int read_passwd_file()
         return EXIT_FAILURE;
     }
     keyval = it->second;
-    kvmap_t::iterator aws_accesskeyid_it = keyval.find(aws_accesskeyid);
-    kvmap_t::iterator aws_secretkey_it = keyval.find(aws_secretkey);
+    kvmap_t::iterator aws_accesskeyid_it = keyval.find(AWS_ACCESSKEYID);
+    kvmap_t::iterator aws_secretkey_it = keyval.find(AWS_SECRETKEY);
     if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
         S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
         return EXIT_FAILURE;

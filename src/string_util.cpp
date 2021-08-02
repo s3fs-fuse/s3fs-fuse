@@ -35,7 +35,7 @@
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
-const std::string SPACES = " \t\r\n";
+const char SPACES[] = " \t\r\n";
 
 //-------------------------------------------------------------------
 // Templates
@@ -108,13 +108,13 @@ std::string lower(std::string s)
     return s;
 }
 
-std::string trim_left(const std::string &s, const std::string &t /* = SPACES */)
+std::string trim_left(const std::string &s, const char *t /* = SPACES */)
 {
     std::string d(s);
     return d.erase(0, s.find_first_not_of(t));
 }
 
-std::string trim_right(const std::string &s, const std::string &t /* = SPACES */)
+std::string trim_right(const std::string &s, const char *t /* = SPACES */)
 {
     std::string d(s);
     std::string::size_type i(d.find_last_not_of(t));
@@ -125,7 +125,7 @@ std::string trim_right(const std::string &s, const std::string &t /* = SPACES */
     }
 }
 
-std::string trim(const std::string &s, const std::string &t /* = SPACES */)
+std::string trim(const std::string &s, const char *t /* = SPACES */)
 {
     return trim_left(trim_right(s, t), t);
 }

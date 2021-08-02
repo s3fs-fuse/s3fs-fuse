@@ -40,8 +40,8 @@
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
-static const std::string empty_payload_hash         = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-static const std::string empty_md5_base64_hash      = "1B2M2Y8AsgTpgAmY7PhCfg==";
+static const char EMPTY_PAYLOAD_HASH[]              = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+static const char EMPTY_MD5_BASE64_HASH[]           = "1B2M2Y8AsgTpgAmY7PhCfg==";
 
 //-------------------------------------------------------------------
 // Class S3fsCurl
@@ -50,10 +50,10 @@ static const int MULTIPART_SIZE                     = 10 * 1024 * 1024;
 static const int GET_OBJECT_RESPONSE_LIMIT          = 1024;
 
 static const int IAM_EXPIRE_MERGIN                  = 20 * 60;  // update timing
-static const std::string ECS_IAM_ENV_VAR            = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
-static const std::string IAMCRED_ACCESSKEYID        = "AccessKeyId";
-static const std::string IAMCRED_SECRETACCESSKEY    = "SecretAccessKey";
-static const std::string IAMCRED_ROLEARN            = "RoleArn";
+static const char ECS_IAM_ENV_VAR[]                 = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+static const char IAMCRED_ACCESSKEYID[]             = "AccessKeyId";
+static const char IAMCRED_SECRETACCESSKEY[]         = "SecretAccessKey";
+static const char IAMCRED_ROLEARN[]                 = "RoleArn";
 
 // [NOTE] about default mime.types file
 // If no mime.types file is specified in the mime option, s3fs
@@ -2682,7 +2682,7 @@ void S3fsCurl::insertV4Headers()
     std::string date8601;
     get_date_sigv3(strdate, date8601);
 
-    std::string contentSHA256 = payload_hash.empty() ? empty_payload_hash : payload_hash;
+    std::string contentSHA256 = payload_hash.empty() ? EMPTY_PAYLOAD_HASH : payload_hash;
     const std::string realpath = pathrequeststyle ? "/" + bucket + server_path : server_path;
 
     //string canonical_headers, signed_headers;
@@ -2836,9 +2836,9 @@ int S3fsCurl::GetIAMCredentials()
 
     // url
     if(is_ecs){
-        const char *env = std::getenv(ECS_IAM_ENV_VAR.c_str());
+        const char *env = std::getenv(ECS_IAM_ENV_VAR);
         if(env == NULL){
-            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR.c_str());
+            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR);
             return -EIO;
         }
         url = std::string(S3fsCurl::IAM_cred_url) + env;
@@ -3232,7 +3232,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
                 return -EIO;
             }
         }else{
-            strMD5 = empty_md5_base64_hash;
+            strMD5 = EMPTY_MD5_BASE64_HASH;
         }
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
     }
