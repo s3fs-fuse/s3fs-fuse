@@ -21,6 +21,9 @@
 #ifndef S3FS_FDCACHE_PAGE_H_
 #define S3FS_FDCACHE_PAGE_H_
 
+#include <list>
+#include <sys/types.h>
+
 #include "fdcache_stat.h"
 
 //------------------------------------------------
@@ -89,7 +92,6 @@ class PageList
         static bool CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpage_list_t& sparse_list, int fd, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
 
         void Clear();
-        bool Compress();
         bool Parse(off_t new_pos);
 
     public:
@@ -115,6 +117,7 @@ class PageList
         bool IsModified() const;
         bool ClearAllModified();
 
+        bool Compress();
         bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
         void Dump() const;
         bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);

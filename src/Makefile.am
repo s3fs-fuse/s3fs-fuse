@@ -68,6 +68,7 @@ s3fs_LDADD = $(DEPS_LIBS)
 
 noinst_PROGRAMS = \
     test_curl_util \
+    test_page_list \
     test_string_util
 
 test_curl_util_SOURCES = common_auth.cpp curl_util.cpp string_util.cpp test_curl_util.cpp s3fs_global.cpp s3fs_logger.cpp
@@ -83,10 +84,18 @@ endif
 
 test_curl_util_LDADD = $(DEPS_LIBS)
 
+test_page_list_SOURCES = \
+    fdcache_page.cpp \
+    s3fs_global.cpp \
+    s3fs_logger.cpp \
+    string_util.cpp \
+    test_page_list.cpp
+
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 
 TESTS = \
     test_curl_util \
+    test_page_list \
     test_string_util
 
 clang-tidy:
