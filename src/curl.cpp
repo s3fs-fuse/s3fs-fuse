@@ -2628,7 +2628,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringToSign  = "AWS4-HMAC-SHA256\n";
     StringToSign += date8601 + "\n";
     StringToSign += strdate + "/" + endpoint + "/s3/aws4_request\n";
-    StringToSign += s3fs_hex(sRequest, sRequest_len);
+    StringToSign += s3fs_hex_lower(sRequest, sRequest_len);
     delete[] sRequest;
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
@@ -2639,7 +2639,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     s3fs_HMAC256(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
     delete[] kSigning;
 
-    Signature = s3fs_hex(md, md_len);
+    Signature = s3fs_hex_lower(md, md_len);
     delete[] md;
 
     return Signature;
@@ -2660,7 +2660,7 @@ void S3fsCurl::insertV4Headers()
                 unsigned char*  sRequest     = NULL;
                 unsigned int    sRequest_len = 0;
                 s3fs_sha256(b_postdata, cRequest_len, &sRequest, &sRequest_len);
-                payload_hash = s3fs_hex(sRequest, sRequest_len);
+                payload_hash = s3fs_hex_lower(sRequest, sRequest_len);
                 delete[] sRequest;
                 break;
             }
@@ -3751,7 +3751,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
             S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
             return -EIO;
         }
-        partdata.etag = s3fs_hex(md5raw, get_md5_digest_length());
+        partdata.etag = s3fs_hex_lower(md5raw, get_md5_digest_length());
         char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", md5base64p);
         delete[] md5base64p;
