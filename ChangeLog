@@ -1,6 +1,19 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.90 -- 07 Aug, 2021 (major changes only)
+#1599 - Don't ignore nomultipart when storage is low
+#1600 - #1602 - #1604 - #1617 - #1619 - #1620 - #1623 - #1624 - Fix POSIX compatibility issues found by pjdfstest
+#1630 - Fail CheckBucket when S3 returns PermanentRedirect
+#1640 - #1655 - Do not create zero-byte object when creating file
+#1648 - Allow arbitrary size AWS secret keys
+#1668 - #1678 - Fix race conditions
+#1696 - Set explicit Content-Length: 0 when initiating MPU
+#1681 - Set CURLOPT_UNRESTRICTED_AUTH when authenticating
+#1723 - Add jitter to avoid thundering herd
+#1728 - Loosen CheckBucket to check only the bucket
+#1729 - Add support for AWS-style environment variables
+
 Version 1.89 -- 22 Feb, 2021 (major changes only)
 #1520 - #1525 - #1534 - #1549 - Propagate S3 errors to errno more accurately
 #1546 - #1559 - Allow writing > 5 GB single-part objects supported by some non-AWS S3
