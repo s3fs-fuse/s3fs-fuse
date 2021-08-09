@@ -21,6 +21,7 @@
 #ifndef S3FS_LOGGER_H_
 #define S3FS_LOGGER_H_
 
+#include <cstdarg>
 #include <cstdio>
 #include <syslog.h>
 #include <sys/time.h>
@@ -141,30 +142,16 @@ class S3fsLog
 //-------------------------------------------------------------------
 // Debug macros
 //-------------------------------------------------------------------
+void s3fs_low_logprn(S3fsLog::s3fs_log_level level, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 5, 6)));
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
         do{ \
-            if(S3fsLog::IsS3fsLogLevel(level)){ \
-                if(foreground || S3fsLog::IsSetLogFile()){ \
-                    S3fsLog::SeekEnd(); \
-                    fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), __FILE__, __func__, __LINE__, __VA_ARGS__); \
-                    S3fsLog::Flush(); \
-                }else{ \
-                    syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): " fmt "%s", instance_name.c_str(), __FILE__, __func__, __LINE__, __VA_ARGS__); \
-                } \
-            } \
+            s3fs_low_logprn(level, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
         }while(0)
 
+void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 6, 7)));
 #define S3FS_LOW_LOGPRN2(level, nest, fmt, ...) \
         do{ \
-            if(S3fsLog::IsS3fsLogLevel(level)){ \
-                if(foreground || S3fsLog::IsSetLogFile()){ \
-                    S3fsLog::SeekEnd(); \
-                    fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), __FILE__, __func__, __LINE__, __VA_ARGS__); \
-                    S3fsLog::Flush(); \
-                }else{ \
-                    syslog(S3fsLog::GetSyslogLevel(level), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), __VA_ARGS__); \
-                } \
-            } \
+            s3fs_low_logprn2(level, nest, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
         }while(0)
 
 #define S3FS_LOW_CURLDBG(fmt, ...) \
@@ -229,14 +216,14 @@ class S3fsLog
 // small trick for VA_ARGS
 //
 #define S3FS_PRN_EXIT(fmt, ...)   S3FS_LOW_LOGPRN_EXIT(fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_CRIT(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_CRIT, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_ERR(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_ERR,  fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_WARN(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_WARN, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_DBG(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_DBG,  fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_INFO(fmt, ...)   S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 0, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 1, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 2, fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 3, fmt, ##__VA_ARGS__, "")
+#define S3FS_PRN_CRIT(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_CRIT, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_ERR(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_ERR,  fmt, ##__VA_ARGS__)
+#define S3FS_PRN_WARN(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_WARN, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_DBG(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_DBG,  fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO(fmt, ...)   S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 0, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 1, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 2, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 3, fmt, ##__VA_ARGS__)
 #define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_CACHE(fp, ...)   S3FS_LOW_CACHE(fp, ##__VA_ARGS__, "")
 
