@@ -35,7 +35,7 @@ class PseudoFdInfo
         std::string     upload_id;
         filepart_list_t upload_list;
         UntreatedParts  untreated_list;     // list of untreated parts that have been written and not yet uploaded(for streamupload)
-        etaglist_t      etag_entities;      // list of etag string entities(to maintain the etag entity even if MPPART_INFO is destroyed)
+        etaglist_t      etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
 
         bool            is_lock_init;
         pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
@@ -61,7 +61,7 @@ class PseudoFdInfo
         bool GetUploadId(std::string& id) const;
         bool GetEtaglist(etaglist_t& list);
 
-        bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, int* ppartnum = NULL, std::string** ppetag = NULL);
+        bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = NULL);
 
         void ClearUntreated(bool lock_already_held = false);
         bool ClearUntreated(off_t start, off_t size);

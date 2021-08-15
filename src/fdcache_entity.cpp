@@ -1265,14 +1265,13 @@ int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t sta
     }
 
     // append new part and get it's etag string pointer
-    int          partnum = 0;
-    std::string* petag   = NULL;
-    if(!pseudo_obj->AppendUploadPart(start, size, false, &partnum, &petag)){
+    etagpair* petagpair = NULL;
+    if(!pseudo_obj->AppendUploadPart(start, size, false, &petagpair)){
         return -EIO;
     }
 
     S3fsCurl s3fscurl(true);
-    return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, partnum, petag);
+    return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, petagpair);
 }
 
 // [NOTE]

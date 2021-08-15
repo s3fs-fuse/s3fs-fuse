@@ -177,7 +177,7 @@ bool PseudoFdInfo::GetEtaglist(etaglist_t& list)
 // An error will occur if it is discontinuous or if it overlaps with an
 // existing area.
 //
-bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* ppartnum, std::string** ppetag)
+bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagpair** ppetag)
 {
     if(IsUploading()){
         S3FS_PRN_ERR("Multipart Upload has not started yet.");
@@ -194,21 +194,20 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, int* 
         return false;
     }
 
-    // add new part
-    etag_entities.push_back(std::string(""));                   // [NOTE] Create the etag entity and register it in the list.
-    std::string&    etag_entity = etag_entities.back();
-    filepart        newpart(false, physical_fd, start, size, is_copy, &etag_entity);
-    upload_list.push_back(newpart);
+    // make part number
+    int partnumber = static_cast<int>(upload_list.size()) + 1;
 
-    // set part number
-    if(ppartnum){
-        *ppartnum = static_cast<int>(upload_list.size());
-    }
+    // add new part
+    etag_entities.push_back(etagpair(NULL, partnumber));        // [NOTE] Create the etag entity and register it in the list.
+    etagpair&   etag_entity = etag_entities.back();
+    filepart    newpart(false, physical_fd, start, size, is_copy, &etag_entity);
+    upload_list.push_back(newpart);
 
     // set etag pointer
     if(ppetag){
         *ppetag = &etag_entity;
     }
+
     return true;
 }
 
