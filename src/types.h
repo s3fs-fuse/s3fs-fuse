@@ -174,7 +174,29 @@ enum signature_type_t {
 //----------------------------------------------
 // etaglist_t / filepart / untreatedpart
 //----------------------------------------------
-typedef std::list<std::string> etaglist_t;
+//
+// Etag string and part number pair
+//
+struct etagpair
+{
+    std::string  etag;        // expected etag value
+    int          part_num;    // part number
+
+    etagpair(const char* petag = NULL, int part = -1) : etag(petag ? petag : ""), part_num(part) {}
+
+    ~etagpair()
+    {
+      clear();
+    }
+
+    void clear()
+    {
+        etag.erase();
+        part_num = -1;
+    }
+};
+
+typedef std::list<etagpair> etaglist_t;
 
 //
 // Each part information for Multipart upload
@@ -187,9 +209,9 @@ struct filepart
     off_t        startpos;    // seek fd point for uploading
     off_t        size;        // uploading size
     bool         is_copy;     // whether is copy multipart
-    std::string* petag;       // use only parallel upload
+    etagpair*    petag;       // use only parallel upload
 
-    filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, std::string* petag = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petag) {}
+    filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
 
     ~filepart()
     {
@@ -207,15 +229,26 @@ struct filepart
         petag    = NULL;
     }
 
-    void add_etag_list(etaglist_t* list)
+    void add_etag_list(etaglist_t& list, int partnum = -1)
     {
-        list->push_back(std::string());
-        petag = &list->back();
+        if(-1 == partnum){
+            partnum = list.size() + 1;
+        }
+        list.push_back(etagpair(NULL, partnum));
+        petag = &list.back();
     }
 
-    void add_etag(std::string* petagobj)
+    void set_etag(etagpair* petagobj)
     {
         petag = petagobj;
+    }
+
+    int get_part_number()
+    {
+        if(!petag){
+            return -1;
+        }
+        return petag->part_num;
     }
 };
 

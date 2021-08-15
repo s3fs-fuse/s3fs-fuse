@@ -1336,10 +1336,10 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         s3fscurl_para->partdata.size       = chunk;
         s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
         s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
-        s3fscurl_para->partdata.add_etag_list(&list);
+        s3fscurl_para->partdata.add_etag_list(list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, static_cast<int>(list.size()), upload_id))){
+        if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, s3fscurl_para->partdata.get_part_number(), upload_id))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             close(fd2);
             delete s3fscurl_para;
@@ -1431,12 +1431,12 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             s3fscurl_para->partdata.size       = iter->bytes;
             s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
             s3fscurl_para->b_partdata_size     = s3fscurl_para->partdata.size;
-            s3fscurl_para->partdata.add_etag_list(&list);
+            s3fscurl_para->partdata.add_etag_list(list);
 
-            S3FS_PRN_INFO3("Upload Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset), static_cast<long long>(iter->bytes), list.size());
+            S3FS_PRN_INFO3("Upload Part [tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset), static_cast<long long>(iter->bytes), s3fscurl_para->partdata.get_part_number());
 
             // initiate upload part for parallel
-            if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, static_cast<int>(list.size()), upload_id))){
+            if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, s3fscurl_para->partdata.get_part_number(), upload_id))){
                 S3FS_PRN_ERR("failed uploading part setup(%d)", result);
                 close(fd2);
                 delete s3fscurl_para;
@@ -1462,12 +1462,12 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
 
                 s3fscurl_para->b_from   = SAFESTRPTR(tpath);
                 s3fscurl_para->b_meta   = meta;
-                s3fscurl_para->partdata.add_etag_list(&list);
+                s3fscurl_para->partdata.add_etag_list(list);
 
-                S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%zu]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset + i), static_cast<long long>(bytes), list.size());
+                S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long>(iter->offset + i), static_cast<long long>(bytes), s3fscurl_para->partdata.get_part_number());
 
                 // initiate upload part for parallel
-                if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size()), upload_id, meta))){
+                if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, s3fscurl_para->partdata.get_part_number(), upload_id, meta))){
                     S3FS_PRN_ERR("failed uploading part setup(%d)", result);
                     close(fd2);
                     delete s3fscurl_para;
@@ -3583,15 +3583,14 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
-    int cnt = 0;
-    for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it, ++cnt){
-        if(it->empty()){
-            S3FS_PRN_ERR("%d file part is not finished uploading.", cnt + 1);
+    for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it){
+        if(it->etag.empty()){
+            S3FS_PRN_ERR("%d file part is not finished uploading.", it->part_num);
             return -EIO;
         }
         postContent += "<Part>\n";
-        postContent += "  <PartNumber>" + str(cnt + 1) + "</PartNumber>\n";
-        postContent += "  <ETag>" + *it + "</ETag>\n";
+        postContent += "  <PartNumber>" + str(it->part_num) + "</PartNumber>\n";
+        postContent += "  <ETag>" + it->etag + "</ETag>\n";
         postContent += "</Part>\n";
     }
     postContent += "</CompleteMultipartUpload>\n";
@@ -3887,7 +3886,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
             return false;
         }
     }
-    (*partdata.petag) = it->second;
+    partdata.petag->etag = it->second;
     partdata.uploaded = true;
 
     return true;
@@ -3910,7 +3909,7 @@ bool S3fsCurl::CopyMultipartPostComplete()
         etag.erase(etag.size() - 1);
         etag.erase(0, 1);
     }
-    (*partdata.petag) = etag;
+    partdata.petag->etag = etag;
 
     bodydata.Clear();
     headdata.Clear();
@@ -3960,10 +3959,10 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);
         s3fscurl_para->b_from   = SAFESTRPTR(tpath);
         s3fscurl_para->b_meta   = meta;
-        s3fscurl_para->partdata.add_etag_list(&list);
+        s3fscurl_para->partdata.add_etag_list(list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, static_cast<int>(list.size()), upload_id, meta))){
+        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, s3fscurl_para->partdata.get_part_number(), upload_id, meta))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             delete s3fscurl_para;
             return result;
@@ -3996,7 +3995,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     return 0;
 }
 
-int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, int part_num, std::string* petag)
+int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etagpair* petagpair)
 {
     S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%lld][size=%lld]", upload_id.c_str(), SAFESTRPTR(tpath), fd, static_cast<long long int>(offset), static_cast<long long int>(size));
 
@@ -4016,12 +4015,12 @@ int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* t
     partdata.size       = size;
     b_partdata_startpos = partdata.startpos;
     b_partdata_size     = partdata.size;
-    partdata.add_etag(petag);
+    partdata.set_etag(petagpair);
 
     // upload part
     int   result;
-    if(0 != (result = UploadMultipartPostRequest(tpath, part_num, upload_id))){
-        S3FS_PRN_ERR("failed uploading %d part by error(%d)", part_num, result);
+    if(0 != (result = UploadMultipartPostRequest(tpath, petagpair->part_num, upload_id))){
+        S3FS_PRN_ERR("failed uploading %d part by error(%d)", petagpair->part_num, result);
         close(fd2);
         return result;
     }
@@ -4069,10 +4068,10 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
         S3fsCurl* s3fscurl_para = new S3fsCurl(true);
         s3fscurl_para->b_from   = SAFESTRPTR(from);
         s3fscurl_para->b_meta   = meta;
-        s3fscurl_para->partdata.add_etag_list(&list);
+        s3fscurl_para->partdata.add_etag_list(list);
 
         // initiate upload part for parallel
-        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(from, to, static_cast<int>(list.size()), upload_id, meta))){
+        if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(from, to, s3fscurl_para->partdata.get_part_number(), upload_id, meta))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
             delete s3fscurl_para;
             return result;

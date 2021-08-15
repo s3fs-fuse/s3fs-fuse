@@ -399,7 +399,7 @@ class S3fsCurl
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
         int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
-        int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, int part_num, std::string* petag);
+        int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etagpair* petagpair);
         int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
         // methods(variables)
