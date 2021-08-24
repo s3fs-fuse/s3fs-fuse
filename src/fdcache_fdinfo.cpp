@@ -141,7 +141,7 @@ bool PseudoFdInfo::InitialUploadInfo(const std::string& id)
 
 bool PseudoFdInfo::GetUploadId(std::string& id) const
 {
-    if(IsUploading()){
+    if(!IsUploading()){
         S3FS_PRN_ERR("Multipart Upload has not started yet.");
         return false;
     }
@@ -151,7 +151,7 @@ bool PseudoFdInfo::GetUploadId(std::string& id) const
 
 bool PseudoFdInfo::GetEtaglist(etaglist_t& list)
 {
-    if(IsUploading()){
+    if(!IsUploading()){
         S3FS_PRN_ERR("Multipart Upload has not started yet.");
         return false;
     }
@@ -179,7 +179,7 @@ bool PseudoFdInfo::GetEtaglist(etaglist_t& list)
 //
 bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagpair** ppetag)
 {
-    if(IsUploading()){
+    if(!IsUploading()){
         S3FS_PRN_ERR("Multipart Upload has not started yet.");
         return false;
     }
