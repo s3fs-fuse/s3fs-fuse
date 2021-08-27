@@ -1,6 +1,6 @@
 # s3fs
 
-s3fs allows Linux and macOS to mount an S3 bucket via FUSE.
+s3fs allows Linux, macOS, and FreeBSD to mount an S3 bucket via FUSE.
 s3fs preserves the native object format for files, allowing use of other
 tools like [AWS CLI](https://github.com/aws/aws-cli).  
 [![s3fs-fuse CI](https://github.com/s3fs-fuse/s3fs-fuse/workflows/s3fs-fuse%20CI/badge.svg)](https://github.com/s3fs-fuse/s3fs-fuse/actions)
@@ -73,6 +73,12 @@ Many systems provide pre-built packages:
   ```
   brew install --cask osxfuse
   brew install s3fs
+  ```
+
+* FreeBSD:
+
+  ```
+  pkg install fusefs-s3fs
   ```
 
 Note: Homebrew has deprecated osxfuse and s3fs may not install any more, see
