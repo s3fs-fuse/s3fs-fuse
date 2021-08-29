@@ -2839,7 +2839,7 @@ static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, P
 
     pval = new XATTRVAL;
     pval->length = 0;
-    pval->pvalue = s3fs_decode64(tmpval.c_str(), &pval->length);
+    pval->pvalue = s3fs_decode64(tmpval.c_str(), tmpval.size(), &pval->length);
 
     return true;
 }

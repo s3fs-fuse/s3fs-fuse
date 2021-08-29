@@ -99,7 +99,7 @@ bool get_keyword_value(const std::string& target, const char* keyword, std::stri
 std::string s3fs_hex_lower(const unsigned char* input, size_t length);
 std::string s3fs_hex_upper(const unsigned char* input, size_t length);
 char* s3fs_base64(const unsigned char* input, size_t length);
-unsigned char* s3fs_decode64(const char* input, size_t* plength);
+unsigned char* s3fs_decode64(const char* input, size_t input_len, size_t* plength);
 
 //
 // WTF8
