@@ -390,7 +390,7 @@ char* s3fs_base64(const unsigned char* input, size_t length)
     if(!input || 0 == length){
         return NULL;
     }
-    result = new char[((length / 3) + 1) * 4 + 1];
+    result = new char[((length + 3 - 1) / 3) * 4 + 1];
 
     unsigned char parts[4];
     size_t rpos;
@@ -438,7 +438,7 @@ unsigned char* s3fs_decode64(const char* input, size_t* plength)
     if(!input || 0 == strlen(input) || !plength){
         return NULL;
     }
-    result = new unsigned char[strlen(input) + 1];
+    result = new unsigned char[strlen(input) / 4 * 3 + 1];
 
     unsigned char parts[4];
     size_t input_len = strlen(input);
