@@ -1510,7 +1510,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // upload rest data
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && 0 < untreated_size){
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize(), 0) && 0 < untreated_size){
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
@@ -1637,7 +1637,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // upload rest data
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && 0 < untreated_size){
+        if(pseudo_obj->GetLastUntreated(untreated_start, untreated_size, S3fsCurl::GetMultipartSize(), 0) && 0 < untreated_size){
             if(0 != (result = NoCacheMultipartPost(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart post(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
@@ -2080,14 +2080,13 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
 
 int FdEntity::UploadPendingMeta()
 {
-    AutoLock auto_lock(&fdent_lock);
-
     if(!is_meta_pending) {
        return 0;
     }
 
     headers_t updatemeta = orgmeta;
     updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(path.c_str()));
+    updatemeta["x-amz-metadata-directive"] = "REPLACE";
     // put headers, no need to update mtime to avoid dead lock
     int result = put_headers(path.c_str(), updatemeta, true);
     if(0 != result){
