@@ -64,23 +64,35 @@ void test_trim()
 
 void test_base64()
 {
+    unsigned char *buf;
     size_t len;
+
     ASSERT_STREQUALS(s3fs_base64(NULL, 0), NULL);
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64(NULL, &len)), NULL);
+    buf = s3fs_decode64(NULL, &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
+
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), NULL);
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64("", &len)), NULL);
+    buf = s3fs_decode64("", &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), "MQ==");
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64("MQ==", &len)), "1");
+    buf = s3fs_decode64("MQ==", &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "1", 1);
     ASSERT_EQUALS(len, static_cast<size_t>(1));
+
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("12"), 2), "MTI=");
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64("MTI=", &len)), "12");
+    buf = s3fs_decode64("MTI=", &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "12", 2);
     ASSERT_EQUALS(len, static_cast<size_t>(2));
+
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("123"), 3), "MTIz");
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64("MTIz", &len)), "123");
+    buf = s3fs_decode64("MTIz", &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "123", 3);
     ASSERT_EQUALS(len, static_cast<size_t>(3));
+
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1234"), 4), "MTIzNA==");
-    ASSERT_STREQUALS(reinterpret_cast<const char *>(s3fs_decode64("MTIzNA==", &len)), "1234");
+    buf = s3fs_decode64("MTIzNA==", &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "1234", 4);
     ASSERT_EQUALS(len, static_cast<size_t>(4));
 
     // TODO: invalid input

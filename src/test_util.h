@@ -76,11 +76,23 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
   }
 }
 
+void assert_bufequals(const char *x, size_t len1, const char *y, size_t len2, const char *file, int line)
+{
+    if(x == NULL && y == NULL){
+        return;
+    // cppcheck-suppress nullPointerRedundantCheck
+    } else if(x == NULL || y == NULL || len1 != len2 || memcmp(x, y, len1) != 0){
+        std::cerr << (x ? std::string(x, len1) : "null") << " != " << (y ? std::string(y, len2) : "null") << " at " << file << ":" << line << std::endl;
+        std::exit(1);
+    }
+}
+
 #define ASSERT_TRUE(x)          assert_equals((x), true, __FILE__, __LINE__)
 #define ASSERT_FALSE(x)         assert_equals((x), false, __FILE__, __LINE__)
 #define ASSERT_EQUALS(x, y)     assert_equals((x), (y), __FILE__, __LINE__)
 #define ASSERT_NEQUALS(x, y)    assert_nequals((x), (y), __FILE__, __LINE__)
 #define ASSERT_STREQUALS(x, y)  assert_strequals((x), (y), __FILE__, __LINE__)
+#define ASSERT_BUFEQUALS(x, len1, y, len2) assert_bufequals((x), (len1), (y), (len2), __FILE__, __LINE__)
 
 #endif // S3FS_TEST_UTIL_H_
 
