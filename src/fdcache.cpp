@@ -336,7 +336,7 @@ bool FdManager::HaveLseekHole()
             result = false;
         }
     }
-    close(fd);
+    fclose(ptmpfp);
 
     FdManager::checked_lseek   = true;
     FdManager::have_lseek_hole = result;
