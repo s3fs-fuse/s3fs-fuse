@@ -802,7 +802,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
         char* p_key;
         size_t keylength;
 
-        if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), &keylength))) {
+        if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), onekey.size(), &keylength))) {
             raw_key = std::string(p_key, keylength);
             base64_key = onekey;
             delete[] p_key;

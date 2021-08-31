@@ -68,30 +68,30 @@ void test_base64()
     size_t len;
 
     ASSERT_STREQUALS(s3fs_base64(NULL, 0), NULL);
-    buf = s3fs_decode64(NULL, &len);
+    buf = s3fs_decode64(NULL, 0, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), NULL);
-    buf = s3fs_decode64("", &len);
+    buf = s3fs_decode64("", 0, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), "MQ==");
-    buf = s3fs_decode64("MQ==", &len);
+    buf = s3fs_decode64("MQ==", 4, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "1", 1);
     ASSERT_EQUALS(len, static_cast<size_t>(1));
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("12"), 2), "MTI=");
-    buf = s3fs_decode64("MTI=", &len);
+    buf = s3fs_decode64("MTI=", 4, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "12", 2);
     ASSERT_EQUALS(len, static_cast<size_t>(2));
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("123"), 3), "MTIz");
-    buf = s3fs_decode64("MTIz", &len);
+    buf = s3fs_decode64("MTIz", 4, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "123", 3);
     ASSERT_EQUALS(len, static_cast<size_t>(3));
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1234"), 4), "MTIzNA==");
-    buf = s3fs_decode64("MTIzNA==", &len);
+    buf = s3fs_decode64("MTIzNA==", 8, &len);
     ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, "1234", 4);
     ASSERT_EQUALS(len, static_cast<size_t>(4));
 
