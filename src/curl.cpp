@@ -2387,7 +2387,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         S3FS_PRN_DBG("Body Text: %s", bodydata.str());
                         // Add jitter to avoid thundering herd.
                         unsigned int sleep_time = 2 << retry_count;
-                        sleep(sleep_time + random() % sleep_time);
+                        sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
                         break;
                     }
                     default:

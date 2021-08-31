@@ -232,7 +232,7 @@ struct filepart
     void add_etag_list(etaglist_t& list, int partnum = -1)
     {
         if(-1 == partnum){
-            partnum = list.size() + 1;
+            partnum = static_cast<int>(list.size()) + 1;
         }
         list.push_back(etagpair(NULL, partnum));
         petag = &list.back();
