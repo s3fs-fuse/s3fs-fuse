@@ -3188,10 +3188,40 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
     }
 
     // url
-    url             = std::string(S3fsCurl::IAM_cred_url);
+    if(is_ecs){
+        const char *env = std::getenv(ECS_IAM_ENV_VAR);
+        if(env == NULL){
+            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR);
+            return -EIO;
+        }
+        url = std::string(S3fsCurl::IAM_cred_url) + env;
+    }else{
+        if(S3fsCurl::IAM_api_version > 1){
+            int result = GetIAMv2ApiToken();
+            if(-ENOENT == result){
+                // If we get a 404 back when requesting the token service,
+                // then it's highly likely we're running in an environment
+                // that doesn't support the AWS IMDSv2 API, so we'll skip
+                // the token retrieval in the future.
+                SetIMDSVersion(1);
+            }else if(result != 0){
+                // If we get an unexpected error when retrieving the API
+                // token, log it but continue.  Requirement for including
+                // an API token with the metadata request may or may not
+                // be enforced, so we should not abort here.
+                S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+            }
+        }
+
+        url = std::string(S3fsCurl::IAM_cred_url);
+    }
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
+
+    if(S3fsCurl::IAM_api_version > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
+    }
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return false;
