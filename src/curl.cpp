@@ -3028,6 +3028,12 @@ int S3fsCurl::GetIAMv2ApiToken()
     std::string ttlstr = str(S3fsCurl::IAMv2_token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
                                             ttlstr.c_str());
+
+    // Curl appends an "Expect: 100-continue" header to the token request, 
+    // and aws responds with a 417 Expectation Failed. This ensures the 
+    // Expect header is empty before the request is sent.
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Expect", "");
+
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PUT, true)){
         return -EIO;
     }
