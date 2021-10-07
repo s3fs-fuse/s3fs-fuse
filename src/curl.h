@@ -261,10 +261,10 @@ class S3fsCurl
         static bool PushbackSseKeys(const std::string& onekey);
         static bool AddUserAgent(CURL* hCurl);
 
-        static int CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
-        static int CurlDebugBodyInFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
-        static int CurlDebugBodyOutFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
-        static int RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
+        static int CurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+        static int CurlDebugBodyInFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+        static int CurlDebugBodyOutFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
+        static int RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
         // methods
         bool ResetHandle(bool lock_already_held = false);

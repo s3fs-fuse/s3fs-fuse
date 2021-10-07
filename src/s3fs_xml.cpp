@@ -175,6 +175,8 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
                 if(strlen(dirpath) > strlen(basepath)){
                     withdirname = &dirpath[strlen(basepath)];
                 }
+                // cppcheck-suppress unmatchedSuppression
+                // cppcheck-suppress knownConditionTrueFalse
                 if(!withdirname.empty() && '/' != *withdirname.rbegin()){
                     withdirname += "/";
                 }

@@ -404,7 +404,7 @@ bool FdEntity::IsUploading(bool lock_already_held)
 // If the open is successful, returns pseudo fd.
 // If it fails, it returns an error code with a negative value.
 //
-int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
+int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
 {
     AutoLock auto_lock(&fdent_lock, type);
 
@@ -1240,6 +1240,9 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     }
     s3fscurl.DestroyCurlHandle();
 
+    // Clear the dirty flag, because the meta data is updated.
+    is_meta_pending = false;
+
     // reset upload_id
     if(!pseudo_obj->InitialUploadInfo(upload_id)){
         return -EIO;
@@ -1535,6 +1538,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
     if(0 == result){
         pagelist.ClearAllModified();
+        is_meta_pending = false;
     }
     return result;
 }
@@ -1662,6 +1666,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
     if(0 == result){
         pagelist.ClearAllModified();
+        is_meta_pending = false;
     }
     return result;
 }
