@@ -293,7 +293,7 @@ bool PageList::CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpag
             check_start = checkpage.offset;
             check_bytes = iter->bytes - (checkpage.offset - iter->offset);
 
-        }else if(iter->offset < (checkpage.offset + checkpage.bytes) && (checkpage.offset + checkpage.bytes) < (iter->offset + iter->bytes)){
+        }else if((checkpage.offset + checkpage.bytes) < (iter->offset + iter->bytes)){  // here, already "iter->offset < (checkpage.offset + checkpage.bytes)" is true.
             // case 3
             check_start = iter->offset;
             check_bytes = checkpage.bytes - (iter->offset - checkpage.offset);

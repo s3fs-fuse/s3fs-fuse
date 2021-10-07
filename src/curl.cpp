@@ -1878,22 +1878,22 @@ bool S3fsCurl::AddUserAgent(CURL* hCurl)
     return true;
 }
 
-int S3fsCurl::CurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
+int S3fsCurl::CurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
 {
     return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_END);
 }
 
-int S3fsCurl::CurlDebugBodyInFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
+int S3fsCurl::CurlDebugBodyInFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
 {
     return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_DATA_IN);
 }
 
-int S3fsCurl::CurlDebugBodyOutFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
+int S3fsCurl::CurlDebugBodyOutFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr)
 {
     return S3fsCurl::RawCurlDebugFunc(hcurl, type, data, size, userptr, CURLINFO_DATA_OUT);
 }
 
-int S3fsCurl::RawCurlDebugFunc(CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype)
+int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype)
 {
     if(!hcurl){
         // something wrong...
