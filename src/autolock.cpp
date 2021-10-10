@@ -64,7 +64,7 @@ AutoLock::~AutoLock()
     if (is_lock_acquired) {
         int result = pthread_mutex_unlock(auto_mutex);
         if(result != 0){
-            S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
+            S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", result);
             abort();
         }
     }
