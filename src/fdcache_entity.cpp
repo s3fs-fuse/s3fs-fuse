@@ -404,7 +404,7 @@ bool FdEntity::IsUploading(bool lock_already_held)
 // If the open is successful, returns pseudo fd.
 // If it fails, it returns an error code with a negative value.
 //
-int FdEntity::Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
+int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
 {
     AutoLock auto_lock(&fdent_lock, type);
 

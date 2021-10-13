@@ -85,7 +85,7 @@ class FdEntity
         void Close(int fd);
         bool IsOpen() const { return (-1 != physical_fd); }
         bool FindPseudoFd(int fd, bool lock_already_held = false);
-        int Open(headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type);
+        int Open(const headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type);
         bool LoadAll(int fd, headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
         int Dup(int fd, bool lock_already_held = false);
         int OpenPseudoFd(int flags = O_RDONLY, bool lock_already_held = false);
