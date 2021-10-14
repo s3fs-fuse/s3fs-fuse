@@ -59,7 +59,6 @@ jobs:
           - ubuntu:21.04
           - ubuntu:20.04
           - ubuntu:18.04
-          - ubuntu:16.04
           - debian:buster
           - debian:stretch
           - centos:centos8
