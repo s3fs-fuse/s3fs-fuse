@@ -62,6 +62,8 @@ inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, fdpage& page, 
 // default_modify:  modified flag value in the list after compression when default_modify=true
 //
 // NOTE: ignore_modify and ignore_load cannot both be true.
+//       Zero size pages will be deleted. However, if the page information is the only one,
+//       it will be left behind. This is what you need to do to create a new empty file.
 //
 static fdpage_list_t raw_compress_fdpage_list(const fdpage_list_t& pages, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
 {
@@ -70,28 +72,33 @@ static fdpage_list_t raw_compress_fdpage_list(const fdpage_list_t& pages, bool i
     bool          is_first = true;
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
         if(!is_first){
-            if( (!ignore_load   && (tmppage.loaded   != iter->loaded  )) ||
-                (!ignore_modify && (tmppage.modified != iter->modified)) )
-            {
-                // Different from the previous area, add it to list
-                raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
-
-                // keep current area
-                tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
-            }else{
-                // Same as the previous area
-                if(tmppage.next() != iter->offset){
-                    // These are not contiguous areas, add it to list
+            if(0 < tmppage.bytes){
+                if( (!ignore_load   && (tmppage.loaded   != iter->loaded  )) ||
+                    (!ignore_modify && (tmppage.modified != iter->modified)) )
+                {
+                    // Different from the previous area, add it to list
                     raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
 
                     // keep current area
                     tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
                 }else{
-                    // These are contiguous areas
+                    // Same as the previous area
+                    if(tmppage.next() != iter->offset){
+                        // These are not contiguous areas, add it to list
+                        raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
 
-                    // add current area
-                    tmppage.bytes += iter->bytes;
+                        // keep current area
+                        tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
+                    }else{
+                        // These are contiguous areas
+
+                        // add current area
+                        tmppage.bytes += iter->bytes;
+                    }
                 }
+            }else{
+                // if found empty page, skip it
+                tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
             }
         }else{
             // first erea
@@ -103,7 +110,13 @@ static fdpage_list_t raw_compress_fdpage_list(const fdpage_list_t& pages, bool i
     }
     // add last area
     if(!is_first){
-        raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
+        // [NOTE]
+        // Zero size pages are not allowed. However, if it is the only one, allow it.
+        // This is a special process that exists only to create empty files.
+        //
+        if(compressed_pages.empty() || 0 != tmppage.bytes){
+            raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
+        }
     }
     return compressed_pages;
 }
@@ -367,7 +380,7 @@ void PageList::Clear()
 bool PageList::Init(off_t size, bool is_loaded, bool is_modified)
 {
     Clear();
-    if(0 < size){
+    if(0 <= size){
         fdpage page(0, size, is_loaded, is_modified);
         pages.push_back(page);
     }

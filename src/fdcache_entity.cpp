@@ -2173,6 +2173,16 @@ bool FdEntity::PunchHole(off_t start, size_t size)
     return true;
 }
 
+// [NOTE]
+// Indicate that a new file's is dirty.
+// This ensures that both metadata and data are synced during flush.
+//
+void FdEntity::MarkDirtyNewFile()
+{
+    pagelist.Init(0, false, true);
+    is_meta_pending = true;
+}
+
 /*
 * Local variables:
 * tab-width: 4
