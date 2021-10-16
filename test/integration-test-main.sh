@@ -1321,6 +1321,32 @@ function test_cache_file_stat() {
     rm_test_file "${BIG_FILE}"
 }
 
+function test_zero_cache_file_stat() {
+    describe "Test zero byte cache file stat ..."
+
+    rm_test_file ${TEST_TEXT_FILE}
+
+    #
+    # create empty file
+    #
+    touch ${TEST_TEXT_FILE}
+
+    #
+    # get "testrun-xxx" directory name
+    #
+    CACHE_TESTRUN_DIR=$(ls -1 ${CACHE_DIR}/${TEST_BUCKET_1}/ 2>/dev/null | grep testrun 2>/dev/null)
+
+    # [NOTE]
+    # The stat file is a one-line text file, expecting for "<inode>:0"(ex. "4543937: 0").
+    #
+    head -1 ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE} 2>/dev/null | grep -q ':0$' 2>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "The cache file stat after creating an empty file is incorrect : ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+        return 1;
+    fi
+    rm_test_file ${TEST_TEXT_FILE}
+}
+
 function test_upload_sparsefile {
     describe "Testing upload sparse file ..."
 
@@ -1462,6 +1488,7 @@ function test_ut_ossfs {
 function add_all_tests {
     if ps u $S3FS_PID | grep -q use_cache; then
         add_tests test_cache_file_stat
+        add_tests test_zero_cache_file_stat
     fi
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
