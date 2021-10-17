@@ -39,6 +39,7 @@ ENSURE_DISKFREE_SIZE=10
 
 export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
+
 if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE}"
@@ -53,10 +54,56 @@ if [ -n "${ALL_TESTS}" ]; then
         singlepart_copy_limit=10  # limit size to exercise multipart code paths
         #use_sse  # TODO: S3Proxy does not support SSE
     )
-else
-    FLAGS=(
-        sigv4
-    )
+
+elif [ -n "${TESTCASE}" ]; then
+    # [Case name]
+    #   STANDARD    -> use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE}
+    #   MD5         -> enable_content_md5
+    #   NOOBJ       -> enable_noobj_cache
+    #   STATSIZE    -> max_stat_cache_size=100
+    #   NOCOPY      -> nocopyapi
+    #   NOMULTI     -> nomultipart
+    #   NOCOMPAT    -> notsup_compat_dir
+    #   SIGV2       -> sigv2
+    #   SIGV4       -> sigv4
+    #   CPLIMIT     -> singlepart_copy_limit=10
+    #   SSE         -> use_sse
+    #
+    FLAGS=()
+    for ONECASE in $(echo "${TESTCASE}" | tr ':' ' '); do
+        if [ "${ONECASE}" = "STANDARD" ]; then
+            FLAGS+=("use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE}")
+        elif [ "${ONECASE}" = "MD5" ]; then
+            FLAGS+=("enable_content_md5")
+        elif [ "${ONECASE}" = "NOOBJ" ]; then
+            FLAGS+=("enable_noobj_cache")
+        elif [ "${ONECASE}" = "STATSIZE" ]; then
+            FLAGS+=("max_stat_cache_size=100")
+        elif [ "${ONECASE}" = "NOCOPY" ]; then
+            FLAGS+=("nocopyapi")
+        elif [ "${ONECASE}" = "NOMULTI" ]; then
+            FLAGS+=("nomultipart")
+        elif [ "${ONECASE}" = "NOCOMPAT" ]; then
+            FLAGS+=("notsup_compat_dir")
+        elif [ "${ONECASE}" = "SIGV2" ]; then
+            FLAGS+=("sigv2")
+        elif [ "${ONECASE}" = "SIGV4" ]; then
+            FLAGS+=("sigv4")
+        elif [ "${ONECASE}" = "CPLIMIT" ]; then
+            FLAGS+=("singlepart_copy_limit=10")
+        elif [ "${ONECASE}" = "SSE" ]; then
+            FLAGS+=("use_sse")
+        else
+            # Unknown case, skip this. (or should exit?)
+            :
+        fi
+    done
+    if [ "${#FLAGS[*]}" -eq 0 ]; then
+        #
+        # Set default one case
+        #
+        FLAGS=("sigv4")
+    fi
 fi
 
 start_s3proxy

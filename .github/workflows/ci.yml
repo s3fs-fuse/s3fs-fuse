@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
 
       #
-      # matrix for containers
+      # matrix for containers and test cases
       #
       matrix:
         container:
@@ -60,6 +60,15 @@ jobs:
           - centos:centos7
           - fedora:35
           - opensuse/leap:15
+
+        # [Test case]
+        # The symbol defined in this variable will be tested.
+        # The following symbols are defined in small-integration-test.sh.
+        #
+        testcase:
+          - STANDARD:MD5:STATSIZE:CPLIMIT
+          - NOOBJ:NOCOPY:NOMULTI:NOCOMPAT
+          - SIGV2:SIGV4
 
     container:
       image: ${{ matrix.container }}
@@ -103,7 +112,7 @@ jobs:
 
       - name: Test suite
         run: |
-          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+          make TESTCASE=${{ matrix.testcase }} check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   # [NOTE]
   # A case of "runs-on: macos-11.0" does not work,
@@ -114,6 +123,28 @@ jobs:
   #
   macos10:
     runs-on: macos-10.15
+
+    #
+    # build matrix for test cases
+    #
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      #
+      # matrix for test cases
+      #
+      matrix:
+        # [Test case]
+        # The symbol defined in this variable will be tested.
+        # The following symbols are defined in small-integration-test.sh.
+        #
+        testcase:
+          - STANDARD:MD5:STATSIZE:CPLIMIT
+          - NOOBJ:NOCOPY:NOMULTI:NOCOMPAT
+          - SIGV2:SIGV4
 
     steps:
       - name: Checkout source code
@@ -157,7 +188,7 @@ jobs:
           make check -C src
           echo "user_allow_other" | sudo tee -a /etc/fuse.conf >/dev/null
           if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
-          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+          make TESTCASE=${{ matrix.testcase }} check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
 #
 # Local variables:
