@@ -105,19 +105,17 @@ static bool parse_string(const char* pstr, char delim, strlist_t& strlist)
     if(!pstr){
         return false;
     }
-    char* ptmp = strdup(pstr);
-    char* pbup = ptmp;
-    for(char* pfound = strchr(ptmp, delim); pfound; pfound = strchr(ptmp, delim)){
-        *pfound = '\0';
-        if(0 < strlen(ptmp)){
-            strlist.push_back(std::string(ptmp));
+    std::string strAll(pstr);
+    while(!strAll.empty()){
+        size_t pos = strAll.find_first_of(delim);
+        if(std::string::npos != pos){
+            strlist.push_back(strAll.substr(0, pos));
+            strAll = strAll.substr(pos + 1);
+        }else{
+            strlist.push_back(strAll);
+            strAll.erase();
         }
-        ptmp = ++pfound;
     }
-    if(0 < strlen(ptmp)){
-        strlist.push_back(std::string(ptmp));
-    }
-    free(pbup);
     return true;
 }
 
