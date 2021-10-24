@@ -1485,6 +1485,143 @@ function test_ut_ossfs {
     ../../ut_test.py
 }
 
+#
+# This test opens a file and writes multiple sets of data.
+# The file is opened only once and multiple blocks of data are written
+# to the file descriptor with a gap.
+#
+# That is, the data sets are written discontinuously.
+# The data to be written uses multiple data that is less than or larger
+# than the part size of the multi-part upload.
+# The gap should be at least the part size of the multi-part upload.
+# Write as shown below:
+#  <SOF>....<write data>....<write data>....<write data><EOF>
+#
+# There are two types of tests: new files and existing files.
+# For existing files, the file size must be larger than where this test
+# writes last position.
+#  <SOF>....<write data>....<write data>....<write data>...<EOF>
+#
+function test_write_data_with_skip() {
+    describe "Testing write data block with skipping block..."
+
+    #
+    # The first argument of the script is "testrun-<random>" the directory name.
+    #
+    CACHE_TESTRUN_DIR=$1
+
+    _SKIPWRITE_FILE="test_skipwrite"
+    _TMP_SKIPWRITE_FILE="/tmp/${_SKIPWRITE_FILE}"
+
+    #------------------------------------------------------
+    # (1) test new file 
+    #------------------------------------------------------
+    #
+    # Clean files
+    #
+    rm_test_file ${_SKIPWRITE_FILE}
+    rm_test_file ${_TMP_SKIPWRITE_FILE}
+
+    #
+    # Create new file in bucket and temporary directory(/tmp)
+    #
+    # Writing to the file is as follows:
+    #    |<-- skip(12MB) --><-- write(1MB) --><-- skip(22MB)  --><-- write(20MB) --><-- skip(23MB)  --><-- write(1MB) -->| (79MB)
+    #
+    # As a result, areas that are not written to the file are mixed.
+    # The part that is not written has a HOLE that is truncate and filled
+    # with 0x00.
+    # Assuming that multipart upload is performed on a part-by-part basis,
+    # it will be as follows:
+    #    part 1)       0x0.. 0x9FFFFF :                      <not write area(0x00)>
+    #    part 2)  0xA00000..0x13FFFFF :  0xA00000..0xBFFFFF  <not write area(0x00)>
+    #                                    0xC00000..0xCFFFFF  <write area>
+    #                                    0xD00000..0x13FFFFF <not write area(0x00)>
+    #    part 3) 0x1400000..0x1DFFFFF :                      <not write area(0x00)>
+    #    part 4) 0x1E00000..0x27FFFFF : 0x1E00000..0x22FFFFF <not write area(0x00)>
+    #                                   0x2300000..0x27FFFFF <write area>
+    #    part 5) 0x2800000..0x31FFFFF :                      <write area>
+    #    part 6) 0x3200000..0x3BFFFFF : 0x3200000..0x36FFFFF <write area>
+    #                                   0x3700000..0x3BFFFFF <not write area(0x00)>
+    #    part 7) 0x3C00000..0x45FFFFF :                      <not write area(0x00)>
+    #    part 8) 0x4600000..0x4BFFFFF : 0x4600000..0x4AFFFFF <not write area(0x00)>
+    #                                   0x4B00000..0x4BFFFFF <write area>
+    # 
+    ./write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 78643200:65536
+
+    #
+    # delete cache file if using cache
+    #
+    if ps u $S3FS_PID | grep -q use_cache; then
+        rm -f ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+        rm -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+    fi
+
+    #
+    # Compare
+    #
+    cmp ${_SKIPWRITE_FILE} ${_TMP_SKIPWRITE_FILE}
+
+    #------------------------------------------------------
+    # (2) test existed file
+    #------------------------------------------------------
+    # [NOTE]
+    # This test uses the file used in the previous test as an existing file.
+    #
+    if ps u $S3FS_PID | grep -q use_cache; then
+        rm -f ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+        rm -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+    fi
+
+    #
+    # Over write data to existed file in bucket and temporary directory(/tmp)
+    #
+    # Writing to the file is as follows:
+    #    |<----------------------------------------------- existed file ----------------------------------------------------------->| (79MB)
+    #    |<-- skip(12MB) --><-- write(1MB) --><-- skip(22MB)  --><-- write(20MB) --><-- skip(22MB)  --><-- write(1MB) --><-- 1MB -->| (79MB)
+    #
+    # As a result, areas that are not written to the file are mixed.
+    # The part that is not written has a HOLE that is truncate and filled
+    # with 0x00.
+    # Assuming that multipart upload is performed on a part-by-part basis,
+    # it will be as follows:
+    #    part 1)       0x0.. 0x9FFFFF :                      <not write area(0x00)>
+    #    part 2)  0xA00000..0x13FFFFF :  0xA00000..0xBFFFFF  <not write area(0x00)>
+    #                                    0xC00000..0xCFFFFF  <write area>
+    #                                    0xD00000..0x13FFFFF <not write area(0x00)>
+    #    part 3) 0x1400000..0x1DFFFFF :                      <not write area(0x00)>
+    #    part 4) 0x1E00000..0x27FFFFF : 0x1E00000..0x22FFFFF <not write area(0x00)>
+    #                                   0x2300000..0x27FFFFF <write area>
+    #    part 5) 0x2800000..0x31FFFFF :                      <write area>
+    #    part 6) 0x3200000..0x3BFFFFF : 0x3200000..0x36FFFFF <write area>
+    #                                   0x3700000..0x3BFFFFF <not write area(0x00)>
+    #    part 7) 0x3C00000..0x45FFFFF :                      <not write area(0x00)>
+    #    part 8) 0x4600000..0x4BFFFFF : 0x4600000..0x49FFFFF <not write area(0x00)>
+    #    part 8) 0x4600000..0x4BFFFFF : 0x4A00000..0x4AFFFFF <write area>
+    #                                   0x4B00000..0x4BFFFFF <not write area(0x00)>
+    # 
+    ./write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 77594624:65536
+
+    #
+    # delete cache file if using cache
+    #
+    if ps u $S3FS_PID | grep -q use_cache; then
+        rm -f ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+        rm -f ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}
+    fi
+
+    #
+    # Compare
+    #
+    cmp ${_SKIPWRITE_FILE} ${_TMP_SKIPWRITE_FILE}
+
+    #
+    # Clean files
+    #
+    rm_test_file ${_SKIPWRITE_FILE}
+    rm_test_file ${_TMP_SKIPWRITE_FILE}
+}
+
 function add_all_tests {
     if ps u $S3FS_PID | grep -q use_cache; then
         add_tests test_cache_file_stat
@@ -1546,6 +1683,7 @@ function add_all_tests {
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file
     fi
+    test_write_data_with_skip
 }
 
 init_suite

@@ -30,6 +30,9 @@ EXTRA_DIST = \
 
 testdir = test
 
+noinst_PROGRAMS = write_multiblock
+write_multiblock_SOURCES = write_multiblock.cc
+
 #
 # Local variables:
 # tab-width: 4
