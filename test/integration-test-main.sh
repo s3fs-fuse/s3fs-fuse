@@ -1232,9 +1232,9 @@ function test_cache_file_stat() {
     dd if=/dev/urandom of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     #
-    # get "testrun-xxx" directory name
+    # The first argument of the script is "testrun-<random>" the directory name.
     #
-    CACHE_TESTRUN_DIR=$(ls -1 ${CACHE_DIR}/${TEST_BUCKET_1}/ 2>/dev/null | grep testrun 2>/dev/null)
+    CACHE_TESTRUN_DIR=$1
 
     #
     # get cache file inode number
@@ -1332,9 +1332,9 @@ function test_zero_cache_file_stat() {
     touch ${TEST_TEXT_FILE}
 
     #
-    # get "testrun-xxx" directory name
+    # The first argument of the script is "testrun-<random>" the directory name.
     #
-    CACHE_TESTRUN_DIR=$(ls -1 ${CACHE_DIR}/${TEST_BUCKET_1}/ 2>/dev/null | grep testrun 2>/dev/null)
+    CACHE_TESTRUN_DIR=$1
 
     # [NOTE]
     # The stat file is a one-line text file, expecting for "<inode>:0"(ex. "4543937: 0").
