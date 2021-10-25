@@ -103,25 +103,22 @@ fi
 # This function execute the function parameters $1 times
 # before giving up, with 1 second delays.
 function retry {
-    set +o errexit
     N=$1; shift;
-    status=0
+    rc=0
     for i in $(seq $N); do
         echo "Trying: $*"
-        eval $@
-        status=$?
-        if [ $status == 0 ]; then
+        eval $@ && rc=$? || rc=$?
+        if [ $rc == 0 ]; then
             break
         fi
         sleep 1
         echo "Retrying: $*"
     done
 
-    if [ $status != 0 ]; then
+    if [ $rc != 0 ]; then
         echo "timeout waiting for $*"
     fi
-    set -o errexit
-    return $status
+    return $rc
 }
 
 # Proxy is not started if S3PROXY_BINARY is an empty string
@@ -268,20 +265,18 @@ function start_s3fs {
     rm -f pid
 
     if [ `uname` = "Darwin" ]; then
-         set +o errexit
          TRYCOUNT=0
          while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
-             df | grep -q $TEST_BUCKET_MOUNT_POINT_1
-             if [ $? -eq 0 ]; then
+             df | grep -q $TEST_BUCKET_MOUNT_POINT_1 && rc=$? || rc=$?
+             if [ $rc -eq 0 ]; then
                  break;
              fi
              sleep 1
              TRYCOUNT=`expr ${TRYCOUNT} + 1`
          done
-         if [ $? -ne 0 ]; then
+         if [ $rc -ne 0 ]; then
              exit 1
          fi
-         set -o errexit
     else
         retry ${RETRIES:=20} grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
     fi
