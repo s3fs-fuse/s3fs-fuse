@@ -144,8 +144,8 @@ function test_mv_to_exist_file {
 
     BIG_MV_FILE_BLOCK_SIZE=$((BIG_FILE_BLOCK_SIZE + 1))
 
-    dd if=/dev/urandom of="${BIG_FILE}" bs=${BIG_FILE_BLOCK_SIZE} count=${BIG_FILE_COUNT}
-    dd if=/dev/urandom of="${BIG_FILE}-mv" bs=${BIG_MV_FILE_BLOCK_SIZE} count=${BIG_FILE_COUNT}
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${BIG_FILE}"
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${BIG_FILE}-mv"
 
     mv ${BIG_FILE} ${BIG_FILE}-mv
 
@@ -446,7 +446,7 @@ function test_update_metadata_external_large_object() {
     TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
     TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
 
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
 
     #
     # chmod
@@ -517,7 +517,7 @@ function test_rename_before_close {
 function test_multipart_upload {
     describe "Testing multi-part upload ..."
 
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
     dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     # Verify contents of file
@@ -534,7 +534,7 @@ function test_multipart_upload {
 function test_multipart_copy {
     describe "Testing multi-part copy ..."
 
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
     dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
     mv "${BIG_FILE}" "${BIG_FILE}-copy"
 
@@ -558,7 +558,7 @@ function test_multipart_mix {
     if [ `uname` = "Darwin" ]; then
        cat /dev/null > $BIG_FILE
     fi
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
     dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
 
     # (1) Edit the middle of an existing file
@@ -638,7 +638,7 @@ function test_multipart_mix {
 function test_utimens_during_multipart {
     describe "Testing utimens calling during multipart copy ..."
 
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
 
     cp ${TEMP_DIR}/${BIG_FILE} ${BIG_FILE}
 
@@ -1103,7 +1103,7 @@ function test_concurrent_directory_updates {
 
 function test_concurrent_reads {
     describe "Test concurrent reads from a file ..."
-    dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEST_TEXT_FILE}"
     for process in `seq 10`; do
         dd if=${TEST_TEXT_FILE} of=/dev/null seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 &
     done
@@ -1113,7 +1113,7 @@ function test_concurrent_reads {
 
 function test_concurrent_writes {
     describe "Test concurrent writes to a file ..."
-    dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${TEST_TEXT_FILE}"
     for process in `seq 10`; do
         dd if=/dev/zero of=${TEST_TEXT_FILE} seek=$(($RANDOM % $BIG_FILE_LENGTH)) count=16 bs=1024 conv=notrunc &
     done
@@ -1152,7 +1152,7 @@ function test_clean_up_cache() {
     mkdir -p $dir
 
     for x in $(seq $count); do
-        dd if=/dev/urandom of=$dir/file-$x bs=10485760 count=1
+        ../../junk_data 10485760 > $dir/file-$x
     done
 
     file_cnt=$(ls $dir | wc -l)
@@ -1227,7 +1227,7 @@ function test_truncate_cache() {
 function test_cache_file_stat() {
     describe "Test cache file stat ..."
 
-    dd if=/dev/urandom of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${BIG_FILE}"
 
     #
     # The first argument of the script is "testrun-<random>" the directory name.
@@ -1383,7 +1383,7 @@ function test_mix_upload_entities() {
     #
     # Make test file
     #
-    dd if=/dev/urandom of="${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${BIG_FILE}"
 
     #
     # If the cache option is enabled, delete the cache of uploaded files.
@@ -1420,7 +1420,7 @@ function test_ensurespace_move_file() {
     # Make test file which is not under mountpoint
     #
     mkdir -p ${CACHE_DIR}/.s3fs_test_tmpdir
-    dd if=/dev/urandom of="${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" bs=$BIG_FILE_BLOCK_SIZE count=$BIG_FILE_COUNT
+    ../../junk_data $(($BIG_FILE_BLOCK_SIZE * $BIG_FILE_COUNT)) > "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}"
 
     #
     # Backup file stat

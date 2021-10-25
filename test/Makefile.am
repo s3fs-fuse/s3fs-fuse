@@ -30,7 +30,11 @@ EXTRA_DIST = \
 
 testdir = test
 
-noinst_PROGRAMS = write_multiblock
+noinst_PROGRAMS = \
+    junk_data \
+    write_multiblock
+
+junk_data_SOURCES = junk_data.c
 write_multiblock_SOURCES = write_multiblock.cc
 
 #
