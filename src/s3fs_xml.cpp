@@ -42,15 +42,19 @@ static pthread_mutex_t* pxml_parser_mutex = NULL;
 //-------------------------------------------------------------------
 static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
 {
-    static time_t tmLast = 0;  // cache for 60 sec.
-    static std::string strNs;
     bool result = false;
 
     if(!pxml_parser_mutex || !doc){
-        return false;
+        return result;
     }
-    if((tmLast + 60) < time(NULL)){
+
+    std::string tmpNs;
+    {
+        static time_t tmLast = 0;  // cache for 60 sec.
+        static std::string strNs;
+
         AutoLock lock(pxml_parser_mutex);
+
         if((tmLast + 60) < time(NULL)){
             // refresh
             tmLast = time(NULL);
@@ -62,16 +66,17 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
                     if(nslist[0] && nslist[0]->href){
                         int len = xmlStrlen(nslist[0]->href);
                         if(0 < len){
-                            strNs  = std::string((const char*)(nslist[0]->href), len);
+                            strNs = std::string((const char*)(nslist[0]->href), len);
                         }
                     }
                     S3FS_XMLFREE(nslist);
                 }
             }
         }
+        tmpNs = strNs;
     }
-    if(!strNs.empty()){
-        nsurl  = strNs;
+    if(!tmpNs.empty()){
+        nsurl  = tmpNs;
         result = true;
     }
     return result;
