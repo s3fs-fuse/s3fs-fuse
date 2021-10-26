@@ -1545,7 +1545,7 @@ function test_write_data_with_skip() {
     #    part 8) 0x4600000..0x4BFFFFF : 0x4600000..0x4AFFFFF <not write area(0x00)>
     #                                   0x4B00000..0x4BFFFFF <write area>
     # 
-    ./write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 78643200:65536
+    ../../write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 78643200:65536
 
     #
     # delete cache file if using cache
@@ -1598,7 +1598,7 @@ function test_write_data_with_skip() {
     #    part 8) 0x4600000..0x4BFFFFF : 0x4A00000..0x4AFFFFF <write area>
     #                                   0x4B00000..0x4BFFFFF <not write area(0x00)>
     # 
-    ./write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 77594624:65536
+    ../../write_multiblock -f "${_SKIPWRITE_FILE}" -f "${_TMP_SKIPWRITE_FILE}" -p 12582912:65536 -p 36700160:20971520 -p 77594624:65536
 
     #
     # delete cache file if using cache
@@ -1681,7 +1681,7 @@ function add_all_tests {
     if ! ps u $S3FS_PID | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file
     fi
-    test_write_data_with_skip
+    add_tests test_write_data_with_skip
 }
 
 init_suite
