@@ -77,7 +77,7 @@ export S3_ENDPOINT
 export TEST_SCRIPT_DIR=`pwd`
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
-S3PROXY_VERSION="1.8.0"
+S3PROXY_VERSION="1.9.0"
 S3PROXY_BINARY=${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
@@ -107,7 +107,7 @@ function retry {
     rc=0
     for i in $(seq $N); do
         echo "Trying: $*"
-        eval $@ && rc=$? || rc=$?
+        eval $@; rc=$?
         if [ $rc == 0 ]; then
             break
         fi
@@ -267,7 +267,7 @@ function start_s3fs {
     if [ `uname` = "Darwin" ]; then
          TRYCOUNT=0
          while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
-             df | grep -q $TEST_BUCKET_MOUNT_POINT_1 && rc=$? || rc=$?
+             df | grep -q $TEST_BUCKET_MOUNT_POINT_1; rc=$?
              if [ $rc -eq 0 ]; then
                  break;
              fi
