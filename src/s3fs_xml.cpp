@@ -52,7 +52,10 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
             xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
             if(nslist){
                 if(nslist[0] && nslist[0]->href){
-                    strNs  = (const char*)(nslist[0]->href);
+                    int len = xmlStrlen(nslist[0]->href);
+                    if(0 < len){
+                        strNs  = std::string((const char*)(nslist[0]->href), len);
+                    }
                 }
                 S3FS_XMLFREE(nslist);
             }
