@@ -4983,6 +4983,13 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // mutex for xml
+    if(!init_parser_xml_lock()){
+        S3FS_PRN_EXIT("could not initialize mutex for xml parser.");
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
     // init curl (without mime types)
     //
     // [NOTE]
@@ -5002,6 +5009,7 @@ int main(int argc, char* argv[])
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5015,6 +5023,7 @@ int main(int argc, char* argv[])
     if(0 != fuse_opt_parse(&custom_args, NULL, NULL, my_fuse_opt_proc)){
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5030,12 +5039,14 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::FinalCheckSse()){
         S3FS_PRN_EXIT("something wrong about SSE options.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5050,6 +5061,7 @@ int main(int argc, char* argv[])
         show_usage();
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5058,6 +5070,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("BUCKET %s, name not compatible with virtual-hosted style.", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5067,6 +5080,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5074,6 +5088,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5087,6 +5102,7 @@ int main(int argc, char* argv[])
             show_usage();
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
     }
@@ -5096,24 +5112,28 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
     if(!passwd_file.empty() && S3fsCurl::IsSetAccessKeys()){
         S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
         if(EXIT_SUCCESS != get_access_keys()){
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
         if(!S3fsCurl::IsSetAccessKeys()){
             S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
         // More error checking on the access key pair can be done
@@ -5125,6 +5145,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("temporary directory doesn't exists.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5133,6 +5154,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5149,6 +5171,7 @@ int main(int argc, char* argv[])
             S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
 
@@ -5156,6 +5179,7 @@ int main(int argc, char* argv[])
             S3FS_PRN_EXIT("missing service instance ID for bucket creation");
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
     }
@@ -5194,6 +5218,7 @@ int main(int argc, char* argv[])
 
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(exitcode);
     }
 
@@ -5208,6 +5233,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5260,6 +5286,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_WARN("Could not release curl library.");
     }
     s3fs_destroy_global_ssl();
+    destroy_parser_xml_lock();
 
     // cleanup xml2
     xmlCleanupParser();

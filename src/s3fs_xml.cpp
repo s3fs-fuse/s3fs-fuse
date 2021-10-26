@@ -25,11 +25,17 @@
 #include "s3fs.h"
 #include "s3fs_xml.h"
 #include "s3fs_util.h"
+#include "autolock.h"
 
 //-------------------------------------------------------------------
 // Variables
 //-------------------------------------------------------------------
 static const char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
+
+// [NOTE]
+// mutex for static variables in GetXmlNsUrl
+//
+static pthread_mutex_t* pxml_parser_mutex = NULL;
 
 //-------------------------------------------------------------------
 // Functions
@@ -40,24 +46,27 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
     static std::string strNs;
     bool result = false;
 
-    if(!doc){
+    if(!pxml_parser_mutex || !doc){
         return false;
     }
     if((tmLast + 60) < time(NULL)){
-        // refresh
-        tmLast = time(NULL);
-        strNs  = "";
-        xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
-        if(pRootNode){
-            xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
-            if(nslist){
-                if(nslist[0] && nslist[0]->href){
-                    int len = xmlStrlen(nslist[0]->href);
-                    if(0 < len){
-                        strNs  = std::string((const char*)(nslist[0]->href), len);
+        AutoLock lock(pxml_parser_mutex);
+        if((tmLast + 60) < time(NULL)){
+            // refresh
+            tmLast = time(NULL);
+            strNs  = "";
+            xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
+            if(pRootNode){
+                xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
+                if(nslist){
+                    if(nslist[0] && nslist[0]->href){
+                        int len = xmlStrlen(nslist[0]->href);
+                        if(0 < len){
+                            strNs  = std::string((const char*)(nslist[0]->href), len);
+                        }
                     }
+                    S3FS_XMLFREE(nslist);
                 }
-                S3FS_XMLFREE(nslist);
             }
         }
     }
@@ -495,6 +504,44 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     S3FS_XMLFREEDOC(doc);
 
     return result;
+}
+
+//-------------------------------------------------------------------
+// Utility for lock
+//-------------------------------------------------------------------
+bool init_parser_xml_lock()
+{
+    if(pxml_parser_mutex){
+        return false;
+    }
+    pxml_parser_mutex = new pthread_mutex_t;
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+
+    if(0 != pthread_mutex_init(pxml_parser_mutex, &attr)){
+        delete pxml_parser_mutex;
+        pxml_parser_mutex = NULL;
+        return false;
+    }
+    return true;
+}
+
+bool destroy_parser_xml_lock()
+{
+    if(!pxml_parser_mutex){
+        return false;
+    }
+    if(0 != pthread_mutex_destroy(pxml_parser_mutex)){
+        return false;
+    }
+    delete pxml_parser_mutex;
+    pxml_parser_mutex = NULL;
+
+    return true;
 }
 
 /*
