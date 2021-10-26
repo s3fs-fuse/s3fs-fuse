@@ -235,7 +235,7 @@ function run_suite {
    key_prefix="testrun-$RANDOM"
    cd_run_dir $key_prefix
    for t in "${TEST_LIST[@]}"; do
-       $t $key_prefix && rc=$? || rc=$?
+       $t $key_prefix; rc=$?
        if [[ $rc == 0 ]] ; then
            report_pass $t
        else

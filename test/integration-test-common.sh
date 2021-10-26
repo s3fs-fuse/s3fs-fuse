@@ -107,7 +107,7 @@ function retry {
     rc=0
     for i in $(seq $N); do
         echo "Trying: $*"
-        eval $@ && rc=$? || rc=$?
+        eval $@; rc=$?
         if [ $rc == 0 ]; then
             break
         fi
@@ -267,7 +267,7 @@ function start_s3fs {
     if [ `uname` = "Darwin" ]; then
          TRYCOUNT=0
          while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
-             df | grep -q $TEST_BUCKET_MOUNT_POINT_1 && rc=$? || rc=$?
+             df | grep -q $TEST_BUCKET_MOUNT_POINT_1; rc=$?
              if [ $rc -eq 0 ]; then
                  break;
              fi
