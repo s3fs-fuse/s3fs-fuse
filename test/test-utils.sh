@@ -238,6 +238,7 @@ function run_suite {
        # Ensure test input name differs every iteration
        TEST_TEXT_FILE=test-s3fs.txt-$RANDOM
        $t $key_prefix && rc=$? || rc=$?
+
        if [[ $rc == 0 ]] ; then
            report_pass $t
        else
