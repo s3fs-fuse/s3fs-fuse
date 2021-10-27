@@ -739,7 +739,7 @@ function test_mtime_file {
 
     # create the test file again
     mk_test_file
-    sleep 2 # allow for some time to pass to compare the timestamps between test & alt
+    sleep 1 # allow for some time to pass to compare the timestamps between test & alt
 
     #copy the test file with preserve mode
     cp -p $TEST_TEXT_FILE $ALT_TEST_TEXT_FILE
@@ -781,7 +781,7 @@ function test_update_time() {
     base_atime=`get_atime $TEST_TEXT_FILE`
     base_ctime=`get_ctime $TEST_TEXT_FILE`
     base_mtime=`get_mtime $TEST_TEXT_FILE`
-    sleep 2
+    sleep 1
 
     #
     # chmod -> update only ctime
@@ -795,7 +795,7 @@ function test_update_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # chown -> update only ctime
@@ -809,7 +809,7 @@ function test_update_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # set_xattr -> update only ctime
@@ -823,7 +823,7 @@ function test_update_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # touch -> update ctime/atime/mtime
@@ -839,7 +839,7 @@ function test_update_time() {
     base_atime=$atime
     base_mtime=$mtime
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # "touch -a" -> update ctime/atime, not update mtime
@@ -855,7 +855,7 @@ function test_update_time() {
         fi
         base_atime=$atime
         base_ctime=$ctime
-        sleep 2
+        sleep 1
     fi
 
     #
@@ -871,7 +871,7 @@ function test_update_time() {
     fi
     base_mtime=$mtime
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # cp -p -> update ctime, not update atime/mtime
@@ -885,7 +885,7 @@ function test_update_time() {
        echo "cp with -p option expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    sleep 2
+    sleep 1
 
     #
     # mv -> update ctime, not update atime/mtime
@@ -929,7 +929,7 @@ function test_update_directory_time() {
     subfile_atime=`get_atime $TIME_TEST_FILE_INDIR`
     subfile_ctime=`get_ctime $TIME_TEST_FILE_INDIR`
     subfile_mtime=`get_mtime $TIME_TEST_FILE_INDIR`
-    sleep 2
+    sleep 1
 
     #
     # chmod -> update only ctime
@@ -943,7 +943,7 @@ function test_update_directory_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # chown -> update only ctime
@@ -957,7 +957,7 @@ function test_update_directory_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # set_xattr -> update only ctime
@@ -971,7 +971,7 @@ function test_update_directory_time() {
        return 1
     fi
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # touch -> update ctime/atime/mtime
@@ -987,7 +987,7 @@ function test_update_directory_time() {
     base_atime=$atime
     base_mtime=$mtime
     base_ctime=$ctime
-    sleep 2
+    sleep 1
 
     #
     # "touch -a" -> update ctime/atime, not update mtime
@@ -1003,7 +1003,7 @@ function test_update_directory_time() {
         fi
         base_atime=$atime
         base_ctime=$ctime
-        sleep 2
+        sleep 1
     fi
 
     #
