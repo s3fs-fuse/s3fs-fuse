@@ -58,7 +58,7 @@ CONFIGURE_OPTIONS="CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/u
 #-----------------------------------------------------------
 # OS dependent variables
 #-----------------------------------------------------------
-if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.04" ]; then
+if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.10" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
@@ -149,6 +149,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     INSTALL_JDK_PACKAGES="java-1_8_0-openjdk"
 
 else
+    echo "No container configured for: ${CONTAINER_FULLNAME}"
     exit 1
 fi
 
