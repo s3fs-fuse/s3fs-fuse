@@ -771,17 +771,15 @@ function test_mtime_file {
 # will not be called from FUSE library. We added this bypass because
 # the test became unstable.
 #
-function test_update_time() {
-    describe "Testing update time function ..."
+function test_update_time_chmod() {
+    describe "Testing update time function chmod..."
 
-    #
-    # create the test
-    #
-    mk_test_file
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     base_atime=`get_atime $TEST_TEXT_FILE`
     base_ctime=`get_ctime $TEST_TEXT_FILE`
     base_mtime=`get_mtime $TEST_TEXT_FILE`
-    sleep 1
 
     #
     # chmod -> update only ctime
@@ -794,12 +792,22 @@ function test_update_time() {
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
+    rm_test_file
+}
+
+function test_update_time_chown() {
+    describe "Testing update time function chown..."
 
     #
     # chown -> update only ctime
     #
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
+
     chown $UID $TEST_TEXT_FILE
     atime=`get_atime $TEST_TEXT_FILE`
     ctime=`get_ctime $TEST_TEXT_FILE`
@@ -808,8 +816,18 @@ function test_update_time() {
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
+    rm_test_file
+}
+
+function test_update_time_xattr() {
+    describe "Testing update time function set_xattr..."
+
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # set_xattr -> update only ctime
@@ -822,8 +840,18 @@ function test_update_time() {
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
+    rm_test_file
+}
+
+function test_update_time_touch() {
+    describe "Testing update time function touch..."
+
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # touch -> update ctime/atime/mtime
@@ -836,27 +864,42 @@ function test_update_time() {
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
-    base_atime=$atime
-    base_mtime=$mtime
-    base_ctime=$ctime
-    sleep 1
+    rm_test_file
+}
+
+function test_update_time_touch_a() {
+    describe "Testing update time function touch -a..."
+
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # "touch -a" -> update ctime/atime, not update mtime
     #
-    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
-        touch -a $TEST_TEXT_FILE
-        atime=`get_atime $TEST_TEXT_FILE`
-        ctime=`get_ctime $TEST_TEXT_FILE`
-        mtime=`get_mtime $TEST_TEXT_FILE`
-        if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
-           echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
-           return 1
-        fi
-        base_atime=$atime
-        base_ctime=$ctime
-        sleep 1
+    touch -a $TEST_TEXT_FILE
+    atime=`get_atime $TEST_TEXT_FILE`
+    ctime=`get_ctime $TEST_TEXT_FILE`
+    mtime=`get_mtime $TEST_TEXT_FILE`
+    if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+        echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+        return 1
     fi
+    rm_test_file
+}
+
+function test_update_time_append() {
+    describe "Testing update time function append..."
+
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # append -> update ctime/mtime, not update atime
@@ -866,12 +909,19 @@ function test_update_time() {
     ctime=`get_ctime $TEST_TEXT_FILE`
     mtime=`get_mtime $TEST_TEXT_FILE`
     if [ $base_atime -ne $atime -o $base_ctime -eq $ctime -o $base_mtime -eq $mtime ]; then
-       echo "append expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime and same atime: $base_atime == $atime"
-       return 1
+        echo "append expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime and same atime: $base_atime == $atime"
+        return 1
     fi
-    base_mtime=$mtime
-    base_ctime=$ctime
-    sleep 1
+    rm_test_file
+}
+
+function test_update_time_cp_p() {
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # cp -p -> update ctime, not update atime/mtime
@@ -885,7 +935,15 @@ function test_update_time() {
        echo "cp with -p option expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    sleep 1
+}
+
+function test_update_time_mv() {
+    t0=1000000000  # 9 September 2001
+    OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
+    echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    base_atime=`get_atime $TEST_TEXT_FILE`
+    base_ctime=`get_ctime $TEST_TEXT_FILE`
+    base_mtime=`get_mtime $TEST_TEXT_FILE`
 
     #
     # mv -> update ctime, not update atime/mtime
@@ -992,7 +1050,7 @@ function test_update_directory_time() {
     #
     # "touch -a" -> update ctime/atime, not update mtime
     #
-    if ! cat /proc/mounts | grep "^s3fs " | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -e noatime -e relatime >/dev/null; then
+    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         touch -a $TEST_DIR
         atime=`get_atime $TEST_DIR`
         ctime=`get_ctime $TEST_DIR`
@@ -1661,7 +1719,16 @@ function add_all_tests {
     add_tests test_symlink
     add_tests test_extended_attributes
     add_tests test_mtime_file
-    add_tests test_update_time
+    add_tests test_update_time_chmod
+    add_tests test_update_time_chown
+    add_tests test_update_time_xattr
+    add_tests test_update_time_touch
+    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+        add_tests test_update_time_touch_a
+    fi
+    add_tests test_update_time_append
+    add_tests test_update_time_cp_p
+    add_tests test_update_time_mv
     add_tests test_update_directory_time
     add_tests test_rm_rf_dir
     add_tests test_copy_file
