@@ -26,10 +26,6 @@
 set -o errexit
 set -o pipefail
 
-# Require root
-REQUIRE_ROOT=require-root.sh
-#source $REQUIRE_ROOT
-
 source integration-test-common.sh
 
 CACHE_DIR="/tmp/s3fs-cache"
