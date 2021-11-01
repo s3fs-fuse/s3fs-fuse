@@ -4677,6 +4677,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetContentMd5(true);
             return 0;
         }
+        if(0 == strcmp(arg, "enable_unsigned_payload")){
+            S3fsCurl::SetUnsignedPayload(true);
+            return 0;
+        }
         if(is_prefix(arg, "host=")){
             s3host = strchr(arg, '=') + sizeof(char);
             return 0;
@@ -5048,6 +5052,10 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
+    }
+
+    if(S3fsCurl::GetSignatureType() == V2_ONLY && S3fsCurl::GetUnsignedPayload()){
+        S3FS_PRN_WARN("Ignoring enable_unsigned_payload with sigv2");
     }
 
     if(!FdEntity::GetNoMixMultipart() && max_dirty_data != -1){

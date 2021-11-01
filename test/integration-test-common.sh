@@ -249,6 +249,7 @@ function start_s3fs {
             -o ssl_verify_hostname=0 \
             -o use_xattr=1 \
             -o createbucket \
+            -o enable_unsigned_payload \
             ${AUTH_OPT} \
             ${DIRECT_IO_OPT} \
             -o stat_cache_expire=1 \

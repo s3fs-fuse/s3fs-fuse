@@ -137,6 +137,7 @@ int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
 signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
+bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
 bool             S3fsCurl::is_use_session_token= false;          // default
@@ -2879,7 +2880,11 @@ void S3fsCurl::insertV4Headers()
     std::string payload_hash;
     switch (type) {
         case REQTYPE_PUT:
-            payload_hash = s3fs_sha256_hex_fd(b_infile == NULL ? -1 : fileno(b_infile), 0, -1);
+            if(GetUnsignedPayload()){
+                payload_hash = "UNSIGNED-PAYLOAD";
+            }else{
+                payload_hash = s3fs_sha256_hex_fd(b_infile == NULL ? -1 : fileno(b_infile), 0, -1);
+            }
             break;
 
         case REQTYPE_COMPLETEMULTIPOST:
@@ -2894,7 +2899,11 @@ void S3fsCurl::insertV4Headers()
             }
 
         case REQTYPE_UPLOADMULTIPOST:
-            payload_hash = s3fs_sha256_hex_fd(partdata.fd, partdata.startpos, partdata.size);
+            if(GetUnsignedPayload()){
+                payload_hash = "UNSIGNED-PAYLOAD";
+            }else{
+                payload_hash = s3fs_sha256_hex_fd(partdata.fd, partdata.startpos, partdata.size);
+            }
             break;
         default:
             break;
