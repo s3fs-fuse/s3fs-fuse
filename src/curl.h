@@ -169,6 +169,7 @@ class S3fsCurl
         static off_t            multipart_size;
         static off_t            multipart_copy_size;
         static signature_type_t signature_type;
+        static bool             is_unsigned_payload;
         static bool             is_ua;             // User-Agent
         static bool             listobjectsv2;
         static bool             requester_pays;
@@ -364,6 +365,8 @@ class S3fsCurl
         static off_t GetMultipartCopySize() { return S3fsCurl::multipart_copy_size; }
         static signature_type_t SetSignatureType(signature_type_t signature_type) { signature_type_t bresult = S3fsCurl::signature_type; S3fsCurl::signature_type = signature_type; return bresult; }
         static signature_type_t GetSignatureType() { return S3fsCurl::signature_type; }
+        static bool SetUnsignedPayload(bool issset) { bool bresult = S3fsCurl::is_unsigned_payload; S3fsCurl::is_unsigned_payload = issset; return bresult; }
+        static bool GetUnsignedPayload() { return S3fsCurl::is_unsigned_payload; }
         static bool SetUserAgentFlag(bool isset) { bool bresult = S3fsCurl::is_ua; S3fsCurl::is_ua = isset; return bresult; }
         static bool IsUserAgentFlag() { return S3fsCurl::is_ua; }
         static void InitUserAgent();
