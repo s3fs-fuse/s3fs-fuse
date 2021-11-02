@@ -1200,6 +1200,72 @@ int S3fsCurl::MapPutErrorResponse(int result)
     return result;
 }
 
+// [NOTE]
+// It is a factory method as utility because it requires an S3fsCurl object
+// initialized for multipart upload from outside this class.
+//
+S3fsCurl* S3fsCurl::CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result)
+{
+    // duplicate fd
+    if(!tpath || -1 == fd || start < 0 || size <= 0 || !petag){
+        S3FS_PRN_ERR("Parameters are wrong: tpath(%s), fd(%d), start(%lld), size(%lld), petag(%s)", SAFESTRPTR(tpath), fd, static_cast<long long int>(start), static_cast<long long int>(size), (petag ? "not null" : "null"));
+        result = -EIO;
+        return NULL;
+    }
+    result = 0;
+
+    S3fsCurl* s3fscurl = new S3fsCurl(true);
+
+    if(!is_copy){
+        s3fscurl->partdata.fd         = fd;
+        s3fscurl->partdata.startpos   = start;
+        s3fscurl->partdata.size       = size;
+        s3fscurl->partdata.is_copy    = is_copy;
+        s3fscurl->partdata.petag      = petag;                          // [NOTE] be careful, the value is set directly
+        s3fscurl->b_partdata_startpos = s3fscurl->partdata.startpos;
+        s3fscurl->b_partdata_size     = s3fscurl->partdata.size;
+
+        S3FS_PRN_INFO3("Upload Part [tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), part_num);
+
+        if(0 != (result = s3fscurl->UploadMultipartPostSetup(tpath, part_num, upload_id))){
+            S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+            delete s3fscurl;
+            return NULL;
+        }
+    }else{
+        headers_t   meta;
+        std::string srcresource;
+        std::string srcurl;
+        MakeUrlResource(get_realpath(tpath).c_str(), srcresource, srcurl);
+        meta["x-amz-copy-source"] = srcresource;
+
+        std::ostringstream strrange;
+        strrange << "bytes=" << start << "-" << (start + size - 1);
+        meta["x-amz-copy-source-range"]   = strrange.str();
+
+        s3fscurl->b_from         = SAFESTRPTR(tpath);
+        s3fscurl->b_meta         = meta;
+        s3fscurl->partdata.petag = petag;                               // [NOTE] be careful, the value is set directly
+
+        S3FS_PRN_INFO3("Copy Part [tpath=%s][start=%lld][size=%lld][part=%d]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), part_num);
+
+        if(0 != (result = s3fscurl->CopyMultipartPostSetup(tpath, tpath, part_num, upload_id, meta))){
+            S3FS_PRN_ERR("failed uploading part setup(%d)", result);
+            delete s3fscurl;
+            return NULL;
+        }
+    }
+
+    // Call lazy function
+    if(!s3fscurl->fpLazySetup || !s3fscurl->fpLazySetup(s3fscurl)){
+        S3FS_PRN_ERR("failed lazy function setup for uploading part");
+        result = -EIO;
+        delete s3fscurl;
+        return NULL;
+    }
+    return s3fscurl;
+}
+
 int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd)
 {
     int            result;
