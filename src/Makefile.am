@@ -54,6 +54,7 @@ s3fs_SOURCES = \
     addhead.cpp \
     sighandlers.cpp \
     autolock.cpp \
+    threadpoolman.cpp \
     common_auth.cpp
 if USE_SSL_OPENSSL
     s3fs_SOURCES += openssl_auth.cpp

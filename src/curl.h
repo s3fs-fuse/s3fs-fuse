@@ -45,7 +45,7 @@
 //  CURLOPT_SSL_ENABLE_ALPN         7.36.0 and later
 //  CURLOPT_KEEP_SENDING_ON_ERROR   7.51.0 and later
 //
-// s3fs uses these, if you build s3fs with the old libcurl, 
+// s3fs uses these, if you build s3fs with the old libcurl,
 // substitute the following symbols to avoid errors.
 // If the version of libcurl linked at runtime is old,
 // curl_easy_setopt results in an error(CURLE_UNKNOWN_OPTION) and
@@ -191,7 +191,7 @@ class S3fsCurl
         std::vector<pthread_t> *completed_tids;
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
-    
+
     public:
         static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
         static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
@@ -230,7 +230,6 @@ class S3fsCurl
         static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
         // lazy functions for set curl options
-        static bool UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
         static bool CopyMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
         static bool PreGetObjectRequestSetCurlOpts(S3fsCurl* s3fscurl);
         static bool PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl);
@@ -259,7 +258,6 @@ class S3fsCurl
         int CopyMultipartPostSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
         bool UploadMultipartPostComplete();
         bool CopyMultipartPostComplete();
-        bool MixMultipartPostComplete();
         int MapPutErrorResponse(int result);
 
     public:
@@ -268,9 +266,13 @@ class S3fsCurl
         static bool InitCredentialObject(S3fsCred* pcredobj);
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
+        static S3fsCurl* CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result);
         static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
         static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size);
+
+        // lazy functions for set curl options(public)
+        static bool UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
 
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
@@ -357,6 +359,7 @@ class S3fsCurl
         int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
         int CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, etaglist_t& parts);
         int UploadMultipartPostRequest(const char* tpath, int part_num, const std::string& upload_id);
+        bool MixMultipartPostComplete();
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
         int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);

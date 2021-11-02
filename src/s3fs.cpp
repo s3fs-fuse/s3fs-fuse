@@ -47,6 +47,7 @@
 #include "s3fs_help.h"
 #include "s3fs_util.h"
 #include "mpu_util.h"
+#include "threadpoolman.h"
 
 //-------------------------------------------------------------------
 // Symbols
@@ -95,6 +96,7 @@ static int max_keys_list_object   = 1000;// default is 1000
 static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
+static int max_thread_count       = 5;  // default is 5
 
 //-------------------------------------------------------------------
 // Global functions : prototype
@@ -4084,6 +4086,16 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetMaxParallelCount(maxpara);
             return 0;
         }
+        if(is_prefix(arg, "max_thread_count=")){
+            int max_thcount = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            if(0 >= max_thcount){
+                S3FS_PRN_EXIT("argument should be over 1: max_thread_count");
+                return -1;
+            }
+            max_thread_count = max_thcount;
+            S3FS_PRN_WARN("The max_thread_count option is not a formal option. Please note that it will change in the future.");
+            return 0;
+        }
         if(is_prefix(arg, "fd_page_size=")){
             S3FS_PRN_ERR("option fd_page_size is no longer supported, so skip this option.");
             return 0;
@@ -4162,6 +4174,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(0 == strcmp(arg, "nocopyapi")){
             nocopyapi = true;
+            return 0;
+        }
+        if(0 == strcmp(arg, "streamupload")){
+            FdEntity::SetStreamUpload(true);
+            S3FS_PRN_WARN("The streamupload option is not a formal option. Please note that it will change in the future.");
             return 0;
         }
         if(0 == strcmp(arg, "norenameapi")){
@@ -4672,6 +4689,14 @@ int main(int argc, char* argv[])
         max_dirty_data = -1;
     }
 
+    if(!ThreadPoolMan::Initialize(max_thread_count)){
+        S3FS_PRN_EXIT("Could not create thread pool(%d)", max_thread_count);
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
+        exit(EXIT_FAILURE);
+    }
+
     // check free disk space
     if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
         S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
@@ -4728,6 +4753,9 @@ int main(int argc, char* argv[])
         fuse_res = s3fs_init_deferred_exit_status;
     }
     fuse_opt_free_args(&custom_args);
+
+    // Destroy thread pool
+    ThreadPoolMan::Destroy();
 
     // Destroy curl
     if(!S3fsCurl::DestroyS3fsCurl()){

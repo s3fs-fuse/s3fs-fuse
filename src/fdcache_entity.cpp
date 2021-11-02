@@ -43,6 +43,7 @@ static const int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max coun
 // FdEntity class variables
 //------------------------------------------------
 bool FdEntity::mixmultipart = true;
+bool FdEntity::streamupload = false;
 
 //------------------------------------------------
 // FdEntity class methods
@@ -51,6 +52,13 @@ bool FdEntity::SetNoMixMultipart()
 {
     bool old = mixmultipart;
     mixmultipart = false;
+    return old;
+}
+
+bool FdEntity::SetStreamUpload(bool isstream)
+{
+    bool old = streamupload;
+    streamupload = isstream;
     return old;
 }
 
@@ -418,6 +426,13 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
 
     AutoLock auto_data_lock(&fdent_data_lock);
 
+    // [NOTE]
+    // When the file size is incremental by truncating, it must be keeped
+    // as an untreated area, and this area is set to these variables.
+    //
+    off_t truncated_start = 0;
+    off_t truncated_size  = 0;
+
     if(-1 != physical_fd){
         //
         // already open file
@@ -436,6 +451,14 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
                 return -EIO;
             }
         }
+
+        // set untreated area
+        if(0 <= size && size_orgmeta < size){
+            // set untreated area
+            truncated_start = size_orgmeta;
+            truncated_size  = size - size_orgmeta;
+        }
+
         // set original headers and set size.
         off_t new_size = (0 <= size ? size : size_orgmeta);
         if(pmeta){
@@ -614,6 +637,12 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
             size_orgmeta = 0;
         }
 
+        // set untreated area
+        if(0 <= size && size_orgmeta < size){
+            truncated_start = size_orgmeta;
+            truncated_size  = size - size_orgmeta;
+        }
+
         // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
         if(-1 != time){
             struct timespec ts = {time, 0};
@@ -632,6 +661,18 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
     PseudoFdInfo*   ppseudoinfo = new PseudoFdInfo(physical_fd, flags);
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
     pseudo_fd_map[pseudo_fd]    = ppseudoinfo;
+
+    // if there is untreated area, set it to pseudo object.
+    if(0 < truncated_size){
+        if(!ppseudoinfo->AddUntreated(truncated_start, truncated_size)){
+            pseudo_fd_map.erase(pseudo_fd);
+            if(pfile){
+                fclose(pfile);
+                pfile = NULL;
+            }
+            delete ppseudoinfo;
+        }
+    }
 
     return pseudo_fd;
 }
@@ -1317,6 +1358,7 @@ int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
     s3fscurl.DestroyCurlHandle();
 
     // clear multipart upload info
+    pseudo_obj->ClearUntreated();
     pseudo_obj->ClearUploadInfo(false);
 
     return 0;
@@ -1370,10 +1412,17 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
         return 0;
     }
 
+    if(S3fsLog::IsS3fsLogDbg()){
+        pagelist.Dump();
+    }
+
     int result;
     if(nomultipart){
         // No multipart upload
         result = RowFlushNoMultipart(pseudo_obj, tpath);
+    }else if(FdEntity::streamupload){
+        // Stream maultipart upload
+        result = RowFlushStreamMultipart(pseudo_obj, tpath);
     }else if(FdEntity::mixmultipart){
         // Mix multipart upload
         result = RowFlushMixMultipart(pseudo_obj, tpath);
@@ -1685,6 +1734,187 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
     return result;
 }
 
+// [NOTE]
+// Both fdent_lock and fdent_data_lock must be locked before calling.
+//
+int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
+{
+    S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d][mix_upload=%s]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, (FdEntity::mixmultipart ? "true" : "false"));
+
+    if(-1 == physical_fd || !pseudo_obj){
+        return -EBADF;
+    }
+    int result;
+
+    if(pagelist.Size() <= S3fsCurl::GetMultipartSize()){
+        //
+        // Use normal upload instead of multipart upload(too small part size)
+        //
+
+        // backup upload file size
+        struct stat st;
+        memset(&st, 0, sizeof(struct stat));
+        if(-1 == fstat(physical_fd, &st)){
+            S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
+        }
+
+        // If there are unloaded pages, they are loaded at here.
+        if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+            S3FS_PRN_ERR("failed to load parts before uploading object(%d)", result);
+            return result;
+        }
+
+        headers_t tmporgmeta = orgmeta;
+        S3fsCurl s3fscurl(true);
+        result = s3fscurl.PutRequest(path.c_str(), tmporgmeta, physical_fd);
+
+        // reset uploaded file size
+        size_orgmeta = st.st_size;
+
+        pseudo_obj->ClearUntreated();
+
+        if(0 == result){
+            pagelist.ClearAllModified();
+        }
+
+    }else{
+        //
+        // Make upload/download/copy/cancel lists from file
+        //
+        mp_part_list_t  to_upload_list;
+        mp_part_list_t  to_copy_list;
+        mp_part_list_t  to_download_list;
+        filepart_list_t cancel_uploaded_list;
+        if(!pseudo_obj->ExtractUploadPartsFromAllArea(to_upload_list, to_copy_list, to_download_list, cancel_uploaded_list, S3fsCurl::GetMultipartSize(), pagelist.Size(), FdEntity::mixmultipart)){
+            S3FS_PRN_ERR("Failed to extract various upload parts list from all area: errno(EIO)");
+            return -EIO;
+        }
+
+        //
+        // Check total size for downloading and Download
+        //
+        total_mp_part_list mptoal;
+        off_t              total_download_size = mptoal(to_download_list);
+        if(0 < total_download_size){
+            //
+            // Check if there is enough free disk space for the total download size
+            //
+            if(!ReserveDiskSpace(total_download_size)){
+                // no enough disk space
+                //
+                // [NOTE]
+                // Because there is no left space size to download, we can't solve this anymore
+                // in this case which is uploading in sequence.
+                //
+                S3FS_PRN_WARN("Not enough local storage(%lld byte) to cache write request for whole of the file: [path=%s][physical_fd=%d]", static_cast<long long int>(total_download_size), path.c_str(), physical_fd);
+                return -ENOSPC;   // No space left on device
+            }
+            // enough disk space
+
+            //
+            // Download all parts
+            //
+            // [TODO]
+            // Execute in parallel downloading with multiple thread.
+            //
+            for(mp_part_list_t::const_iterator download_iter = to_download_list.begin(); download_iter != to_download_list.end(); ++download_iter){
+                if(0 != (result = Load(download_iter->start, download_iter->size, AutoLock::ALREADY_LOCKED))){
+                    break;
+                }
+            }
+            FdManager::FreeReservedDiskSpace(total_download_size);
+            if(0 != result){
+                S3FS_PRN_ERR("failed to load uninitialized area before writing(errno=%d)", result);
+                return result;
+            }
+        }
+
+        //
+        // Has multipart uploading already started?
+        //
+        if(!pseudo_obj->IsUploading()){
+            //
+            // Multipart uploading hasn't started yet, so start it.
+            //
+            S3fsCurl    s3fscurl(true);
+            std::string upload_id;
+            if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id, true))){
+                S3FS_PRN_ERR("failed to setup multipart upload(create upload id) by errno(%d)", result);
+                return result;
+            }
+            if(!pseudo_obj->InitialUploadInfo(upload_id)){
+                S3FS_PRN_ERR("failed to setup multipart upload(set upload id to object)");
+                return -EIO;
+            }
+
+            // Clear the dirty flag, because the meta data is updated.
+            is_meta_pending = false;
+        }
+
+        //
+        // Output debug level information
+        //
+        // When canceling(overwriting) a part that has already been uploaded, output it.
+        //
+        if(S3fsLog::IsS3fsLogDbg()){
+            for(filepart_list_t::const_iterator cancel_iter = cancel_uploaded_list.begin(); cancel_iter != cancel_uploaded_list.end(); ++cancel_iter){
+                S3FS_PRN_DBG("Cancel uploaded: start(%lld), size(%lld), part number(%d)", static_cast<long long int>(cancel_iter->startpos), static_cast<long long int>(cancel_iter->size), (cancel_iter->petag ? cancel_iter->petag->part_num : -1));
+            }
+        }
+
+        //
+        // Upload multipart and copy parts and wait exiting them
+        //
+        if(!pseudo_obj->ParallelMultipartUploadAll(path.c_str(), to_upload_list, to_copy_list, result)){
+            S3FS_PRN_ERR("Failed to upload multipart parts.");
+            pseudo_obj->ClearUntreated();
+            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            return -EIO;
+        }
+        if(0 != result){
+            S3FS_PRN_ERR("An error(%d) occurred in some threads that were uploading parallel multiparts, but continue to clean up..", result);
+            pseudo_obj->ClearUntreated();
+            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            return result;
+        }
+
+        //
+        // Complete uploading
+        //
+        std::string upload_id;
+        etaglist_t  etaglist;
+        if(!pseudo_obj->GetUploadId(upload_id) || !pseudo_obj->GetEtaglist(etaglist)){
+            S3FS_PRN_ERR("There is no upload id or etag list.");
+            pseudo_obj->ClearUntreated();
+            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            return -EIO;
+        }else{
+            S3fsCurl s3fscurl(true);
+            if(0 != (result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist))){
+                S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
+                pseudo_obj->ClearUntreated();
+                pseudo_obj->ClearUploadInfo(false); // clear multipart upload info
+                return result;
+            }
+            s3fscurl.DestroyCurlHandle();
+        }
+        pseudo_obj->ClearUntreated();
+        pseudo_obj->ClearUploadInfo(false);         // clear multipart upload info
+
+        // put pending headers
+        if(0 != (result = UploadPendingMeta())){
+            return result;
+        }
+    }
+    pseudo_obj->ClearUntreated();
+
+    if(0 == result){
+        pagelist.ClearAllModified();
+    }
+
+    return result;
+}
+
 // [NOTICE]
 // Need to lock before calling this method.
 bool FdEntity::ReserveDiskSpace(off_t size)
@@ -1798,6 +2028,12 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
             S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", physical_fd);
             return -errno;
         }
+        // set untreated area
+        if(!pseudo_obj->AddUntreated(pagelist.Size(), (start - pagelist.Size()))){
+            S3FS_PRN_ERR("failed to set untreated area by incremental.");
+            return -EIO;
+        }
+
         // add new area
         pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), PageList::PAGE_MODIFIED);
     }
@@ -1806,6 +2042,9 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     if(nomultipart){
         // No multipart upload
         wsize = WriteNoMultipart(pseudo_obj, bytes, start, size);
+    }else if(FdEntity::streamupload){
+        // Stream upload
+        wsize = WriteStreamUpload(pseudo_obj, bytes, start, size);
     }else if(FdEntity::mixmultipart){
         // Mix multipart upload
         wsize = WriteMixMultipart(pseudo_obj, bytes, start, size);
@@ -2052,6 +2291,54 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
             pseudo_obj->ClearUntreated(untreated_start, untreated_size);
         }
     }
+    return wsize;
+}
+
+//
+// On Stream upload, the uploading is executed in another thread when the
+// written area exceeds the maximum size of multipart upload.
+//
+// [NOTE]
+// Both fdent_lock and fdent_data_lock must be locked before calling.
+//
+ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
+{
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, static_cast<long long int>(start), size);
+
+    if(-1 == physical_fd || !pseudo_obj){
+        S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, path.c_str());
+        return -EBADF;
+    }
+
+    // Writing
+    ssize_t wsize;
+    if(-1 == (wsize = pwrite(physical_fd, bytes, size, start))){
+        S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
+        return -errno;
+    }
+    if(0 < wsize){
+        pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pseudo_obj->AddUntreated(start, wsize);
+    }
+
+    // Check and Upload
+    //
+    // If the last updated Untreated area exceeds the maximum upload size,
+    // upload processing is performed.
+    //
+    headers_t tmporgmeta  = orgmeta;
+    bool      isuploading = pseudo_obj->IsUploading();
+    int       result;
+    if(0 != (result = pseudo_obj->UploadBoundaryLastUntreatedArea(path.c_str(), tmporgmeta))){
+        S3FS_PRN_ERR("Failed to upload the last untreated parts(area) : result=%d", result);
+        return result;
+    }
+
+    if(!isuploading && pseudo_obj->IsUploading()){
+        // Clear the dirty flag, because the meta data is updated.
+        is_meta_pending = false;
+    }
+
     return wsize;
 }
 

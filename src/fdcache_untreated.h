@@ -46,19 +46,18 @@ class UntreatedParts
         bool empty();
 
         bool AddPart(off_t start, off_t size);
-
-        // [NOTE]
-        // The following method does not return parts smaller than mini_size.
-        // You can avoid it by setting min_size to 0.
-        //
-        bool GetPart(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE) { return RowGetPart(start, size, max_size, min_size, false); }
         bool GetLastUpdatedPart(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE) { return RowGetPart(start, size, max_size, min_size, true); }
-
-        bool TakeoutPart(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE);
-        bool TakeoutPartFromBegin(off_t& start, off_t& size, off_t max_size);
 
         bool ClearParts(off_t start, off_t size);
         bool ClearAll() { return ClearParts(0, 0); }
+
+        bool GetLastUpdatePart(off_t& start, off_t& size);
+        bool ReplaceLastUpdatePart(off_t start, off_t size);
+        bool RemoveLastUpdatePart();
+
+        bool Duplicate(untreated_list_t& list);
+
+        void Dump();
 };
 
 #endif // S3FS_FDCACHE_UNTREATED_H_
