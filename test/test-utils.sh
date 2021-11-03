@@ -237,6 +237,7 @@ function run_suite {
    for t in "${TEST_LIST[@]}"; do
        # Ensure test input name differs every iteration
        TEST_TEXT_FILE=test-s3fs.txt-$RANDOM
+       TEST_DIR=testdir-$RANDOM
        $t $key_prefix && rc=$? || rc=$?
 
        if [[ $rc == 0 ]] ; then

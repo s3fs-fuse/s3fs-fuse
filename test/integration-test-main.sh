@@ -916,6 +916,8 @@ function test_update_time_append() {
 }
 
 function test_update_time_cp_p() {
+    describe "Testing update time function cp -p..."
+
     t0=1000000000  # 9 September 2001
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
@@ -938,6 +940,8 @@ function test_update_time_cp_p() {
 }
 
 function test_update_time_mv() {
+    describe "Testing update time function mv..."
+
     t0=1000000000  # 9 September 2001
     OBJECT_NAME="$(basename $PWD)/${TEST_TEXT_FILE}"
     echo data | aws_cli s3 cp --metadata="atime=$t0,ctime=$t0,mtime=$t0" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
@@ -966,28 +970,19 @@ function test_update_time_mv() {
 # See the description of test_update_time () for notes about the
 # "touch -a" command and atime.
 #
-function test_update_directory_time() {
-    describe "Testing update time for directory function ..."
+function test_update_directory_time_chmod() {
+    describe "Testing update time for directory mv..."
 
     #
     # create the directory and sub-directory and a file in directory
     #
-    TIME_TEST_SUBDIR="$TEST_DIR/testsubdir"
-    TIME_TEST_FILE_INDIR="$TEST_DIR/testfile"
-    mk_test_dir
-    mkdir $TIME_TEST_SUBDIR
-    touch $TIME_TEST_FILE_INDIR
+    t0=1000000000  # 9 September 2001
+    DIRECTORY_NAME="$(basename $PWD)/${TEST_DIR}"
+    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=$t0,ctime=$t0,mtime=$t0" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
 
     base_atime=`get_atime $TEST_DIR`
     base_ctime=`get_ctime $TEST_DIR`
     base_mtime=`get_mtime $TEST_DIR`
-    subdir_atime=`get_atime $TIME_TEST_SUBDIR`
-    subdir_ctime=`get_ctime $TIME_TEST_SUBDIR`
-    subdir_mtime=`get_mtime $TIME_TEST_SUBDIR`
-    subfile_atime=`get_atime $TIME_TEST_FILE_INDIR`
-    subfile_ctime=`get_ctime $TIME_TEST_FILE_INDIR`
-    subfile_mtime=`get_mtime $TIME_TEST_FILE_INDIR`
-    sleep 1
 
     #
     # chmod -> update only ctime
@@ -1000,9 +995,20 @@ function test_update_directory_time() {
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
 
+    rm -rf $TEST_DIR
+}
+
+function test_update_directory_time_chown {
+    describe "Testing update time for directory chown..."
+
+    t0=1000000000  # 9 September 2001
+    DIRECTORY_NAME="$(basename $PWD)/${TEST_DIR}"
+    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=$t0,ctime=$t0,mtime=$t0" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
     #
     # chown -> update only ctime
     #
@@ -1014,9 +1020,20 @@ function test_update_directory_time() {
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
 
+    rm -rf $TEST_DIR
+}
+
+function test_update_directory_time_set_xattr {
+    describe "Testing update time for directory set_xattr..."
+
+    t0=1000000000  # 9 September 2001
+    DIRECTORY_NAME="$(basename $PWD)/${TEST_DIR}"
+    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=$t0,ctime=$t0,mtime=$t0" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
     #
     # set_xattr -> update only ctime
     #
@@ -1028,9 +1045,20 @@ function test_update_directory_time() {
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    base_ctime=$ctime
-    sleep 1
 
+    rm -rf $TEST_DIR
+}
+
+function test_update_directory_time_touch {
+    describe "Testing update time for directory touch..."
+
+    t0=1000000000  # 9 September 2001
+    DIRECTORY_NAME="$(basename $PWD)/${TEST_DIR}"
+    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=$t0,ctime=$t0,mtime=$t0" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
     #
     # touch -> update ctime/atime/mtime
     #
@@ -1042,28 +1070,55 @@ function test_update_directory_time() {
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
-    base_atime=$atime
-    base_mtime=$mtime
-    base_ctime=$ctime
-    sleep 1
 
+    rm -rf $TEST_DIR
+}
+
+function test_update_directory_time_touch_a {
+    describe "Testing update time for directory touch -a..."
+
+    t0=1000000000  # 9 September 2001
+    DIRECTORY_NAME="$(basename $PWD)/${TEST_DIR}"
+    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=$t0,ctime=$t0,mtime=$t0" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
     #
     # "touch -a" -> update ctime/atime, not update mtime
     #
-    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
-        touch -a $TEST_DIR
-        atime=`get_atime $TEST_DIR`
-        ctime=`get_ctime $TEST_DIR`
-        mtime=`get_mtime $TEST_DIR`
-        if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
-           echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
-           return 1
-        fi
-        base_atime=$atime
-        base_ctime=$ctime
-        sleep 1
+    touch -a $TEST_DIR
+    atime=`get_atime $TEST_DIR`
+    ctime=`get_ctime $TEST_DIR`
+    mtime=`get_mtime $TEST_DIR`
+    if [ $base_atime -eq $atime -o $base_ctime -eq $ctime -o $base_mtime -ne $mtime ]; then
+        echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+        return 1
     fi
 
+    rm -rf $TEST_DIR
+}
+
+function test_update_directory_time_subdir() {
+    describe "Testing update time for directory subdirectory..."
+
+    TIME_TEST_SUBDIR="$TEST_DIR/testsubdir"
+    TIME_TEST_FILE_INDIR="$TEST_DIR/testfile"
+    mk_test_dir
+    mkdir $TIME_TEST_SUBDIR
+    touch $TIME_TEST_FILE_INDIR
+    # TODO: remove sleep after improving AWS CLI speed
+    sleep 1
+
+    base_atime=`get_atime $TEST_DIR`
+    base_ctime=`get_ctime $TEST_DIR`
+    base_mtime=`get_mtime $TEST_DIR`
+    subdir_atime=`get_atime $TIME_TEST_SUBDIR`
+    subdir_ctime=`get_ctime $TIME_TEST_SUBDIR`
+    subdir_mtime=`get_mtime $TIME_TEST_SUBDIR`
+    subfile_atime=`get_atime $TIME_TEST_FILE_INDIR`
+    subfile_ctime=`get_ctime $TIME_TEST_FILE_INDIR`
+    subfile_mtime=`get_mtime $TIME_TEST_FILE_INDIR`
     #
     # mv -> update ctime, not update atime/mtime for target directory
     #       not update any for sub-directory and a file
@@ -1096,6 +1151,7 @@ function test_update_directory_time() {
 
     rm -rf $TIME_TEST_SUBDIR
     rm -rf $TIME_TEST_DIR
+    rm -rf $TEST_DIR
 }
 
 function test_rm_rf_dir {
@@ -1719,6 +1775,7 @@ function add_all_tests {
     add_tests test_symlink
     add_tests test_extended_attributes
     add_tests test_mtime_file
+
     add_tests test_update_time_chmod
     add_tests test_update_time_chown
     add_tests test_update_time_xattr
@@ -1729,7 +1786,16 @@ function add_all_tests {
     add_tests test_update_time_append
     add_tests test_update_time_cp_p
     add_tests test_update_time_mv
-    add_tests test_update_directory_time
+
+    add_tests test_update_directory_time_chmod
+    add_tests test_update_directory_time_chown
+    add_tests test_update_directory_time_set_xattr
+    add_tests test_update_directory_time_touch
+    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+        add_tests test_update_directory_time_touch_a
+    fi
+    add_tests test_update_directory_time_subdir
+
     add_tests test_rm_rf_dir
     add_tests test_copy_file
     add_tests test_write_after_seek_ahead
