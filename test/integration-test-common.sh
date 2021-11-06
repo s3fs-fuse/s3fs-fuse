@@ -83,6 +83,10 @@ S3PROXY_BINARY=${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
 CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
 
+AWSR_HASH="42510f826e02cc33f16c45ef7fda94024e874e15"
+AWSR_BINARY="aws-cli-repl-${AWSR_HASH}"
+export AWSR_BINARY
+
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
 then
 	echo "Missing credentials file: $S3FS_CREDENTIALS_FILE"
@@ -165,9 +169,22 @@ function start_s3proxy {
         # wait for Chaos HTTP Proxy to start
         wait_for_port 1080
     fi
+
+    if [ -n "${AWSR_BINARY}" ]; then
+        curl "https://raw.githubusercontent.com/janakaud/aws-cli-repl/${AWSR_HASH}/awsr" \
+            --location --silent --output "${AWSR_BINARY}"
+        chmod +x "${AWSR_BINARY}"
+    fi
+    AWSR_DAEMON=True python3 ./${AWSR_BINARY} &
+    AWSR_PID=$!
 }
 
 function stop_s3proxy {
+    if [ -n "${AWSR_PID}" ]
+    then
+        kill $AWSR_PID
+    fi
+
     if [ -n "${S3PROXY_PID}" ]
     then
         kill $S3PROXY_PID

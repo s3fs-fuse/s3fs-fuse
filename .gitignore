@@ -76,6 +76,7 @@ src/s3fs
 src/test_curl_util
 src/test_page_list
 src/test_string_util
+test/aws-cli-repl-*
 test/chaos-http-proxy-*
 test/junk_data
 test/s3proxy-*
