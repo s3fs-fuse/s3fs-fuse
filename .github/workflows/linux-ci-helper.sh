@@ -124,7 +124,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     #
     CONFIGURE_OPTIONS="CXXFLAGS='-O2 -std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:34" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:35" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
