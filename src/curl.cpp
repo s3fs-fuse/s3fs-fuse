@@ -1453,8 +1453,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             }
         }else{
             // Multipart copy
-            off_t bytes = 0;
-            for(off_t i = 0; i < iter->bytes; i += bytes){
+            for(off_t i = 0, bytes = 0; i < iter->bytes; i += bytes){
                 S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
                 bytes = std::min(static_cast<off_t>(GetMultipartCopySize()), iter->bytes - i);
