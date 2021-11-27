@@ -1453,10 +1453,21 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             }
         }else{
             // Multipart copy
-            for(off_t i = 0; i < iter->bytes; i += GetMultipartCopySize()){
+            for(off_t i = 0, bytes = 0; i < iter->bytes; i += bytes){
                 S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
-                off_t bytes = std::min(static_cast<off_t>(GetMultipartCopySize()), iter->bytes - i);
+                bytes = std::min(static_cast<off_t>(GetMultipartCopySize()), iter->bytes - i);
+                /* every part should be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB */
+                off_t remain_bytes = iter->bytes - i - bytes;
+
+                if ((MIN_MULTIPART_SIZE > remain_bytes) && (0 < remain_bytes)){
+                    if(FIVE_GB < (bytes + remain_bytes)){
+                        bytes = (bytes + remain_bytes)/2;
+                    } else{
+                        bytes += remain_bytes;
+                    }
+                }
+
                 std::ostringstream strrange;
                 strrange << "bytes=" << (iter->offset + i) << "-" << (iter->offset + i + bytes - 1);
                 meta["x-amz-copy-source-range"] = strrange.str();
