@@ -63,7 +63,7 @@ jobs:
           - debian:stretch
           - centos:centos8
           - centos:centos7
-          - fedora:34
+          - fedora:35
           - opensuse/leap:15
 
     container:
