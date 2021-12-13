@@ -72,7 +72,7 @@ Many systems provide pre-built packages:
 
   ```
   brew install --cask osxfuse
-  brew install s3fs
+  brew install gromgit/fuse/s3fs-mac
   ```
 
 * FreeBSD:
