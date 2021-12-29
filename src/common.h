@@ -39,6 +39,7 @@ extern bool           nomultipart;
 extern bool           pathrequeststyle;
 extern bool           complement_stat;
 extern bool           noxmlns;
+extern bool           is_multi_tenancy;
 extern std::string    program_name;
 extern std::string    service_path;
 extern std::string    s3host;
@@ -48,6 +49,7 @@ extern std::string    endpoint;
 extern std::string    cipher_suites;
 extern std::string    instance_name;
 extern std::string    aws_profile;
+extern std::string    tenancy_id;
 
 #endif // S3FS_COMMON_H_
 

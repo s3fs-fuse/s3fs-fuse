@@ -73,6 +73,7 @@ static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file;
 static std::string mimetype_file;
+//static std::string tenancy_id;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
@@ -93,6 +94,7 @@ static bool create_bucket         = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
+//static bool is_multi_tenancy      = true;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
@@ -469,7 +471,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // [NOTE]
     // If the file is listed but not allowed access, put it in
     // the positive cache instead of the negative cache.
-    // 
+    //
     if(0 != result && -EPERM != result){
         // finally, "path" object did not find. Add no object cache.
         strpath = path;  // reset original
@@ -1429,7 +1431,7 @@ static int rename_directory(const char* from, const char* to)
     std::string newpath;                       // should be from name(not used)
     std::string nowcache;                      // now cache path(not used)
     dirtype DirType;
-    bool normdir; 
+    bool normdir;
     MVNODE* mn_head = NULL;
     MVNODE* mn_tail = NULL;
     MVNODE* mn_cur;
@@ -1464,7 +1466,7 @@ static int rename_directory(const char* from, const char* to)
     // (CommonPrefixes is empty, but all object is listed in Key.)
     if(0 != (result = list_bucket(basepath.c_str(), head, NULL))){
         S3FS_PRN_ERR("list_bucket returns error.");
-        return result; 
+        return result;
     }
     head.GetNameList(headlist);                       // get name without "/".
     S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
@@ -1498,7 +1500,7 @@ static int rename_directory(const char* from, const char* to)
             is_dir  = false;
             normdir = false;
         }
-        
+
         // push this one onto the stack
         if(NULL == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir, normdir)){
             return -ENOMEM;
@@ -1789,7 +1791,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
-  
+
     return result;
 }
 
@@ -1965,7 +1967,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // Change owner
         ent->SetUId(uid);
         ent->SetGId(gid);
-  
+
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
@@ -1974,7 +1976,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
-  
+
     return result;
 }
 
@@ -2736,7 +2738,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         each_query += query_prefix;
 
         // request
-        int result; 
+        int result;
         if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
             S3FS_PRN_ERR("ListBucketRequest returns with error.");
             return result;
@@ -3362,10 +3364,10 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     return 0;
 }
-   
+
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
-// There's no way to pass an exit status to the high-level event loop API, so 
+// There's no way to pass an exit status to the high-level event loop API, so
 // this function stores the exit value in a global for main()
 static void s3fs_exit_fuseloop(int exit_status)
 {
@@ -3748,7 +3750,7 @@ static int check_for_aws_format(const kvmap_t& kvmap)
 
 //
 // check_passwd_file_perms
-// 
+//
 // expect that global passwd_file variable contains
 // a non-empty value and is readable by the current user
 //
@@ -3767,19 +3769,19 @@ static int check_passwd_file_perms()
         return EXIT_FAILURE;
     }
 
-    // return error if any file has others permissions 
+    // return error if any file has others permissions
     if( (info.st_mode & S_IROTH) ||
-        (info.st_mode & S_IWOTH) || 
+        (info.st_mode & S_IWOTH) ||
         (info.st_mode & S_IXOTH)) {
         S3FS_PRN_EXIT("credentials file %s should not have others permissions.", passwd_file.c_str());
         return EXIT_FAILURE;
     }
 
-    // Any local file should not have any group permissions 
-    // /etc/passwd-s3fs can have group permissions 
+    // Any local file should not have any group permissions
+    // /etc/passwd-s3fs can have group permissions
     if(passwd_file != "/etc/passwd-s3fs"){
         if( (info.st_mode & S_IRGRP) ||
-            (info.st_mode & S_IWGRP) || 
+            (info.st_mode & S_IWGRP) ||
             (info.st_mode & S_IXGRP)) {
             S3FS_PRN_EXIT("credentials file %s should not have group permissions.", passwd_file.c_str());
             return EXIT_FAILURE;
@@ -3831,7 +3833,7 @@ static int read_aws_credentials_file(const std::string &filename)
             secret.clear();
             session_token.clear();
         }
-    
+
         size_t pos = line.find_first_of('=');
         if(pos == std::string::npos){
             continue;
@@ -3873,10 +3875,10 @@ static int read_aws_credentials_file(const std::string &filename)
 // read_passwd_file
 //
 // Support for per bucket credentials
-// 
+//
 // Format for the credentials file:
 // [bucket:]AccessKeyId:SecretAccessKey
-// 
+//
 // Lines beginning with # are considered comments
 // and ignored, as are empty lines
 //
@@ -3947,7 +3949,7 @@ static int read_passwd_file()
 //
 // get_access_keys
 //
-// called only when were are not mounting a 
+// called only when were are not mounting a
 // public bucket
 //
 // Here is the order precedence for getting the
@@ -4141,10 +4143,10 @@ static int set_bucket(const char* arg)
 }
 
 // This is repeatedly called by the fuse option parser
-// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
+// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
 //
-// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
+// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name
 //  or the mountpoint. The bucket name will always come before the mountpoint
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
@@ -4725,6 +4727,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_specified_endpoint = true;
             return 0;
         }
+        if(is_prefix(arg, "tenancy_id=")){
+            tenancy_id            = strchr(arg, '=') + sizeof(char);
+            is_multi_tenancy = true;
+            return 0;
+        }
         if(0 == strcmp(arg, "use_path_request_style")){
             pathrequeststyle = true;
             return 0;
@@ -4896,7 +4903,7 @@ int main(int argc, char* argv[])
 {
     int ch;
     int fuse_res;
-    int option_index = 0; 
+    int option_index = 0;
     struct fuse_operations s3fs_oper;
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
@@ -5009,7 +5016,7 @@ int main(int argc, char* argv[])
     // call of my_fuse_opt_proc function is completed. Therefore,
     // the mime type is loaded just after calling the my_fuse_opt_proc
     // function.
-    // 
+    //
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
@@ -5115,6 +5122,11 @@ int main(int argc, char* argv[])
         }
     }
 
+    if(is_multi_tenancy){
+      bucket = tenancy_id+":"+bucket;
+      S3FS_PRN_INFO("bucket name: %s", bucket.c_str());
+    }
+
     // error checking of command line arguments for compatibility
     if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
         S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
@@ -5145,7 +5157,7 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
         // More error checking on the access key pair can be done
-        // like checking for appropriate lengths and characters  
+        // like checking for appropriate lengths and characters
     }
 
     // check tmp dir permission
@@ -5204,11 +5216,11 @@ int main(int argc, char* argv[])
     // our own certificate verification logic.
     // For now, this will be unsupported unless we get a request for it to
     // be supported. In that case, we have a couple of options:
-    // - implement a command line option that bypasses the verify host 
+    // - implement a command line option that bypasses the verify host
     //   but doesn't bypass verifying the certificate
     // - write our own host verification (this might be complex)
     // See issue #128strncasecmp
-    /* 
+    /*
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = bucket.find_first_of('.');
         if(found != std::string::npos){

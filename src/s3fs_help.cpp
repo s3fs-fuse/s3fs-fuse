@@ -31,7 +31,7 @@
 //-------------------------------------------------------------------
 // Contents
 //-------------------------------------------------------------------
-static const char help_string[] = 
+static const char help_string[] =
     "\n"
     "Mount an Amazon S3 bucket as a file system.\n"
     "\n"
@@ -146,6 +146,10 @@ static const char help_string[] =
     "        S3 does not allow copy object api for anonymous users, then\n"
     "        s3fs sets nocopyapi option automatically when public_bucket=1\n"
     "        option is specified.\n"
+    "\n"
+    "   tenancy_id (default=\"\" which means disabled)\n"
+    "      - Tenancy id for CEPH multi tenancy naming convention\n"
+    "        (tenancy_id:bucket_name)\n"
     "\n"
     "   passwd_file (default=\"\")\n"
     "      - specify which s3fs password file to use\n"

@@ -256,8 +256,13 @@ std::string prepare_url(const char* url)
     std::string uri;
     std::string hostname;
     std::string path;
+    std::string token;
     std::string url_str = std::string(url);
-    std::string token = std::string("/") + bucket;
+    if(is_multi_tenancy) {
+      token = std::string("/") + urlEncode(bucket);
+    } else {
+      token = std::string("/") + bucket;
+    }
     size_t bucket_pos;
     size_t bucket_length = token.size();
     size_t uri_length = 0;
@@ -283,7 +288,6 @@ std::string prepare_url(const char* url)
     }
 
     url_str = uri + hostname + path;
-
     S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 
     return url_str;

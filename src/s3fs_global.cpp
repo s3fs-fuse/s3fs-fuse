@@ -29,6 +29,7 @@ bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool complement_stat              = false;
 bool noxmlns                      = false;
+bool is_multi_tenancy             = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string s3host                = "https://s3.amazonaws.com";
@@ -37,6 +38,7 @@ std::string endpoint              = "us-east-1";
 std::string cipher_suites;
 std::string instance_name;
 std::string aws_profile           = "default";
+std::string tenancy_id;
 
 /*
 * Local variables:
