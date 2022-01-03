@@ -60,42 +60,42 @@ CONFIGURE_OPTIONS="CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/u
 #-----------------------------------------------------------
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.10" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq --no-install-recommends"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
