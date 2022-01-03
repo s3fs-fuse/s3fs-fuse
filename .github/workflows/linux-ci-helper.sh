@@ -154,7 +154,7 @@ echo "${PRGNAME} [INFO] Updates."
 ${PACKAGE_MANAGER_BIN} ${PACKAGE_UPDATE_OPTIONS}
 
 #
-# Install pacakages ( with cppcheck )
+# Install packages ( with cppcheck )
 #
 echo "${PRGNAME} [INFO] Install packages."
 ${PACKAGE_MANAGER_BIN} install -y ${INSTALL_PACKAGES}

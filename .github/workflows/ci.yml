@@ -98,7 +98,7 @@ jobs:
       # Matters that depend on OS:VERSION are determined and executed in the following script.
       # Please note that the option to configure (CONFIGURE_OPTIONS) is set in the environment variable.
       #
-      - name: Install pacakagse
+      - name: Install packages
         run: |
           .github/workflows/linux-ci-helper.sh ${{ matrix.container }}
 
@@ -118,10 +118,10 @@ jobs:
 
   # [NOTE]
   # A case of "runs-on: macos-11.0" does not work,
-  # becase load_osxfuse returns exit code = 1.
+  # because load_osxfuse returns exit code = 1.
   # Maybe it needs to reboot. Apple said 
   # "Installing a new kernel extension requires signing in as an Admin user. You must also restart your Mac to load the extension".
-  # Then we do not use macos 11 on Github Actions now.
+  # Then we do not use macos 11 on GitHub Actions now.
   #
   macos10:
     runs-on: macos-10.15
