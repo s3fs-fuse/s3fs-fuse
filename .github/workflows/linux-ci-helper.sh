@@ -136,7 +136,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
 
-    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk libxml2-devel make openssl-devel python3-pip wget attr"
+    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk libxml2-devel mailcap make openssl-devel python3-pip wget attr"
     INSTALL_CPPCHECK_OPTIONS=""
 
 else
