@@ -19,6 +19,8 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
+set -o verbose
+
 echo "${PRGNAME} [INFO] Start Linux helper for installing packages."
 
 #-----------------------------------------------------------
@@ -88,8 +90,10 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_UPDATE_OPTIONS="update -y"
 
+    apt list --installed
+    ls -l /etc/mime.types
     INSTALL_PACKAGES="autoconf autotools-dev default-jdk fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
@@ -158,6 +162,10 @@ ${PACKAGE_MANAGER_BIN} ${PACKAGE_UPDATE_OPTIONS}
 #
 echo "${PRGNAME} [INFO] Install packages."
 ${PACKAGE_MANAGER_BIN} install -y ${INSTALL_PACKAGES}
+
+if [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
+    apt list --installed
+fi
 
 echo "${PRGNAME} [INFO] Install cppcheck package."
 ${PACKAGE_MANAGER_BIN} ${INSTALL_CPPCHECK_OPTIONS} install -y cppcheck
