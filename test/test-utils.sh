@@ -315,7 +315,7 @@ function get_disk_avail_size() {
 }
 
 function aws_cli() {
-    FLAGS=""
+    local FLAGS=""
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"
     fi
