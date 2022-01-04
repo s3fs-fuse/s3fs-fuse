@@ -89,7 +89,6 @@ static bool is_ecs                = false;
 static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
 static bool is_use_session_token  = false;
-static bool create_bucket         = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
@@ -862,56 +861,6 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     S3FS_MALLOCTRIM(0);
 
     return 0;
-}
-
-static int do_create_bucket()
-{
-    S3FS_PRN_INFO2("/");
-
-    FILE* ptmpfp;
-    int   tmpfd;
-    if(endpoint == "us-east-1"){
-        ptmpfp = NULL;
-        tmpfd = -1;
-    }else{
-        if(NULL == (ptmpfp = tmpfile())   ||
-           -1 == (tmpfd = fileno(ptmpfp)) ||
-           0 >= fprintf(ptmpfp, "<CreateBucketConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\n"
-                                "  <LocationConstraint>%s</LocationConstraint>\n"
-                                "</CreateBucketConfiguration>", endpoint.c_str()) ||
-           0 != fflush(ptmpfp) ||
-           -1 == fseek(ptmpfp, 0L, SEEK_SET))
-        {
-            S3FS_PRN_ERR("failed to create temporary file. err(%d)", errno);
-            if(ptmpfp){
-              fclose(ptmpfp);
-            }
-            return (0 == errno ? -EIO : -errno);
-        }
-    }
-
-    headers_t meta;
-
-    S3fsCurl s3fscurl(true);
-    int      res = s3fscurl.PutRequest("/", meta, tmpfd);
-    if(res < 0){
-        long responseCode = s3fscurl.GetLastResponseCode();
-        if((responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
-            S3FS_PRN_ERR("Could not connect, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureType(V2_ONLY);
-
-            // retry to check
-            s3fscurl.DestroyCurlHandle();
-            res = s3fscurl.PutRequest("/", meta, tmpfd);
-        }else if(responseCode == 409){
-            // bucket already exists
-            res = 0;
-        }
-    }
-    if(ptmpfp != NULL){
-        fclose(ptmpfp);
-    }
-    return res;
 }
 
 // common function for creation of a plain object
@@ -3399,14 +3348,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
       S3FS_PRN_INFO("loaded IAM role name = %s", S3fsCurl::GetIAMRole());
     }
 
-    if (create_bucket){
-        int result = do_create_bucket();
-        if(result != 0){
-            s3fs_exit_fuseloop(result);
-            return NULL;
-        }
-    }
-
     // Check Bucket
     {
         int result;
@@ -4716,10 +4657,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetSignatureType(V4_ONLY);
             return 0;
         }
-        if(0 == strcmp(arg, "createbucket")){
-            create_bucket = true;
-            return 0;
-        }
         if(is_prefix(arg, "endpoint=")){
             endpoint              = strchr(arg, '=') + sizeof(char);
             is_specified_endpoint = true;
@@ -5183,13 +5120,6 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
 
-        if(create_bucket && !S3fsCurl::IsSetAccessKeyID()){
-            S3FS_PRN_EXIT("missing service instance ID for bucket creation");
-            S3fsCurl::DestroyS3fsCurl();
-            s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            exit(EXIT_FAILURE);
-        }
     }
 
     // set user agent

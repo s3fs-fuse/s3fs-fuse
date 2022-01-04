@@ -222,9 +222,6 @@ function start_s3fs {
     #
     # use_path_request_style
     #     The test env doesn't have virtual hosts
-    # createbucket
-    #     S3Proxy always starts with no buckets, this tests the s3fs-fuse
-    #     automatic bucket creation path.
     # $AUTH_OPT
     #     Will be either "-o public_bucket=1" 
     #                     or 
@@ -248,7 +245,6 @@ function start_s3fs {
             -o no_check_certificate \
             -o ssl_verify_hostname=0 \
             -o use_xattr=1 \
-            -o createbucket \
             -o enable_unsigned_payload \
             ${AUTH_OPT} \
             ${DIRECT_IO_OPT} \
