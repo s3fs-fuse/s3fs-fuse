@@ -62,14 +62,14 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.10" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2-minimal python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2-minimal python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
@@ -90,7 +90,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2 procps python3-pip"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jdk-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr wget python2-minimal procps python3-pip"
     INSTALL_CPPCHECK_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
