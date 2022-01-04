@@ -1248,13 +1248,13 @@ function test_open_second_fd {
 
 function test_write_multiple_offsets {
     describe "test writing to multiple offsets ..."
-    ../../write_multiple_offsets.py ${TEST_TEXT_FILE} 1024 1 $((16 * 1024 * 1024)) 1 $((18 * 1024 * 1024)) 1
+    ../../write_multiblock -f ${TEST_TEXT_FILE} -p "1024:1" -p "$((16 * 1024 * 1024)):1" -p "$((18 * 1024 * 1024)):1"
     rm_test_file ${TEST_TEXT_FILE}
 }
 
 function test_write_multiple_offsets_backwards {
     describe "test writing to multiple offsets ..."
-    ../../write_multiple_offsets.py ${TEST_TEXT_FILE} $((20 * 1024 * 1024 + 1)) 1 $((10 * 1024 * 1024)) 1
+    ../../write_multiblock -f ${TEST_TEXT_FILE} -p "$((20 * 1024 * 1024 + 1)):1" -p "$((10 * 1024 * 1024)):1"
     rm_test_file ${TEST_TEXT_FILE}
 }
 
