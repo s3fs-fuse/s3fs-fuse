@@ -288,6 +288,7 @@ std::string prepare_url(const char* url)
     }
 
     url_str = uri + hostname + path;
+
     S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
 
     return url_str;
