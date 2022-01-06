@@ -73,7 +73,7 @@ static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static std::string passwd_file;
 static std::string mimetype_file;
-//static std::string tenancy_id;
+
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
@@ -94,7 +94,6 @@ static bool create_bucket         = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
-//static bool is_multi_tenancy      = true;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = true;// default supports compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
