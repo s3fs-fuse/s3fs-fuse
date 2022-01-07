@@ -103,7 +103,7 @@ fi
 # This function execute the function parameters $1 times
 # before giving up, with 1 second delays.
 function retry {
-    N=$1; shift;
+    local N=$1; shift;
     rc=0
     for i in $(seq $N); do
         echo "Trying: $*"
@@ -127,9 +127,9 @@ function retry {
 # 
 function start_s3proxy {
     if [ -n "${PUBLIC}" ]; then
-        S3PROXY_CONFIG="s3proxy-noauth.conf"
+        local S3PROXY_CONFIG="s3proxy-noauth.conf"
     else
-        S3PROXY_CONFIG="s3proxy.conf"
+        local S3PROXY_CONFIG="s3proxy.conf"
     fi
 
     if [ -n "${S3PROXY_BINARY}" ]
@@ -179,11 +179,11 @@ function stop_s3proxy {
 function start_s3fs {
     # Public bucket if PUBLIC is set
     if [ -n "${PUBLIC}" ]; then
-        AUTH_OPT="-o public_bucket=1"
+        local AUTH_OPT="-o public_bucket=1"
     elif [ -n "${S3FS_PROFILE}" ]; then
-        AUTH_OPT="-o profile=${S3FS_PROFILE}"
+        local AUTH_OPT="-o profile=${S3FS_PROFILE}"
     else
-        AUTH_OPT="-o passwd_file=${S3FS_CREDENTIALS_FILE}"
+        local AUTH_OPT="-o passwd_file=${S3FS_CREDENTIALS_FILE}"
     fi
 
     # If VALGRIND is set, pass it as options to valgrind.
@@ -196,9 +196,9 @@ function start_s3fs {
 
     # On OSX only, we need to specify the direct_io and auto_cache flag.
     if [ `uname` = "Darwin" ]; then
-       DIRECT_IO_OPT="-o direct_io -o auto_cache"
+       local DIRECT_IO_OPT="-o direct_io -o auto_cache"
     else
-       DIRECT_IO_OPT=""
+       local DIRECT_IO_OPT=""
     fi
 
     if [ -n "${CHAOS_HTTP_PROXY}" ]; then
@@ -211,9 +211,9 @@ function start_s3fs {
     # This patch may be temporary, but no other method has been found at this time.
     #
     if [ `uname` = "Darwin" ]; then
-        VIA_STDBUF_CMDLINE=""
+        local VIA_STDBUF_CMDLINE=""
     else
-        VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
+        local VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
     fi
 
     # Common s3fs options:
@@ -262,7 +262,7 @@ function start_s3fs {
     rm -f pid
 
     if [ `uname` = "Darwin" ]; then
-         TRYCOUNT=0
+         local TRYCOUNT=0
          while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
              df | grep -q $TEST_BUCKET_MOUNT_POINT_1; rc=$?
              if [ $rc -eq 0 ]; then
