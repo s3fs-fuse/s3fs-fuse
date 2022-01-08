@@ -319,7 +319,7 @@ function aws_cli() {
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"
     fi
-    aws $* --endpoint-url "${S3_URL}" --no-verify-ssl $FLAGS
+    aws $* --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem $FLAGS
 }
 
 function wait_for_port() {

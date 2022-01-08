@@ -32,12 +32,6 @@ on:
 #
 # Jobs
 #
-# [NOTE]
-# Some tests using awscli may output a python warning.
-# The warning is about HTTPS connections using self-signed certificates.
-# That's why the PYTHONWARNINGS environment variable disables the
-# "Unverified HTTPS request" warning.
-#
 jobs:
   Linux:
     runs-on: ubuntu-latest
@@ -77,12 +71,6 @@ jobs:
       # Installation special environment variables for debian and ubuntu.
       #
       DEBIAN_FRONTEND:  noninteractive
-
-      # [NOTE]
-      # Since using a self-signed certificate and have not registered a certificate authority,
-      # we get a warning in python, so we suppress it(by PYTHONWARNINGS).
-      #
-      PYTHONWARNINGS:   "ignore:Unverified HTTPS request"
 
     steps:
       # [NOTE]
@@ -126,13 +114,6 @@ jobs:
   #
   macos10:
     runs-on: macos-10.15
-
-    env:
-      # [NOTE]
-      # Since using a self-signed certificate and have not registered a certificate authority,
-      # we get a warning in python, so we suppress it(by PYTHONWARNINGS).
-      #
-      PYTHONWARNINGS:   "ignore:Unverified HTTPS request"
 
     steps:
       - name: Checkout source code
