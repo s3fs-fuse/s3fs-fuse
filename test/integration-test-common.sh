@@ -140,6 +140,11 @@ function start_s3proxy {
             chmod +x "${S3PROXY_BINARY}"
         fi
 
+        # generate self-signed SSL certificate
+        rm -f /tmp/keystore.jks /tmp/keystore.pem
+        echo -e 'password\npassword\n\n\n\n\n\n\nyes' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
+        echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file /tmp/keystore.pem
+
         ${STDBUF_BIN} -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
         S3PROXY_PID=$!
 
