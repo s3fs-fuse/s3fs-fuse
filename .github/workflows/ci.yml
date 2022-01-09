@@ -107,7 +107,7 @@ jobs:
         run: |
           ./autogen.sh
           /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
-          make
+          make --jobs=$(nproc)
 
       - name: Cppcheck
         run: |
@@ -165,7 +165,7 @@ jobs:
         run: |
           ./autogen.sh
           PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
-          make
+          make --jobs=$(sysctl -n hw.ncpu)
 
       - name: Cppcheck
         run: |
