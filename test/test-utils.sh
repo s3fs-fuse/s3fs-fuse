@@ -94,11 +94,11 @@ function get_size() {
 }
 
 function check_file_size() {
-    FILE_NAME="$1"
-    EXPECTED_SIZE="$2"
+    local FILE_NAME="$1"
+    local EXPECTED_SIZE="$2"
 
     # Verify file is zero length via metadata
-    size=$(get_size ${FILE_NAME})
+    local size=$(get_size ${FILE_NAME})
     if [ $size -ne $EXPECTED_SIZE ]
     then
         echo "error: expected ${FILE_NAME} to be zero length"
@@ -106,7 +106,7 @@ function check_file_size() {
     fi
 
     # Verify file is zero length via data
-    size=$(cat ${FILE_NAME} | wc -c)
+    local size=$(cat ${FILE_NAME} | wc -c)
     if [ $size -ne $EXPECTED_SIZE ]
     then
         echo "error: expected ${FILE_NAME} to be $EXPECTED_SIZE length, got $size"
@@ -116,9 +116,9 @@ function check_file_size() {
 
 function mk_test_file {
     if [ $# == 0 ]; then
-        TEXT=$TEST_TEXT
+        local TEXT=$TEST_TEXT
     else
-        TEXT=$1
+        local TEXT=$1
     fi
     echo $TEXT > $TEST_TEXT_FILE
     if [ ! -e $TEST_TEXT_FILE ]
@@ -128,14 +128,14 @@ function mk_test_file {
     fi
 
     # wait & check
-    BASE_TEXT_LENGTH=`echo $TEXT | wc -c | awk '{print $1}'`
-    TRY_COUNT=10
+    local BASE_TEXT_LENGTH=`echo $TEXT | wc -c | awk '{print $1}'`
+    local TRY_COUNT=10
     while true; do
-        MK_TEXT_LENGTH=`wc -c $TEST_TEXT_FILE | awk '{print $1}'`
+        local MK_TEXT_LENGTH=`wc -c $TEST_TEXT_FILE | awk '{print $1}'`
         if [ $BASE_TEXT_LENGTH -eq $MK_TEXT_LENGTH ]; then
             break
         fi
-        TRY_COUNT=`expr $TRY_COUNT - 1`
+        local TRY_COUNT=`expr $TRY_COUNT - 1`
         if [ $TRY_COUNT -le 0 ]; then
             echo "Could not create file ${TEST_TEXT_FILE}, that file size is something wrong"
         fi
@@ -145,9 +145,9 @@ function mk_test_file {
 
 function rm_test_file {
     if [ $# == 0 ]; then
-        FILE=$TEST_TEXT_FILE
+        local FILE=$TEST_TEXT_FILE
     else
-        FILE=$1
+        local FILE=$1
     fi
     rm -f $FILE
 
@@ -182,7 +182,7 @@ function cd_run_dir {
         echo "TEST_BUCKET_MOUNT_POINT_1 variable not set"
         exit 1
     fi
-    RUN_DIR=${TEST_BUCKET_MOUNT_POINT_1}/${1}
+    local RUN_DIR=${TEST_BUCKET_MOUNT_POINT_1}/${1}
     mkdir -p ${RUN_DIR}
     cd ${RUN_DIR}
 }
@@ -256,8 +256,8 @@ function run_suite {
        echo "FAIL: $t"
    done
 
-   passed=${#TEST_PASSED_LIST[@]} 
-   failed=${#TEST_FAILED_LIST[@]} 
+   local passed=${#TEST_PASSED_LIST[@]} 
+   local failed=${#TEST_FAILED_LIST[@]} 
 
    echo "SUMMARY for $0: $passed tests passed.  $failed tests failed."
 
@@ -301,7 +301,7 @@ function get_permissions() {
 }
 
 function check_content_type() {
-    INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1`
+    local INFO_STR=`aws_cli s3api head-object --bucket ${TEST_BUCKET_1} --key $1`
     if [[ "${INFO_STR}" != *"$2"* ]]
     then
         echo "moved file content-type is not as expected expected:$2 got:${INFO_STR}"
@@ -310,7 +310,7 @@ function check_content_type() {
 }
 
 function get_disk_avail_size() {
-    DISK_AVAIL_SIZE=`BLOCKSIZE=$((1024 * 1024)) df $1 | awk '{print $4}' | tail -n 1`
+    local DISK_AVAIL_SIZE=`BLOCKSIZE=$((1024 * 1024)) df $1 | awk '{print $4}' | tail -n 1`
     echo ${DISK_AVAIL_SIZE}
 }
 
@@ -323,7 +323,7 @@ function aws_cli() {
 }
 
 function wait_for_port() {
-    PORT=$1
+    local PORT=$1
     for i in $(seq 30); do
         if exec 3<>"/dev/tcp/127.0.0.1/${PORT}";
         then
@@ -337,9 +337,9 @@ function wait_for_port() {
 
 function make_random_string() {
     if [ -n "$1" ]; then
-        END_POS=$1
+        local END_POS=$1
     else
-        END_POS=8
+        local END_POS=8
     fi
 
     ${BASE64_BIN} --wrap=0 < /dev/urandom | tr -d /+ | head -c ${END_POS}
