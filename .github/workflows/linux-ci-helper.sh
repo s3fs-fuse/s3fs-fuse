@@ -53,7 +53,7 @@ INSTALL_AWSCLI_PACKAGES="awscli"
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
-CONFIGURE_OPTIONS="CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
+CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
 
 #-----------------------------------------------------------
 # OS dependent variables
@@ -114,22 +114,12 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos8" ]; then
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3"
     INSTALL_CPPCHECK_OPTIONS="--enablerepo=powertools"
 
-    # [NOTE]
-    # Add -O2 to prevent the warning '_FORTIFY_SOURCE requires compiling with optimization(-O)'.
-    #
-    CONFIGURE_OPTIONS="CXXFLAGS='-O2 -std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
-
 elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     PACKAGE_MANAGER_BIN="yum"
     PACKAGE_UPDATE_OPTIONS="update -y"
 
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release"
     INSTALL_CPPCHECK_OPTIONS="--enablerepo=epel"
-
-    # [NOTE]
-    # Add -O2 to prevent the warning '_FORTIFY_SOURCE requires compiling with optimization(-O)'.
-    #
-    CONFIGURE_OPTIONS="CXXFLAGS='-O2 -std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:35" ]; then
     PACKAGE_MANAGER_BIN="dnf"
