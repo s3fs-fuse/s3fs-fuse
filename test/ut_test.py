@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # 
 # s3fs - FUSE-based file system backed by Amazon S3
 # 
@@ -21,7 +21,6 @@
 
 import os
 import unittest
-import ConfigParser
 import random
 import sys
 import time
@@ -42,7 +41,7 @@ class OssfsUnitTest(unittest.TestCase):
 
     def test_read_file(self):
         filename = "%s" % (self.random_string(10))
-        print filename
+        print(filename)
 
         f = open(filename, 'w')
         data = self.random_string(1000)
@@ -61,7 +60,7 @@ class OssfsUnitTest(unittest.TestCase):
     def test_rename_file(self):
         filename1 = "%s" % (self.random_string(10))
         filename2 = "%s" % (self.random_string(10))
-        print filename1, filename2
+        print(filename1, filename2)
 
         f = open(filename1, 'w+')
         data1 = self.random_string(1000)
@@ -81,7 +80,7 @@ class OssfsUnitTest(unittest.TestCase):
     def test_rename_file2(self):
         filename1 = "%s" % (self.random_string(10))
         filename2 = "%s" % (self.random_string(10))
-        print filename1, filename2
+        print(filename1, filename2)
 
         f = open(filename1, 'w')
         data1 = self.random_string(1000)
@@ -104,7 +103,7 @@ class OssfsUnitTest(unittest.TestCase):
         filename = "%s" % (self.random_string(10))
         fd = os.open(filename, os.O_CREAT|os.O_RDWR)
         try:
-            os.write(fd, 'a' * 42)
+            os.write(fd, b'a' * 42)
             self.assertEqual(os.fstat(fd).st_size, 42)
             os.ftruncate(fd, 100)
             self.assertEqual(os.fstat(fd).st_size, 100)
