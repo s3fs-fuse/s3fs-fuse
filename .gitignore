@@ -26,6 +26,7 @@
 *.o
 *.Po
 *.Plo
+*.exe
 
 #
 # autotools/automake
