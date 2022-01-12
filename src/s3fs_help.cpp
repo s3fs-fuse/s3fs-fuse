@@ -319,7 +319,7 @@ static const char help_string[] =
     "      Content-MD5 header.  This can add CPU overhead to transfers.\n"
     "\n"
     "   enable_unsigned_payload (default is disable)\n"
-    "      - Do not calculate Content-SHA25 for PutObject and UploadPart\n"
+    "      - Do not calculate Content-SHA256 for PutObject and UploadPart\n"
     "      payloads.  This can reduce CPU overhead to transfers.\n"
     "\n"
     "   ecs (default is disable)\n"
