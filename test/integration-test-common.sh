@@ -108,7 +108,7 @@ function retry {
     for i in $(seq $N); do
         echo "Trying: $*"
         eval $@; rc=$?
-        if [ $rc == 0 ]; then
+        if [ $rc = 0 ]; then
             break
         fi
         sleep 1
