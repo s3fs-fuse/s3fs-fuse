@@ -83,6 +83,15 @@ test/s3proxy-*
 test/write_multiblock
 
 #
+# Windows ports
+#
+*.dll
+*.exe
+fuse.pc
+WinFsp/
+bin/
+
+#
 # Local variables:
 # tab-width: 4
 # c-basic-offset: 4
