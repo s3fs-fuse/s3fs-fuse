@@ -32,6 +32,11 @@
 #include "s3fs.h"
 #include "string_util.h"
 
+// Use the polyfill in MSYS2 environment
+#ifdef __MSYS__
+#include "strptime.h"
+#endif
+
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------

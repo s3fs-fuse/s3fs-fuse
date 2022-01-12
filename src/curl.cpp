@@ -37,6 +37,11 @@
 #include "string_util.h"
 #include "addhead.h"
 
+// Use the polyfill in MSYS2 environment
+#ifdef __MSYS__
+#include "strcasestr.h"
+#endif
+
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
