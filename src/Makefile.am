@@ -53,7 +53,9 @@ s3fs_SOURCES = \
     addhead.cpp \
     sighandlers.cpp \
     autolock.cpp \
-    common_auth.cpp
+    common_auth.cpp \
+    strptime.cpp \
+    strcasestr.cpp
 if USE_SSL_OPENSSL
     s3fs_SOURCES += openssl_auth.cpp
 endif
@@ -71,7 +73,7 @@ noinst_PROGRAMS = \
     test_page_list \
     test_string_util
 
-test_curl_util_SOURCES = common_auth.cpp curl_util.cpp string_util.cpp test_curl_util.cpp s3fs_global.cpp s3fs_logger.cpp
+test_curl_util_SOURCES = common_auth.cpp curl_util.cpp string_util.cpp test_curl_util.cpp s3fs_global.cpp s3fs_logger.cpp strptime.cpp strcasestr.cpp
 if USE_SSL_OPENSSL
     test_curl_util_SOURCES += openssl_auth.cpp
 endif
@@ -89,9 +91,10 @@ test_page_list_SOURCES = \
     s3fs_global.cpp \
     s3fs_logger.cpp \
     string_util.cpp \
-    test_page_list.cpp
+    test_page_list.cpp \
+    strptime.cpp
 
-test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
+test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp strptime.cpp
 
 TESTS = \
     test_curl_util \
