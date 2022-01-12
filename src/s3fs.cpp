@@ -4031,6 +4031,11 @@ static bool set_mountpoint_attribute(struct stat& mpst)
     mp_gid  = getegid();
     mp_mode = S_IFDIR | (allow_other ? (is_mp_umask ? (~mp_umask & (S_IRWXU | S_IRWXG | S_IRWXO)) : (S_IRWXU | S_IRWXG | S_IRWXO)) : S_IRWXU);
 
+// In MSYS2 environment with WinFsp, it is not supported to change mode of mount point.
+// Doing that forcely will occurs permission problem, so disabling it.
+#ifdef __MSYS__
+    return true;
+#else
     S3FS_PRN_INFO2("PROC(uid=%u, gid=%u) - MountPoint(uid=%u, gid=%u, mode=%04o)",
            (unsigned int)mp_uid, (unsigned int)mp_gid, (unsigned int)(mpst.st_uid), (unsigned int)(mpst.st_gid), mpst.st_mode);
 
@@ -4049,6 +4054,7 @@ static bool set_mountpoint_attribute(struct stat& mpst)
         return true;
     }
     return false;
+#endif
 }
 
 //
@@ -4107,6 +4113,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             mountpoint = arg;
             struct stat stbuf;
 
+// In MSYS2 environment with WinFsp, it is not needed to create the mount point before mounting.
+// Also it causes a conflict with WinFsp's validation, so disabling it.
+#ifdef __MSYS__
+            memset(&stbuf, 0, sizeof stbuf);
+            set_mountpoint_attribute(stbuf);
+#else
             if(stat(arg, &stbuf) == -1){
                 S3FS_PRN_EXIT("unable to access MOUNTPOINT %s: %s", mountpoint.c_str(), strerror(errno));
                 return -1;
@@ -4136,6 +4148,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 }
                 closedir(dp);
             }
+#endif
             return 1;
         }
 
