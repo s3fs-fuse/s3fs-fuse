@@ -2336,6 +2336,12 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
     stbuf->f_bfree  = stbuf->f_blocks;
     stbuf->f_bavail = stbuf->f_blocks;
     stbuf->f_namemax = NAME_MAX;
+#ifdef __MSYS__
+    // WinFsp resolves the free space from f_bfree * f_frsize, and the total space from f_blocks * f_frsize (in bytes).
+    stbuf->f_frsize = stbuf->f_bsize;
+    stbuf->f_blocks = INT32_MAX;
+    stbuf->f_bfree = INT32_MAX;
+#endif
     return 0;
 }
 
