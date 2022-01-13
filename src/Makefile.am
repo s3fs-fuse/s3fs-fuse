@@ -96,7 +96,9 @@ test_page_list_SOURCES = \
     s3fs_logger.cpp \
     string_util.cpp \
     test_page_list.cpp \
-    strptime.cpp
+if MSYS
+    test_page_list_SOURCES += strptime.cpp
+endif
 
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 if MSYS
