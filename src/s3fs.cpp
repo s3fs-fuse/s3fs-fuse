@@ -5122,6 +5122,13 @@ int main(int argc, char* argv[])
     }
 
     if(is_multi_tenancy){
+      if(!pathrequeststyle) {
+        S3FS_PRN_EXIT("CEPH multi tenancy naming convention can't be used without use_path_request_style");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
+        exit(EXIT_FAILURE);
+      }
       bucket = tenancy_id+":"+bucket;
       S3FS_PRN_INFO("bucket name: %s", bucket.c_str());
     }
