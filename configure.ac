@@ -19,11 +19,11 @@
 ######################################################################
 dnl Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.71])
-AC_INIT([s3fs],[1.90])
-AC_CONFIG_HEADERS([config.h])
+AC_PREREQ(2.59)
+AC_INIT(s3fs, 1.90)
+AC_CONFIG_HEADER([config.h])
 
-AC_CANONICAL_TARGET
+AC_CANONICAL_SYSTEM
 AM_INIT_AUTOMAKE([foreign])
 
 AC_PROG_CXX
