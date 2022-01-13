@@ -232,6 +232,9 @@ AM_CONDITIONAL([USE_SSL_GNUTLS], [test "$auth_lib" = gnutls -o "$auth_lib" = net
 AM_CONDITIONAL([USE_GNUTLS_NETTLE], [test "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_SSL_NSS], [test "$auth_lib" = nss])
 
+AC_CANONICAL_HOST
+AM_CONDITIONAL([MSYS], [test "$host_os" = "msys"])
+
 dnl ----------------------------------------------
 dnl check functions
 dnl ----------------------------------------------
