@@ -64,7 +64,7 @@ if USE_SSL_NSS
     s3fs_SOURCES += nss_auth.cpp
 endif
 if MSYS
-    s3fs_SOURCES += strptime.cpp strcasestr.cpp
+    s3fs_SOURCES += strptime.cpp
 endif
 
 s3fs_LDADD = $(DEPS_LIBS)
@@ -85,7 +85,7 @@ if USE_SSL_NSS
     test_curl_util_SOURCES += nss_auth.cpp
 endif
 if MSYS
-    test_curl_util_SOURCES += strptime.cpp strcasestr.cpp
+    test_curl_util_SOURCES += strptime.cpp
 endif
 
 test_curl_util_LDADD = $(DEPS_LIBS)
