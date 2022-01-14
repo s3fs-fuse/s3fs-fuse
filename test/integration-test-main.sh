@@ -262,7 +262,7 @@ function test_chmod {
 
     # if they're the same, we have a problem.
     local CHANGED_PERMISSIONS=$(get_permissions $TEST_TEXT_FILE)
-    if [ $CHANGED_PERMISSIONS == $ORIGINAL_PERMISSIONS ]
+    if [ $CHANGED_PERMISSIONS = $ORIGINAL_PERMISSIONS ]
     then
       echo "Could not modify $TEST_TEXT_FILE permissions"
       return 1
@@ -299,9 +299,9 @@ function test_chown {
     else
         local CHANGED_PERMISSIONS=$(stat --format=%u:%g $TEST_TEXT_FILE)
     fi
-    if [ $CHANGED_PERMISSIONS == $ORIGINAL_PERMISSIONS ]
+    if [ $CHANGED_PERMISSIONS = $ORIGINAL_PERMISSIONS ]
     then
-      if [ $ORIGINAL_PERMISSIONS == "1000:1000" ]
+      if [ $ORIGINAL_PERMISSIONS = "1000:1000" ]
       then
         echo "Could not be strict check because original file permission 1000:1000"
       else

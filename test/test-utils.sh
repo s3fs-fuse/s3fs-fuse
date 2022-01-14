@@ -115,7 +115,7 @@ function check_file_size() {
 }
 
 function mk_test_file {
-    if [ $# == 0 ]; then
+    if [ $# = 0 ]; then
         local TEXT=$TEST_TEXT
     else
         local TEXT=$1
@@ -144,7 +144,7 @@ function mk_test_file {
 }
 
 function rm_test_file {
-    if [ $# == 0 ]; then
+    if [ $# = 0 ]; then
         local FILE=$TEST_TEXT_FILE
     else
         local FILE=$1
@@ -178,7 +178,7 @@ function rm_test_dir {
 # Create and cd to a unique directory for this test run
 # Sets RUN_DIR to the name of the created directory
 function cd_run_dir {
-    if [ "$TEST_BUCKET_MOUNT_POINT_1" == "" ]; then
+    if [ "$TEST_BUCKET_MOUNT_POINT_1" = "" ]; then
         echo "TEST_BUCKET_MOUNT_POINT_1 variable not set"
         exit 1
     fi
@@ -240,7 +240,7 @@ function run_suite {
        TEST_DIR=testdir-$RANDOM
        $t $key_prefix && rc=$? || rc=$?
 
-       if [[ $rc == 0 ]] ; then
+       if [[ $rc = 0 ]] ; then
            report_pass $t
        else
            report_fail $t
