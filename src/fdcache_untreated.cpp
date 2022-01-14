@@ -224,7 +224,7 @@ bool UntreatedParts::ReplaceLastUpdatePart(off_t start, off_t size)
                 iter->start = start;
                 iter->size  = size;
             }else{
-                untreated_list.erase(iter);
+                iter = untreated_list.erase(iter);
             }
             return true;
         }

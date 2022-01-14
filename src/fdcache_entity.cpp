@@ -1359,7 +1359,7 @@ int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
 
     // clear multipart upload info
     pseudo_obj->ClearUntreated();
-    pseudo_obj->ClearUploadInfo(false);
+    pseudo_obj->ClearUploadInfo();
 
     return 0;
 }
@@ -1421,7 +1421,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
         // No multipart upload
         result = RowFlushNoMultipart(pseudo_obj, tpath);
     }else if(FdEntity::streamupload){
-        // Stream maultipart upload
+        // Stream multipart upload
         result = RowFlushStreamMultipart(pseudo_obj, tpath);
     }else if(FdEntity::mixmultipart){
         // Mix multipart upload
@@ -1793,8 +1793,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
         // Check total size for downloading and Download
         //
-        total_mp_part_list mptoal;
-        off_t              total_download_size = mptoal(to_download_list);
+        off_t total_download_size = total_mp_part_list(to_download_list);
         if(0 < total_download_size){
             //
             // Check if there is enough free disk space for the total download size
@@ -1868,13 +1867,13 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         if(!pseudo_obj->ParallelMultipartUploadAll(path.c_str(), to_upload_list, to_copy_list, result)){
             S3FS_PRN_ERR("Failed to upload multipart parts.");
             pseudo_obj->ClearUntreated();
-            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
             return -EIO;
         }
         if(0 != result){
             S3FS_PRN_ERR("An error(%d) occurred in some threads that were uploading parallel multiparts, but continue to clean up..", result);
             pseudo_obj->ClearUntreated();
-            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
             return result;
         }
 
@@ -1886,20 +1885,20 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         if(!pseudo_obj->GetUploadId(upload_id) || !pseudo_obj->GetEtaglist(etaglist)){
             S3FS_PRN_ERR("There is no upload id or etag list.");
             pseudo_obj->ClearUntreated();
-            pseudo_obj->ClearUploadInfo(false);     // clear multipart upload info
+            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
             return -EIO;
         }else{
             S3fsCurl s3fscurl(true);
             if(0 != (result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist))){
                 S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
                 pseudo_obj->ClearUntreated();
-                pseudo_obj->ClearUploadInfo(false); // clear multipart upload info
+                pseudo_obj->ClearUploadInfo(); // clear multipart upload info
                 return result;
             }
             s3fscurl.DestroyCurlHandle();
         }
         pseudo_obj->ClearUntreated();
-        pseudo_obj->ClearUploadInfo(false);         // clear multipart upload info
+        pseudo_obj->ClearUploadInfo();         // clear multipart upload info
 
         // put pending headers
         if(0 != (result = UploadPendingMeta())){
