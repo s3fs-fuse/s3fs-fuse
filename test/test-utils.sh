@@ -25,6 +25,7 @@ set -o errexit
 set -o pipefail
 
 # Configuration
+ORIG_DIR=$PWD
 TEST_TEXT="HELLO WORLD"
 TEST_TEXT_FILE=test-s3fs.txt
 TEST_DIR=testdir
@@ -231,7 +232,6 @@ function describe {
 # directory in the bucket.  An attempt to clean this directory is
 # made after the test run.  
 function run_suite {
-   orig_dir=$PWD
    key_prefix="testrun-$RANDOM"
    cd_run_dir $key_prefix
    for t in "${TEST_LIST[@]}"; do
@@ -246,7 +246,7 @@ function run_suite {
            report_fail $t
        fi
    done
-   cd ${orig_dir}
+   cd ${ORIG_DIR}
    clean_run_dir
 
    for t in "${TEST_PASSED_LIST[@]}"; do
@@ -319,7 +319,7 @@ function aws_cli() {
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"
     fi
-    aws $* --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem $FLAGS
+    AWSR_CLIENT=True python3 "${ORIG_DIR}/${AWSR_BINARY}" $* --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem $FLAGS
 }
 
 function wait_for_port() {
