@@ -24,6 +24,7 @@
 #include "fdcache_untreated.h"
 #include "psemaphore.h"
 #include "metaheader.h"
+#include "autolock.h"
 
 //------------------------------------------------
 // Structure of parameters to pass to thread
@@ -73,12 +74,12 @@ class PseudoFdInfo
         static void* MultipartUploadThreadWorker(void* arg);
 
         bool Clear();
-        void CloseUploadFd(bool lock_already_held = false);
-        bool OpenUploadFd(bool lock_already_held = false);
+        void CloseUploadFd(AutoLock::Type type = AutoLock::NONE);
+        bool OpenUploadFd(AutoLock::Type type = AutoLock::NONE);
         bool GetLastUpdateUntreatedPart(off_t& start, off_t& size);
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
-        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, bool lock_already_held = false);
+        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type = AutoLock::NONE);
         int WaitAllThreadsExit();
         bool ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 
@@ -93,8 +94,8 @@ class PseudoFdInfo
         bool Readable() const;
 
         bool Set(int fd, int open_flags);
-        bool ClearUploadInfo(bool is_clear_part = false, bool lock_already_held = false);
-        bool InitialUploadInfo(const std::string& id, bool lock_already_held = false);
+        bool ClearUploadInfo(bool is_clear_part = false, AutoLock::Type type = AutoLock::NONE);
+        bool InitialUploadInfo(const std::string& id, AutoLock::Type type = AutoLock::NONE);
 
         bool IsUploading() const { return !upload_id.empty(); }
         bool GetUploadId(std::string& id) const;
@@ -102,7 +103,7 @@ class PseudoFdInfo
 
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = NULL);
 
-        void ClearUntreated(bool lock_already_held = false);
+        void ClearUntreated(AutoLock::Type type = AutoLock::NONE);
         bool ClearUntreated(off_t start, off_t size);
         bool GetLastUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE);
         bool AddUntreated(off_t start, off_t size);

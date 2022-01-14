@@ -326,17 +326,14 @@ struct mp_part
 
 typedef std::list<struct mp_part> mp_part_list_t;
 
-struct total_mp_part_list
+inline off_t total_mp_part_list(const mp_part_list_t& mplist)
 {
-    off_t operator()(const mp_part_list_t& mplist) const
-    {
-        off_t size = 0;
-        for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
-            size += iter->size;
-        }
-        return size;
+    off_t size = 0;
+    for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
+        size += iter->size;
     }
-};
+    return size;
+}
 
 //-------------------------------------------------------------------
 // mimes_t
