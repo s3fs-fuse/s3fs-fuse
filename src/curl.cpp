@@ -1280,9 +1280,9 @@ int S3fsCurl::MapPutErrorResponse(int result)
     //     </Error>
     //
     const char* pstrbody = bodydata.str();
-    if(!pstrbody || NULL != strcasestr(pstrbody, "<Error>")){
-        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or NULL). The request failed during copying the object in S3.");
-        S3FS_PRN_DBG("Put request Response Body : %s", (pstrbody ? pstrbody : "(null)"));
+    std::string code;
+    if(!pstrbody || simple_parse_xml(pstrbody, bodydata.size(), "Code", code)){
+        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or NULL). The request failed during copying the object in S3.  Code: %s", code.c_str());
         // TODO: parse more specific error from <Code>
         result = -EIO;
     }
