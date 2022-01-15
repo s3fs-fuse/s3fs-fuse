@@ -66,59 +66,65 @@ set -o pipefail
 S3FS=../src/s3fs
 
 # Allow these defaulted values to be overridden
-: ${S3_URL:="https://127.0.0.1:8080"}
-: ${S3_ENDPOINT:="us-east-1"}
-: ${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}
-: ${TEST_BUCKET_1:="s3fs-integration-test"}
+: "${S3_URL:="https://127.0.0.1:8080"}"
+: "${S3_ENDPOINT:="us-east-1"}"
+: "${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}"
+: "${TEST_BUCKET_1:="s3fs-integration-test"}"
 
 export TEST_BUCKET_1
 export S3_URL
 export S3_ENDPOINT
-export TEST_SCRIPT_DIR=`pwd`
+TEST_SCRIPT_DIR=$(pwd)
+export TEST_SCRIPT_DIR
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
 S3PROXY_VERSION="1.9.0"
-S3PROXY_BINARY=${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}
+S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
 CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
 
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
 then
-	echo "Missing credentials file: $S3FS_CREDENTIALS_FILE"
+	echo "Missing credentials file: ${S3FS_CREDENTIALS_FILE}"
 	exit 1
 fi
-chmod 600 "$S3FS_CREDENTIALS_FILE"
+chmod 600 "${S3FS_CREDENTIALS_FILE}"
 
 if [ -z "${S3FS_PROFILE}" ]; then
-    export AWS_ACCESS_KEY_ID=$(cut -d: -f1 ${S3FS_CREDENTIALS_FILE})
-    export AWS_SECRET_ACCESS_KEY=$(cut -d: -f2 ${S3FS_CREDENTIALS_FILE})
+    AWS_ACCESS_KEY_ID=$(cut -d: -f1 "${S3FS_CREDENTIALS_FILE}")
+    export AWS_ACCESS_KEY_ID
+
+    AWS_SECRET_ACCESS_KEY=$(cut -d: -f2 "${S3FS_CREDENTIALS_FILE}")
+    export AWS_SECRET_ACCESS_KEY
 fi
 
-if [ ! -d $TEST_BUCKET_MOUNT_POINT_1 ]
-then
-	mkdir -p $TEST_BUCKET_MOUNT_POINT_1
+if [ ! -d "${TEST_BUCKET_MOUNT_POINT_1}" ]; then
+	mkdir -p "${TEST_BUCKET_MOUNT_POINT_1}"
 fi
 
 # This function execute the function parameters $1 times
 # before giving up, with 1 second delays.
 function retry {
-    local N=$1; shift;
+    local N="$1"
+    shift
     rc=0
-    for i in $(seq $N); do
+    for _ in $(seq "${N}"); do
         echo "Trying: $*"
-        eval $@; rc=$?
-        if [ $rc = 0 ]; then
+        # shellcheck disable=SC2068,SC2294
+        eval $@
+        rc=$?
+        if [ "${rc}" -eq 0 ]; then
             break
         fi
         sleep 1
         echo "Retrying: $*"
     done
 
-    if [ $rc != 0 ]; then
+    if [ "${rc}" -ne 0 ]; then
         echo "timeout waiting for $*"
     fi
-    return $rc
+    return "${rc}"
 }
 
 # Proxy is not started if S3PROXY_BINARY is an empty string
@@ -145,7 +151,7 @@ function start_s3proxy {
         echo -e 'password\npassword\n\n\n\n\n\n\nyes' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
         echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file /tmp/keystore.pem
 
-        ${STDBUF_BIN} -oL -eL java -jar "$S3PROXY_BINARY" --properties $S3PROXY_CONFIG &
+        "${STDBUF_BIN}" -oL -eL java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
@@ -159,7 +165,7 @@ function start_s3proxy {
             chmod +x "${CHAOS_HTTP_PROXY_BINARY}"
         fi
 
-        ${STDBUF_BIN} -oL -eL java -jar ${CHAOS_HTTP_PROXY_BINARY} --properties chaos-http-proxy.conf &
+        "${STDBUF_BIN}" -oL -eL java -jar "${CHAOS_HTTP_PROXY_BINARY}" --properties chaos-http-proxy.conf &
         CHAOS_HTTP_PROXY_PID=$!
 
         # wait for Chaos HTTP Proxy to start
@@ -170,12 +176,12 @@ function start_s3proxy {
 function stop_s3proxy {
     if [ -n "${S3PROXY_PID}" ]
     then
-        kill $S3PROXY_PID
+        kill "${S3PROXY_PID}"
     fi
 
     if [ -n "${CHAOS_HTTP_PROXY_PID}" ]
     then
-        kill $CHAOS_HTTP_PROXY_PID
+        kill "${CHAOS_HTTP_PROXY_PID}"
     fi
 }
 
@@ -200,7 +206,7 @@ function start_s3fs {
     fi
 
     # On OSX only, we need to specify the direct_io and auto_cache flag.
-    if [ `uname` = "Darwin" ]; then
+    if [ "$(uname)" = "Darwin" ]; then
        local DIRECT_IO_OPT="-o direct_io -o auto_cache"
     else
        local DIRECT_IO_OPT=""
@@ -215,7 +221,7 @@ function start_s3fs {
     # Therefore, when it is macos, it is not executed via stdbuf.
     # This patch may be temporary, but no other method has been found at this time.
     #
-    if [ `uname` = "Darwin" ]; then
+    if [ "$(uname)" = "Darwin" ]; then
         local VIA_STDBUF_CMDLINE=""
     else
         local VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
@@ -238,15 +244,17 @@ function start_s3fs {
     #
 
     # subshell with set -x to log exact invocation of s3fs-fuse
+    # shellcheck disable=SC2086
     (
         set -x 
         ${VIA_STDBUF_CMDLINE} \
-            ${VALGRIND_EXEC} ${S3FS} \
-            $TEST_BUCKET_1 \
-            $TEST_BUCKET_MOUNT_POINT_1 \
+            ${VALGRIND_EXEC} \
+            ${S3FS} \
+            ${TEST_BUCKET_1} \
+            ${TEST_BUCKET_MOUNT_POINT_1} \
             -o use_path_request_style \
-            -o url=${S3_URL} \
-            -o endpoint=${S3_ENDPOINT} \
+            -o url="${S3_URL}" \
+            -o endpoint="${S3_ENDPOINT}" \
             -o no_check_certificate \
             -o ssl_verify_hostname=0 \
             -o use_xattr=1 \
@@ -255,37 +263,39 @@ function start_s3fs {
             ${DIRECT_IO_OPT} \
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
-            -o dbglevel=${DBGLEVEL:=info} \
+            -o dbglevel="${DBGLEVEL:=info}" \
             -o no_time_stamp_msg \
             -o retries=3 \
             -f \
             "${@}" &
         echo $! >&3
-    ) 3>pid | ${STDBUF_BIN} -oL -eL ${SED_BIN} ${SED_BUFFER_FLAG} "s/^/s3fs: /" &
+    ) 3>pid | "${STDBUF_BIN}" -oL -eL "${SED_BIN}" "${SED_BUFFER_FLAG}" "s/^/s3fs: /" &
     sleep 1
-    export S3FS_PID=$(<pid)
+    S3FS_PID=$(<pid)
+    export S3FS_PID
     rm -f pid
 
-    if [ `uname` = "Darwin" ]; then
+    if [ "$(uname)" = "Darwin" ]; then
          local TRYCOUNT=0
-         while [ $TRYCOUNT -le ${RETRIES:=20} ]; do
-             df | grep -q $TEST_BUCKET_MOUNT_POINT_1; rc=$?
-             if [ $rc -eq 0 ]; then
+         while [ "${TRYCOUNT}" -le "${RETRIES:=20}" ]; do
+             df | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"
+             rc=$?
+             if [ "${rc}" -eq 0 ]; then
                  break;
              fi
              sleep 1
-             TRYCOUNT=`expr ${TRYCOUNT} + 1`
+             TRYCOUNT=$((TRYCOUNT + 1))
          done
-         if [ $rc -ne 0 ]; then
+         if [ "${rc}" -ne 0 ]; then
              exit 1
          fi
     else
-        retry ${RETRIES:=20} grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts || exit 1
+        retry "${RETRIES:=20}" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts || exit 1
     fi
 
     # Quick way to start system up for manual testing with options under test
-    if [[ -n ${INTERACT} ]]; then
-        echo "Mountpoint $TEST_BUCKET_MOUNT_POINT_1  is ready"
+    if [[ -n "${INTERACT}" ]]; then
+        echo "Mountpoint ${TEST_BUCKET_MOUNT_POINT_1} is ready"
         echo "control-C to quit"
         sleep infinity
         exit 0
@@ -294,13 +304,13 @@ function start_s3fs {
 
 function stop_s3fs {
     # Retry in case file system is in use
-    if [ `uname` = "Darwin" ]; then
-        if df | grep -q $TEST_BUCKET_MOUNT_POINT_1; then
-            retry 10 df "|" grep -q $TEST_BUCKET_MOUNT_POINT_1 "&&" umount $TEST_BUCKET_MOUNT_POINT_1
+    if [ "$(uname)" = "Darwin" ]; then
+        if df | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
+            retry 10 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     else
-        if grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts; then 
-            retry 10 grep -q $TEST_BUCKET_MOUNT_POINT_1 /proc/mounts "&&" fusermount -u $TEST_BUCKET_MOUNT_POINT_1
+        if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then 
+            retry 10 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount -u "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     fi
 }

@@ -101,6 +101,10 @@ jobs:
         run: |
           make cppcheck
 
+      - name: Shellcheck
+        run: |
+          make shellcheck
+
       - name: Test suite
         run: |
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
@@ -131,7 +135,7 @@ jobs:
 
       - name: Install brew other packages
         run: |
-          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed';
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
 
       - name: Install awscli
@@ -151,6 +155,10 @@ jobs:
       - name: Cppcheck
         run: |
           make cppcheck
+
+      - name: Shellcheck
+        run: |
+          make shellcheck
 
       - name: Test suite
         run: |

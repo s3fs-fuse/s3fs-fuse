@@ -46,33 +46,33 @@ func_usage()
     echo ""
 }
 
-PRGNAME=`basename $0`
+PRGNAME=$(basename "$0")
 
-if [ "X$1" = "X-h" -o "X$1" = "X-H" ]; then
-    func_usage $PRGNAME
+if [ "X$1" = "X-h" ] || [ "X$1" = "X-H" ]; then
+    func_usage "${PRGNAME}"
     exit 0
 fi
-if [ "X$1" = "X" -o "X$2" = "X" -o "X$3" = "X" ]; then
-    func_usage $PRGNAME
+if [ "X$1" = "X" ] || [ "X$2" = "X" ] || [ "X$3" = "X" ]; then
+    func_usage "${PRGNAME}"
     exit 1
 fi
 
-BUCKET=$1
+BUCKET="$1"
 CDIR="$2"
-LIMIT=$3
+LIMIT="$3"
 SILENT=0
 if [ "X$4" = "X-silent" ]; then
     SILENT=1
 fi
 FILES_CDIR="${CDIR}/${BUCKET}"
 STATS_CDIR="${CDIR}/.${BUCKET}.stat"
-CURRENT_CACHE_SIZE=`du -sb "$FILES_CDIR" | awk '{print $1}'`
+CURRENT_CACHE_SIZE=$(du -sb "${FILES_CDIR}" | awk '{print $1}')
 #
 # Check total size
 #
-if [ $LIMIT -ge $CURRENT_CACHE_SIZE ]; then
+if [ "${LIMIT}" -ge "${CURRENT_CACHE_SIZE}" ]; then
     if [ $SILENT -ne 1 ]; then
-        echo "$FILES_CDIR ($CURRENT_CACHE_SIZE) is below allowed $LIMIT"
+        echo "${FILES_CDIR} (${CURRENT_CACHE_SIZE}) is below allowed ${LIMIT}"
     fi
     exit 0
 fi
@@ -86,37 +86,36 @@ TMP_CFILE=""
 #
 # Make file list by sorted access time
 #
-find "$STATS_CDIR" -type f -exec stat -c "%X:%n" "{}" \; | sort | while read part
+find "${STATS_CDIR}" -type f -exec stat -c "%X:%n" "{}" \; | sort | while read -r part
 do
-    echo Looking at $part
-    TMP_ATIME=`echo "$part" | cut -d: -f1`
-    TMP_STATS="`echo "$part" | cut -d: -f2`"
-    TMP_CFILE=`echo "$TMP_STATS" | sed s/\.$BUCKET\.stat/$BUCKET/`
+    echo "Looking at ${part}"
+    TMP_ATIME=$(echo "${part}" | cut -d: -f1)
+    TMP_STATS=$(echo "${part}" | cut -d: -f2)
+    TMP_CFILE=$(echo "${TMP_STATS}" | sed -e "s/\\.${BUCKET}\\.stat/${BUCKET}/")
 
-    if [ `stat -c %X "$TMP_STATS"` -eq $TMP_ATIME ]; then
-        rm -f "$TMP_STATS" "$TMP_CFILE" > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            if [ $SILENT -ne 1 ]; then
-                echo "ERROR: Could not remove files($TMP_STATS,$TMP_CFILE)"
+    if [ "$(stat -c %X "${TMP_STATS}")" -eq "${TMP_ATIME}" ]; then
+        if ! rm "${TMP_STATS}" "${TMP_CFILE}" > /dev/null 2>&1; then
+            if [ "${SILENT}" -ne 1 ]; then
+                echo "ERROR: Could not remove files(${TMP_STATS},${TMP_CFILE})"
             fi
             exit 1
         else
-            if [ $SILENT -ne 1 ]; then
-                echo "remove file: $TMP_CFILE	$TMP_STATS"
+            if [ "${SILENT}" -ne 1 ]; then
+                echo "remove file: ${TMP_CFILE}	${TMP_STATS}"
             fi
         fi
     fi
-    if [ $LIMIT -ge `du -sb "$FILES_CDIR" | awk '{print $1}'` ]; then
-        if [ $SILENT -ne 1 ]; then
+    if [ "${LIMIT}" -ge "$(du -sb "${FILES_CDIR}" | awk '{print $1}')" ]; then
+        if [ "${SILENT}" -ne 1 ]; then
             echo "finish removing files"
         fi
         break
     fi
 done
 
-if [ $SILENT -ne 1 ]; then
-    TOTAL_SIZE=`du -sb "$FILES_CDIR" | awk '{print $1}'`
-    echo "Finish: $FILES_CDIR total size is $TOTAL_SIZE"
+if [ "${SILENT}" -ne 1 ]; then
+    TOTAL_SIZE=$(du -sb "${FILES_CDIR}" | awk '{print $1}')
+    echo "Finish: ${FILES_CDIR} total size is ${TOTAL_SIZE}"
 fi
 
 exit 0

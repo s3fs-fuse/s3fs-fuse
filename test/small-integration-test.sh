@@ -32,8 +32,9 @@ CACHE_DIR="/tmp/s3fs-cache"
 rm -rf "${CACHE_DIR}"
 mkdir "${CACHE_DIR}"
 
-#reserve 200MB for data cache
 source test-utils.sh
+
+#reserve 200MB for data cache
 FAKE_FREE_DISK_SIZE=200
 ENSURE_DISKFREE_SIZE=10
 
@@ -44,13 +45,13 @@ if [ -n "${ALL_TESTS}" ]; then
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE}"
         enable_content_md5
         enable_noobj_cache
-        max_stat_cache_size=100
+        "max_stat_cache_size=100"
         nocopyapi
         nomultipart
         notsup_compat_dir
         sigv2
         sigv4
-        singlepart_copy_limit=10  # limit size to exercise multipart code paths
+        "singlepart_copy_limit=10"  # limit size to exercise multipart code paths
         #use_sse  # TODO: S3Proxy does not support SSE
     )
 else
@@ -64,9 +65,10 @@ start_s3proxy
 aws_cli s3 mb "s3://${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"
 
 for flag in "${FLAGS[@]}"; do
-    echo "testing s3fs flag: $flag"
+    echo "testing s3fs flag: ${flag}"
 
-    start_s3fs -o $flag
+    # shellcheck disable=SC2086
+    start_s3fs -o ${flag}
 
     ./integration-test-main.sh
 
