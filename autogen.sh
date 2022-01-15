@@ -1,5 +1,5 @@
-#! /bin/sh
-
+#!/bin/sh
+#
 # This file is part of S3FS.
 # 
 # Copyright 2009, 2010 Free Software Foundation, Inc.
@@ -22,14 +22,12 @@
 echo "--- Make commit hash file -------"
 
 SHORTHASH="unknown"
-type git > /dev/null 2>&1
-if [ $? -eq 0 -a -d .git ]; then
-	RESULT=`git rev-parse --short HEAD`
-	if [ $? -eq 0 ]; then
-		SHORTHASH=${RESULT}
+if command -v git > /dev/null 2>&1 && test -d .git; then
+	if RESULT=$(git rev-parse --short HEAD); then
+		SHORTHASH="${RESULT}"
 	fi
 fi
-echo ${SHORTHASH} > default_commit_hash
+echo "${SHORTHASH}" > default_commit_hash
 
 echo "--- Finished commit hash file ---"
 

@@ -40,25 +40,25 @@ UsageFunction()
 }
 
 ### Check parameters
-WHOAMI=`whoami`
-OWNNAME=`basename $0`
+WHOAMI=$(whoami)
+OWNNAME=$(basename "$0")
 AUTOYES="no"
 ALLYES="no"
 DIRPARAM=""
 
 while [ "$1" != "" ]; do
-    if [ "X$1" = "X-help" -o "X$1" = "X-h" -o "X$1" = "X-H" ]; then
-        UsageFunction $OWNNAME
+    if [ "X$1" = "X-help" ] || [ "X$1" = "X-h" ] || [ "X$1" = "X-H" ]; then
+        UsageFunction "${OWNNAME}"
         exit 0
-    elif [ "X$1" = "X-y" -o "X$1" = "X-Y" ]; then
+    elif [ "X$1" = "X-y" ] || [ "X$1" = "X-Y" ]; then
         AUTOYES="yes"
-    elif [ "X$1" = "X-all" -o "X$1" = "X-ALL" ]; then
+    elif [ "X$1" = "X-all" ] || [ "X$1" = "X-ALL" ]; then
         ALLYES="yes"
     else
         if [ "X$DIRPARAM" != "X" ]; then
             echo "*** Input error."
             echo ""
-            UsageFunction $OWNNAME
+            UsageFunction "${OWNNAME}"
             exit 1
         fi
         DIRPARAM=$1
@@ -68,7 +68,7 @@ done
 if [ "X$DIRPARAM" = "X" ]; then
     echo "*** Input error."
     echo ""
-    UsageFunction $OWNNAME
+    UsageFunction "${OWNNAME}"
     exit 1
 fi
 
@@ -88,18 +88,17 @@ echo "Please execute this program by responsibility of your own."
 echo "#############################################################################"
 echo ""
 
-DATE=`date +'%Y%m%d-%H%M%S'`
-LOGFILE="$OWNNAME-$DATE.log"
+DATE=$(date +'%Y%m%d-%H%M%S')
+LOGFILE="${OWNNAME}-${DATE}.log"
 
-echo -n "Start to merge directory object... [$DIRPARAM]"
-echo "# Start to merge directory object... [$DIRPARAM]" >> $LOGFILE
-echo -n "# DATE :        " >> $LOGFILE
-echo `date` >> $LOGFILE
-echo -n "# BASEDIR :     " >> $LOGFILE
-echo `pwd` >> $LOGFILE
-echo -n "# TARGET PATH : " >> $LOGFILE
-echo $DIRPARAM >> $LOGFILE
-echo  "" >> $LOGFILE
+echo "Start to merge directory object... [${DIRPARAM}]"
+{
+	echo "# Start to merge directory object... [${DIRPARAM}]"
+	echo "# DATE :        $(date)"
+	echo "# BASEDIR :     $(pwd)"
+	echo "# TARGET PATH : ${DIRPARAM}"
+	echo  ""
+} > "${LOGFILE}"
 
 if [ "$AUTOYES" = "yes" ]; then
     echo "(no confirmation)"
@@ -109,80 +108,84 @@ fi
 echo ""
 
 ### Get Directory list
-DIRLIST=`find $DIRPARAM -type d -print | grep -v ^\.$`
+DIRLIST=$(find "${DIRPARAM}" -type d -print | grep -v ^\.$)
 
 #
 # Main loop
 #
 for DIR in $DIRLIST; do
     ### Skip "." and ".." directories
-    BASENAME=`basename $DIR`
-    if [ "$BASENAME" = "." -o "$BASENAME" = ".." ]; then
+    BASENAME=$(basename "${DIR}")
+    if [ "${BASENAME}" = "." ] || [ "${BASENAME}" = ".." ]; then
         continue
     fi
 
-    if [ "$ALLYES" = "no" ]; then
+    if [ "${ALLYES}" = "no" ]; then
         ### Skip "d---------" directories.
         ### Other clients make directory object "dir/" which don't have
         ### "x-amz-meta-mode" attribute.
         ### Then these directories is "d---------", it is target directory.
-        DIRPERMIT=`ls -ld --time-style=+'%Y%m%d%H%M' $DIR | awk '{print $1}'`
-        if [ "$DIRPERMIT" != "d---------" ]; then
+
+        # shellcheck disable=SC2012
+        DIRPERMIT=$(ls -ld --time-style=+'%Y%m%d%H%M' "${DIR}" | awk '{print $1}')
+        if [ "${DIRPERMIT}" != "d---------" ]; then
             continue
         fi
     fi
 
     ### Confirm
     ANSWER=""
-    if [ "$AUTOYES" = "yes" ]; then
+    if [ "${AUTOYES}" = "yes" ]; then
         ANSWER="y"
     fi
-    while [ "X$ANSWER" != "XY" -a "X$ANSWER" != "Xy" -a "X$ANSWER" != "XN" -a "X$ANSWER" != "Xn" ]; do
-        echo -n "Do you merge $DIR? (y/n): "
-        read ANSWER
+    while [ "X${ANSWER}" != "XY" ] && [ "X${ANSWER}" != "Xy" ] && [ "X${ANSWER}" != "XN" ] && [ "X${ANSWER}" != "Xn" ]; do
+        printf "%s" "Do you merge ${DIR} ? (y/n): "
+        read -r ANSWER
     done
-    if [ "X$ANSWER" != "XY" -a "X$ANSWER" != "Xy" ]; then
+    if [ "X${ANSWER}" != "XY" ] && [ "X${ANSWER}" != "Xy" ]; then
         continue
     fi
 
     ### Do
-    CHOWN=`ls -ld --time-style=+'%Y%m%d%H%M' $DIR | awk '{print $3":"$4" "$7}'`
-    CHMOD=`ls -ld --time-style=+'%Y%m%d%H%M' $DIR | awk '{print $7}'`
-    TOUCH=`ls -ld --time-style=+'%Y%m%d%H%M' $DIR | awk '{print $6" "$7}'`
+    # shellcheck disable=SC2012
+    CHOWN=$(ls -ld --time-style=+'%Y%m%d%H%M' "${DIR}" | awk '{print $3":"$4" "$7}')
+    # shellcheck disable=SC2012
+    CHMOD=$(ls -ld --time-style=+'%Y%m%d%H%M' "${DIR}" | awk '{print $7}')
+    # shellcheck disable=SC2012
+    TOUCH=$(ls -ld --time-style=+'%Y%m%d%H%M' "${DIR}" | awk '{print $6" "$7}')
 
-    echo -n "*** Merge $DIR :	"
-    echo -n "	$DIR :		" >> $LOGFILE
+    printf "%s" "*** Merge ${DIR} :	"
+    printf "%s" "	${DIR} :		" >> "${LOGFILE}"
 
-    chmod 755 $CHMOD > /dev/null 2>&1
+    chmod 755 "${CHMOD}" > /dev/null 2>&1
     RESULT=$?
-    if [ $RESULT -ne 0 ]; then
+    if [ "${RESULT}" -ne 0 ]; then
         echo "Failed(chmod)"
-        echo "Failed(chmod)" >> $LOGFILE
+        echo "Failed(chmod)" >> "${LOGFILE}"
         continue
     fi
-    chown $CHOWN > /dev/null 2>&1
+    chown "${CHOWN}" > /dev/null 2>&1
     RESULT=$?
-    if [ $RESULT -ne 0 ]; then
+    if [ "${RESULT}" -ne 0 ]; then
         echo "Failed(chown)"
-        echo "Failed(chown)" >> $LOGFILE
+        echo "Failed(chown)" >> "${LOGFILE}"
         continue
     fi
-    touch -t $TOUCH > /dev/null 2>&1
+    touch -t "${TOUCH}" > /dev/null 2>&1
     RESULT=$?
-    if [ $RESULT -ne 0 ]; then
+    if [ "${RESULT}" -ne 0 ]; then
         echo "Failed(touch)"
-        echo "Failed(touch)" >> $LOGFILE
+        echo "Failed(touch)" >> "${LOGFILE}"
         continue
     fi
     echo "Succeed"
-    echo "Succeed" >> $LOGFILE
+    echo "Succeed" >> "${LOGFILE}"
 done
 
 echo ""
-echo "" >> $LOGFILE
+echo "" >> "${LOGFILE}"
 echo "Finished."
-echo -n "# Finished : " >> $LOGFILE
-echo `date` >> $LOGFILE
+echo "# Finished : $(date)" >> "${LOGFILE}"
 
 #
 # Local variables:
