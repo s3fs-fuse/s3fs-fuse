@@ -2146,7 +2146,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
     // get page list that have no data
     fdpage_list_t   nodata_pages;
     if(!pagelist.GetNoDataPageLists(nodata_pages)){
-        S3FS_PRN_ERR("filed to get page list that have no data.");
+        S3FS_PRN_ERR("failed to get page list that have no data.");
         return false;
     }
     if(nodata_pages.empty()){
@@ -2158,9 +2158,9 @@ bool FdEntity::PunchHole(off_t start, size_t size)
     for(fdpage_list_t::const_iterator iter = nodata_pages.begin(); iter != nodata_pages.end(); ++iter){
         if(0 != fallocate(physical_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
             if(ENOSYS == errno || EOPNOTSUPP == errno){
-                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);
+                S3FS_PRN_ERR("failed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);
             }else{
-                S3FS_PRN_ERR("filed to fallocate for punching hole to file with errno(%d)", errno);
+                S3FS_PRN_ERR("failed to fallocate for punching hole to file with errno(%d)", errno);
             }
             return false;
         }
