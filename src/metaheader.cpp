@@ -28,11 +28,6 @@
 #include "metaheader.h"
 #include "string_util.h"
 
-// Use the polyfill in MSYS2 environment
-#ifdef __MSYS__
-#include "strptime.h"
-#endif
-
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------

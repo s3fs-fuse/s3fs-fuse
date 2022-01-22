@@ -63,9 +63,6 @@ endif
 if USE_SSL_NSS
     s3fs_SOURCES += nss_auth.cpp
 endif
-if MSYS
-    s3fs_SOURCES += strptime.cpp
-endif
 
 s3fs_LDADD = $(DEPS_LIBS)
 
@@ -84,9 +81,6 @@ endif
 if USE_SSL_NSS
     test_curl_util_SOURCES += nss_auth.cpp
 endif
-if MSYS
-    test_curl_util_SOURCES += strptime.cpp
-endif
 
 test_curl_util_LDADD = $(DEPS_LIBS)
 
@@ -96,14 +90,8 @@ test_page_list_SOURCES = \
     s3fs_logger.cpp \
     string_util.cpp \
     test_page_list.cpp
-if MSYS
-    test_page_list_SOURCES += strptime.cpp
-endif
 
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
-if MSYS
-    test_string_util_SOURCES += strptime.cpp
-endif
 
 TESTS = \
     test_curl_util \
