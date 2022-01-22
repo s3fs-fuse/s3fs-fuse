@@ -44,7 +44,7 @@ int SyncFiller::Fill(const std::string& name, const struct stat *stbuf, off_t of
 
     int result = 0;
     if(filled.insert(name).second){
-        result = filler_func(filler_buff, name.c_str(), stbuf, off);
+        result = filler_func(filler_buff, name.c_str(), stbuf, off, static_cast<fuse_fill_dir_flags>(0));
     }
     return result;
 }
@@ -56,7 +56,7 @@ int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
     int result = 0;
     for(auto it = pathlist.cbegin(); it != pathlist.cend(); ++it) {
         if(filled.insert(*it).second){
-            if(0 != filler_func(filler_buff, it->c_str(), nullptr, 0)){
+            if(0 != filler_func(filler_buff, it->c_str(), nullptr, 0, static_cast<fuse_fill_dir_flags>(0))){
                 result = 1;
             }
         }
