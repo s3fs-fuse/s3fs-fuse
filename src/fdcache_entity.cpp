@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <utime.h>
 
 #include "common.h"
 #include "fdcache_entity.h"

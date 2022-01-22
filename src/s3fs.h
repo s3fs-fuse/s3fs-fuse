@@ -21,7 +21,7 @@
 #ifndef S3FS_S3FS_H_
 #define S3FS_S3FS_H_
 
-#define FUSE_USE_VERSION      26
+#define FUSE_USE_VERSION      30
 
 #include <fuse.h>
 
