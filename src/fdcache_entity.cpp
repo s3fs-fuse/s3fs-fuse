@@ -27,8 +27,10 @@
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <utility>
+#include <utime.h>
 
 #include "common.h"
 #include "s3fs.h"

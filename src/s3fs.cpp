@@ -143,22 +143,22 @@ static int print_umount_message(const std::string& mp, bool force) __attribute__
 //-------------------------------------------------------------------
 // fuse interface functions
 //-------------------------------------------------------------------
-static int s3fs_getattr(const char* path, struct stat* stbuf);
+static int s3fs_getattr(const char* path, struct stat* stbuf, fuse_file_info* info);
 static int s3fs_readlink(const char* path, char* buf, size_t size);
 static int s3fs_mknod(const char* path, mode_t mode, dev_t rdev);
 static int s3fs_mkdir(const char* path, mode_t mode);
 static int s3fs_unlink(const char* path);
 static int s3fs_rmdir(const char* path);
 static int s3fs_symlink(const char* from, const char* to);
-static int s3fs_rename(const char* from, const char* to);
+static int s3fs_rename(const char* from, const char* to, unsigned int flags);
 static int s3fs_link(const char* from, const char* to);
-static int s3fs_chmod(const char* path, mode_t mode);
-static int s3fs_chmod_nocopy(const char* path, mode_t mode);
-static int s3fs_chown(const char* path, uid_t uid, gid_t gid);
-static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid);
-static int s3fs_utimens(const char* path, const struct timespec ts[2]);
-static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2]);
-static int s3fs_truncate(const char* path, off_t size);
+static int s3fs_chmod(const char* path, mode_t mode, struct fuse_file_info* info);
+static int s3fs_chmod_nocopy(const char* path, mode_t mode, struct fuse_file_info* info);
+static int s3fs_chown(const char* path, uid_t uid, gid_t gid, struct fuse_file_info* info);
+static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid, struct fuse_file_info* info);
+static int s3fs_utimens(const char* path, const struct timespec ts[2], struct fuse_file_info* info);
+static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2], struct fuse_file_info* info);
+static int s3fs_truncate(const char* path, off_t size, struct fuse_file_info* info);
 static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi);
 static int s3fs_open(const char* path, struct fuse_file_info* fi);
 static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi);
@@ -168,9 +168,9 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi);
 static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi);
 static int s3fs_release(const char* path, struct fuse_file_info* fi);
 static int s3fs_opendir(const char* path, struct fuse_file_info* fi);
-static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi);
+static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags);
 static int s3fs_access(const char* path, int mask);
-static void* s3fs_init(struct fuse_conn_info* conn);
+static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config);
 static void s3fs_destroy(void*);
 #ifdef __APPLE__
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position);
@@ -889,7 +889,7 @@ int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_
     return 0;
 }
 
-static int s3fs_getattr(const char* _path, struct stat* stbuf)
+static int s3fs_getattr(const char* _path, struct stat* stbuf, fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int result;
@@ -1905,7 +1905,7 @@ static int rename_directory(const char* from, const char* to)
     return 0;
 }
 
-static int s3fs_rename(const char* _from, const char* _to)
+static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 {
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
@@ -1977,7 +1977,7 @@ static int s3fs_link(const char* _from, const char* _to)
     return -ENOTSUP;
 }
 
-static int s3fs_chmod(const char* _path, mode_t mode)
+static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2123,7 +2123,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     return 0;
 }
 
-static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
+static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2223,7 +2223,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     return result;
 }
 
-static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
+static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2375,7 +2375,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     return 0;
 }
 
-static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
+static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2606,7 +2606,7 @@ static int update_mctime_parent_directory(const char* _path)
     return 0;
 }
 
-static int s3fs_utimens(const char* _path, const struct timespec ts[2])
+static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2764,7 +2764,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     return 0;
 }
 
-static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
+static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2872,7 +2872,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     return result;
 }
 
-static int s3fs_truncate(const char* _path, off_t size)
+static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int          result;
@@ -3505,7 +3505,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     return 0;
 }
 
-static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
+static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags)
 {
     WTF8_ENCODE(path)
     S3ObjList head;
@@ -3531,8 +3531,8 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     }
 
     // force to add "." and ".." name.
-    filler(buf, ".", nullptr, 0);
-    filler(buf, "..", nullptr, 0);
+    filler(buf, ".", nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS);
+    filler(buf, "..", nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS);
     if(head.IsEmpty()){
         return 0;
     }
@@ -4468,7 +4468,7 @@ static void s3fs_exit_fuseloop(int exit_status)
       }
 }
 
-static void* s3fs_init(struct fuse_conn_info* conn)
+static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config)
 {
     S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), ps3fscred->GetCredFuncVersion(false));
 
@@ -4504,10 +4504,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
          conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
     }
     #endif
-
-    if(conn->capable & FUSE_CAP_BIG_WRITES){
-         conn->want |= FUSE_CAP_BIG_WRITES;
-    }
 
     // Signal object
     if(!S3fsSignals::Initialize()){
@@ -6089,7 +6085,6 @@ int main(int argc, char* argv[])
         s3fs_oper.listxattr   = s3fs_listxattr;
         s3fs_oper.removexattr = s3fs_removexattr;
     }
-    s3fs_oper.flag_utime_omit_ok = true;
 
     // now passing things off to fuse, fuse will finish evaluating the command line args
     fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, nullptr);
