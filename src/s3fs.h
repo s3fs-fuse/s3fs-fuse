@@ -21,9 +21,11 @@
 #ifndef S3FS_S3FS_H_
 #define S3FS_S3FS_H_
 
-#define FUSE_USE_VERSION      26
+#define FUSE_USE_VERSION      30
 
 #include <fuse.h>
+
+static const fuse_fill_dir_flags FUSE_FILL_DIR_NONE = static_cast<fuse_fill_dir_flags>(0);  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 #define S3FS_FUSE_EXIT() \
         do{ \
