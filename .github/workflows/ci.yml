@@ -99,7 +99,10 @@ jobs:
 
       - name: Cppcheck
         run: |
-          make cppcheck
+          # work around resource leak false positives on older Linux distributions
+          if cppcheck --version | awk '{if ($2 <= 1.86) { exit(1) } }'; then
+            make cppcheck
+          fi
 
       - name: Shellcheck
         run: |
