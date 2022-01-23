@@ -26,6 +26,7 @@
 
 #include "common.h"
 #include "s3fs.h"
+#include "s3fs_util.h"
 #include "cache.h"
 #include "autolock.h"
 #include "string_util.h"
@@ -33,16 +34,6 @@
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
-#ifndef CLOCK_REALTIME
-#define CLOCK_REALTIME          0
-#endif
-#ifndef CLOCK_MONOTONIC
-#define CLOCK_MONOTONIC         CLOCK_REALTIME
-#endif
-#ifndef CLOCK_MONOTONIC_COARSE
-#define CLOCK_MONOTONIC_COARSE  CLOCK_MONOTONIC
-#endif
-
 inline void SetStatCacheTime(struct timespec& ts)
 {
     if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &ts)){
