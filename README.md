@@ -68,7 +68,7 @@ Many systems provide pre-built packages:
   sudo zypper install s3fs
   ```
 
-* macOS via [Homebrew](https://brew.sh/):
+* macOS 10.12 and newer via [Homebrew](https://brew.sh/):
 
   ```
   brew install --cask osxfuse
