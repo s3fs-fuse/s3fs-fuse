@@ -18,11 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#ifndef HAVE_CLOCK_GETTIME
-#include <sys/time.h>
-#endif
 
 #include <algorithm>
 
@@ -45,29 +43,11 @@
 #define CLOCK_MONOTONIC_COARSE  CLOCK_MONOTONIC
 #endif
 
-#ifdef HAVE_CLOCK_GETTIME
-static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
-{
-    return clock_gettime(static_cast<clockid_t>(clk_id), ts);
-}
-#else
-static int s3fs_clock_gettime(int clk_id, struct timespec* ts)
-{
-    struct timeval now;
-    if(0 != gettimeofday(&now, NULL)){
-        return -1;
-    }
-    ts->tv_sec  = now.tv_sec;
-    ts->tv_nsec = now.tv_usec * 1000;
-    return 0;
-}
-#endif
-
 inline void SetStatCacheTime(struct timespec& ts)
 {
-    if(-1 == s3fs_clock_gettime(CLOCK_MONOTONIC_COARSE, &ts)){
-        ts.tv_sec  = time(NULL);
-        ts.tv_nsec = 0;
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &ts)){
+        S3FS_PRN_CRIT("clock_gettime failed: %d", errno);
+        abort();
     }
 }
 
