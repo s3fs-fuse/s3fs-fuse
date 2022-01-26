@@ -62,7 +62,9 @@ fi
 
 start_s3proxy
 
-aws_cli s3 mb "s3://${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"
+if ! aws_cli s3api head-bucket --bucket "${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"; then
+    aws_cli s3 mb "s3://${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"
+fi
 
 for flag in "${FLAGS[@]}"; do
     echo "testing s3fs flag: ${flag}"
