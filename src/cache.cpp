@@ -792,6 +792,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
         }
 #if defined(__APPLE__)
         pst->st_mtime = mtime.tv_sec;
+        pst->st_mtimespec.tv_nsec = mtime.tv_nsec;
 #else
         pst->st_mtim.tv_sec = mtime.tv_sec;
         pst->st_mtim.tv_nsec = mtime.tv_nsec;
@@ -809,6 +810,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
         }
 #if defined(__APPLE__)
         pst->st_ctime = ctime.tv_sec;
+        pst->st_ctimespec.tv_nsec = ctime.tv_nsec;
 #else
         pst->st_ctim.tv_sec = ctime.tv_sec;
         pst->st_ctim.tv_nsec = ctime.tv_nsec;
@@ -826,6 +828,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
         }
 #if defined(__APPLE__)
         pst->st_atime = atime.tv_sec;
+        pst->st_atimespec.tv_nsec = atime.tv_nsec;
 #else
         pst->st_atim.tv_sec = atime.tv_sec;
         pst->st_atim.tv_nsec = atime.tv_nsec;

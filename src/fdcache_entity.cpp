@@ -793,10 +793,12 @@ int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct utimbuf n_time;
-        n_time.modtime = mtime.tv_sec;
-        n_time.actime  = ctime.tv_sec;
-        if(-1 == utime(cachepath.c_str(), &n_time)){
+        struct timeval n_time[2];
+        n_time[0].tv_sec  = ctime.tv_sec;
+        n_time[0].tv_usec = ctime.tv_nsec / 1000;
+        n_time[1].tv_sec  = mtime.tv_sec;
+        n_time[1].tv_usec = mtime.tv_nsec / 1000;
+        if(-1 == utimes(cachepath.c_str(), n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return -errno;
         }
@@ -884,18 +886,30 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
         struct timeval tv[2];
         tv[0].tv_sec = holding_mtime.tv_sec;
         tv[0].tv_usec = holding_mtime.tv_nsec / 1000;
+#if defined(__APPLE__)
         tv[1].tv_sec = st.st_ctime;
-        tv[1].tv_usec = 0;
+        tv[1].tv_usec = st.st_ctimespec.tv_nsec / 1000;
+#else
+        tv[1].tv_sec = st.st_ctim.tv_sec;
+        tv[1].tv_usec = st.st_ctim.tv_nsec / 1000;
+#endif
         if(-1 == futimes(physical_fd, tv)){
             S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
             return false;
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct utimbuf n_time;
-        n_time.modtime = holding_mtime.tv_sec;
-        n_time.actime  = st.st_ctime;
-        if(-1 == utime(cachepath.c_str(), &n_time)){
+        struct timeval n_time[2];
+#if defined(__APPLE__)
+        n_time[0].tv_sec = st.st_ctime;
+        n_time[0].tv_usec = st.st_ctimespec.tv_nsec / 1000;
+#else
+        n_time[0].tv_sec = st.st_ctime;
+        n_time[0].tv_usec = st.st_ctim.tv_nsec / 1000;
+#endif
+        n_time[1].tv_sec = holding_mtime.tv_sec;
+        n_time[1].tv_usec = holding_mtime.tv_nsec / 1000;
+        if(-1 == utimes(cachepath.c_str(), n_time)){
             S3FS_PRN_ERR("utime failed. errno(%d)", errno);
             return false;
         }
