@@ -371,6 +371,21 @@ function test_read_external_object() {
     rm -f "${TEST_TEXT_FILE}"
 }
 
+function test_read_external_dir_object() {
+    describe "create directory objects via aws CLI and read via s3fs ..."
+    local SUB_DIR_NAME;      SUB_DIR_NAME="subdir"
+    local SUB_DIR_TEST_FILE; SUB_DIR_TEST_FILE="${SUB_DIR_NAME}/${TEST_TEXT_FILE}"
+    local OBJECT_NAME;       OBJECT_NAME=$(basename "${PWD}")/"${SUB_DIR_TEST_FILE}"
+
+    echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+
+    if stat "${SUB_DIR_NAME}" | grep -q '1969-12-31[[:space:]]23:59:59[.]000000000'; then
+        echo "sub directory a/c/m time is underflow(-1)."
+        return 1
+    fi
+    rm -rf "${SUB_DIR_NAME}"
+}
+
 function test_update_metadata_external_small_object() {
     describe "update meta to small file after created file by aws cli"
 
@@ -1796,6 +1811,7 @@ function add_all_tests {
     fi
     add_tests test_external_modification
     add_tests test_read_external_object
+    add_tests test_read_external_dir_object
     add_tests test_update_metadata_external_small_object
     add_tests test_update_metadata_external_large_object
     add_tests test_rename_before_close
