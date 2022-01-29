@@ -21,6 +21,16 @@
 #ifndef S3FS_S3FS_UTIL_H_
 #define S3FS_S3FS_UTIL_H_
 
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME          0
+#endif
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC         CLOCK_REALTIME
+#endif
+#ifndef CLOCK_MONOTONIC_COARSE
+#define CLOCK_MONOTONIC_COARSE  CLOCK_MONOTONIC
+#endif
+
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------

@@ -45,6 +45,7 @@
 #include "string_util.h"
 #include "s3fs_auth.h"
 #include "s3fs_help.h"
+#include "s3fs_util.h"
 #include "mpu_util.h"
 
 //-------------------------------------------------------------------
@@ -1927,6 +1928,17 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     return result;
 }
 
+static timespec handle_utimens_special_values(timespec ts, timespec now, timespec orig)
+{
+    if(ts.tv_nsec == UTIME_NOW){
+        return now;
+    }else if(ts.tv_nsec == UTIME_OMIT){
+        return orig;
+    }else{
+        return ts;
+    }
+}
+
 static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 {
     WTF8_ENCODE(path)
@@ -1953,6 +1965,18 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         }
     }
 
+    struct timespec now;
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &now)){
+        abort();
+    }
+#if __APPLE__
+    struct timespec actime = handle_utimens_special_values(ts[0], now, stbuf.st_ctimespec);
+    struct timespec mtime = handle_utimens_special_values(ts[1], now, stbuf.st_mtimespec);
+#else
+    struct timespec actime = handle_utimens_special_values(ts[0], now, stbuf.st_ctim);
+    struct timespec mtime = handle_utimens_special_values(ts[1], now, stbuf.st_mtim);
+#endif
+
     if(S_ISDIR(stbuf.st_mode)){
         result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
     }else{
@@ -1975,14 +1999,14 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, actime.tv_sec, mtime.tv_sec, actime.tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
         headers_t updatemeta;
-        updatemeta["x-amz-meta-mtime"]         = str(ts[1]);
-        updatemeta["x-amz-meta-ctime"]         = str(ts[0]);
-        updatemeta["x-amz-meta-atime"]         = str(ts[0]);
+        updatemeta["x-amz-meta-mtime"]         = str(mtime.tv_sec);
+        updatemeta["x-amz-meta-ctime"]         = str(actime.tv_sec);
+        updatemeta["x-amz-meta-atime"]         = str(actime.tv_sec);
         updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -2002,7 +2026,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
-                ent->SetHoldingMtime(ts[1]);     // ts[1] is mtime
+                ent->SetHoldingMtime(mtime);
 
                 // If there is data in the Stats cache, update the Stats cache.
                 StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
@@ -2029,7 +2053,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             StatCache::getStatCacheData()->DelStat(nowcache);
 
             if(keep_mtime){
-                ent->SetHoldingMtime(ts[1]);     // ts[1].tv_sec is mtime
+                ent->SetHoldingMtime(mtime);
             }
         }
     }
@@ -2063,6 +2087,18 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         }
     }
 
+    struct timespec now;
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &now)){
+        abort();
+    }
+#if __APPLE__
+    struct timespec actime = handle_utimens_special_values(ts[0], now, stbuf.st_ctimespec);
+    struct timespec mtime = handle_utimens_special_values(ts[1], now, stbuf.st_mtimespec);
+#else
+    struct timespec actime = handle_utimens_special_values(ts[0], now, stbuf.st_ctim);
+    struct timespec mtime = handle_utimens_special_values(ts[1], now, stbuf.st_mtim);
+#endif
+
     // Get attributes
     if(S_ISDIR(stbuf.st_mode)){
         result = chk_dir_object_type(path, newpath, strpath, nowcache, NULL, &nDirType);
@@ -2086,7 +2122,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts[0].tv_sec, ts[1].tv_sec, ts[0].tv_sec, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, actime.tv_sec, mtime.tv_sec, actime.tv_sec, stbuf.st_uid, stbuf.st_gid))){
             return result;
         }
     }else{
@@ -2101,13 +2137,13 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         }
 
         // set mtime/ctime
-        if(0 != (result = ent->SetMCtime(ts[1], ts[0]))){
+        if(0 != (result = ent->SetMCtime(mtime, actime))){
             S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
 
         // set atime
-        if(0 != (result = ent->SetAtime(ts[0]))){
+        if(0 != (result = ent->SetAtime(actime))){
             S3FS_PRN_ERR("could not set atime to file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -5235,6 +5271,7 @@ int main(int argc, char* argv[])
         s3fs_oper.listxattr   = s3fs_listxattr;
         s3fs_oper.removexattr = s3fs_removexattr;
     }
+    s3fs_oper.flag_utime_omit_ok = true;
 
     // now passing things off to fuse, fuse will finish evaluating the command line args
     fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
