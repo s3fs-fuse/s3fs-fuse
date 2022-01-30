@@ -24,6 +24,34 @@
 #include "curl_util.h"
 #include "test_util.h"
 
+//---------------------------------------------------------
+// S3fsCred Stub
+//
+// [NOTE]
+// This test program links curl_util.cpp just to use the
+// curl_slist_sort_insert function.
+// This file has a call to S3fsCred::GetBucket(), which
+// results in a link error. That method is not used in
+// this test file, so define a stub class. Linking all
+// implementation of the S3fsCred class or making all
+// stubs is not practical, so this is the best answer.
+//
+class S3fsCred
+{
+    private:
+        static std::string  bucket_name;
+    public:
+        static const std::string& GetBucket();
+};
+
+std::string  S3fsCred::bucket_name;
+
+const std::string& S3fsCred::GetBucket()
+{
+	return S3fsCred::bucket_name;
+}
+//---------------------------------------------------------
+
 #define ASSERT_IS_SORTED(x) assert_is_sorted((x), __FILE__, __LINE__)
 
 void assert_is_sorted(struct curl_slist* list, const char *file, int line)

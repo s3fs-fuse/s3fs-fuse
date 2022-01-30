@@ -31,6 +31,7 @@
 #include "fdcache_pseudofd.h"
 #include "s3fs_util.h"
 #include "s3fs_logger.h"
+#include "s3fs_cred.h"
 #include "string_util.h"
 #include "autolock.h"
 
@@ -125,7 +126,7 @@ bool FdManager::DeleteCacheDirectory()
         return false;
     }
 
-    std::string mirror_path = FdManager::cache_dir + "/." + bucket + ".mirror";
+    std::string mirror_path = FdManager::cache_dir + "/." + S3fsCred::GetBucket() + ".mirror";
     if(!delete_files_in_dir(mirror_path.c_str(), true)){
         return false;
     }
@@ -181,10 +182,10 @@ bool FdManager::MakeCachePath(const char* path, std::string& cache_path, bool is
     std::string resolved_path(FdManager::cache_dir);
     if(!is_mirror_path){
         resolved_path += "/";
-        resolved_path += bucket;
+        resolved_path += S3fsCred::GetBucket();
     }else{
         resolved_path += "/.";
-        resolved_path += bucket;
+        resolved_path += S3fsCred::GetBucket();
         resolved_path += ".mirror";
     }
 
@@ -208,7 +209,7 @@ bool FdManager::CheckCacheTopDir()
     if(FdManager::cache_dir.empty()){
         return true;
     }
-    std::string toppath(FdManager::cache_dir + "/" + bucket);
+    std::string toppath(FdManager::cache_dir + "/" + S3fsCred::GetBucket());
 
     return check_exist_dir_permission(toppath.c_str());
 }
@@ -749,7 +750,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
 {
     DIR*           dp;
     struct dirent* dent;
-    std::string    abs_path = cache_dir + "/" + bucket + path;
+    std::string    abs_path = cache_dir + "/" + S3fsCred::GetBucket() + path;
 
     if(NULL == (dp = opendir(abs_path.c_str()))){
         S3FS_PRN_ERR("could not open cache dir(%s) - errno(%d)", abs_path.c_str(), errno);

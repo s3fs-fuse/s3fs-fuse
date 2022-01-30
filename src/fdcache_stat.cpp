@@ -29,6 +29,7 @@
 #include "fdcache_stat.h"
 #include "fdcache.h"
 #include "s3fs_util.h"
+#include "s3fs_cred.h"
 #include "string_util.h"
 
 //------------------------------------------------
@@ -37,14 +38,14 @@
 std::string CacheFileStat::GetCacheFileStatTopDir()
 {
     std::string top_path;
-    if(!FdManager::IsCacheDir() || bucket.empty()){
+    if(!FdManager::IsCacheDir() || S3fsCred::GetBucket().empty()){
         return top_path;
     }
 
     // stat top dir( "/<cache_dir>/.<bucket_name>.stat" )
     top_path += FdManager::GetCacheDir();
     top_path += "/.";
-    top_path += bucket;
+    top_path += S3fsCred::GetBucket();
     top_path += ".stat";
     return top_path;
 }

@@ -34,6 +34,7 @@
 #include "psemaphore.h"
 #include "metaheader.h"
 #include "fdcache_page.h"
+#include "s3fs_cred.h"
 
 //----------------------------------------------
 // Avoid dependency on libcurl version
@@ -83,7 +84,6 @@ class S3fsCurl;
 // Prototype function for lazy setup options for curl handle
 typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
 
-typedef std::map<std::string, std::string> iamcredmap_t;
 typedef std::map<std::string, std::string> sseckeymap_t;
 typedef std::list<sseckeymap_t>            sseckeylist_t;
 
@@ -140,24 +140,7 @@ class S3fsCurl
         static bool             is_content_md5;
         static bool             is_verbose;
         static bool             is_dump_body;
-        static std::string      AWSAccessKeyId;
-        static std::string      AWSSecretAccessKey;
-        static std::string      AWSAccessToken;
-        static time_t           AWSAccessTokenExpire;
-        static bool             is_ecs;
-        static bool             is_use_session_token;
-        static bool             is_ibm_iam_auth;
-        static std::string      IAM_cred_url;
-        static int              IAM_api_version;
-        static std::string      IAMv2_token_url;
-        static int              IAMv2_token_ttl;
-        static std::string      IAMv2_token_ttl_hdr;
-        static std::string      IAMv2_token_hdr;
-        static std::string      IAMv2_api_token;
-        static size_t           IAM_field_count;
-        static std::string      IAM_token_field;
-        static std::string      IAM_expiry_field;
-        static std::string      IAM_role;
+        static S3fsCred*        ps3fscred;
         static long             ssl_verify_hostname;
         static curltime_t       curl_times;
         static curlprogress_t   curl_progress;
@@ -252,11 +235,6 @@ class S3fsCurl
         static bool PreGetObjectRequestSetCurlOpts(S3fsCurl* s3fscurl);
         static bool PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl);
 
-        static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
-        static bool SetIAMCredentials(const char* response);
-        static bool SetIAMv2APIToken(const char* response);
-        static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
-        static bool SetIAMRoleFromMetaData(const char* response);
         static bool LoadEnvSseCKeys();
         static bool LoadEnvSseKmsid();
         static bool PushbackSseKeys(const std::string& onekey);
@@ -278,8 +256,6 @@ class S3fsCurl
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
         int GetIAMv2ApiToken();
-        int GetIAMCredentials();
-
         int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
         int CopyMultipartPostSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
         bool UploadMultipartPostComplete();
@@ -290,12 +266,12 @@ class S3fsCurl
     public:
         // class methods
         static bool InitS3fsCurl();
+        static bool InitCredentialObject(S3fsCred* pcredobj);
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
         static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
         static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size);
-        static bool CheckIAMCredentialUpdate();
 
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
@@ -332,16 +308,6 @@ class S3fsCurl
         static bool GetVerbose() { return S3fsCurl::is_verbose; }
         static bool SetDumpBody(bool flag);
         static bool IsDumpBody() { return S3fsCurl::is_dump_body; }
-        static bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
-        static bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
-        static bool IsSetAccessKeyID()
-        {
-            return !S3fsCurl::AWSAccessKeyId.empty();
-        }
-        static bool IsSetAccessKeys()
-        {
-            return !S3fsCurl::IAM_role.empty() || ((!S3fsCurl::AWSAccessKeyId.empty() || S3fsCurl::is_ibm_iam_auth) && !S3fsCurl::AWSSecretAccessKey.empty());
-        }
         static long SetSslVerifyHostname(long value);
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
         static void ResetOffset(S3fsCurl* pCurl);
@@ -351,14 +317,6 @@ class S3fsCurl
         // maximum parallel HEAD requests
         static int SetMaxMultiRequest(int max);
         static int GetMaxMultiRequest() { return S3fsCurl::max_multireq; }
-        static bool SetIsECS(bool flag);
-        static bool SetIsIBMIAMAuth(bool flag);
-        static size_t SetIAMFieldCount(size_t field_count);
-        static std::string SetIAMCredentialsURL(const char* url);
-        static std::string SetIAMTokenField(const char* token_field);
-        static std::string SetIAMExpiryField(const char* expiry_field);
-        static std::string SetIAMRole(const char* role);
-        static const char* GetIAMRole() { return S3fsCurl::IAM_role.c_str(); }
         static bool SetMultipartSize(off_t size);
         static off_t GetMultipartSize() { return S3fsCurl::multipart_size; }
         static bool SetMultipartCopySize(off_t size);
@@ -374,12 +332,12 @@ class S3fsCurl
         static bool IsListObjectsV2() { return S3fsCurl::listobjectsv2; }
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
-        static bool SetIMDSVersion(int version);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
         bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
 
+        int GetIAMCredentials();
         bool LoadIAMRoleFromMetaData();
         bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true);

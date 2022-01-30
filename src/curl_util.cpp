@@ -27,6 +27,7 @@
 #include "curl_util.h"
 #include "string_util.h"
 #include "s3fs_auth.h"
+#include "s3fs_cred.h"
 
 //-------------------------------------------------------------------
 // Utility Functions
@@ -244,7 +245,7 @@ bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::strin
     if(!realpath){
         return false;
     }
-    resourcepath = urlEncode(service_path + bucket + realpath);
+    resourcepath = urlEncode(service_path + S3fsCred::GetBucket() + realpath);
     url          = s3host + resourcepath;
     return true;
 }
@@ -257,7 +258,7 @@ std::string prepare_url(const char* url)
     std::string hostname;
     std::string path;
     std::string url_str = std::string(url);
-    std::string token = std::string("/") + bucket;
+    std::string token = std::string("/") + S3fsCred::GetBucket();
     size_t bucket_pos;
     size_t bucket_length = token.size();
     size_t uri_length = 0;
@@ -271,7 +272,7 @@ std::string prepare_url(const char* url)
     bucket_pos = url_str.find(token, uri_length);
 
     if(!pathrequeststyle){
-        hostname = bucket + "." + url_str.substr(uri_length, bucket_pos - uri_length);
+        hostname = S3fsCred::GetBucket() + "." + url_str.substr(uri_length, bucket_pos - uri_length);
         path = url_str.substr((bucket_pos + bucket_length));
     }else{
         hostname = url_str.substr(uri_length, bucket_pos - uri_length);
@@ -279,7 +280,7 @@ std::string prepare_url(const char* url)
         if('/' != part[0]){
             part = "/" + part;
         }
-        path = "/" + bucket + part;
+        path = "/" + S3fsCred::GetBucket() + part;
     }
 
     url_str = uri + hostname + path;
@@ -354,7 +355,7 @@ std::string url_to_host(const std::string &url)
 std::string get_bucket_host()
 {
     if(!pathrequeststyle){
-        return bucket + "." + url_to_host(s3host);
+        return S3fsCred::GetBucket() + "." + url_to_host(s3host);
     }
     return url_to_host(s3host);
 }

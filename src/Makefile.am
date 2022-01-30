@@ -41,6 +41,7 @@ s3fs_SOURCES = \
     s3objlist.cpp \
     cache.cpp \
     string_util.cpp \
+    s3fs_cred.cpp \
     s3fs_util.cpp \
     fdcache.cpp \
     fdcache_entity.cpp \
