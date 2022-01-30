@@ -72,13 +72,12 @@ static mode_t mp_mode             = 0;    // mode of mount point
 static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
-static std::string passwd_file;
+static S3fsCred* ps3fscred        = NULL; // using only in this file
 static std::string mimetype_file;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
 static bool allow_other           = false;
-static bool load_iamrole          = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
 static mode_t s3fs_umask          = 0;
@@ -86,10 +85,7 @@ static bool is_s3fs_uid           = false;// default does not set.
 static bool is_s3fs_gid           = false;// default does not set.
 static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
-static bool is_ecs                = false;
-static bool is_ibm_iam_auth       = false;
 static bool is_use_xattr          = false;
-static bool is_use_session_token  = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
@@ -99,11 +95,6 @@ static int max_keys_list_object   = 1000;// default is 1000
 static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
-
-static const char ALLBUCKET_FIELDS_TYPE[] = "";         // special key for mapping(This name is absolutely not used as a bucket name)
-static const char KEYVAL_FIELDS_TYPE[]    = "\t";       // special key for mapping(This name is absolutely not used as a bucket name)
-static const char AWS_ACCESSKEYID[]       = "AWSAccessKeyId";
-static const char AWS_SECRETKEY[]         = "AWSSecretKey";
 
 //-------------------------------------------------------------------
 // Global functions : prototype
@@ -139,12 +130,6 @@ static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, P
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
-static int parse_passwd_file(bucketkvmap_t& resmap);
-static int check_for_aws_format(const kvmap_t& kvmap);
-static int check_passwd_file_perms();
-static int read_aws_credentials_file(const std::string &filename);
-static int read_passwd_file();
-static int get_access_keys();
 static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
@@ -1207,7 +1192,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     if(update_ctime){
         meta["x-amz-meta-ctime"]     = str(time(NULL));
     }
-    meta["x-amz-copy-source"]        = urlEncode(service_path + bucket + s3_realpath);
+    meta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + s3_realpath);
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -1626,7 +1611,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         headers_t updatemeta;
         updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
         updatemeta["x-amz-meta-mode"]          = str(mode);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -1803,7 +1788,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
         updatemeta["x-amz-meta-uid"]           = str(uid);
         updatemeta["x-amz-meta-gid"]           = str(gid);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -2007,7 +1992,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         updatemeta["x-amz-meta-mtime"]         = str(mtime);
         updatemeta["x-amz-meta-ctime"]         = str(actime);
         updatemeta["x-amz-meta-atime"]         = str(actime);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -3028,7 +3013,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     // set xattr all object
     headers_t updatemeta;
     updatemeta["x-amz-meta-ctime"]         = str(time(NULL));
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
     // check opened file handle.
@@ -3309,7 +3294,7 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     // set xattr all object
     headers_t updatemeta;
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
     if(!xattrs.empty()){
         updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);
@@ -3380,7 +3365,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
 
     // check loading IAM role name
-    if(load_iamrole){
+    if(ps3fscred->IsIAMRoleMetadataType()){
       // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
       //
       S3fsCurl s3fscurl;
@@ -3389,7 +3374,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
           s3fs_exit_fuseloop(EXIT_FAILURE);
           return NULL;
       }
-      S3FS_PRN_INFO("loaded IAM role name = %s", S3fsCurl::GetIAMRole());
+      S3FS_PRN_INFO("loaded IAM role name = %s", ps3fscred->GetIAMRole().c_str());
     }
 
     // Check Bucket
@@ -3501,8 +3486,8 @@ static int s3fs_check_service()
     S3FS_PRN_INFO("check services.");
 
     // At first time for access S3, we check IAM role if it sets.
-    if(!S3fsCurl::CheckIAMCredentialUpdate()){
-        S3FS_PRN_CRIT("Failed to check IAM role name(%s).", S3fsCurl::GetIAMRole());
+    if(!ps3fscred->CheckIAMCredentialUpdate()){
+        S3FS_PRN_CRIT("Failed to check IAM role name(%s).", ps3fscred->GetIAMRole().c_str());
         return EXIT_FAILURE;
     }
 
@@ -3599,474 +3584,6 @@ static int s3fs_check_service()
 }
 
 //
-// Read and Parse passwd file
-//
-// The line of the password file is one of the following formats:
-//   (1) "accesskey:secretkey"         : AWS format for default(all) access key/secret key
-//   (2) "bucket:accesskey:secretkey"  : AWS format for bucket's access key/secret key
-//   (3) "key=value"                   : Content-dependent KeyValue contents
-//
-// This function sets result into bucketkvmap_t, it bucket name and key&value mapping.
-// If bucket name is empty(1 or 3 format), bucket name for mapping is set "\t" or "".
-//
-// Return:  1 - OK(could parse and set mapping etc.)
-//          0 - NG(could not read any value)
-//         -1 - Should shutdown immediately
-//
-static int parse_passwd_file(bucketkvmap_t& resmap)
-{
-    std::string          line;
-    size_t               first_pos;
-    readline_t           linelist;
-    readline_t::iterator iter;
-
-    // open passwd file
-    std::ifstream PF(passwd_file.c_str());
-    if(!PF.good()){
-        S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
-        return -1;
-    }
-
-    // read each line
-    while(getline(PF, line)){
-        line = trim(line);
-        if(line.empty()){
-            continue;
-        }
-        if('#' == line[0]){
-            continue;
-        }
-        if(std::string::npos != line.find_first_of(" \t")){
-            S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
-            return -1;
-        }
-        if('[' == line[0]){
-            S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
-            return -1;
-        }
-        linelist.push_back(line);
-    }
-
-    // read '=' type
-    kvmap_t kv;
-    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos = iter->find_first_of('=');
-        if(first_pos == std::string::npos){
-            continue;
-        }
-        // formatted by "key=val"
-        std::string key = trim(iter->substr(0, first_pos));
-        std::string val = trim(iter->substr(first_pos + 1, std::string::npos));
-        if(key.empty()){
-            continue;
-        }
-        if(kv.end() != kv.find(key)){
-            S3FS_PRN_WARN("same key name(%s) found in passwd file, skip this.", key.c_str());
-            continue;
-        }
-        kv[key] = val;
-    }
-    // set special key name
-    resmap[KEYVAL_FIELDS_TYPE] = kv;
-
-    // read ':' type
-    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
-        first_pos       = iter->find_first_of(':');
-        size_t last_pos = iter->find_last_of(':');
-        if(first_pos == std::string::npos){
-            continue;
-        }
-        std::string bucketname;
-        std::string accesskey;
-        std::string secret;
-        if(first_pos != last_pos){
-            // formatted by "bucket:accesskey:secretkey"
-            bucketname    = trim(iter->substr(0, first_pos));
-            accesskey = trim(iter->substr(first_pos + 1, last_pos - first_pos - 1));
-            secret    = trim(iter->substr(last_pos + 1, std::string::npos));
-        }else{
-            // formatted by "accesskey:secretkey"
-            bucketname    = ALLBUCKET_FIELDS_TYPE;
-            accesskey = trim(iter->substr(0, first_pos));
-            secret    = trim(iter->substr(first_pos + 1, std::string::npos));
-        }
-        if(resmap.end() != resmap.find(bucketname)){
-            S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
-            return -1;
-        }
-        kv.clear();
-        kv[AWS_ACCESSKEYID] = accesskey;
-        kv[AWS_SECRETKEY] = secret;
-        resmap[bucketname] = kv;
-    }
-    return (resmap.empty() ? 0 : 1);
-}
-
-//
-// Return:  1 - OK(could read and set accesskey etc.)
-//          0 - NG(could not read)
-//         -1 - Should shutdown immediately
-//
-static int check_for_aws_format(const kvmap_t& kvmap)
-{
-    std::string str1(AWS_ACCESSKEYID);
-    std::string str2(AWS_SECRETKEY);
-
-    if(kvmap.empty()){
-        return 0;
-    }
-    kvmap_t::const_iterator str1_it = kvmap.find(str1);
-    kvmap_t::const_iterator str2_it = kvmap.find(str2);
-    if(kvmap.end() == str1_it && kvmap.end() == str2_it){
-        return 0;
-    }
-    if(kvmap.end() == str1_it || kvmap.end() == str2_it){
-        S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
-        return -1;
-    }
-    if(!S3fsCurl::SetAccessKey(str1_it->second.c_str(), str2_it->second.c_str())){
-        S3FS_PRN_EXIT("failed to set access key/secret key.");
-        return -1;
-    }
-    return 1;
-}
-
-//
-// check_passwd_file_perms
-// 
-// expect that global passwd_file variable contains
-// a non-empty value and is readable by the current user
-//
-// Check for too permissive access to the file
-// help save users from themselves via a security hole
-//
-// only two options: return or error out
-//
-static int check_passwd_file_perms()
-{
-    struct stat info;
-
-    // let's get the file info
-    if(stat(passwd_file.c_str(), &info) != 0){
-        S3FS_PRN_EXIT("unexpected error from stat(%s).", passwd_file.c_str());
-        return EXIT_FAILURE;
-    }
-
-    // return error if any file has others permissions 
-    if( (info.st_mode & S_IROTH) ||
-        (info.st_mode & S_IWOTH) || 
-        (info.st_mode & S_IXOTH)) {
-        S3FS_PRN_EXIT("credentials file %s should not have others permissions.", passwd_file.c_str());
-        return EXIT_FAILURE;
-    }
-
-    // Any local file should not have any group permissions 
-    // /etc/passwd-s3fs can have group permissions 
-    if(passwd_file != "/etc/passwd-s3fs"){
-        if( (info.st_mode & S_IRGRP) ||
-            (info.st_mode & S_IWGRP) || 
-            (info.st_mode & S_IXGRP)) {
-            S3FS_PRN_EXIT("credentials file %s should not have group permissions.", passwd_file.c_str());
-            return EXIT_FAILURE;
-        }
-    }else{
-        // "/etc/passwd-s3fs" does not allow group write.
-        if((info.st_mode & S_IWGRP)){
-            S3FS_PRN_EXIT("credentials file %s should not have group writable permissions.", passwd_file.c_str());
-            return EXIT_FAILURE;
-        }
-    }
-    if((info.st_mode & S_IXUSR) || (info.st_mode & S_IXGRP)){
-        S3FS_PRN_EXIT("credentials file %s should not have executable permissions.", passwd_file.c_str());
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-static int read_aws_credentials_file(const std::string &filename)
-{
-    // open passwd file
-    std::ifstream PF(filename.c_str());
-    if(!PF.good()){
-        return -1;
-    }
-
-    std::string profile;
-    std::string accesskey;
-    std::string secret;
-    std::string session_token;
-
-    // read each line
-    std::string line;
-    while(getline(PF, line)){
-        line = trim(line);
-        if(line.empty()){
-            continue;
-        }
-        if('#' == line[0]){
-            continue;
-        }
-
-        if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
-            if(profile == aws_profile){
-                break;
-            }
-            profile = line.substr(1, line.size() - 2);
-            accesskey.clear();
-            secret.clear();
-            session_token.clear();
-        }
-    
-        size_t pos = line.find_first_of('=');
-        if(pos == std::string::npos){
-            continue;
-        }
-        std::string key   = trim(line.substr(0, pos));
-        std::string value = trim(line.substr(pos + 1, std::string::npos));
-        if(key == "aws_access_key_id"){
-            accesskey = value;
-        }else if(key == "aws_secret_access_key"){
-            secret = value;
-        }else if(key == "aws_session_token"){
-            session_token = value;
-        }
-    }
-
-    if(profile != aws_profile){
-      return EXIT_FAILURE;
-    }
-    if (session_token.empty()) {
-        if (is_use_session_token) {
-            S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/credentials file for profile: %s.", aws_profile.c_str());
-            return EXIT_FAILURE;
-        }
-        if(!S3fsCurl::SetAccessKey(accesskey.c_str(), secret.c_str())){
-            S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
-            return EXIT_FAILURE;
-        }
-    } else {
-        if (!S3fsCurl::SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str())) {
-            S3FS_PRN_EXIT("session token is invalid.");
-            return EXIT_FAILURE;
-        }
-    }
-
-    return EXIT_SUCCESS;
-}
-
-//
-// read_passwd_file
-//
-// Support for per bucket credentials
-// 
-// Format for the credentials file:
-// [bucket:]AccessKeyId:SecretAccessKey
-// 
-// Lines beginning with # are considered comments
-// and ignored, as are empty lines
-//
-// Uncommented lines without the ":" character are flagged as
-// an error, so are lines with spaces or tabs
-//
-// only one default key pair is allowed, but not required
-//
-static int read_passwd_file()
-{
-    bucketkvmap_t bucketmap;
-    kvmap_t       keyval;
-    int           result;
-
-    // if you got here, the password file
-    // exists and is readable by the
-    // current user, check for permissions
-    if(EXIT_SUCCESS != check_passwd_file_perms()){
-        return EXIT_FAILURE;
-    }
-
-    //
-    // parse passwd file
-    //
-    result = parse_passwd_file(bucketmap);
-    if(-1 == result){
-         return EXIT_FAILURE;
-    }
-
-    //
-    // check key=value type format.
-    //
-    bucketkvmap_t::iterator it = bucketmap.find(KEYVAL_FIELDS_TYPE);
-    if(bucketmap.end() != it){
-        // aws format
-        result = check_for_aws_format(it->second);
-        if(-1 == result){
-            return EXIT_FAILURE;
-        }else if(1 == result){
-            // success to set
-            return EXIT_SUCCESS;
-        }
-    }
-
-    std::string bucket_key = ALLBUCKET_FIELDS_TYPE;
-    if(!bucket.empty() && bucketmap.end() != bucketmap.find(bucket)){
-        bucket_key = bucket;
-    }
-    it = bucketmap.find(bucket_key);
-    if(bucketmap.end() == it){
-        S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
-        return EXIT_FAILURE;
-    }
-    keyval = it->second;
-    kvmap_t::iterator aws_accesskeyid_it = keyval.find(AWS_ACCESSKEYID);
-    kvmap_t::iterator aws_secretkey_it = keyval.find(AWS_SECRETKEY);
-    if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
-        S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
-        return EXIT_FAILURE;
-    }
-    if(!S3fsCurl::SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str())){
-        S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-//
-// get_access_keys
-//
-// called only when were are not mounting a 
-// public bucket
-//
-// Here is the order precedence for getting the
-// keys:
-//
-// 1 - from the command line  (security risk)
-// 2 - from a password file specified on the command line
-// 3 - from environment variables
-// 3a - from the AWS_CREDENTIAL_FILE environment variable
-// 3b - from ${HOME}/.aws/credentials
-// 4 - from the users ~/.passwd-s3fs
-// 5 - from /etc/passwd-s3fs
-//
-static int get_access_keys()
-{
-    // should be redundant
-    if(S3fsCurl::IsPublicBucket()){
-        return EXIT_SUCCESS;
-    }
-
-    // access key loading is deferred
-    if(load_iamrole || is_ecs){
-        return EXIT_SUCCESS;
-    }
-
-    // 1 - keys specified on the command line
-    if(S3fsCurl::IsSetAccessKeys()){
-        return EXIT_SUCCESS;
-    }
-
-    // 2 - was specified on the command line
-    if(!passwd_file.empty()){
-        std::ifstream PF(passwd_file.c_str());
-        if(PF.good()){
-             PF.close();
-             return read_passwd_file();
-        }else{
-            S3FS_PRN_EXIT("specified passwd_file is not readable.");
-            return EXIT_FAILURE;
-        }
-    }
-
-    // 3  - environment variables
-    char* AWSACCESSKEYID     = getenv("AWS_ACCESS_KEY_ID") ? getenv("AWS_ACCESS_KEY_ID") : getenv("AWSACCESSKEYID");
-    char* AWSSECRETACCESSKEY = getenv("AWS_SECRET_ACCESS_KEY") ? getenv("AWS_SECRET_ACCESS_KEY") : getenv("AWSSECRETACCESSKEY");
-    char* AWSSESSIONTOKEN    = getenv("AWS_SESSION_TOKEN") ? getenv("AWS_SESSION_TOKEN") : getenv("AWSSESSIONTOKEN");
-
-    if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
-        if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
-            (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
-            S3FS_PRN_EXIT("both environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together.");
-            return EXIT_FAILURE;
-        }
-        S3FS_PRN_INFO2("access key from env variables");
-        if (AWSSESSIONTOKEN != NULL) {
-            S3FS_PRN_INFO2("session token is available");
-            if (!S3fsCurl::SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)) {
-                 S3FS_PRN_EXIT("session token is invalid.");
-                 return EXIT_FAILURE;
-            }
-        } else {
-            S3FS_PRN_INFO2("session token is not available");
-            if (is_use_session_token) {
-                S3FS_PRN_EXIT("environment variable AWS_SESSION_TOKEN is expected to be set.");
-                return EXIT_FAILURE;
-            }
-        }
-        if(!S3fsCurl::SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
-            S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-            return EXIT_FAILURE;
-        }
-        return EXIT_SUCCESS;
-    }
-
-    // 3a - from the AWS_CREDENTIAL_FILE environment variable
-    char * AWS_CREDENTIAL_FILE;
-    AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
-    if(AWS_CREDENTIAL_FILE != NULL){
-        passwd_file = AWS_CREDENTIAL_FILE;
-        if(!passwd_file.empty()){
-            std::ifstream PF(passwd_file.c_str());
-            if(PF.good()){
-                 PF.close();
-                 return read_passwd_file();
-            }else{
-                S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
-                return EXIT_FAILURE;
-            }
-        }
-    }
-
-    // 3b - check ${HOME}/.aws/credentials
-    std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
-    if(read_aws_credentials_file(aws_credentials) == EXIT_SUCCESS) {
-        return EXIT_SUCCESS;
-    }else if(aws_profile != "default"){
-        S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
-        return EXIT_FAILURE;
-    }
-
-    // 4 - from the default location in the users home directory
-    char * HOME;
-    HOME = getenv ("HOME");
-    if(HOME != NULL){
-         passwd_file = HOME;
-         passwd_file += "/.passwd-s3fs";
-         std::ifstream PF(passwd_file.c_str());
-         if(PF.good()){
-             PF.close();
-             if(EXIT_SUCCESS != read_passwd_file()){
-                 return EXIT_FAILURE;
-             }
-             // It is possible that the user's file was there but
-             // contained no key pairs i.e. commented out
-             // in that case, go look in the final location
-             if(S3fsCurl::IsSetAccessKeys()){
-                  return EXIT_SUCCESS;
-             }
-         }
-     }
-
-    // 5 - from the system default location
-    passwd_file = "/etc/passwd-s3fs";
-    std::ifstream PF(passwd_file.c_str());
-    if(PF.good()){
-        PF.close();
-        return read_passwd_file();
-    }
-    S3FS_PRN_EXIT("could not determine how to establish security credentials.");
-
-    return EXIT_FAILURE;
-}
-
-//
 // Check & Set attributes for mount point.
 //
 static bool set_mountpoint_attribute(struct stat& mpst)
@@ -4112,7 +3629,10 @@ static int set_bucket(const char* arg)
             S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
             return -1;
         }
-        bucket = strtok(bucket_name, ":");
+        if(!S3fsCred::SetBucket(strtok(bucket_name, ":"))){
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            return -1;
+        }
         char* pmount_prefix = strtok(NULL, "");
         if(pmount_prefix){
             if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
@@ -4126,7 +3646,10 @@ static int set_bucket(const char* arg)
             }
         }
     }else{
-        bucket = arg;
+        if(!S3fsCred::SetBucket(arg)){
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            return -1;
+        }
     }
     return 0;
 }
@@ -4142,7 +3665,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     int ret;
     if(key == FUSE_OPT_KEY_NONOPT){
         // the first NONOPT option is the bucket name
-        if(bucket.empty()){
+        if(S3fsCred::GetBucket().empty()){
             if ((ret = set_bucket(arg))){
                 return ret;
             }
@@ -4427,21 +3950,21 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(is_prefix(arg, "passwd_file=")){
-            passwd_file = strchr(arg, '=') + sizeof(char);
+            ps3fscred->SetS3fsPasswdFile(strchr(arg, '=') + sizeof(char));
             return 0;
         }
         if(0 == strcmp(arg, "ibm_iam_auth")){
-            S3fsCurl::SetIsIBMIAMAuth(true);
-            S3fsCurl::SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
-            S3fsCurl::SetIAMTokenField("\"access_token\"");
-            S3fsCurl::SetIAMExpiryField("\"expiration\"");
-            S3fsCurl::SetIAMFieldCount(2);
-            S3fsCurl::SetIMDSVersion(1);
-            is_ibm_iam_auth = true;
+            ps3fscred->SetIsIBMIAMAuth(true);
+            ps3fscred->SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
+            ps3fscred->SetIAMTokenField("\"access_token\"");
+            ps3fscred->SetIAMExpiryField("\"expiration\"");
+            ps3fscred->SetIAMFieldCount(2);
+            ps3fscred->SetIMDSVersion(1);
+            ps3fscred->SetIsIBMIAMAuth(true);
             return 0;
         }
         if (0 == strcmp(arg, "use_session_token")) {
-            is_use_session_token = true;
+            ps3fscred->SetIsUseSessionToken(true);
             return 0;
         }
         if(is_prefix(arg, "ibm_iam_endpoint=")){
@@ -4453,45 +3976,45 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                  return -1;
             }
             endpoint_url = std::string(iam_endpoint) + "/identity/token";
-            S3fsCurl::SetIAMCredentialsURL(endpoint_url.c_str());
+            ps3fscred->SetIAMCredentialsURL(endpoint_url.c_str());
             return 0;
         }
         if(0 == strcmp(arg, "imdsv1only")){
-            S3fsCurl::SetIMDSVersion(1);
+            ps3fscred->SetIMDSVersion(1);
             return 0;
         }
         if(0 == strcmp(arg, "ecs")){
-            if (is_ibm_iam_auth) {
+            if(ps3fscred->IsIBMIAMAuth()){
                 S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
                 return -1;
             }
-            S3fsCurl::SetIsECS(true);
-            S3fsCurl::SetIMDSVersion(1);
-            S3fsCurl::SetIAMCredentialsURL("http://169.254.170.2");
-            S3fsCurl::SetIAMFieldCount(5);
-            is_ecs = true;
+            ps3fscred->SetIsECS(true);
+            ps3fscred->SetIMDSVersion(1);
+            ps3fscred->SetIAMCredentialsURL("http://169.254.170.2");
+            ps3fscred->SetIAMFieldCount(5);
+            ps3fscred->SetIsECS(true);
             return 0;
         }
         if(is_prefix(arg, "iam_role")){
-            if (is_ecs || is_ibm_iam_auth) {
+            if(ps3fscred->IsECS() || ps3fscred->IsIBMIAMAuth()){
                 S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
                 return -1;
             }
             if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
                 // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
                 //
-                load_iamrole = true;
+                ps3fscred->SetIAMRoleMetadataType(true);
                 return 0;
 
             }else if(is_prefix(arg, "iam_role=")){
                 const char* role = strchr(arg, '=') + sizeof(char);
-                S3fsCurl::SetIAMRole(role);
-                load_iamrole = false;
+                ps3fscred->SetIAMRole(role);
+                ps3fscred->SetIAMRoleMetadataType(false);
                 return 0;
             }
         }
         if(is_prefix(arg, "profile=")){
-            aws_profile = strchr(arg, '=') + sizeof(char);
+            ps3fscred->SetAwsProfileName(strchr(arg, '=') + sizeof(char));
             return 0;
         }
         if(is_prefix(arg, "public_bucket=")){
@@ -4917,6 +4440,18 @@ int main(int argc, char* argv[])
         program_name.replace(0, found+1, "");
     }
 
+    // set credential object
+    //
+    // This local variable is the only credential object.
+    // It is also set in the S3fsCurl class and this object is used.
+    //
+    S3fsCred s3fscredObj;
+    ps3fscred = &s3fscredObj;
+    if(!S3fsCurl::InitCredentialObject(&s3fscredObj)){
+        S3FS_PRN_EXIT("Failed to setup credential object to s3fs curl.");
+        exit(EXIT_FAILURE);
+    }
+
     while((ch = getopt_long(argc, argv, "dho:fsu", long_opts, &option_index)) != -1){
         switch(ch){
             case 0:
@@ -5057,37 +4592,11 @@ int main(int argc, char* argv[])
         max_dirty_data = -1;
     }
 
-    // The first plain argument is the bucket
-    if(bucket.empty()){
-        S3FS_PRN_EXIT("missing BUCKET argument.");
+    //
+    // Checking forbidden parameters for bucket
+    //
+    if(!ps3fscred->CheckForbiddenBucketParams()){
         show_usage();
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
-    // bucket names cannot contain upper case characters in virtual-hosted style
-    if((!pathrequeststyle) && (lower(bucket) != bucket)){
-        S3FS_PRN_EXIT("BUCKET %s, name not compatible with virtual-hosted style.", bucket.c_str());
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
-    // check bucket name for illegal characters
-    found = bucket.find_first_of("/:\\;!@#$%^&*?|+=");
-    if(found != std::string::npos){
-        S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket.c_str());
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
-    if(!pathrequeststyle && is_prefix(s3host.c_str(), "https://") && bucket.find_first_of('.') != std::string::npos) {
-        S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket.c_str());
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
@@ -5110,28 +4619,31 @@ int main(int argc, char* argv[])
     }
 
     // error checking of command line arguments for compatibility
-    if(S3fsCurl::IsPublicBucket() && S3fsCurl::IsSetAccessKeys()){
+    if(S3fsCurl::IsPublicBucket() && ps3fscred->IsSetAccessKeys()){
         S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
-    if(!passwd_file.empty() && S3fsCurl::IsSetAccessKeys()){
+
+    if(!ps3fscred->IsSetPasswdFile() && ps3fscred->IsSetAccessKeys()){
         S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         exit(EXIT_FAILURE);
     }
-    if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
-        if(EXIT_SUCCESS != get_access_keys()){
+
+    if(!S3fsCurl::IsPublicBucket() && !ps3fscred->IsIAMRoleMetadataType() && !ps3fscred->IsECS()){
+        if(!ps3fscred->InitialS3fsCredentials()){
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
             destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
-        if(!S3fsCurl::IsSetAccessKeys()){
+
+        if(!ps3fscred->IsSetAccessKeys()){
             S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
@@ -5166,7 +4678,7 @@ int main(int argc, char* argv[])
     }
 
     // check IBM IAM requirements
-    if(is_ibm_iam_auth){
+    if(ps3fscred->IsIBMIAMAuth()){
         // check that default ACL is either public-read or private
         acl_t defaultACL = S3fsCurl::GetDefaultAcl();
         if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
@@ -5197,7 +4709,7 @@ int main(int argc, char* argv[])
     // See issue #128strncasecmp
     /* 
     if(1 == S3fsCurl::GetSslVerifyHostname()){
-        found = bucket.find_first_of('.');
+        found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){
             found = s3host.find("https:");
             if(found != std::string::npos){

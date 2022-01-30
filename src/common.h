@@ -42,12 +42,10 @@ extern bool           noxmlns;
 extern std::string    program_name;
 extern std::string    service_path;
 extern std::string    s3host;
-extern std::string    bucket;
 extern std::string    mount_prefix;
 extern std::string    endpoint;
 extern std::string    cipher_suites;
 extern std::string    instance_name;
-extern std::string    aws_profile;
 
 #endif // S3FS_COMMON_H_
 

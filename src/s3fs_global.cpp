@@ -32,11 +32,9 @@ bool noxmlns                      = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string s3host                = "https://s3.amazonaws.com";
-std::string bucket;
 std::string endpoint              = "us-east-1";
 std::string cipher_suites;
 std::string instance_name;
-std::string aws_profile           = "default";
 
 /*
 * Local variables:

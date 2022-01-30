@@ -49,12 +49,6 @@ static const char EMPTY_MD5_BASE64_HASH[]           = "1B2M2Y8AsgTpgAmY7PhCfg=="
 static const int MULTIPART_SIZE                     = 10 * 1024 * 1024;
 static const int GET_OBJECT_RESPONSE_LIMIT          = 1024;
 
-static const int IAM_EXPIRE_MERGIN                  = 20 * 60;  // update timing
-static const char ECS_IAM_ENV_VAR[]                 = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
-static const char IAMCRED_ACCESSKEYID[]             = "AccessKeyId";
-static const char IAMCRED_SECRETACCESSKEY[]         = "SecretAccessKey";
-static const char IAMCRED_ROLEARN[]                 = "RoleArn";
-
 // [NOTE] about default mime.types file
 // If no mime.types file is specified in the mime option, s3fs
 // will look for /etc/mime.types on all operating systems and
@@ -103,23 +97,7 @@ sse_type_t       S3fsCurl::ssetype             = sse_type_t::SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
 bool             S3fsCurl::is_dump_body        = false;
-std::string      S3fsCurl::AWSAccessKeyId;
-std::string      S3fsCurl::AWSSecretAccessKey;
-std::string      S3fsCurl::AWSAccessToken;
-time_t           S3fsCurl::AWSAccessTokenExpire= 0;
-bool             S3fsCurl::is_ecs              = false;
-bool             S3fsCurl::is_ibm_iam_auth     = false;
-std::string      S3fsCurl::IAM_cred_url        = "http://169.254.169.254/latest/meta-data/iam/security-credentials/";
-std::string      S3fsCurl::IAMv2_token_url     = "http://169.254.169.254/latest/api/token";
-std::string      S3fsCurl::IAMv2_token_ttl_hdr = "X-aws-ec2-metadata-token-ttl-seconds";
-std::string      S3fsCurl::IAMv2_token_hdr     = "X-aws-ec2-metadata-token";
-int              S3fsCurl::IAMv2_token_ttl     = 21600;
-size_t           S3fsCurl::IAM_field_count     = 4;
-std::string      S3fsCurl::IAM_token_field     = "Token";
-std::string      S3fsCurl::IAM_expiry_field    = "Expiration";
-std::string      S3fsCurl::IAM_role;
-std::string      S3fsCurl::IAMv2_api_token;
-int              S3fsCurl::IAM_api_version     = 2;
+S3fsCred*        S3fsCurl::ps3fscred           = NULL;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 
 // protected by curl_warnings_lock
@@ -140,7 +118,6 @@ signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
 bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
-bool             S3fsCurl::is_use_session_token= false;          // default
 bool             S3fsCurl::requester_pays      = false;          // default
 
 //-------------------------------------------------------------------
@@ -381,6 +358,18 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
         }
     }
     return 0;
+}
+
+bool S3fsCurl::InitCredentialObject(S3fsCred* pcredobj)
+{
+    // Set the only Credential object
+    if(!pcredobj || S3fsCurl::ps3fscred){
+        S3FS_PRN_ERR("Unable to set the only Credential object.");
+        return false;
+    }
+    S3fsCurl::ps3fscred = pcredobj;
+
+    return true;
 }
 
 bool S3fsCurl::InitMimeType(const std::string& strFile)
@@ -1013,32 +1002,6 @@ bool S3fsCurl::SetDumpBody(bool flag)
     return old;
 }
 
-bool S3fsCurl::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
-{
-    if((!S3fsCurl::is_ibm_iam_auth && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0]){
-        return false;
-    }
-    AWSAccessKeyId     = AccessKeyId;
-    AWSSecretAccessKey = SecretAccessKey;
-    return true;
-}
-
-bool S3fsCurl::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char* SessionToken)
-{
-    bool access_key_is_empty = !AccessKeyId || '\0' == AccessKeyId[0];
-    bool secret_access_key_is_empty = !SecretAccessKey || '\0' == SecretAccessKey[0];
-    bool session_token_is_empty = !SessionToken || '\0' == SessionToken[0];
-
-    if((!S3fsCurl::is_ibm_iam_auth && access_key_is_empty) || secret_access_key_is_empty || session_token_is_empty){
-        return false;
-    }
-    AWSAccessKeyId     = AccessKeyId;
-    AWSSecretAccessKey = SecretAccessKey;
-    AWSAccessToken     = SessionToken;
-    S3fsCurl::is_use_session_token = true;
-    return true;
-}
-
 long S3fsCurl::SetSslVerifyHostname(long value)
 {
     if(0 != value && 1 != value){
@@ -1047,61 +1010,6 @@ long S3fsCurl::SetSslVerifyHostname(long value)
     long old = S3fsCurl::ssl_verify_hostname;
     S3fsCurl::ssl_verify_hostname = value;
     return old;
-}
-
-bool S3fsCurl::SetIsIBMIAMAuth(bool flag)
-{
-    bool old = S3fsCurl::is_ibm_iam_auth;
-    S3fsCurl::is_ibm_iam_auth = flag;
-    return old;
-}
-
-bool S3fsCurl::SetIsECS(bool flag)
-{
-    bool old = S3fsCurl::is_ecs;
-    S3fsCurl::is_ecs = flag;
-    return old;
-}
-
-std::string S3fsCurl::SetIAMRole(const char* role)
-{
-    std::string old = S3fsCurl::IAM_role;
-    S3fsCurl::IAM_role = role ? role : "";
-    return old;
-}
-
-size_t S3fsCurl::SetIAMFieldCount(size_t field_count)
-{
-    size_t old = S3fsCurl::IAM_field_count;
-    S3fsCurl::IAM_field_count = field_count;
-    return old;
-}
-
-std::string S3fsCurl::SetIAMCredentialsURL(const char* url)
-{
-    std::string old = S3fsCurl::IAM_cred_url;
-    S3fsCurl::IAM_cred_url = url ? url : "";
-    return old;
-}
-
-std::string S3fsCurl::SetIAMTokenField(const char* token_field)
-{
-    std::string old = S3fsCurl::IAM_token_field;
-    S3fsCurl::IAM_token_field = token_field ? token_field : "";
-    return old;
-}
-
-std::string S3fsCurl::SetIAMExpiryField(const char* expiry_field)
-{
-    std::string old = S3fsCurl::IAM_expiry_field;
-    S3fsCurl::IAM_expiry_field = expiry_field ? expiry_field : "";
-    return old;
-}
-
-bool S3fsCurl::SetIMDSVersion(int version)
-{
-    S3fsCurl::IAM_api_version = version;
-    return true;
 }
 
 bool S3fsCurl::SetMultipartSize(off_t size)
@@ -1735,150 +1643,6 @@ bool S3fsCurl::PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl)
     return true;
 }
 
-bool S3fsCurl::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval)
-{
-    if(!response){
-      return false;
-    }
-    std::istringstream sscred(response);
-    std::string        oneline;
-    keyval.clear();
-    while(getline(sscred, oneline, ',')){
-        std::string::size_type pos;
-        std::string            key;
-        std::string            val;
-        if(std::string::npos != (pos = oneline.find(IAMCRED_ACCESSKEYID))){
-            key = IAMCRED_ACCESSKEYID;
-        }else if(std::string::npos != (pos = oneline.find(IAMCRED_SECRETACCESSKEY))){
-            key = IAMCRED_SECRETACCESSKEY;
-        }else if(std::string::npos != (pos = oneline.find(S3fsCurl::IAM_token_field))){
-            key = S3fsCurl::IAM_token_field;
-        }else if(std::string::npos != (pos = oneline.find(S3fsCurl::IAM_expiry_field))){
-            key = S3fsCurl::IAM_expiry_field;
-        }else if(std::string::npos != (pos = oneline.find(IAMCRED_ROLEARN))){
-            key = IAMCRED_ROLEARN;
-        }else{
-            continue;
-        }
-        if(std::string::npos == (pos = oneline.find(':', pos + key.length()))){
-            continue;
-        }
-
-        if(S3fsCurl::is_ibm_iam_auth && key == S3fsCurl::IAM_expiry_field){
-            // parse integer value
-            if(std::string::npos == (pos = oneline.find_first_of("0123456789", pos))){
-                continue;
-            }
-            oneline.erase(0, pos);
-            if(std::string::npos == (pos = oneline.find_last_of("0123456789"))){
-                continue;
-            }
-            val = oneline.substr(0, pos+1);
-        }else{
-            // parse std::string value (starts and ends with quotes)
-            if(std::string::npos == (pos = oneline.find('\"', pos))){
-                continue;
-            }
-            oneline.erase(0, pos+1);
-            if(std::string::npos == (pos = oneline.find('\"'))){
-                continue;
-            }
-            val = oneline.substr(0, pos);
-        }
-        keyval[key] = val;
-    }
-    return true;
-}
-
-bool S3fsCurl::SetIAMv2APIToken(const char* response)
-{
-    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", response);
-    S3fsCurl::IAMv2_api_token = std::string(response);
-    return true;
-}
-
-bool S3fsCurl::SetIAMCredentials(const char* response)
-{
-    S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
-
-    iamcredmap_t keyval;
-
-    if(!ParseIAMCredentialResponse(response, keyval)){
-        return false;
-    }
-
-    if(S3fsCurl::IAM_field_count != keyval.size()){
-        return false;
-    }
-
-    S3fsCurl::AWSAccessToken       = keyval[std::string(S3fsCurl::IAM_token_field)];
-
-    if(S3fsCurl::is_ibm_iam_auth){
-        off_t tmp_expire = 0;
-        if(!s3fs_strtoofft(&tmp_expire, keyval[std::string(S3fsCurl::IAM_expiry_field)].c_str(), /*base=*/ 10)){
-            return false;
-        }
-        S3fsCurl::AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
-    }else{
-        S3fsCurl::AWSAccessKeyId       = keyval[std::string(IAMCRED_ACCESSKEYID)];
-        S3fsCurl::AWSSecretAccessKey   = keyval[std::string(IAMCRED_SECRETACCESSKEY)];
-        S3fsCurl::AWSAccessTokenExpire = cvtIAMExpireStringToTime(keyval[S3fsCurl::IAM_expiry_field].c_str());
-    }
-    return true;
-}
-
-bool S3fsCurl::CheckIAMCredentialUpdate()
-{
-    if(S3fsCurl::IAM_role.empty() && !S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth){
-        return true;
-    }
-    if(time(NULL) + IAM_EXPIRE_MERGIN <= S3fsCurl::AWSAccessTokenExpire){
-        return true;
-    }
-    S3FS_PRN_INFO("IAM Access Token refreshing...");
-    // update
-    S3fsCurl s3fscurl;
-    if(0 != s3fscurl.GetIAMCredentials()){
-        S3FS_PRN_ERR("IAM Access Token refresh failed");
-        return false;
-    }
-    S3FS_PRN_INFO("IAM Access Token refreshed");
-    return true;
-}
-
-bool S3fsCurl::ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename)
-{
-    if(!response){
-        return false;
-    }
-    // [NOTE]
-    // expected following strings.
-    // 
-    // myrolename
-    //
-    std::istringstream ssrole(response);
-    std::string        oneline;
-    if (getline(ssrole, oneline, '\n')){
-        rolename = oneline;
-        return !rolename.empty();
-    }
-    return false;
-}
-
-bool S3fsCurl::SetIAMRoleFromMetaData(const char* response)
-{
-    S3FS_PRN_INFO3("IAM role name response = \"%s\"", response);
-
-    std::string rolename;
-
-    if(!S3fsCurl::ParseIAMRoleFromMetaDataResponse(response, rolename)){
-        return false;
-    }
-
-    SetIAMRole(rolename.c_str());
-    return true;
-}
-
 bool S3fsCurl::AddUserAgent(CURL* hCurl)
 {
     if(!hCurl){
@@ -1982,6 +1746,10 @@ S3fsCurl::S3fsCurl(bool ahbe) :
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
     sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL), curlCode(CURLE_OK)
 {
+    if(!S3fsCurl::ps3fscred){
+        S3FS_PRN_CRIT("The object of S3fs Credential class is not initialized.");
+        abort();
+    }
 }
 
 S3fsCurl::~S3fsCurl()
@@ -2462,7 +2230,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
                 return false;
             }
-            if(S3fsCurl::is_ibm_iam_auth){
+            if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){
                     return false;
                 }
@@ -2712,7 +2480,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
             case CURLE_PEER_FAILED_VERIFICATION:
                 S3FS_PRN_ERR("### CURLE_PEER_FAILED_VERIFICATION");
 
-                first_pos = bucket.find_first_of('.');
+                first_pos = S3fsCred::GetBucket().find_first_of('.');
                 if(first_pos != std::string::npos){
                     S3FS_PRN_INFO("curl returned a CURL_PEER_FAILED_VERIFICATION error");
                     S3FS_PRN_INFO("security issue found: buckets with periods in their name are incompatible with http");
@@ -2789,8 +2557,8 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
     std::string Signature;
     std::string StringToSign;
 
-    if(!S3fsCurl::IAM_role.empty() || S3fsCurl::is_ecs || S3fsCurl::is_use_session_token){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
+    if(!S3fsCurl::ps3fscred->GetIAMRole().empty() || S3fsCurl::ps3fscred->IsECS() || S3fsCurl::ps3fscred->IsUseSessionToken()){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::ps3fscred->GetAccessToken().c_str());
     }
 
     StringToSign += method + "\n";
@@ -2800,8 +2568,8 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
     StringToSign += get_canonical_headers(requestHeaders, true);
     StringToSign += resource;
 
-    const void* key            = S3fsCurl::AWSSecretAccessKey.data();
-    size_t key_len             = S3fsCurl::AWSSecretAccessKey.size();
+    const void* key            = S3fsCurl::ps3fscred->GetSecretAccessKey().data();
+    size_t key_len             = S3fsCurl::ps3fscred->GetSecretAccessKey().size();
     const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
     size_t sdata_len           = StringToSign.size();
     unsigned char* md          = NULL;
@@ -2827,8 +2595,8 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     std::string Signature, StringCQ, StringToSign;
     std::string uriencode;
 
-    if(!S3fsCurl::IAM_role.empty()  || S3fsCurl::is_ecs || S3fsCurl::is_use_session_token){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::AWSAccessToken.c_str());
+    if(!S3fsCurl::ps3fscred->GetIAMRole().empty() || S3fsCurl::ps3fscred->IsECS() || S3fsCurl::ps3fscred->IsUseSessionToken()){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", S3fsCurl::ps3fscred->GetAccessToken().c_str());
     }
 
     uriencode = urlEncode(canonical_uri);
@@ -2849,7 +2617,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringCQ += get_sorted_header_keys(requestHeaders) + "\n";
     StringCQ += payload_hash;
 
-    std::string   kSecret = "AWS4" + S3fsCurl::AWSSecretAccessKey;
+    std::string   kSecret = "AWS4" + S3fsCurl::ps3fscred->GetSecretAccessKey();
     unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = NULL;
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len = 0;
 
@@ -2931,7 +2699,7 @@ void S3fsCurl::insertV4Headers()
     get_date_sigv3(strdate, date8601);
 
     std::string contentSHA256 = payload_hash.empty() ? EMPTY_PAYLOAD_HASH : payload_hash;
-    const std::string realpath = pathrequeststyle ? "/" + bucket + server_path : server_path;
+    const std::string realpath = pathrequeststyle ? "/" + S3fsCred::GetBucket() + server_path : server_path;
 
     //string canonical_headers, signed_headers;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
@@ -2944,7 +2712,7 @@ void S3fsCurl::insertV4Headers()
 
     if(!S3fsCurl::IsPublicBucket()){
         std::string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST || type == REQTYPE_MULTILIST ? "=" : ""), strdate, contentSHA256, date8601);
-        std::string auth = "AWS4-HMAC-SHA256 Credential=" + AWSAccessKeyId + "/" + strdate + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
+        std::string auth = "AWS4-HMAC-SHA256 Credential=" + S3fsCurl::ps3fscred->GetAccessKeyID() + "/" + strdate + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
     }
 }
@@ -2967,28 +2735,28 @@ void S3fsCurl::insertV2Headers()
 
     if(!S3fsCurl::IsPublicBucket()){
         std::string Signature = CalcSignatureV2(op, get_header_value(requestHeaders, "Content-MD5"), get_header_value(requestHeaders, "Content-Type"), date, resource);
-        requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", std::string("AWS " + AWSAccessKeyId + ":" + Signature).c_str());
+        requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", std::string("AWS " + S3fsCurl::ps3fscred->GetAccessKeyID() + ":" + Signature).c_str());
     }
 }
 
 void S3fsCurl::insertIBMIAMHeaders()
 {
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", ("Bearer " + S3fsCurl::AWSAccessToken).c_str());
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", ("Bearer " + S3fsCurl::ps3fscred->GetAccessToken()).c_str());
 
     if(op == "PUT" && path == mount_prefix + "/"){
         // ibm-service-instance-id header is required for bucket creation requests
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "ibm-service-instance-id", S3fsCurl::AWSAccessKeyId.c_str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "ibm-service-instance-id", S3fsCurl::ps3fscred->GetAccessKeyID().c_str());
     }
 }
 
 void S3fsCurl::insertAuthHeaders()
 {
-    if(!S3fsCurl::CheckIAMCredentialUpdate()){
+    if(!S3fsCurl::ps3fscred->CheckIAMCredentialUpdate()){
         S3FS_PRN_ERR("An error occurred in checking IAM credential.");
         return; // do not insert auth headers on error
     }
 
-    if(S3fsCurl::is_ibm_iam_auth){
+    if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
         insertIBMIAMHeaders();
     }else if(S3fsCurl::signature_type == V2_ONLY){
         insertV2Headers();
@@ -3037,7 +2805,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 //
 int S3fsCurl::GetIAMv2ApiToken()
 {
-    url = std::string(S3fsCurl::IAMv2_token_url);
+    url = std::string(S3fsCred::IAMv2_token_url);
     if(!CreateCurlHandle()){
         return -EIO;
     }
@@ -3045,9 +2813,8 @@ int S3fsCurl::GetIAMv2ApiToken()
     responseHeaders.clear();
     bodydata.Clear();
 
-    std::string ttlstr = str(S3fsCurl::IAMv2_token_ttl);
-    requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_ttl_hdr.c_str(),
-                                            ttlstr.c_str());
+    std::string ttlstr = str(S3fsCred::IAMv2_token_ttl);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCred::IAMv2_token_ttl_hdr, ttlstr.c_str());
 
     // Curl appends an "Expect: 100-continue" header to the token request, 
     // and aws responds with a 417 Expectation Failed. This ensures the 
@@ -3072,7 +2839,7 @@ int S3fsCurl::GetIAMv2ApiToken()
 
     int result = RequestPerform(true);
 
-    if(0 == result && !S3fsCurl::SetIAMv2APIToken(bodydata.str())){
+    if(0 == result && !S3fsCurl::ps3fscred->SetIAMv2APIToken(bodydata.str())){
         S3FS_PRN_ERR("Error storing IMDSv2 API token.");
         result = -EIO;
     }
@@ -3090,10 +2857,10 @@ int S3fsCurl::GetIAMv2ApiToken()
 //
 int S3fsCurl::GetIAMCredentials()
 {
-    if (!S3fsCurl::is_ecs && !S3fsCurl::is_ibm_iam_auth) {
-        S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::IAM_role.c_str());
+    if (!S3fsCurl::ps3fscred->IsECS() && !S3fsCurl::ps3fscred->IsIBMIAMAuth()) {
+        S3FS_PRN_INFO3("[IAM role=%s]", S3fsCurl::ps3fscred->GetIAMRole().c_str());
 
-        if(S3fsCurl::IAM_role.empty()) {
+        if(S3fsCurl::ps3fscred->GetIAMRole().empty()) {
             S3FS_PRN_ERR("IAM role name is empty.");
             return -EIO;
         }
@@ -3107,22 +2874,22 @@ int S3fsCurl::GetIAMCredentials()
     }
 
     // url
-    if(is_ecs){
-        const char *env = std::getenv(ECS_IAM_ENV_VAR);
+    if(S3fsCurl::ps3fscred->IsECS()){
+        const char *env = std::getenv(S3fsCred::ECS_IAM_ENV_VAR);
         if(env == NULL){
-            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR);
+            S3FS_PRN_ERR("%s is not set.", S3fsCred::ECS_IAM_ENV_VAR);
             return -EIO;
         }
-        url = std::string(S3fsCurl::IAM_cred_url) + env;
+        url = S3fsCurl::ps3fscred->GetIAMCredentialsURL() + env;
     }else{
-        if(S3fsCurl::IAM_api_version > 1){
+        if(S3fsCurl::ps3fscred->GetIMDSVersion() > 1){
             int result = GetIAMv2ApiToken();
             if(-ENOENT == result){
                 // If we get a 404 back when requesting the token service,
                 // then it's highly likely we're running in an environment
                 // that doesn't support the AWS IMDSv2 API, so we'll skip
                 // the token retrieval in the future.
-                SetIMDSVersion(1);
+                S3fsCurl::ps3fscred->SetIMDSVersion(1);
             }else if(result != 0){
                 // If we get an unexpected error when retrieving the API
                 // token, log it but continue.  Requirement for including
@@ -3131,8 +2898,7 @@ int S3fsCurl::GetIAMCredentials()
                 S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
             }
         }
-        
-        url = std::string(S3fsCurl::IAM_cred_url) + S3fsCurl::IAM_role;
+        url = S3fsCurl::ps3fscred->GetIAMCredentialsURL() + S3fsCurl::ps3fscred->GetIAMRole();
     }
 
     requestHeaders  = NULL;
@@ -3140,13 +2906,13 @@ int S3fsCurl::GetIAMCredentials()
     bodydata.Clear();
     std::string postContent;
 
-    if(S3fsCurl::is_ibm_iam_auth){
-        url = std::string(S3fsCurl::IAM_cred_url);
+    if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
+        url = S3fsCurl::ps3fscred->GetIAMCredentialsURL();
 
         // make contents
         postContent += "grant_type=urn:ibm:params:oauth:grant-type:apikey";
         postContent += "&response_type=cloud_iam";
-        postContent += "&apikey=" + S3fsCurl::AWSSecretAccessKey;
+        postContent += "&apikey=" + S3fsCurl::ps3fscred->GetSecretAccessKey();
 
         // set postdata
         postdata             = reinterpret_cast<const unsigned char*>(postContent.c_str());
@@ -3170,8 +2936,8 @@ int S3fsCurl::GetIAMCredentials()
         }
     }
 
-    if(S3fsCurl::IAM_api_version > 1){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
+    if(S3fsCurl::ps3fscred->GetIMDSVersion() > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCred::IAMv2_token_hdr, S3fsCurl::ps3fscred->GetIAMv2APIToken().c_str());
     }
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3190,7 +2956,7 @@ int S3fsCurl::GetIAMCredentials()
     int result = RequestPerform(true);
 
     // analyzing response
-    if(0 == result && !S3fsCurl::SetIAMCredentials(bodydata.str())){
+    if(0 == result && !S3fsCurl::ps3fscred->SetIAMCredentials(bodydata.str())){
         S3FS_PRN_ERR("Something error occurred, could not get IAM credential.");
         result = -EIO;
     }
@@ -3214,22 +2980,22 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
     }
 
     // url
-    if(is_ecs){
-        const char *env = std::getenv(ECS_IAM_ENV_VAR);
+    if(S3fsCurl::ps3fscred->IsECS()){
+        const char *env = std::getenv(S3fsCred::ECS_IAM_ENV_VAR);
         if(env == NULL){
-            S3FS_PRN_ERR("%s is not set.", ECS_IAM_ENV_VAR);
+            S3FS_PRN_ERR("%s is not set.", S3fsCred::ECS_IAM_ENV_VAR);
             return -EIO;
         }
-        url = std::string(S3fsCurl::IAM_cred_url) + env;
+        url = S3fsCurl::ps3fscred->GetIAMCredentialsURL() + env;
     }else{
-        if(S3fsCurl::IAM_api_version > 1){
+        if(S3fsCurl::ps3fscred->GetIMDSVersion() > 1){
             int result = GetIAMv2ApiToken();
             if(-ENOENT == result){
                 // If we get a 404 back when requesting the token service,
                 // then it's highly likely we're running in an environment
                 // that doesn't support the AWS IMDSv2 API, so we'll skip
                 // the token retrieval in the future.
-                SetIMDSVersion(1);
+                S3fsCurl::ps3fscred->SetIMDSVersion(1);
             }else if(result != 0){
                 // If we get an unexpected error when retrieving the API
                 // token, log it but continue.  Requirement for including
@@ -3238,15 +3004,14 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
                 S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
             }
         }
-
-        url = std::string(S3fsCurl::IAM_cred_url);
+        url = S3fsCurl::ps3fscred->GetIAMCredentialsURL();
     }
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
 
-    if(S3fsCurl::IAM_api_version > 1){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCurl::IAMv2_token_hdr.c_str(), S3fsCurl::IAMv2_api_token.c_str());
+    if(S3fsCurl::ps3fscred->GetIMDSVersion() > 1){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCred::IAMv2_token_hdr, S3fsCurl::ps3fscred->GetIAMv2APIToken().c_str());
     }
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3265,7 +3030,7 @@ bool S3fsCurl::LoadIAMRoleFromMetaData()
     int result = RequestPerform(true);
 
     // analyzing response
-    if(0 == result && !S3fsCurl::SetIAMRoleFromMetaData(bodydata.str())){
+    if(0 == result && !S3fsCurl::ps3fscred->SetIAMRoleFromMetaData(bodydata.str())){
         S3FS_PRN_ERR("Something error occurred, could not get IAM role name.");
         result = -EIO;
     }
