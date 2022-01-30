@@ -1966,7 +1966,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     }
 
     struct timespec now;
-    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &now)){
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_REALTIME), &now)){
         abort();
     }
 #if __APPLE__
@@ -2088,7 +2088,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     }
 
     struct timespec now;
-    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &now)){
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_REALTIME), &now)){
         abort();
     }
 #if __APPLE__
