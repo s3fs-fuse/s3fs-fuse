@@ -2004,9 +2004,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         }
     }else{
         headers_t updatemeta;
-        updatemeta["x-amz-meta-mtime"]         = str(mtime.tv_sec);
-        updatemeta["x-amz-meta-ctime"]         = str(actime.tv_sec);
-        updatemeta["x-amz-meta-atime"]         = str(actime.tv_sec);
+        updatemeta["x-amz-meta-mtime"]         = str(mtime);
+        updatemeta["x-amz-meta-ctime"]         = str(actime);
+        updatemeta["x-amz-meta-atime"]         = str(actime);
         updatemeta["x-amz-copy-source"]        = urlEncode(service_path + bucket + get_realpath(strpath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
