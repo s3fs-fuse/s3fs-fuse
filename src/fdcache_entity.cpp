@@ -1343,7 +1343,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
     if(pseudo_fd_map.end() == miter || NULL == miter->second){
         return -EBADF;
     }
-    if(!miter->second->Writable()){
+    if(!miter->second->Writable() && !(miter->second->GetFlags() & O_CREAT)){
         // If the entity is opened read-only, it will end normally without updating.
         return 0;
     }
