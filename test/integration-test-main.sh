@@ -357,6 +357,17 @@ function test_external_directory_creation {
 function test_external_modification {
     describe "Test external modification to an object ..."
     echo "old" > "${TEST_TEXT_FILE}"
+
+    # [NOTE]
+    # If the stat and file cache directory are enabled, an error will
+    # occur if the unixtime(sec) value does not change.
+    # If mtime(ctime/atime) when updating from the external program
+    # (awscli) is the same unixtime value as immediately before, the
+    # cache will be read out.
+    # Therefore, we need to wait over 1 second here.
+    #
+    sleep 1
+
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "new new" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp "${TEST_TEXT_FILE}" <(echo "new new")
