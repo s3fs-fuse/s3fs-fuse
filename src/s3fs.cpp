@@ -2168,20 +2168,35 @@ static int s3fs_truncate(const char* _path, off_t size)
 
     // Get file information
     if(0 == (result = get_object_attribute(path, NULL, &meta))){
-        // Exists -> Get file(with size)
+        // File exists
+
+        // [NOTE]
+        // If the file exists, the file has already been opened by FUSE before
+        // truncate is called. Then the call below will change the file size.
+        // (When an already open file is changed the file size, FUSE will not
+        // reopen it.)
+        // The Flush is called before this file is closed, so there is no need
+        // to do it here.
+        //
         if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, false, true, AutoLock::NONE))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
-        if(0 != (result = ent->Load(0, size, AutoLock::NONE))){
-            S3FS_PRN_ERR("could not download file(%s): result=%d", path, result);
-            return result;
-        }
-
         ent->UpdateCtime();
+
+        // [NOTE]
+        // Only for macos, this truncate calls to "size=0" do not reflect size.
+        // The cause is unknown now, but it can be avoided by flushing the file.
+        //
+        if(0 == size){
+            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
+                S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+                return result;
+            }
+            StatCache::getStatCacheData()->DelStat(path);
+        }
     }else{
         // Not found -> Make tmpfile(with size)
-
         struct fuse_context* pcxt;
         if(NULL == (pcxt = fuse_get_context())){
             return -EIO;
@@ -2198,15 +2213,12 @@ static int s3fs_truncate(const char* _path, off_t size)
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+            return result;
+        }
+        StatCache::getStatCacheData()->DelStat(path);
     }
-
-    // upload
-    if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
-        S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
-        return result;
-    }
-
-    StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
 
     return result;

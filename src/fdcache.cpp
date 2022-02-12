@@ -552,6 +552,11 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         // found
         ent = iter->second;
 
+        // [NOTE]
+        // Even if getting the request to change the size of modifying
+        // file to small, we do not change it. Because if it will change,
+        // test_open_second_fd test will be failed.
+        //
         if(ent->IsModified()){
             // If the file is being modified and it's size is larger than size parameter, it will not be resized.
             off_t cur_size = 0;

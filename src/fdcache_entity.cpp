@@ -426,7 +426,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
         // check only file size(do not need to save cfs and time.
         if(0 <= size && pagelist.Size() != size){
             // truncate temporary file size
-            if(-1 == ftruncate(physical_fd, size)){
+            if(-1 == ftruncate(physical_fd, size) || -1 == fsync(physical_fd)){
                 S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", physical_fd, errno);
                 return -errno;
             }
@@ -440,7 +440,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
         off_t new_size = (0 <= size ? size : size_orgmeta);
         if(pmeta){
             orgmeta  = *pmeta;
-            new_size = get_size(orgmeta);
+            size_orgmeta = get_size(orgmeta);
         }
         if(new_size < size_orgmeta){
             size_orgmeta = new_size;
