@@ -161,12 +161,12 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
     xmlFree(fullpath);
 
-    if(!mybname || '\0' == mybname[0]){
+    if('\0' == mybname[0]){
         return NULL;
     }
 
     // check subdir & file in subdir
-    if(dirpath && 0 < strlen(dirpath)){
+    if(0 < strlen(dirpath)){
         // case of "/"
         if(0 == strcmp(mybname, "/") && 0 == strcmp(dirpath, "/")){
             return (char*)c_strErrorObjectName;
