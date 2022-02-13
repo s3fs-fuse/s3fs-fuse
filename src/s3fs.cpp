@@ -2184,6 +2184,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         }
         ent->UpdateCtime();
 
+#if defined(__APPLE__)
         // [NOTE]
         // Only for macos, this truncate calls to "size=0" do not reflect size.
         // The cause is unknown now, but it can be avoided by flushing the file.
@@ -2195,6 +2196,8 @@ static int s3fs_truncate(const char* _path, off_t size)
             }
             StatCache::getStatCacheData()->DelStat(path);
         }
+#endif
+
     }else{
         // Not found -> Make tmpfile(with size)
         struct fuse_context* pcxt;
