@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <climits>
 #include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
