@@ -121,6 +121,17 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
+    # [NOTE] 2022-02-11
+    # We are receiving the following error on Github Actions:
+    #   "Failed to download metadata for repo 'appstream':"
+    # We should proceed with the migration to CentOS9, but we will fix it temporarily.
+    #
+    sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
+    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
+    "${PACKAGE_MANAGER_BIN}" update -y
+    "${PACKAGE_MANAGER_BIN}" --disablerepo '*' --enablerepo extras swap centos-linux-repos centos-stream-repos -y
+    "${PACKAGE_MANAGER_BIN}" distro-sync -y
+
     # [NOTE]
     # Installing ShellCheck on CentOS 8 is not easy.
     # Give up to run ShellCheck on CentOS 8 as we don't have to run ShellChek on all operating systems.
