@@ -184,11 +184,6 @@ bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
     return true;
 }
 
-bool S3fsCred::IsSetAccessKeyID() const
-{
-    return !AWSAccessKeyId.empty();
-}
-
 bool S3fsCred::IsSetAccessKeys() const
 {
     return !IAM_role.empty() || ((!AWSAccessKeyId.empty() || is_ibm_iam_auth) && !AWSSecretAccessKey.empty());
@@ -705,7 +700,7 @@ bool S3fsCred::InitialS3fsCredentials()
     }
 
     // 2 - was specified on the command line
-    if(!IsSetPasswdFile()){
+    if(IsSetPasswdFile()){
         if(!ReadS3fsPasswdFile()){
             return false;;
         }
@@ -877,7 +872,99 @@ bool S3fsCred::CheckIAMCredentialUpdate()
 }
 
 //-------------------------------------------------------------------
-// Methods : Checking forbidden parameters
+// Methods: Option detection
+//-------------------------------------------------------------------
+// return value:  1 = Not processed as it is not a option for this class
+//                0 = The option was detected and processed appropriately
+//               -1 = Processing cannot be continued because a fatal error was detected
+//
+int S3fsCred::DetectParam(const char* arg)
+{
+    if(!arg){
+        S3FS_PRN_EXIT("parameter arg is empty(null)");
+        return -1;
+    }
+
+    if(is_prefix(arg, "passwd_file=")){
+        SetS3fsPasswdFile(strchr(arg, '=') + sizeof(char));
+        return 0;
+    }
+
+    if(0 == strcmp(arg, "ibm_iam_auth")){
+        SetIsIBMIAMAuth(true);
+        SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
+        SetIAMTokenField("\"access_token\"");
+        SetIAMExpiryField("\"expiration\"");
+        SetIAMFieldCount(2);
+        SetIMDSVersion(1);
+        return 0;
+    }
+
+    if(0 == strcmp(arg, "use_session_token")){
+        SetIsUseSessionToken(true);
+        return 0;
+    }
+
+    if(is_prefix(arg, "ibm_iam_endpoint=")){
+        std::string endpoint_url;
+        const char* iam_endpoint = strchr(arg, '=') + sizeof(char);
+
+        // Check url for http / https protocol std::string
+        if(!is_prefix(iam_endpoint, "https://") && !is_prefix(iam_endpoint, "http://")){
+             S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
+             return -1;
+        }
+        endpoint_url = std::string(iam_endpoint) + "/identity/token";
+        SetIAMCredentialsURL(endpoint_url.c_str());
+        return 0;
+    }
+
+    if(0 == strcmp(arg, "imdsv1only")){
+        SetIMDSVersion(1);
+        return 0;
+    }
+
+    if(0 == strcmp(arg, "ecs")){
+        if(IsIBMIAMAuth()){
+            S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
+            return -1;
+        }
+        SetIsECS(true);
+        SetIMDSVersion(1);
+        SetIAMCredentialsURL("http://169.254.170.2");
+        SetIAMFieldCount(5);
+        return 0;
+    }
+
+    if(is_prefix(arg, "iam_role")){
+        if(IsECS() || IsIBMIAMAuth()){
+            S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
+            return -1;
+        }
+        if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
+            // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
+            //
+            SetIAMRoleMetadataType(true);
+            return 0;
+
+        }else if(is_prefix(arg, "iam_role=")){
+            const char* role = strchr(arg, '=') + sizeof(char);
+            SetIAMRole(role);
+            SetIAMRoleMetadataType(false);
+            return 0;
+        }
+    }
+
+    if(is_prefix(arg, "profile=")){
+        SetAwsProfileName(strchr(arg, '=') + sizeof(char));
+        return 0;
+    }
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+// Methods : check parameters
 //-------------------------------------------------------------------
 //
 // Checking forbidden parameters for bucket
@@ -906,6 +993,53 @@ bool S3fsCred::CheckForbiddenBucketParams()
     if(!pathrequeststyle && is_prefix(s3host.c_str(), "https://") && bucket_name.find_first_of('.') != std::string::npos) {
         S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket_name.c_str());
         return false;
+    }
+    return true;
+}
+
+//
+// Check the combination of parameters
+//
+bool S3fsCred::CheckAllParams()
+{
+    //
+    // Checking forbidden parameters for bucket
+    //
+    if(!CheckForbiddenBucketParams()){
+        return false;
+    }
+
+    // error checking of command line arguments for compatibility
+    if(S3fsCurl::IsPublicBucket() && IsSetAccessKeys()){
+        S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
+        return false;
+    }
+
+    if(!IsSetPasswdFile() && IsSetAccessKeys()){
+        S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
+        return false;
+    }
+
+    if(!S3fsCurl::IsPublicBucket() && !IsIAMRoleMetadataType() && !IsECS()){
+        if(!InitialS3fsCredentials()){
+            return false;
+        }
+        if(!IsSetAccessKeys()){
+            S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
+            return false;
+        }
+        // More error checking on the access key pair can be done
+        // like checking for appropriate lengths and characters  
+    }
+
+    // check IBM IAM requirements
+    if(IsIBMIAMAuth()){
+        // check that default ACL is either public-read or private
+        acl_t defaultACL = S3fsCurl::GetDefaultAcl();
+        if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
+            S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
+            return false;
+        }
     }
     return true;
 }
