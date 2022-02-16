@@ -3964,72 +3964,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
-        if(is_prefix(arg, "passwd_file=")){
-            ps3fscred->SetS3fsPasswdFile(strchr(arg, '=') + sizeof(char));
-            return 0;
-        }
-        if(0 == strcmp(arg, "ibm_iam_auth")){
-            ps3fscred->SetIsIBMIAMAuth(true);
-            ps3fscred->SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
-            ps3fscred->SetIAMTokenField("\"access_token\"");
-            ps3fscred->SetIAMExpiryField("\"expiration\"");
-            ps3fscred->SetIAMFieldCount(2);
-            ps3fscred->SetIMDSVersion(1);
-            ps3fscred->SetIsIBMIAMAuth(true);
-            return 0;
-        }
-        if (0 == strcmp(arg, "use_session_token")) {
-            ps3fscred->SetIsUseSessionToken(true);
-            return 0;
-        }
-        if(is_prefix(arg, "ibm_iam_endpoint=")){
-            std::string endpoint_url;
-            const char *iam_endpoint = strchr(arg, '=') + sizeof(char);
-            // Check url for http / https protocol std::string
-            if(!is_prefix(iam_endpoint, "https://") && !is_prefix(iam_endpoint, "http://")) {
-                 S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
-                 return -1;
-            }
-            endpoint_url = std::string(iam_endpoint) + "/identity/token";
-            ps3fscred->SetIAMCredentialsURL(endpoint_url.c_str());
-            return 0;
-        }
-        if(0 == strcmp(arg, "imdsv1only")){
-            ps3fscred->SetIMDSVersion(1);
-            return 0;
-        }
-        if(0 == strcmp(arg, "ecs")){
-            if(ps3fscred->IsIBMIAMAuth()){
-                S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
+        //
+        // Detect options for credential
+        //
+        if(0 >= (ret = ps3fscred->DetectParam(arg))){
+            if(0 > ret){
                 return -1;
             }
-            ps3fscred->SetIsECS(true);
-            ps3fscred->SetIMDSVersion(1);
-            ps3fscred->SetIAMCredentialsURL("http://169.254.170.2");
-            ps3fscred->SetIAMFieldCount(5);
-            ps3fscred->SetIsECS(true);
-            return 0;
-        }
-        if(is_prefix(arg, "iam_role")){
-            if(ps3fscred->IsECS() || ps3fscred->IsIBMIAMAuth()){
-                S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
-                return -1;
-            }
-            if(0 == strcmp(arg, "iam_role") || 0 == strcmp(arg, "iam_role=auto")){
-                // loading IAM role name in s3fs_init(), because we need to wait initializing curl.
-                //
-                ps3fscred->SetIAMRoleMetadataType(true);
-                return 0;
-
-            }else if(is_prefix(arg, "iam_role=")){
-                const char* role = strchr(arg, '=') + sizeof(char);
-                ps3fscred->SetIAMRole(role);
-                ps3fscred->SetIAMRoleMetadataType(false);
-                return 0;
-            }
-        }
-        if(is_prefix(arg, "profile=")){
-            ps3fscred->SetAwsProfileName(strchr(arg, '=') + sizeof(char));
             return 0;
         }
         if(is_prefix(arg, "public_bucket=")){
@@ -4608,10 +4549,9 @@ int main(int argc, char* argv[])
     }
 
     //
-    // Checking forbidden parameters for bucket
+    // Check the combination of parameters for credential
     //
-    if(!ps3fscred->CheckForbiddenBucketParams()){
-        show_usage();
+    if(!ps3fscred->CheckAllParams()){
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
@@ -4631,42 +4571,6 @@ int main(int argc, char* argv[])
             destroy_parser_xml_lock();
             exit(EXIT_FAILURE);
         }
-    }
-
-    // error checking of command line arguments for compatibility
-    if(S3fsCurl::IsPublicBucket() && ps3fscred->IsSetAccessKeys()){
-        S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
-    if(!ps3fscred->IsSetPasswdFile() && ps3fscred->IsSetAccessKeys()){
-        S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
-    if(!S3fsCurl::IsPublicBucket() && !ps3fscred->IsIAMRoleMetadataType() && !ps3fscred->IsECS()){
-        if(!ps3fscred->InitialS3fsCredentials()){
-            S3fsCurl::DestroyS3fsCurl();
-            s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            exit(EXIT_FAILURE);
-        }
-
-        if(!ps3fscred->IsSetAccessKeys()){
-            S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
-            S3fsCurl::DestroyS3fsCurl();
-            s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            exit(EXIT_FAILURE);
-        }
-        // More error checking on the access key pair can be done
-        // like checking for appropriate lengths and characters  
     }
 
     // check tmp dir permission
@@ -4690,20 +4594,6 @@ int main(int argc, char* argv[])
     // set fake free disk space
     if(-1 != fake_diskfree_size){
         FdManager::InitFakeUsedDiskSize(fake_diskfree_size);
-    }
-
-    // check IBM IAM requirements
-    if(ps3fscred->IsIBMIAMAuth()){
-        // check that default ACL is either public-read or private
-        acl_t defaultACL = S3fsCurl::GetDefaultAcl();
-        if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
-            S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
-            S3fsCurl::DestroyS3fsCurl();
-            s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            exit(EXIT_FAILURE);
-        }
-
     }
 
     // set user agent

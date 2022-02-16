@@ -82,6 +82,26 @@ class S3fsCred
     private:
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
 
+        bool SetS3fsPasswdFile(const char* file);
+        bool IsSetPasswdFile();
+        bool SetAwsProfileName(const char* profile_name);
+        bool SetIAMRoleMetadataType(bool flag);
+
+        bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
+        bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
+        bool IsSetAccessKeys() const;
+
+        bool SetIsECS(bool flag);
+        bool SetIsUseSessionToken(bool flag);
+
+        bool SetIsIBMIAMAuth(bool flag);
+
+        std::string SetIAMRole(const char* role);
+        size_t SetIAMFieldCount(size_t field_count);
+        std::string SetIAMCredentialsURL(const char* url);
+        std::string SetIAMTokenField(const char* token_field);
+        std::string SetIAMExpiryField(const char* expiry_field);
+
         bool IsReadableS3fsPasswdFile();
         bool CheckS3fsPasswdFilePerms();
         bool ParseS3fsPasswdFile(bucketkvmap_t& resmap);
@@ -90,7 +110,10 @@ class S3fsCred
         int CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap);
         bool ReadAwsCredentialFile(const std::string &filename);
 
+        bool InitialS3fsCredentials();
         bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
+
+        bool CheckForbiddenBucketParams();
 
     public:
         static bool SetBucket(const char* bucket);
@@ -99,34 +122,18 @@ class S3fsCred
         S3fsCred();
         ~S3fsCred();
 
-        bool SetS3fsPasswdFile(const char* file);
-        bool IsSetPasswdFile();
-        bool SetAwsProfileName(const char* profile_name);
-        bool SetIAMRoleMetadataType(bool flag);
         bool IsIAMRoleMetadataType() const { return load_iamrole; }
-
-        bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey);
-        bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken);
-        bool IsSetAccessKeyID() const;
-        bool IsSetAccessKeys() const;
         const std::string& GetAccessKeyID() const { return AWSAccessKeyId; }
         const std::string& GetSecretAccessKey() const { return AWSSecretAccessKey; }
         const std::string& GetAccessToken() const { return AWSAccessToken; }
 
-        bool SetIsECS(bool flag);
         bool IsECS() const { return is_ecs; }
-        bool SetIsUseSessionToken(bool flag);
         bool IsUseSessionToken() const { return is_use_session_token; }
-        bool SetIsIBMIAMAuth(bool flag);
+
         bool IsIBMIAMAuth() const { return is_ibm_iam_auth; }
 
-        std::string SetIAMRole(const char* role);
         const std::string& GetIAMRole() const { return IAM_role; }
-        size_t SetIAMFieldCount(size_t field_count);
-        std::string SetIAMCredentialsURL(const char* url);
         const std::string& GetIAMCredentialsURL() const { return IAM_cred_url; }
-        std::string SetIAMTokenField(const char* token_field);
-        std::string SetIAMExpiryField(const char* expiry_field);
         int SetIMDSVersion(int version);
         int GetIMDSVersion() const { return IAM_api_version; }
 
@@ -135,11 +142,10 @@ class S3fsCred
         bool SetIAMCredentials(const char* response);
         bool SetIAMRoleFromMetaData(const char* response);
 
-        bool InitialS3fsCredentials();
-
         bool CheckIAMCredentialUpdate();
 
-        bool CheckForbiddenBucketParams();
+        int DetectParam(const char* arg);
+        bool CheckAllParams();
 };
 
 #endif // S3FS_CRED_H_
