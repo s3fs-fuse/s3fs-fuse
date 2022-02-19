@@ -318,7 +318,7 @@ AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)
 dnl ----------------------------------------------
 dnl short commit hash
 dnl ----------------------------------------------
-AC_CHECK_PROG([GITCMD], [git —version], [yes], [no])
+AC_CHECK_PROG([GITCMD], [git --version], [yes], [no])
 AS_IF([test -d .git], [DOTGITDIR=yes], [DOTGITDIR=no])
 
 AC_MSG_CHECKING([github short commit hash])
@@ -347,6 +347,6 @@ dnl ----------------------------------------------
 # tab-width: 4
 # c-basic-offset: 4
 # End:
-# vim600: expandtab sw=4 ts= fdm=marker
+# vim600: expandtab sw=4 ts=4 fdm=marker
 # vim<600: expandtab sw=4 ts=4
 #
