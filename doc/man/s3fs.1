@@ -332,10 +332,10 @@ This name will be added to logging messages and user agent headers sent by s3fs.
 s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
 As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.
 .TP
-\fB\-o\fR notsup_compat_dir (not support compatibility directory types)
-As a default, s3fs supports objects of the directory type as much as possible and recognizes them as directories.
+\fB\-o\fR notsup_compat_dir (not support compatibility directory naming)
+As default, s3fs supports objects of the directory type as much as possible and recognizes them as directories.
 Objects that can be recognized as directory objects are "dir/", "dir", "dir_$folder$", and there is a file object that does not have a directory object but contains that directory path.
-s3fs needs redundant communication to support all these directory types.
+s3fs needs redundant communication to support all these directory names.
 The object as the directory created by s3fs is "dir/".
 By restricting s3fs to recognize only "dir/" as a directory, communication traffic can be reduced.
 This option is used to give this restriction to s3fs.
@@ -426,6 +426,40 @@ The amount of local cache storage used can be indirectly controlled  with "\-o e
 Since s3fs always requires some storage space for operation, it creates temporary files to store incoming write requests until the required s3 request size is reached and the segment has been uploaded. After that, this data is truncated in the temporary file to free up storage space.
 .TP
 Per file you need at least twice the part size (default 5MB or "-o multipart_size") for writing multipart requests or space for the whole file if single requests are enabled ("\-o nomultipart").
+.SH PERFORMANCE CONSIDERATIONS
+.TP
+This section discusses settings to improve s3fs performance.
+.TP
+In most cases, backend performance cannot be controlled and is therefore not part of this discussion.
+.TP
+Details of the local storage usage is discussed in "LOCAL STORAGE CONSUMPTION".
+.TP
+.SS CPU and Memory Consumption
+.TP
+s3fs is a multi-threaded application. Depending on the workload it may use multiple CPUs and a certain amount of memory. You can monitor the CPU and memory consumption with the "top" utility.
+.TP
+.SS Performance of S3 requests
+.TP
+s3fs provides several options (e.g. "\-o multipart_size", "\-o parallel_count") to control behaviour and thus indirectly the performance. The possible combinations of these options in conjunction with the various S3 backends are so varied that there is no individual recommendation other than the default values. Improved individual settings can be found by testing and measuring.
+.TP
+The two options "Enable no object cache" ("\-o enable_noobj_cache") and "Disable support of alternative directory names" ("\-o notsup_compat_dir") can be used to control shared access to the same bucket by different applications:
+.TP
+.IP \[bu]
+Enable no object cache ("\-o enable_noobj_cache")
+.RS
+.TP
+If a bucket is used exclusively by an s3fs instance, you can enable the cache for non-existent files and directories with "\-o enable_noobj_cache". This eliminates repeated requests to check the existence of an object, saving time and possibly money.
+.RE
+.IP \[bu]
+Disable support of alternative directory names ("\-o notsup_compat_dir")
+.RS
+.TP
+s3fs supports "dir/", "dir" and "dir_$folder$" to map directory names to S3 objects and vice versa.
+.TP
+Some applications use a different naming schema for associating directory names to S3 objects. For example, Apache Hadoop uses the  "dir_$folder$" schema to create S3 objects for directories.
+.TP
+The option "\-o notsup_compat_dir" can be set if all accessing tools use the "dir/" naming schema for directory objects and the bucket does not contain any objects with a different naming scheme. In this case, accessing directory objects saves time and possibly money because alternative schemas are not checked.
+.RE
 .SH NOTES
 .TP
 The maximum size of objects that s3fs can handle depends on Amazon S3. For example, up to 5 GB when using single PUT API. And up to 5 TB is supported when Multipart Upload API is used.
