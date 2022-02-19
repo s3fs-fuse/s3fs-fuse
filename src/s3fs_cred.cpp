@@ -410,7 +410,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
     std::ifstream PF(passwd_file.c_str());
     if(!PF.good()){
         S3FS_PRN_EXIT("could not open passwd file : %s", passwd_file.c_str());
-        return false;;
+        return false;
     }
 
     // read each line
@@ -424,11 +424,11 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
         }
         if(std::string::npos != line.find_first_of(" \t")){
             S3FS_PRN_EXIT("invalid line in passwd file, found whitespace character.");
-            return false;;
+            return false;
         }
         if('[' == line[0]){
             S3FS_PRN_EXIT("invalid line in passwd file, found a bracket \"[\" character.");
-            return false;;
+            return false;
         }
         linelist.push_back(line);
     }
@@ -478,7 +478,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
         }
         if(resmap.end() != resmap.find(bucketname)){
             S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
-            return false;;
+            return false;
         }
         kv.clear();
         kv[S3fsCred::AWS_ACCESSKEYID] = accesskey;
@@ -702,7 +702,7 @@ bool S3fsCred::InitialS3fsCredentials()
     // 2 - was specified on the command line
     if(IsSetPasswdFile()){
         if(!ReadS3fsPasswdFile()){
-            return false;;
+            return false;
         }
         return true;
     }
@@ -716,25 +716,25 @@ bool S3fsCred::InitialS3fsCredentials()
         if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
             (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
             S3FS_PRN_EXIT("both environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together.");
-            return false;;
+            return false;
         }
         S3FS_PRN_INFO2("access key from env variables");
         if(AWSSESSIONTOKEN != NULL){
             S3FS_PRN_INFO2("session token is available");
             if(!SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)){
                  S3FS_PRN_EXIT("session token is invalid.");
-                 return false;;
+                 return false;
             }
         }else{
             S3FS_PRN_INFO2("session token is not available");
             if(is_use_session_token){
                 S3FS_PRN_EXIT("environment variable AWS_SESSION_TOKEN is expected to be set.");
-                return false;;
+                return false;
             }
         }
         if(!SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
             S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
-            return false;;
+            return false;
         }
         return true;
     }
@@ -743,9 +743,13 @@ bool S3fsCred::InitialS3fsCredentials()
     char* AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
     if(AWS_CREDENTIAL_FILE != NULL){
         passwd_file = AWS_CREDENTIAL_FILE;
-        if(!passwd_file.empty()){
+        if(IsSetPasswdFile()){
+            if(!IsReadableS3fsPasswdFile()){
+                S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
+                return false;
+            }
             if(!ReadS3fsPasswdFile()){
-                return false;;
+                return false;
             }
             return true;
         }
@@ -757,7 +761,7 @@ bool S3fsCred::InitialS3fsCredentials()
         return true;
     }else if(aws_profile != DEFAULT_AWS_PROFILE_NAME){
         S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
-        return false;;
+        return false;
     }
 
     // 4 - from the default location in the users home directory
@@ -767,7 +771,7 @@ bool S3fsCred::InitialS3fsCredentials()
         passwd_file += "/.passwd-s3fs";
         if(IsReadableS3fsPasswdFile()){
             if(!ReadS3fsPasswdFile()){
-                return false;;
+                return false;
             }
 
             // It is possible that the user's file was there but
@@ -783,13 +787,13 @@ bool S3fsCred::InitialS3fsCredentials()
     passwd_file = "/etc/passwd-s3fs";
     if(IsReadableS3fsPasswdFile()){
         if(!ReadS3fsPasswdFile()){
-            return false;;
+            return false;
         }
         return true;
     }
 
     S3FS_PRN_EXIT("could not determine how to establish security credentials.");
-    return false;;
+    return false;
 }
 
 //-------------------------------------------------------------------
@@ -1015,7 +1019,7 @@ bool S3fsCred::CheckAllParams()
         return false;
     }
 
-    if(!IsSetPasswdFile() && IsSetAccessKeys()){
+    if(IsSetPasswdFile() && IsSetAccessKeys()){
         S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
         return false;
     }
