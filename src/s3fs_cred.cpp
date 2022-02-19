@@ -705,7 +705,7 @@ bool S3fsCred::InitialS3fsCredentials()
     }
 
     // 2 - was specified on the command line
-    if(!IsSetPasswdFile()){
+    if(IsSetPasswdFile()){
         if(!ReadS3fsPasswdFile()){
             return false;;
         }
