@@ -374,6 +374,19 @@ function test_external_modification {
     rm -f "${TEST_TEXT_FILE}"
 }
 
+function test_external_creation {
+    describe "Test external creation of an object ..."
+    local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
+    echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    # shellcheck disable=SC2009
+    if ps u -p "${S3FS_PID}" | grep -q noobj_cache; then
+        [ ! -e "${TEST_TEXT_FILE}" ]
+    fi
+    sleep 1
+    [ -e "${TEST_TEXT_FILE}" ]
+    rm -f "${TEST_TEXT_FILE}"
+}
+
 function test_read_external_object() {
     describe "create objects via aws CLI and read via s3fs ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
@@ -1821,6 +1834,7 @@ function add_all_tests {
         add_tests test_external_directory_creation
     fi
     add_tests test_external_modification
+    add_tests test_external_creation
     add_tests test_read_external_object
     add_tests test_read_external_dir_object
     add_tests test_update_metadata_external_small_object
