@@ -56,7 +56,7 @@ jobs:
           - debian:bullseye
           - debian:buster
           - debian:stretch
-          - centos:centos8
+          - rockylinux:8
           - centos:centos7
           - fedora:35
           - opensuse/leap:15
