@@ -1718,7 +1718,7 @@ function test_write_data_with_skip() {
     # delete cache file if using cache
     #
     # shellcheck disable=SC2009
-    if ps u "${S3FS_PID}" | grep -q use_cache; then
+    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -1735,7 +1735,7 @@ function test_write_data_with_skip() {
     # This test uses the file used in the previous test as an existing file.
     #
     # shellcheck disable=SC2009
-    if ps u "${S3FS_PID}" | grep -q use_cache; then
+    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -1773,7 +1773,7 @@ function test_write_data_with_skip() {
     # delete cache file if using cache
     #
     # shellcheck disable=SC2009
-    if ps u "${S3FS_PID}" | grep -q use_cache; then
+    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -1792,12 +1792,12 @@ function test_write_data_with_skip() {
 
 function add_all_tests {
     # shellcheck disable=SC2009
-    if ps u "${S3FS_PID}" | grep -q use_cache; then
+    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
     fi
     # shellcheck disable=SC2009
-    if ! ps u "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+    if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
     fi
     add_tests test_create_empty_file
@@ -1816,7 +1816,7 @@ function add_all_tests {
     add_tests test_list
     add_tests test_remove_nonempty_directory
     # shellcheck disable=SC2009
-    if ! ps u "${S3FS_PID}" | grep -q notsup_compat_dir; then
+    if ! ps u -p "${S3FS_PID}" | grep -q notsup_compat_dir; then
         # TODO: investigate why notsup_compat_dir fails
         add_tests test_external_directory_creation
     fi
@@ -1872,7 +1872,7 @@ function add_all_tests {
     add_tests test_mix_upload_entities
     add_tests test_ut_ossfs
     # shellcheck disable=SC2009
-    if ! ps u "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+    if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file
     fi
     add_tests test_write_data_with_skip
