@@ -250,9 +250,8 @@ function run_suite {
        # Ensure test input name differs every iteration
        TEST_TEXT_FILE="test-s3fs.txt-${RANDOM}"
        TEST_DIR="testdir-${RANDOM}"
-       "${t}" "${key_prefix}"; rc=$?
-
-       if [[ "${rc}" = 0 ]] ; then
+       "${t}" "${key_prefix}" && rc=$? || rc=$?
+       if [ $rc = 0 ]; then
            report_pass "${t}"
        else
            report_fail "${t}"
