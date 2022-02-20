@@ -1840,7 +1840,7 @@ function add_all_tests {
     add_tests test_update_time_chown
     add_tests test_update_time_xattr
     add_tests test_update_time_touch
-    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         add_tests test_update_time_touch_a
     fi
     add_tests test_update_time_append
@@ -1851,7 +1851,7 @@ function add_all_tests {
     add_tests test_update_directory_time_chown
     add_tests test_update_directory_time_set_xattr
     add_tests test_update_directory_time_touch
-    if [ -e /proc/mounts ] && ! grep "^s3fs " < /proc/mounts | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         add_tests test_update_directory_time_touch_a
     fi
     add_tests test_update_directory_time_subdir
