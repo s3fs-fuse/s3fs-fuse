@@ -117,24 +117,13 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "centos:centos8" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    # [NOTE] 2022-02-11
-    # We are receiving the following error on Github Actions:
-    #   "Failed to download metadata for repo 'appstream':"
-    # We should proceed with the migration to CentOS9, but we will fix it temporarily.
-    #
-    sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
-    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
-    "${PACKAGE_MANAGER_BIN}" update -y
-    "${PACKAGE_MANAGER_BIN}" --disablerepo '*' --enablerepo extras swap centos-linux-repos centos-stream-repos -y
-    "${PACKAGE_MANAGER_BIN}" distro-sync -y
-
     # [NOTE]
-    # Installing ShellCheck on CentOS 8 is not easy.
-    # Give up to run ShellCheck on CentOS 8 as we don't have to run ShellChek on all operating systems.
+    # Installing ShellCheck on LockyLinux is not easy.
+    # Give up to run ShellCheck on LockyLinux as we don't have to run ShellChek on all operating systems.
     #
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3"
     INSTALL_CHECKER_PKGS="cppcheck"
