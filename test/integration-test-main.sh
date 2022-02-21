@@ -1588,7 +1588,7 @@ function test_mix_upload_entities() {
 # line for the ENSURE_DISKFREE_SIZE variable)
 #
 function test_ensurespace_move_file() {
-    describe "Testing upload(mv) file when diskspace is not enough ..."
+    describe "Testing upload(mv) file when disk space is not enough ..."
 
     #
     # Make test file which is not under mountpoint

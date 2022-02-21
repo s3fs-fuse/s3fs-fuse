@@ -65,7 +65,7 @@ if it is not specified bucket name (and path) in command line, must specify this
 .TP
 \fB\-o\fR default_acl (default="private")
 the default canned acl to apply to all written s3 objects, e.g., "private", "public-read".
-see https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl for the full list of canned acls.
+see https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl for the full list of canned ACLs.
 .TP
 \fB\-o\fR retries (default="5")
 number of times to retry a failed S3 transaction.
@@ -207,17 +207,17 @@ but lower values may improve performance.
 .TP
 \fB\-o\fR max_dirty_data (default="5120")
 Flush dirty data to S3 after a certain number of MB written.
-The minimum value is 50 MB.  -1 value means disable.
+The minimum value is 50 MB. -1 value means disable.
 Cannot be used with nomixupload.
 .TP
 \fB\-o\fR ensure_diskfree (default 0)
 sets MB to ensure disk free space. This option means the threshold of free space size on disk which is used for the cache file by s3fs.
 s3fs makes file for downloading, uploading and caching files.
-If the disk free space is smaller than this value, s3fs do not use diskspace as possible in exchange for the performance.
+If the disk free space is smaller than this value, s3fs do not use disk space as possible in exchange for the performance.
 .TP
 \fB\-o\fR multipart_threshold (default="25")
 threshold, in MB, to use multipart upload instead of
-single-part.  Must be at least 5 MB.
+single-part. Must be at least 5 MB.
 .TP
 \fB\-o\fR singlepart_copy_limit (default="512")
 maximum size, in MB, of a single-part copy before trying
@@ -253,7 +253,7 @@ In the opposite case s3fs allows access to all users as the default.
 But if you set the allow_other with this option, you can control the permissions of the mount point by this option like umask.
 .TP
 \fB\-o\fR umask (default is "0000")
-sets umask for files under the mountpoint.  This can allow
+sets umask for files under the mountpoint. This can allow
 users other than the mounting user to read and write to files
 that they did not create.
 .TP
@@ -264,7 +264,7 @@ Allow S3 server to check data integrity of uploads via the Content-MD5 header.
 This can add CPU overhead to transfers.
 \fB\-o\fR enable_unsigned_payload (default is disable)
 Do not calculate Content-SHA256 for PutObject and UploadPart
-payloads.  This can reduce CPU overhead to transfers.
+payloads. This can reduce CPU overhead to transfers.
 .TP
 \fB\-o\fR ecs (default is disable)
 This option instructs s3fs to query the ECS container credential metadata address instead of the instance metadata address.
@@ -274,7 +274,7 @@ This option requires the IAM role name or "auto". If you specify "auto", s3fs wi
 .TP
 \fB\-o\fR imdsv1only (default is to use IMDSv2 with fallback to v1)
 AWS instance metadata service, used with IAM role authentication,
-supports the use of an API token.  If you're using an IAM role in an
+supports the use of an API token. If you're using an IAM role in an
 environment that does not support IMDSv2, setting this flag will skip
 retrieval and usage of the API token when retrieving IAM credentials.
 .TP
@@ -404,7 +404,7 @@ It can be specified as year, month, day, hour, minute, second, and it is express
 For example, "1Y6M10D12h30m30s".
 .SH FUSE/MOUNT OPTIONS
 .TP
-Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync).  Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
+Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync). Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
 .SH LOCAL STORAGE CONSUMPTION
