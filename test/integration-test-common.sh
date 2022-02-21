@@ -247,6 +247,7 @@ function start_s3fs {
     # shellcheck disable=SC2086
     (
         set -x 
+        CURL_CA_BUNDLE=/tmp/keystore.pem \
         ${VIA_STDBUF_CMDLINE} \
             ${VALGRIND_EXEC} \
             ${S3FS} \
@@ -255,8 +256,6 @@ function start_s3fs {
             -o use_path_request_style \
             -o url="${S3_URL}" \
             -o endpoint="${S3_ENDPOINT}" \
-            -o no_check_certificate \
-            -o ssl_verify_hostname=0 \
             -o use_xattr=1 \
             -o enable_unsigned_payload \
             ${AUTH_OPT} \
