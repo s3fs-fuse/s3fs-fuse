@@ -249,13 +249,12 @@ class S3fsCurl
         bool ResetHandle(bool lock_already_held = false);
         bool RemakeHandle();
         bool ClearInternalData();
-        void insertV4Headers();
-        void insertV2Headers();
-        void insertIBMIAMHeaders();
+        void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
+        void insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
+        void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
         void insertAuthHeaders();
-        std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource);
-        std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601);
-        int GetIAMv2ApiToken();
+        std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
+        std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
         int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
         int CopyMultipartPostSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
         bool UploadMultipartPostComplete();
@@ -337,12 +336,13 @@ class S3fsCurl
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
         bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
 
-        int GetIAMCredentials();
-        bool LoadIAMRoleFromMetaData();
+        bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
+        bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
         bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
+        int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
         bool PreHeadRequest(const char* tpath, const char* bpath = NULL, const char* savedpath = NULL, size_t ssekey_pos = -1);
         bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, size_t ssekey_pos = -1) {
           return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
