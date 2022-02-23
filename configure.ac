@@ -311,9 +311,18 @@ AC_COMPILE_IFELSE(
 )
 
 dnl ----------------------------------------------
+dnl build date
+dnl ----------------------------------------------
+AC_SUBST([MAN_PAGE_DATE], [$(date +"%B %Y")])
+
+dnl ----------------------------------------------
 dnl output files
 dnl ----------------------------------------------
-AC_CONFIG_FILES(Makefile src/Makefile test/Makefile doc/Makefile)
+AC_CONFIG_FILES(Makefile
+                src/Makefile
+                test/Makefile
+                doc/Makefile
+                doc/man/s3fs.1)
 
 dnl ----------------------------------------------
 dnl short commit hash

@@ -1,4 +1,4 @@
-.TH S3FS "1" "February 2011" "S3FS" "User Commands"
+.TH S3FS "1" "@MAN_PAGE_DATE@" "S3FS" "User Commands"
 .SH NAME
 S3FS \- FUSE-based file system backed by Amazon S3
 .SH SYNOPSIS
