@@ -4692,6 +4692,9 @@ int main(int argc, char* argv[])
 
     // now passing things off to fuse, fuse will finish evaluating the command line args
     fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, NULL);
+    if(fuse_res == 0){
+        fuse_res = s3fs_init_deferred_exit_status;
+    }
     fuse_opt_free_args(&custom_args);
 
     // Destroy curl
