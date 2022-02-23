@@ -3380,16 +3380,10 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
 
     // check loading IAM role name
-    if(ps3fscred->IsIAMRoleMetadataType()){
-      // load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
-      //
-      S3fsCurl s3fscurl;
-      if(!s3fscurl.LoadIAMRoleFromMetaData()){
-          S3FS_PRN_CRIT("could not load IAM role name from meta data.");
-          s3fs_exit_fuseloop(EXIT_FAILURE);
-          return NULL;
-      }
-      S3FS_PRN_INFO("loaded IAM role name = %s", ps3fscred->GetIAMRole().c_str());
+    if(!ps3fscred->LoadIAMRoleFromMetaData()){
+        S3FS_PRN_CRIT("could not load IAM role name from meta data.");
+        s3fs_exit_fuseloop(EXIT_FAILURE);
+        return NULL;
     }
 
     // Check Bucket
@@ -3502,7 +3496,7 @@ static int s3fs_check_service()
 
     // At first time for access S3, we check IAM role if it sets.
     if(!ps3fscred->CheckIAMCredentialUpdate()){
-        S3FS_PRN_CRIT("Failed to check IAM role name(%s).", ps3fscred->GetIAMRole().c_str());
+        S3FS_PRN_CRIT("Failed to initialize IAM credential.");
         return EXIT_FAILURE;
     }
 

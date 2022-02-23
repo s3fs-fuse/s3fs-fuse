@@ -97,6 +97,7 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
 // Methods : Constructor / Destructor
 //-------------------------------------------------------------------
 S3fsCred::S3fsCred() :
+    is_lock_init(false),
     passwd_file(""),
     aws_profile(DEFAULT_AWS_PROFILE_NAME),
     load_iamrole(false),
@@ -115,10 +116,29 @@ S3fsCred::S3fsCred() :
     IAM_expiry_field("Expiration"),
     IAM_role("")
 {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+    int result;
+    if(0 != (result = pthread_mutex_init(&token_lock, &attr))){
+        S3FS_PRN_CRIT("failed to init token_lock: %d", result);
+        abort();
+    }
+    is_lock_init = true;
 }
 
 S3fsCred::~S3fsCred()
 {
+    if(is_lock_init){
+        int result;
+        if(0 != (result = pthread_mutex_destroy(&token_lock))){
+            S3FS_PRN_CRIT("failed to destroy token_lock: %d", result);
+            abort();
+        }
+        is_lock_init = false;
+    }
 }
 
 //-------------------------------------------------------------------
@@ -156,8 +176,10 @@ bool S3fsCred::SetIAMRoleMetadataType(bool flag)
     return old;
 }
 
-bool S3fsCred::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
+bool S3fsCred::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey, AutoLock::Type type)
 {
+    AutoLock auto_lock(&token_lock, type);
+
     if((!is_ibm_iam_auth && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0]){
         return false;
     }
@@ -167,8 +189,10 @@ bool S3fsCred::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey
     return true;
 }
 
-bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken)
+bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken, AutoLock::Type type)
 {
+    AutoLock auto_lock(&token_lock, type);
+
     bool access_key_is_empty        = !AccessKeyId     || '\0' == AccessKeyId[0];
     bool secret_access_key_is_empty = !SecretAccessKey || '\0' == SecretAccessKey[0];
     bool session_token_is_empty     = !SessionToken    || '\0' == SessionToken[0];
@@ -184,9 +208,11 @@ bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
     return true;
 }
 
-bool S3fsCred::IsSetAccessKeys() const
+bool S3fsCred::IsSetAccessKeys(AutoLock::Type type)
 {
-    return !IAM_role.empty() || ((!AWSAccessKeyId.empty() || is_ibm_iam_auth) && !AWSSecretAccessKey.empty());
+    AutoLock auto_lock(&token_lock, type);
+
+    return IsSetIAMRole(AutoLock::ALREADY_LOCKED) || ((!AWSAccessKeyId.empty() || is_ibm_iam_auth) && !AWSSecretAccessKey.empty());
 }
 
 bool S3fsCred::SetIsECS(bool flag)
@@ -210,11 +236,26 @@ bool S3fsCred::SetIsIBMIAMAuth(bool flag)
     return old;
 }
 
-std::string S3fsCred::SetIAMRole(const char* role)
+bool S3fsCred::SetIAMRole(const char* role, AutoLock::Type type)
 {
-    std::string old = IAM_role;
+    AutoLock auto_lock(&token_lock, type);
+
     IAM_role = role ? role : "";
-    return old;
+    return true;
+}
+
+std::string S3fsCred::GetIAMRole(AutoLock::Type type)
+{
+    AutoLock auto_lock(&token_lock, type);
+
+    return IAM_role;
+}
+
+bool S3fsCred::IsSetIAMRole(AutoLock::Type type)
+{
+    AutoLock auto_lock(&token_lock, type);
+
+    return !IAM_role.empty();
 }
 
 size_t S3fsCred::SetIAMFieldCount(size_t field_count)
@@ -245,24 +286,189 @@ std::string S3fsCred::SetIAMExpiryField(const char* expiry_field)
     return old;
 }
 
-int S3fsCred::SetIMDSVersion(int version)
+bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role, AutoLock::Type type)
 {
+    // check
+    if(check_iam_role && !is_ecs && !IsIBMIAMAuth()){
+        if(!IsSetIAMRole(type)) {
+            S3FS_PRN_ERR("IAM role name is empty.");
+            return false;
+        }
+        S3FS_PRN_INFO3("[IAM role=%s]", GetIAMRole(type).c_str());
+    }
+
+    if(is_ecs){
+        const char *env = std::getenv(S3fsCred::ECS_IAM_ENV_VAR);
+        if(env == NULL){
+            S3FS_PRN_ERR("%s is not set.", S3fsCred::ECS_IAM_ENV_VAR);
+            return false;
+        }
+        url = IAM_cred_url + env;
+
+    }else if(IsIBMIAMAuth()){
+        url = IAM_cred_url;
+
+    }else{
+        // [NOTE]
+        // To avoid deadlocking, do not manipulate the S3fsCred object
+        // in the S3fsCurl::GetIAMv2ApiToken method (when retrying).
+        //
+        AutoLock auto_lock(&token_lock, type);      // Lock for IAM_api_version, IAMv2_api_token
+
+        if(GetIMDSVersion(AutoLock::ALREADY_LOCKED) > 1){
+            S3fsCurl    s3fscurl;
+            std::string token;
+            int         result = s3fscurl.GetIAMv2ApiToken(S3fsCred::IAMv2_token_url, S3fsCred::IAMv2_token_ttl, S3fsCred::IAMv2_token_ttl_hdr, token);
+            if(-ENOENT == result){
+                // If we get a 404 back when requesting the token service,
+                // then it's highly likely we're running in an environment
+                // that doesn't support the AWS IMDSv2 API, so we'll skip
+                // the token retrieval in the future.
+                SetIMDSVersion(1, AutoLock::ALREADY_LOCKED);
+
+            }else if(result != 0){
+                // If we get an unexpected error when retrieving the API
+                // token, log it but continue.  Requirement for including
+                // an API token with the metadata request may or may not
+                // be required, so we should not abort here.
+                S3FS_PRN_ERR("AWS IMDSv2 token retrieval failed: %d", result);
+
+            }else{
+                // Set token
+                if(!SetIAMv2APIToken(token, AutoLock::ALREADY_LOCKED)){
+                    S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", token.c_str());
+                }
+            }
+        }
+        if(check_iam_role){
+            url = IAM_cred_url + GetIAMRole(AutoLock::ALREADY_LOCKED);
+        }else{
+            url = IAM_cred_url;
+        }
+    }
+    return true;
+}
+
+int S3fsCred::SetIMDSVersion(int version, AutoLock::Type type)
+{
+    AutoLock auto_lock(&token_lock, type);
+
     int old = IAM_api_version;
     IAM_api_version = version;
     return old;
 }
 
-bool S3fsCred::SetIAMv2APIToken(const char* response)
+int S3fsCred::GetIMDSVersion(AutoLock::Type type)
 {
-    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", response ? response : "(null)");
-    if(!response){
+    AutoLock auto_lock(&token_lock, type);
+
+    return IAM_api_version;
+}
+
+bool S3fsCred::SetIAMv2APIToken(const std::string& token, AutoLock::Type type)
+{
+    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", token.c_str());
+
+    AutoLock auto_lock(&token_lock, type);
+
+    if(token.empty()){
         return false;
     }
-    IAMv2_api_token = std::string(response);
+    IAMv2_api_token = token;
     return true;
 }
 
-bool S3fsCred::SetIAMCredentials(const char* response)
+std::string S3fsCred::GetIAMv2APIToken(AutoLock::Type type)
+{
+    AutoLock auto_lock(&token_lock, type);
+
+    return IAMv2_api_token;
+}
+
+// [NOTE]
+// Currently, token_lock is always locked before calling this method,
+// and this method calls the S3fsCurl::GetIAMCredentials method.
+// Currently, when the request fails and retries in the process of
+// S3fsCurl::GetIAMCredentials, does not use the S3fsCred object in
+// retry logic.
+// Be careful not to deadlock whenever you change this logic.
+//
+bool S3fsCred::LoadIAMCredentials(AutoLock::Type type)
+{
+    // url(check iam role)
+    std::string url;
+
+    AutoLock auto_lock(&token_lock, type);
+
+    if(!GetIAMCredentialsURL(url, true, AutoLock::ALREADY_LOCKED)){
+        return false;
+    }
+
+    const char* iam_v2_token = NULL;
+    std::string str_iam_v2_token;
+    if(GetIMDSVersion(AutoLock::ALREADY_LOCKED) > 1){
+        str_iam_v2_token = GetIAMv2APIToken(AutoLock::ALREADY_LOCKED);
+        iam_v2_token     = str_iam_v2_token.c_str();
+    }
+
+    const char* ibm_secret_access_key = NULL;
+    std::string str_ibm_secret_access_key;
+    if(IsIBMIAMAuth()){
+        str_ibm_secret_access_key = AWSSecretAccessKey;
+        ibm_secret_access_key     = str_ibm_secret_access_key.c_str();
+    }
+
+    S3fsCurl    s3fscurl;
+    std::string response;
+    if(!s3fscurl.GetIAMCredentials(url.c_str(), iam_v2_token, ibm_secret_access_key, response)){
+        return false;
+    }
+
+    if(!SetIAMCredentials(response.c_str(), AutoLock::ALREADY_LOCKED)){
+        S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+        return false;
+    }
+	return true;
+}
+
+//
+// load IAM role name from http://169.254.169.254/latest/meta-data/iam/security-credentials
+//
+bool S3fsCred::LoadIAMRoleFromMetaData()
+{
+    AutoLock auto_lock(&token_lock);
+
+    if(load_iamrole){
+        // url(not check iam role)
+        std::string url;
+
+        if(!GetIAMCredentialsURL(url, false, AutoLock::ALREADY_LOCKED)){
+            return false;
+        }
+
+        const char* iam_v2_token = NULL;
+        std::string str_iam_v2_token;
+        if(GetIMDSVersion(AutoLock::ALREADY_LOCKED) > 1){
+            str_iam_v2_token = GetIAMv2APIToken(AutoLock::ALREADY_LOCKED);
+            iam_v2_token     = str_iam_v2_token.c_str();
+        }
+
+        S3fsCurl    s3fscurl;
+        std::string token;
+        if(!s3fscurl.GetIAMRoleFromMetaData(url.c_str(), iam_v2_token, token)){
+            return false;
+        }
+
+        if(!SetIAMRoleFromMetaData(token.c_str(), AutoLock::ALREADY_LOCKED)){
+            S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+            return false;
+        }
+        S3FS_PRN_INFO("loaded IAM role name = %s", GetIAMRole(AutoLock::ALREADY_LOCKED).c_str());
+    }
+    return true;
+}
+
+bool S3fsCred::SetIAMCredentials(const char* response, AutoLock::Type type)
 {
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
 
@@ -275,6 +481,8 @@ bool S3fsCred::SetIAMCredentials(const char* response)
     if(IAM_field_count != keyval.size()){
         return false;
     }
+
+    AutoLock auto_lock(&token_lock, type);
 
     AWSAccessToken = keyval[IAM_token_field];
 
@@ -292,7 +500,7 @@ bool S3fsCred::SetIAMCredentials(const char* response)
     return true;
 }
 
-bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
+bool S3fsCred::SetIAMRoleFromMetaData(const char* response, AutoLock::Type type)
 {
     S3FS_PRN_INFO3("IAM role name response = \"%s\"", response ? response : "(null)");
 
@@ -301,10 +509,9 @@ bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
         return false;
     }
 
-    SetIAMRole(rolename.c_str());
+    SetIAMRole(rolename.c_str(), type);
     return true;
 }
-
 
 //-------------------------------------------------------------------
 // Methods : for Credentials
@@ -504,7 +711,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
 //
 // only one default key pair is allowed, but not required
 //
-bool S3fsCred::ReadS3fsPasswdFile()
+bool S3fsCred::ReadS3fsPasswdFile(AutoLock::Type type)
 {
     bucketkvmap_t bucketmap;
     kvmap_t       keyval;
@@ -529,11 +736,17 @@ bool S3fsCred::ReadS3fsPasswdFile()
     bucketkvmap_t::iterator it = bucketmap.find(S3fsCred::KEYVAL_FIELDS_TYPE);
     if(bucketmap.end() != it){
         // aws format
-        int result = CheckS3fsCredentialAwsFormat(it->second);
+        std::string access_key_id;
+        std::string secret_access_key;
+        int result = CheckS3fsCredentialAwsFormat(it->second, access_key_id, secret_access_key);
         if(-1 == result){
             return false;
         }else if(1 == result){
-            // success to set
+            // found ascess(secret) keys
+            if(!SetAccessKey(access_key_id.c_str(), secret_access_key.c_str(), type)){
+                S3FS_PRN_EXIT("failed to set access key/secret key.");
+                return false;
+            }
             return true;
         }
     }
@@ -556,7 +769,7 @@ bool S3fsCred::ReadS3fsPasswdFile()
         return false;
     }
 
-    if(!SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str())){
+    if(!SetAccessKey(aws_accesskeyid_it->second.c_str(), aws_secretkey_it->second.c_str(), type)){
         S3FS_PRN_EXIT("failed to set internal data for access key/secret key from passwd file.");
         return false;
     }
@@ -568,7 +781,7 @@ bool S3fsCred::ReadS3fsPasswdFile()
 //          0 - NG(could not read)
 //         -1 - Should shutdown immediately
 //
-int S3fsCred::CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap)
+int S3fsCred::CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& access_key_id, std::string& secret_access_key)
 {
     std::string str1(S3fsCred::AWS_ACCESSKEYID);
     std::string str2(S3fsCred::AWS_SECRETKEY);
@@ -585,17 +798,16 @@ int S3fsCred::CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap)
         S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
         return -1;
     }
-    if(!SetAccessKey(str1_it->second.c_str(), str2_it->second.c_str())){
-        S3FS_PRN_EXIT("failed to set access key/secret key.");
-        return -1;
-    }
+    access_key_id     = str1_it->second;
+    secret_access_key = str2_it->second;
+
     return 1;
 }
 
 //
 // Read Aws Credential File
 //
-bool S3fsCred::ReadAwsCredentialFile(const std::string &filename)
+bool S3fsCred::ReadAwsCredentialFile(const std::string &filename, AutoLock::Type type)
 {
     // open passwd file
     std::ifstream PF(filename.c_str());
@@ -652,12 +864,12 @@ bool S3fsCred::ReadAwsCredentialFile(const std::string &filename)
             S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/credentials file for profile: %s.", aws_profile.c_str());
             return false;
         }
-        if(!SetAccessKey(accesskey.c_str(), secret.c_str())){
+        if(!SetAccessKey(accesskey.c_str(), secret.c_str(), type)){
             S3FS_PRN_EXIT("failed to set internal data for access key/secret key from aws credential file.");
             return false;
         }
     }else{
-        if(!SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str())){
+        if(!SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str(), type)){
             S3FS_PRN_EXIT("session token is invalid.");
             return false;
         }
@@ -695,13 +907,13 @@ bool S3fsCred::InitialS3fsCredentials()
     }
 
     // 1 - keys specified on the command line
-    if(IsSetAccessKeys()){
+    if(IsSetAccessKeys(AutoLock::NONE)){
         return true;
     }
 
     // 2 - was specified on the command line
     if(IsSetPasswdFile()){
-        if(!ReadS3fsPasswdFile()){
+        if(!ReadS3fsPasswdFile(AutoLock::NONE)){
             return false;
         }
         return true;
@@ -721,7 +933,7 @@ bool S3fsCred::InitialS3fsCredentials()
         S3FS_PRN_INFO2("access key from env variables");
         if(AWSSESSIONTOKEN != NULL){
             S3FS_PRN_INFO2("session token is available");
-            if(!SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN)){
+            if(!SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN, AutoLock::NONE)){
                  S3FS_PRN_EXIT("session token is invalid.");
                  return false;
             }
@@ -732,7 +944,7 @@ bool S3fsCred::InitialS3fsCredentials()
                 return false;
             }
         }
-        if(!SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY)){
+        if(!SetAccessKey(AWSACCESSKEYID, AWSSECRETACCESSKEY, AutoLock::NONE)){
             S3FS_PRN_EXIT("if one access key is specified, both keys need to be specified.");
             return false;
         }
@@ -748,7 +960,7 @@ bool S3fsCred::InitialS3fsCredentials()
                 S3FS_PRN_EXIT("AWS_CREDENTIAL_FILE: \"%s\" is not readable.", passwd_file.c_str());
                 return false;
             }
-            if(!ReadS3fsPasswdFile()){
+            if(!ReadS3fsPasswdFile(AutoLock::NONE)){
                 return false;
             }
             return true;
@@ -757,7 +969,7 @@ bool S3fsCred::InitialS3fsCredentials()
 
     // 3b - check ${HOME}/.aws/credentials
     std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
-    if(ReadAwsCredentialFile(aws_credentials)){
+    if(ReadAwsCredentialFile(aws_credentials, AutoLock::NONE)){
         return true;
     }else if(aws_profile != DEFAULT_AWS_PROFILE_NAME){
         S3FS_PRN_EXIT("Could not find profile: %s in file: %s", aws_profile.c_str(), aws_credentials.c_str());
@@ -770,14 +982,14 @@ bool S3fsCred::InitialS3fsCredentials()
         passwd_file = HOME;
         passwd_file += "/.passwd-s3fs";
         if(IsReadableS3fsPasswdFile()){
-            if(!ReadS3fsPasswdFile()){
+            if(!ReadS3fsPasswdFile(AutoLock::NONE)){
                 return false;
             }
 
             // It is possible that the user's file was there but
             // contained no key pairs i.e. commented out
             // in that case, go look in the final location
-            if(IsSetAccessKeys()){
+            if(IsSetAccessKeys(AutoLock::NONE)){
                 return true;
             }
         }
@@ -786,7 +998,7 @@ bool S3fsCred::InitialS3fsCredentials()
     // 5 - from the system default location
     passwd_file = "/etc/passwd-s3fs";
     if(IsReadableS3fsPasswdFile()){
-        if(!ReadS3fsPasswdFile()){
+        if(!ReadS3fsPasswdFile(AutoLock::NONE)){
             return false;
         }
         return true;
@@ -854,23 +1066,37 @@ bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
     return true;
 }
 
-bool S3fsCred::CheckIAMCredentialUpdate()
+bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string* secret_access_key, std::string* access_token)
 {
-    if(IAM_role.empty() && !is_ecs && !is_ibm_iam_auth){
-        return true;
-    }
-    if(time(NULL) + S3fsCred::IAM_EXPIRE_MERGIN <= AWSAccessTokenExpire){
-        return true;
-    }
-    S3FS_PRN_INFO("IAM Access Token refreshing...");
+    AutoLock auto_lock(&token_lock);
 
-    // update
-    S3fsCurl s3fscurl;
-    if(0 != s3fscurl.GetIAMCredentials()){
-        S3FS_PRN_ERR("IAM Access Token refresh failed");
-        return false;
+    if(IsSetIAMRole(AutoLock::ALREADY_LOCKED) || is_ecs || is_ibm_iam_auth){
+        if(AWSAccessTokenExpire < (time(NULL) + S3fsCred::IAM_EXPIRE_MERGIN)){
+            S3FS_PRN_INFO("IAM Access Token refreshing...");
+
+            // update
+            if(!LoadIAMCredentials(AutoLock::ALREADY_LOCKED)){
+                S3FS_PRN_ERR("IAM Access Token refresh failed");
+                return false;
+            }
+            S3FS_PRN_INFO("IAM Access Token refreshed");
+        }
     }
-    S3FS_PRN_INFO("IAM Access Token refreshed");
+
+    // set
+    if(access_key_id){
+        *access_key_id = AWSAccessKeyId;
+    }
+    if(secret_access_key){
+        *secret_access_key = AWSSecretAccessKey;
+    }
+    if(access_token){
+        if(IsIBMIAMAuth() || IsSetIAMRole(AutoLock::ALREADY_LOCKED) || is_ecs || is_use_session_token){
+            *access_token = AWSAccessToken;
+        }else{
+            access_token->erase();
+        }
+    }
 
     return true;
 }
@@ -900,7 +1126,7 @@ int S3fsCred::DetectParam(const char* arg)
         SetIAMTokenField("\"access_token\"");
         SetIAMExpiryField("\"expiration\"");
         SetIAMFieldCount(2);
-        SetIMDSVersion(1);
+        SetIMDSVersion(1, AutoLock::NONE);
         return 0;
     }
 
@@ -924,7 +1150,7 @@ int S3fsCred::DetectParam(const char* arg)
     }
 
     if(0 == strcmp(arg, "imdsv1only")){
-        SetIMDSVersion(1);
+        SetIMDSVersion(1, AutoLock::NONE);
         return 0;
     }
 
@@ -934,14 +1160,14 @@ int S3fsCred::DetectParam(const char* arg)
             return -1;
         }
         SetIsECS(true);
-        SetIMDSVersion(1);
+        SetIMDSVersion(1, AutoLock::NONE);
         SetIAMCredentialsURL("http://169.254.170.2");
         SetIAMFieldCount(5);
         return 0;
     }
 
     if(is_prefix(arg, "iam_role")){
-        if(IsECS() || IsIBMIAMAuth()){
+        if(is_ecs || IsIBMIAMAuth()){
             S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
             return -1;
         }
@@ -953,7 +1179,7 @@ int S3fsCred::DetectParam(const char* arg)
 
         }else if(is_prefix(arg, "iam_role=")){
             const char* role = strchr(arg, '=') + sizeof(char);
-            SetIAMRole(role);
+            SetIAMRole(role, AutoLock::NONE);
             SetIAMRoleMetadataType(false);
             return 0;
         }
@@ -1014,21 +1240,21 @@ bool S3fsCred::CheckAllParams()
     }
 
     // error checking of command line arguments for compatibility
-    if(S3fsCurl::IsPublicBucket() && IsSetAccessKeys()){
+    if(S3fsCurl::IsPublicBucket() && IsSetAccessKeys(AutoLock::NONE)){
         S3FS_PRN_EXIT("specifying both public_bucket and the access keys options is invalid.");
         return false;
     }
 
-    if(IsSetPasswdFile() && IsSetAccessKeys()){
+    if(IsSetPasswdFile() && IsSetAccessKeys(AutoLock::NONE)){
         S3FS_PRN_EXIT("specifying both passwd_file and the access keys options is invalid.");
         return false;
     }
 
-    if(!S3fsCurl::IsPublicBucket() && !IsIAMRoleMetadataType() && !IsECS()){
+    if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
         if(!InitialS3fsCredentials()){
             return false;
         }
-        if(!IsSetAccessKeys()){
+        if(!IsSetAccessKeys(AutoLock::NONE)){
             S3FS_PRN_EXIT("could not establish security credentials, check documentation.");
             return false;
         }
