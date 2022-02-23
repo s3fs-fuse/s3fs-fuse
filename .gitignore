@@ -57,6 +57,11 @@ compile
 missing
 
 #
+# man page
+#
+doc/man/s3fs.1
+
+#
 # object directories
 #
 .deps
