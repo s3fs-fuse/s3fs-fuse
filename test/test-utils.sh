@@ -248,8 +248,12 @@ function run_suite {
    cd_run_dir "${key_prefix}"
    for t in "${TEST_LIST[@]}"; do
        # Ensure test input name differs every iteration
-       TEST_TEXT_FILE="test-s3fs.txt-${RANDOM}"
+       TEST_TEXT_FILE="test-s3fs-${RANDOM}.txt"
        TEST_DIR="testdir-${RANDOM}"
+       # shellcheck disable=SC2034
+       ALT_TEST_TEXT_FILE="test-s3fs-ALT-${RANDOM}.txt"
+       # shellcheck disable=SC2034
+       BIG_FILE="big-file-s3fs-${RANDOM}.txt"
        "${t}" "${key_prefix}" && rc=$? || rc=$?
        if [ $rc = 0 ]; then
            report_pass "${t}"
