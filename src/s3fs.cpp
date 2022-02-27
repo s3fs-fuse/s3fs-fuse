@@ -705,7 +705,7 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     time_t mtime         = (!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)) ? -1 : stobj.st_mtime;
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, flags, force_tmpfile, true, AutoLock::NONE))){
+    if(NULL == (ent = autoent.Open(path, &meta, stobj.st_size, mtime, flags, force_tmpfile, true, false, AutoLock::NONE))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
         return -EIO;
     }
@@ -939,7 +939,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(NULL == (ent = autoent.Open(path, &meta, 0, -1, fi->flags, false, true, AutoLock::NONE))){
+    if(NULL == (ent = autoent.Open(path, &meta, 0, -1, fi->flags, false, true, false, AutoLock::NONE))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
@@ -1135,7 +1135,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(NULL == (ent = autoent.Open(to, &headers, 0, -1, O_RDWR, true, true, AutoLock::NONE))){
+        if(NULL == (ent = autoent.Open(to, &headers, 0, -1, O_RDWR, true, true, false, AutoLock::NONE))){
             S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
             return -errno;
         }
@@ -1208,7 +1208,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
             // no opened fd
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
-                ent = autoent.Open(from, &meta, buf.st_size, -1, O_RDONLY, false, true, AutoLock::NONE);
+                ent = autoent.Open(from, &meta, buf.st_size, -1, O_RDONLY, false, true, false, AutoLock::NONE);
             }
             if(ent){
                 struct timespec mtime = get_mtime(meta);
@@ -2178,7 +2178,25 @@ static int s3fs_truncate(const char* _path, off_t size)
         // The Flush is called before this file is closed, so there is no need
         // to do it here.
         //
-        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, false, true, AutoLock::NONE))){
+        // [NOTICE]
+        // FdManager::Open() ignores changes that reduce the file size for the
+        // file you are editing. However, if user opens only onece, edit it,
+        // and then shrink the file, it should be done.
+        // When this function is called, the file is already open by FUSE or
+        // some other operation. Therefore, if the number of open files is 1,
+        // no edits other than that fd will be made, and the files will be
+        // shrunk using ignore_modify flag even while editing.
+        // See the comments when merging this code for FUSE2 limitations.
+        // (In FUSE3, it will be possible to handle it reliably using fuse_file_info.)
+        //
+        bool ignore_modify;
+        if(1 < FdManager::GetOpenFdCount(path)){
+            ignore_modify = false;
+        }else{
+            ignore_modify = true;
+        }
+
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, false, true, ignore_modify, AutoLock::NONE))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -2212,7 +2230,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         meta["x-amz-meta-uid"]   = str(pcxt->uid);
         meta["x-amz-meta-gid"]   = str(pcxt->gid);
 
-        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, true, true, AutoLock::NONE))){
+        if(NULL == (ent = autoent.Open(path, &meta, size, -1, O_RDWR, true, true, false, AutoLock::NONE))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -2280,7 +2298,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     FdEntity*    ent;
     headers_t    meta;
     get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
-    if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, fi->flags, false, true, AutoLock::NONE))){
+    if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, fi->flags, false, true, false, AutoLock::NONE))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }

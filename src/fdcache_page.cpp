@@ -355,7 +355,7 @@ void PageList::FreeList(fdpage_list_t& list)
     list.clear();
 }
 
-PageList::PageList(off_t size, bool is_loaded, bool is_modified)
+PageList::PageList(off_t size, bool is_loaded, bool is_modified, bool shrinked) : is_shrink(shrinked)
 {
     Init(size, is_loaded, is_modified);
 }
@@ -365,6 +365,7 @@ PageList::PageList(const PageList& other)
     for(fdpage_list_t::const_iterator iter = other.pages.begin(); iter != other.pages.end(); ++iter){
         pages.push_back(*iter);
     }
+    is_shrink = other.is_shrink;
 }
 
 PageList::~PageList()
@@ -375,6 +376,7 @@ PageList::~PageList()
 void PageList::Clear()
 {
     PageList::FreeList(pages);
+    is_shrink = false;
 }
 
 bool PageList::Init(off_t size, bool is_loaded, bool is_modified)
@@ -443,6 +445,9 @@ bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
                     iter->bytes = size - iter->offset;
                 }
             }
+        }
+        if(is_modified){
+            is_shrink = true;
         }
     }else{    // total == size
         // nothing to do
@@ -766,6 +771,9 @@ off_t PageList::BytesModified() const
 
 bool PageList::IsModified() const
 {
+    if(is_shrink){
+        return true;
+    }
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
         if(iter->modified){
             return true;
@@ -776,6 +784,8 @@ bool PageList::IsModified() const
 
 bool PageList::ClearAllModified()
 {
+    is_shrink = false;
+
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
         if(iter->modified){
             iter->modified = false;
@@ -939,7 +949,7 @@ void PageList::Dump() const
 {
     int cnt = 0;
 
-    S3FS_PRN_DBG("pages = {");
+    S3FS_PRN_DBG("pages (shrinked=%s) = {", (is_shrink ? "yes" : "no"));
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
         S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s / %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "loaded" : "unloaded", iter->modified ? "modified" : "not modified");
     }

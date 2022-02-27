@@ -47,9 +47,11 @@ class FdManager
 
   private:
       static off_t GetFreeDiskSpace(const char* path);
+      static bool IsDir(const std::string* dir);
+
+      int GetPseudoFdCount(const char* path);
       void CleanupCacheDirInternal(const std::string &path = "");
       bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);
-      static bool IsDir(const std::string* dir);
 
   public:
       FdManager();
@@ -71,6 +73,7 @@ class FdManager
       static bool SetCheckCacheDirExist(bool is_check);
       static bool CheckCacheDirExist();
       static bool HasOpenEntityFd(const char* path);
+      static int GetOpenFdCount(const char* path);
       static off_t GetEnsureFreeDiskSpace();
       static off_t SetEnsureFreeDiskSpace(off_t size);
       static bool InitFakeUsedDiskSize(off_t fake_freesize);
@@ -84,7 +87,7 @@ class FdManager
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true, bool lock_already_held = false);
-      FdEntity* Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, AutoLock::Type type);
+      FdEntity* Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
       FdEntity* OpenExistFdEntity(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);

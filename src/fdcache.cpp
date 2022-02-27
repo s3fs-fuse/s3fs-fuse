@@ -409,6 +409,16 @@ bool FdManager::HasOpenEntityFd(const char* path)
     return (0 < ent->GetOpenCount());
 }
 
+// [NOTE]
+// Returns the number of open pseudo fd.
+//
+int FdManager::GetOpenFdCount(const char* path)
+{
+    AutoLock auto_lock(&FdManager::fd_manager_lock);
+
+	return FdManager::singleton.GetPseudoFdCount(path);
+}
+
 //------------------------------------------------
 // FdManager methods
 //------------------------------------------------
@@ -523,9 +533,9 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, boo
     return NULL;
 }
 
-FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, AutoLock::Type type)
+FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
 {
-    S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld][flags=0x%x]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time), flags);
+    S3FS_PRN_DBG("[path=%s][size=%lld][time=%lld][flags=0x%x][force_tmpfile=%s][create=%s][ignore_modify=%s]", SAFESTRPTR(path), static_cast<long long>(size), static_cast<long long>(time), flags, (force_tmpfile ? "yes" : "no"), (is_create ? "yes" : "no"), (ignore_modify ? "yes" : "no"));
 
     if(!path || '\0' == path[0]){
         return NULL;
@@ -554,11 +564,12 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         ent = iter->second;
 
         // [NOTE]
-        // Even if getting the request to change the size of modifying
-        // file to small, we do not change it. Because if it will change,
-        // test_open_second_fd test will be failed.
+        // If the file is being modified and ignore_modify flag is false,
+        // the file size will not be changed even if there is a request
+        // to reduce the size of the modified file.
+        // If you do, the "test_open_second_fd" test will fail.
         //
-        if(ent->IsModified()){
+        if(!ignore_modify && ent->IsModified()){
             // If the file is being modified and it's size is larger than size parameter, it will not be resized.
             off_t cur_size = 0;
             if(ent->GetSize(cur_size) && size <= cur_size){
@@ -635,12 +646,35 @@ FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
     S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);
 
     // search entity by path, and create pseudo fd
-    FdEntity* ent = Open(fd, path, NULL, -1, -1, flags, false, false, AutoLock::NONE);
+    FdEntity* ent = Open(fd, path, NULL, -1, -1, flags, false, false, false, AutoLock::NONE);
     if(!ent){
         // Not found entity
         return NULL;
     }
     return ent;
+}
+
+// [NOTE]
+// Returns the number of open pseudo fd.
+// This method is called from GetOpenFdCount method which is already locked.
+//
+int FdManager::GetPseudoFdCount(const char* path)
+{
+    S3FS_PRN_DBG("[path=%s]", SAFESTRPTR(path));
+
+    if(!path || '\0' == path[0]){
+        return 0;
+    }
+
+    // search from all entity.
+    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+        if(iter->second && 0 == strcmp(iter->second->GetPath(), path)){
+            // found the entity for the path
+            return iter->second->GetOpenCount();
+        }
+    }
+    // not found entity
+    return 0;
 }
 
 void FdManager::Rename(const std::string &from, const std::string &to)

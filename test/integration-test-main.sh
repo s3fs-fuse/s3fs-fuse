@@ -92,6 +92,26 @@ function test_truncate_empty_file {
     rm_test_file
 }
 
+function test_truncate_shrink_file {
+    describe "Testing truncate shrinking large binary file ..."
+
+    local BIG_TRUNCATE_TEST_FILE="big-truncate-test.bin"
+    local t_size=$((1024 * 1024 * 32 + 64))
+
+    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" bs=1024 count=$((1024 * 64))
+    cp "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" "${BIG_TRUNCATE_TEST_FILE}"
+
+    "${TRUNCATE_BIN}" "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" -s "${t_size}"
+    "${TRUNCATE_BIN}" "${BIG_TRUNCATE_TEST_FILE}" -s "${t_size}"
+
+    if ! cmp "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" "${BIG_TRUNCATE_TEST_FILE}"; then
+       return 1
+    fi
+
+    rm -f "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}"
+    rm_test_file "${BIG_TRUNCATE_TEST_FILE}"
+}
+
 function test_mv_file {
     describe "Testing mv file function ..."
     # if the rename file exists, delete it
@@ -1818,6 +1838,7 @@ function add_all_tests {
     add_tests test_truncate_file
     add_tests test_truncate_upload
     add_tests test_truncate_empty_file
+    add_tests test_truncate_shrink_file
     add_tests test_mv_file
     add_tests test_mv_to_exist_file
     add_tests test_mv_empty_directory
