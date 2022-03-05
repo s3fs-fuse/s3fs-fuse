@@ -61,6 +61,9 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 
         if(0 < pthparam->ppseudofdinfo->instruct_count){
             --(pthparam->ppseudofdinfo->instruct_count);
+        }else{
+            S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
+            return (void*)(intptr_t)(-EIO);
         }
         ++(pthparam->ppseudofdinfo->completed_count);
 
@@ -79,6 +82,9 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 
         if(0 < pthparam->ppseudofdinfo->instruct_count){
             --(pthparam->ppseudofdinfo->instruct_count);
+        }else{
+            S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
+            return (void*)(intptr_t)(-EIO);
         }
         ++(pthparam->ppseudofdinfo->completed_count);
 
