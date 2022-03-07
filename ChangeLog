@@ -1,6 +1,18 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.91 -- 07 Mar, 2022 (major changes only)
+#1753 - Fix RowFlush can not upload last part smaller than 5MB using NoCacheMultipartPost
+#1760 - Fix IAM role retrieval from IMDSv2
+#1801 - Add option to allow unsigned payloads
+#1809 - Fix mixupload return EntityTooSmall while a copypart is less than 5MB after split
+#1855 - Allow compilation on Windows via MSYS2
+#1868 - Handle utimensat UTIME_NOW and UTIME_OMIT special values
+#1871 - #1880 - Preserve sub-second precision in more situations
+#1879 - Always flush open files with O_CREAT flag
+#1887 - Fixed not to call Flush even if the file size is increased
+#1888 - Include climits to support musl libc
+
 Version 1.90 -- 07 Aug, 2021 (major changes only)
 #1599 - Don't ignore nomultipart when storage is low
 #1600 - #1602 - #1604 - #1617 - #1619 - #1620 - #1623 - #1624 - Fix POSIX compatibility issues found by pjdfstest
