@@ -125,7 +125,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     # Installing ShellCheck on Rocky Linux is not easy.
     # Give up to run ShellCheck on Rocky Linux as we don't have to run ShellChek on all operating systems.
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl-minimal python3"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
 
@@ -147,7 +147,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:35" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
     # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl-minimal attr diffutils procps python3-pip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
