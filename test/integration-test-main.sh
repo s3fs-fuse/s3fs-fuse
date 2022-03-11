@@ -399,7 +399,7 @@ function test_external_creation {
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q noobj_cache; then
+    if ! ps u -p "${S3FS_PID}" | grep -q disable_noobj_cache; then
         [ ! -e "${TEST_TEXT_FILE}" ]
     fi
     sleep 1
