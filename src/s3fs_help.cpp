@@ -87,7 +87,7 @@ static const char help_string[] =
     "   storage_class (default=\"standard\")\n"
     "      - store object with specified storage class. Possible values:\n"
     "        standard, standard_ia, onezone_ia, reduced_redundancy,\n"
-    "        intelligent_tiering, glacier, and deep_archive.\n"
+    "        intelligent_tiering, glacier, glacier_ir, and deep_archive.\n"
     "\n"
     "   use_rrs (default is disable)\n"
     "      - use Amazon's Reduced Redundancy Storage.\n"

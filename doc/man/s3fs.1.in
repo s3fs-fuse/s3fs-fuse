@@ -85,7 +85,7 @@ delete local file cache when s3fs starts and exits.
 .TP
 \fB\-o\fR storage_class (default="standard")
 store object with specified storage class.
-Possible values: standard, standard_ia, onezone_ia, reduced_redundancy, intelligent_tiering, glacier, and deep_archive.
+Possible values: standard, standard_ia, onezone_ia, reduced_redundancy, intelligent_tiering, glacier, glacier_ir, and deep_archive.
 .TP
 \fB\-o\fR use_rrs (default is disable)
 use Amazon's Reduced Redundancy Storage.
