@@ -167,11 +167,10 @@ specify expire time (seconds) for entries in the stat cache and symbolic link ca
 specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time is based on the time from the last access time of those cache.
 This option is exclusive with stat_cache_expire, and is left for compatibility with older versions.
 .TP
-\fB\-o\fR enable_noobj_cache (default is disable)
-enable cache entries for the object which does not exist.
-s3fs always has to check whether file (or sub directory) exists under object (path) when s3fs does some command, since s3fs has recognized a directory which does not exist and has files or sub directories under itself.
-It increases ListBucket request and makes performance bad.
-You can specify this option for performance, s3fs memorizes in stat cache that the object (file or directory) does not exist.
+\fB\-o\fR disable_noobj_cache (default is enable)
+By default s3fs memorizes when an object does not exist up until the stat cache timeout.
+This caching can cause staleness for applications.
+If disabled, s3fs will not memorize objects and may cause extra HeadObject requests and reduce performance.
 .TP
 \fB\-o\fR no_check_certificate (by default this option is disabled)
 server certificate won't be checked against the available certificate authorities.

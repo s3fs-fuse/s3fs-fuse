@@ -44,7 +44,7 @@ if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE}"
         enable_content_md5
-        enable_noobj_cache
+        disable_noobj_cache
         "max_stat_cache_size=100"
         nocopyapi
         nomultipart

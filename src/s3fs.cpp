@@ -4050,7 +4050,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(0 == strcmp(arg, "enable_noobj_cache")){
+            S3FS_PRN_WARN("enable_noobj_cache is enabled by default and a future version will remove this option.");
             StatCache::getStatCacheData()->EnableCacheNoObject();
+            return 0;
+        }
+        if(0 == strcmp(arg, "disable_noobj_cache")){
+            StatCache::getStatCacheData()->DisableCacheNoObject();
             return 0;
         }
         if(0 == strcmp(arg, "nodnscache")){
