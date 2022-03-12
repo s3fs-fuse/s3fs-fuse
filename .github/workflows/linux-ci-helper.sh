@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # s3fs - FUSE-based file system backed by Amazon S3
 #
@@ -19,12 +19,16 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
-echo "${PRGNAME} [INFO] Start Linux helper for installing packages."
+set -o errexit
+set -o nounset
+set -o pipefail
 
 #-----------------------------------------------------------
 # Common variables
 #-----------------------------------------------------------
 PRGNAME=$(basename "$0")
+
+echo "${PRGNAME} [INFO] Start Linux helper for installing packages."
 
 #-----------------------------------------------------------
 # Parameter check
