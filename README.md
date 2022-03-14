@@ -158,6 +158,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 
 ## References
 
+* [docker-s3fs-client](https://github.com/efrecon/docker-s3fs-client) - Docker image containing s3fs
 * [goofys](https://github.com/kahing/goofys) - similar to s3fs but has better performance and less POSIX compatibility
 * [s3backer](https://github.com/archiecobbs/s3backer) - mount an S3 bucket as a single file
 * [S3Proxy](https://github.com/gaul/s3proxy) - combine with s3fs to mount Backblaze B2, EMC Atmos, Microsoft Azure, and OpenStack Swift buckets
