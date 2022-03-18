@@ -22,6 +22,7 @@
 #define S3FS_CRED_H_
 
 #include "autolock.h"
+#include "s3fs_extcred.h"
 
 //----------------------------------------------
 // Typedefs
@@ -77,6 +78,16 @@ class S3fsCred
         std::string         IAM_expiry_field;
         std::string         IAM_role;               // Protect exclusively
 
+        bool                set_builtin_cred_opts;  // true if options other than "credlib" is set
+        std::string         credlib;                // credlib(name or path)
+        std::string         credlib_opts;           // options for credlib
+
+        void*                    hExtCredLib;
+        fp_VersionS3fsCredential pFuncCredVersion;
+        fp_InitS3fsCredential    pFuncCredInit;
+        fp_FreeS3fsCredential    pFuncCredFree;
+        fp_UpdateS3fsCredential  pFuncCredUpdate;
+
     public:
         static const char*  IAMv2_token_url;
         static int          IAMv2_token_ttl;
@@ -87,7 +98,7 @@ class S3fsCred
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
 
         bool SetS3fsPasswdFile(const char* file);
-        bool IsSetPasswdFile();
+        bool IsSetPasswdFile() const;
         bool SetAwsProfileName(const char* profile_name);
         bool SetIAMRoleMetadataType(bool flag);
 
@@ -130,6 +141,16 @@ class S3fsCred
         bool SetIAMCredentials(const char* response, AutoLock::Type type);
         bool SetIAMRoleFromMetaData(const char* response, AutoLock::Type type);
 
+        bool SetExtCredLib(const char* arg);
+        bool IsSetExtCredLib() const;
+        bool SetExtCredLibOpts(const char* args);
+        bool IsSetExtCredLibOpts() const;
+
+        bool InitExtCredLib();
+        bool LoadExtCredLib();
+        bool UnloadExtCredLib();
+        bool UpdateExtCredentials(AutoLock::Type type);
+
         static bool CheckForbiddenBucketParams();
 
     public:
@@ -144,6 +165,7 @@ class S3fsCred
         bool LoadIAMRoleFromMetaData();
 
         bool CheckIAMCredentialUpdate(std::string* access_key_id = NULL, std::string* secret_access_key = NULL, std::string* access_token = NULL);
+        const char* GetCredFuncVersion(bool detail) const;
 
         int DetectParam(const char* arg);
         bool CheckAllParams();
