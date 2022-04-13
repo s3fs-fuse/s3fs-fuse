@@ -56,6 +56,7 @@ class S3fsCred
         bool                is_lock_init;
 
         std::string         passwd_file;
+        std::string         aws_home_dir;
         std::string         aws_profile;
 
         bool                load_iamrole;
@@ -91,6 +92,10 @@ class S3fsCred
         bool SetAwsProfileName(const char* profile_name);
         bool SetIAMRoleMetadataType(bool flag);
 
+        bool SetAwsHomePath(const char* dir);
+        bool ItSetAwsHomePath();
+        
+
         bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey, AutoLock::Type type);
         bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken, AutoLock::Type type);
         bool IsSetAccessKeys(AutoLock::Type type);
@@ -120,6 +125,8 @@ class S3fsCred
         bool ReadS3fsPasswdFile(AutoLock::Type type);
 
         int CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& access_key_id, std::string& secret_access_key);
+        int CheckSsoCacheKey(std::string& sso_cache_key);
+        bool ReadSsoAwsCredentialFile(const std::string &filename, AutoLock::Type type);
         bool ReadAwsCredentialFile(const std::string &filename, AutoLock::Type type);
 
         bool InitialS3fsCredentials();

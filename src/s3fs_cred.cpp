@@ -23,6 +23,8 @@
 #include <sys/types.h>
 #include <fstream>
 #include <sstream>
+#include <nlohmann/json.hpp>
+#include <openssl/sha.h>
 
 #include "common.h"
 #include "s3fs.h"
@@ -30,11 +32,14 @@
 #include "curl.h"
 #include "string_util.h"
 #include "metaheader.h"
+#include "s3fs_util.h"
 
+using json = nlohmann::json;
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
 #define	DEFAULT_AWS_PROFILE_NAME	"default"
+#define M_ToConstUCharPtr(p)  reinterpret_cast<const unsigned char*>(p)
 
 //-------------------------------------------------------------------
 // Class Variables
@@ -99,6 +104,7 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
 S3fsCred::S3fsCred() :
     is_lock_init(false),
     passwd_file(""),
+    aws_home_dir(""),
     aws_profile(DEFAULT_AWS_PROFILE_NAME),
     load_iamrole(false),
     AWSAccessKeyId(""),
@@ -157,6 +163,22 @@ bool S3fsCred::SetS3fsPasswdFile(const char* file)
 bool S3fsCred::IsSetPasswdFile()
 {
     return !passwd_file.empty();
+}
+
+
+bool S3fsCred::SetAwsHomePath(const char* file)
+{
+    if(!file || strlen(file) == 0){
+        return false;
+    }
+    aws_home_dir = file;
+
+    return true;
+}
+
+bool S3fsCred::ItSetAwsHomePath()
+{
+    return !aws_home_dir.empty();
 }
 
 bool S3fsCred::SetAwsProfileName(const char* name)
@@ -805,6 +827,126 @@ int S3fsCred::CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& ac
 }
 
 //
+// Return:  1 - OK(could read and set accesskey etc.)
+//          0 - NG(could not read)
+//
+int S3fsCred::CheckSsoCacheKey(std::string& sso_cache_key){
+    std::string config_filename =std::string(getpwuid(getuid())->pw_dir) + "/.aws/config";
+    if(ItSetAwsHomePath()){
+        // Override the config path 
+        config_filename = aws_home_dir + "/config";
+    }
+    std::ifstream PF(config_filename.c_str());
+    
+    std::string profile;
+    std::string sso_start_url;
+    std::string sso_region;
+    std::string sso_account_id;
+    std::string sso_role_name;
+
+    // read each line
+    std::string line;
+    while(getline(PF, line)){
+        line = trim(line);
+        if(line.empty()){
+            continue;
+        }
+        if('#' == line[0]){
+            continue;
+        }
+
+        if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
+            if(profile == aws_profile){
+                break;
+            }
+            profile = line.substr(1, line.size() - 2);
+            sso_start_url.clear();
+            sso_region.clear();
+            sso_account_id.clear();
+            sso_role_name.clear();
+        }
+
+        size_t pos = line.find_first_of('=');
+        if(pos == std::string::npos){
+            continue;
+        }
+        std::string key   = trim(line.substr(0, pos));
+        std::string value = trim(line.substr(pos + 1, std::string::npos));
+        if(key == "sso_start_url"){
+            sso_start_url = value;
+        }else if(key == "sso_region"){
+            sso_region = value;
+        }else if(key == "sso_account_id"){
+            sso_account_id = value;
+        }else if(key == "sso_role_name"){
+            sso_role_name = value;
+        }
+    }
+
+     // No sso configure for the current profile 
+    if(sso_start_url != ""){
+
+        // Json generate for each environment. Check aws-cli github v2 code SSOCredentialFetcher in credentials.py
+        json json_sso =
+        {
+            {"startUrl",sso_start_url.c_str()},{"roleName",sso_role_name.c_str()},{"accountId",sso_account_id.c_str()}
+        };
+
+        // Digest the json via SHA1
+        unsigned char digest[SHA_DIGEST_LENGTH];
+        std::string json_sso_string = json_sso.dump();
+        S3FS_PRN_INFO("AWS SSO found : sha1 json_sso_string %s", json_sso_string.c_str());
+        int n = json_sso_string.length();
+        char json_sso_char[n]; 
+        strcpy(json_sso_char, json_sso_string.c_str()); 
+        // Digest the json
+        SHA1((unsigned char*)&json_sso_char, strlen(json_sso_char), (unsigned char*)&digest);   
+        char mdString[SHA_DIGEST_LENGTH*2+1];
+ 
+        for(int i = 0; i < SHA_DIGEST_LENGTH; i++)
+            sprintf(&mdString[i*2], "%02x", (unsigned int)digest[i]);
+ 
+        S3FS_PRN_INFO("AWS SSO found : sso_cache_key (.aws/cli/cache/****.json) is  %s", mdString);
+        // Override the sso_cache_key
+        sso_cache_key = mdString;
+    
+        return 1;
+    }else {
+        // No sso configure in tour config file
+        return 0;
+    }
+ }
+
+//
+// Read Sso Aws Credential Json file
+// Use the library nlohmann-json3-dev to parse json
+//
+bool S3fsCred::ReadSsoAwsCredentialFile(const std::string &filename, AutoLock::Type type)
+{
+   
+    // open cerdentials cache pase file
+    std::ifstream PF(filename.c_str());
+    if(!PF.good()){
+        return false;
+    }
+    json jf = json::parse(PF);
+
+    std::string accesskey = jf["Credentials"]["AccessKeyId"];
+    std::string secret = jf["Credentials"]["SecretAccessKey"];
+    std::string session_token = jf["Credentials"]["SessionToken"];
+
+    if(session_token.empty()){
+      S3FS_PRN_EXIT("AWS session token was expected but wasn't provided in aws/cli/cache file");
+    }else{
+        if(!SetAccessKeyWithSessionToken(accesskey.c_str(), secret.c_str(), session_token.c_str(), type)){
+            S3FS_PRN_EXIT("session token is invalid. Think to refresh your sso creedentials.\n Execute aws sso login --profile profile and aws sts get-caller-identity --profile profile");
+            return false;
+        }
+    }
+
+    return true;
+}
+//
 // Read Aws Credential File
 //
 bool S3fsCred::ReadAwsCredentialFile(const std::string &filename, AutoLock::Type type)
@@ -888,6 +1030,7 @@ bool S3fsCred::ReadAwsCredentialFile(const std::string &filename, AutoLock::Type
 //
 // 1 - from the command line  (security risk)
 // 2 - from a password file specified on the command line
+// 2b - from ${HOME}/.aws/config check SSO configuration
 // 3 - from environment variables
 // 3a - from the AWS_CREDENTIAL_FILE environment variable
 // 3b - from ${HOME}/.aws/credentials
@@ -905,12 +1048,12 @@ bool S3fsCred::InitialS3fsCredentials()
     if(load_iamrole || is_ecs){
         return true;
     }
-
+    
     // 1 - keys specified on the command line
     if(IsSetAccessKeys(AutoLock::NONE)){
         return true;
     }
-
+    
     // 2 - was specified on the command line
     if(IsSetPasswdFile()){
         if(!ReadS3fsPasswdFile(AutoLock::NONE)){
@@ -923,7 +1066,6 @@ bool S3fsCred::InitialS3fsCredentials()
     char* AWSACCESSKEYID     = getenv("AWS_ACCESS_KEY_ID") ?     getenv("AWS_ACCESS_KEY_ID") :     getenv("AWSACCESSKEYID");
     char* AWSSECRETACCESSKEY = getenv("AWS_SECRET_ACCESS_KEY") ? getenv("AWS_SECRET_ACCESS_KEY") : getenv("AWSSECRETACCESSKEY");
     char* AWSSESSIONTOKEN    = getenv("AWS_SESSION_TOKEN") ?     getenv("AWS_SESSION_TOKEN") :     getenv("AWSSESSIONTOKEN");
-
     if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
         if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
             (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
@@ -951,6 +1093,24 @@ bool S3fsCred::InitialS3fsCredentials()
         return true;
     }
 
+    // 2b - check ${HOME}/.aws/config 
+    // find sso_start_url, sso_region, sso_account_id,sso_role_name for the selected profile
+    std::string sso_cache_key;
+    if(CheckSsoCacheKey(sso_cache_key)){
+        // Use the cli cache. Check aws-cli github v2 code SSOCredentialFetcher in credentials.py
+        std::string aws_credentials_sso = std::string(getpwuid(getuid())->pw_dir) + "/.aws/cli/cache/"+ sso_cache_key +".json";
+        if(ItSetAwsHomePath()){
+        // Override the aws_home_dir path 
+            aws_credentials_sso =  aws_home_dir + "/cli/cache/"+ sso_cache_key +".json";
+        }
+        
+        if(ReadSsoAwsCredentialFile(aws_credentials_sso, AutoLock::NONE)){
+            return true;
+        }else{
+            S3FS_PRN_EXIT("Sso configuration is invalid. Think to refresh your sso creedentials.\n Execute aws sso login --profile profile and aws sts get-caller-identity --profile profile");
+        }
+    }
+
     // 3a - from the AWS_CREDENTIAL_FILE environment variable
     char* AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
     if(AWS_CREDENTIAL_FILE != NULL){
@@ -966,7 +1126,7 @@ bool S3fsCred::InitialS3fsCredentials()
             return true;
         }
     }
-
+    
     // 3b - check ${HOME}/.aws/credentials
     std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
     if(ReadAwsCredentialFile(aws_credentials, AutoLock::NONE)){
@@ -1187,6 +1347,11 @@ int S3fsCred::DetectParam(const char* arg)
 
     if(is_prefix(arg, "profile=")){
         SetAwsProfileName(strchr(arg, '=') + sizeof(char));
+        return 0;
+    }
+
+    if(is_prefix(arg, "aws_home_path=")){
+        SetAwsHomePath(strchr(arg, '=') + sizeof(char));
         return 0;
     }
 
