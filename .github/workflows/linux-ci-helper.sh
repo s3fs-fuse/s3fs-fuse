@@ -50,12 +50,6 @@ CONTAINER_OSNAME=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print $1
 CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print $2}')
 
 #-----------------------------------------------------------
-# Common variables for pip
-#-----------------------------------------------------------
-PIP_BIN="pip3"
-PIP_OPTIONS="--upgrade"
-
-#-----------------------------------------------------------
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
 # shellcheck disable=SC2089
