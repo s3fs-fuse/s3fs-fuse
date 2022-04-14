@@ -34,6 +34,7 @@
 # S3_ENDPOINT="us-east-1"            Specify region
 # TMPDIR="/var/tmp"                  Set to use a temporary directory different
 #                                    from /var/tmp
+# Think to add the root certficate of AWS in the file /tmp/keystore.pem to execute aws_cli command
 #
 # Example of running against Amazon S3 using a bucket named "bucket":
 #
