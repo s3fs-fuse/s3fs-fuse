@@ -82,14 +82,6 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
-    PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
-    INSTALL_CHECKER_PKGS="cppcheck shellcheck"
-    INSTALL_CHECKER_PKG_OPTIONS=""
-
 elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
@@ -110,7 +102,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev zip"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -122,7 +114,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     # Installing ShellCheck on Rocky Linux is not easy.
     # Give up to run ShellCheck on Rocky Linux as we don't have to run ShellChek on all operating systems.
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 nlohmann-json3-dev zip"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 nlohmann-json zip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
 
@@ -135,7 +127,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     # And in this version, it cannot be passed due to following error.
     # "shellcheck: ./test/integration-test-main.sh: hGetContents: invalid argument (invalid byte sequence)"
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release json-devel zip"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release json-devel unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
@@ -152,7 +144,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
 
-    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck json-devel zip"
+    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck nlohmann_json zip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
