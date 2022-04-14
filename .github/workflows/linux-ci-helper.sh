@@ -54,7 +54,6 @@ CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print
 #-----------------------------------------------------------
 PIP_BIN="pip3"
 PIP_OPTIONS="--upgrade"
-INSTALL_AWSCLI_PACKAGES="awscliv2"
 
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
@@ -69,7 +68,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.10" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -77,7 +76,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -85,7 +84,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -93,7 +92,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -101,7 +100,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -109,7 +108,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -117,7 +116,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -129,7 +128,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     # Installing ShellCheck on Rocky Linux is not easy.
     # Give up to run ShellCheck on Rocky Linux as we don't have to run ShellChek on all operating systems.
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 nlohmann-json3-dev"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
 
@@ -142,7 +141,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     # And in this version, it cannot be passed due to following error.
     # "shellcheck: ./test/integration-test-main.sh: hGetContents: invalid argument (invalid byte sequence)"
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release json-devel"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
@@ -151,7 +150,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:35" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
     # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip json-devel"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -159,7 +158,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
 
-    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck json-devel"
+    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -192,9 +191,11 @@ java -version
 #
 # Install awscli
 #
-echo "${PRGNAME} [INFO] Install awscli package."
-/bin/sh -c "${PIP_BIN} install ${PIP_OPTIONS} ${INSTALL_AWSCLI_PACKAGES}"
-/bin/sh -c "${PIP_BIN} install ${PIP_OPTIONS} rsa"
+echo "${PRGNAME} [INFO] Install awscli2 package."
+/bin/sh -c "curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip"
+/bin/sh -c "unzip awscliv2.zip"
+/bin/sh -c "./aws/install"
+/bin/sh -c "rm -rf ./aws/install"
 
 #-----------------------------------------------------------
 # Set environment for configure
