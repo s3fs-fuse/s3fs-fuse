@@ -81,6 +81,8 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
+    /bin/sh -c "apt-get update; apt-get install software-properties-common -y"
+    /bin/sh -c "add-apt-repository ppa:team-xbmc/ppa"
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
@@ -102,7 +104,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json-dev zip"
+    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip nlohmann-json3-dev zip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -114,9 +116,10 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     # Installing ShellCheck on Rocky Linux is not easy.
     # Give up to run ShellCheck on Rocky Linux as we don't have to run ShellChek on all operating systems.
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 nlohmann-json zip"
+    INSTALL_PACKAGES="epel-release curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
+    /bin/sh -c "dnf install -y epel-release"
 
 elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     PACKAGE_MANAGER_BIN="yum"
