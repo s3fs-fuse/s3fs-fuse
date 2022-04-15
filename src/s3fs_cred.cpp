@@ -61,6 +61,7 @@ const char* S3fsCred::IAMv2_token_ttl_hdr       = "X-aws-ec2-metadata-token-ttl-
 const char* S3fsCred::IAMv2_token_hdr           = "X-aws-ec2-metadata-token";
 
 std::string S3fsCred::bucket_name;
+std::string profile_prefix	                    = "profile ";
 
 //-------------------------------------------------------------------
 // Class Methods 
@@ -857,7 +858,16 @@ int S3fsCred::CheckSsoCacheKey(std::string& sso_cache_key){
 
         if(line.size() > 2 && line[0] == '[' && line[line.size() - 1] == ']') {
             if(profile == aws_profile){
+                S3FS_PRN_INFO("Use the profile %s to connect in s3", profile.c_str());
                 break;
+            }
+            // Remove 'profile '
+            std::string filter_line;
+            std::size_t found = line.find(profile_prefix);
+            if (found != std::string::npos){
+                line.replace(found, profile_prefix.size(), filter_line);
+            }else{
+                filter_line = line;
             }
             profile = line.substr(1, line.size() - 2);
             sso_start_url.clear();
