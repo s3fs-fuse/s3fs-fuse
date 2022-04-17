@@ -336,8 +336,10 @@ function aws_cli() {
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"
     fi
+    # [NOTE]
+    # AWS_EC2_METADATA_DISABLED for preventing the metadata service(to 169.254.169.254).
     # shellcheck disable=SC2086,SC2068
-    aws $@ --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem ${FLAGS}
+    AWS_EC2_METADATA_DISABLED=true aws $@ --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem ${FLAGS} --debug
 }
 
 function wait_for_port() {
