@@ -141,9 +141,11 @@ jobs:
           S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
 
-      - name: Install awscli
+      - name: Install awscli2
         run: |
-          if pip3 --version; then pip3 install awscli; else curl https://bootstrap.pypa.io/get-pip.py | sudo python; pip install awscli --ignore-installed matplotlib; fi
+          cd /tmp
+          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+          sudo installer -pkg AWSCLIV2.pkg -target /
 
       - name: Check osxfuse permission
         run: |
