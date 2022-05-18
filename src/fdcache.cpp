@@ -816,7 +816,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         }else{
             AutoLock auto_lock(&FdManager::fd_manager_lock, AutoLock::NO_WAIT);
             if (!auto_lock.isLockAcquired()) {
-                S3FS_PRN_ERR("could not get fd_manager_lock when clean up file(%s)", next_path.c_str());
+                S3FS_PRN_INFO("could not get fd_manager_lock when clean up file(%s), then skip it.", next_path.c_str());
                 continue;
             }
             fdent_map_t::iterator iter = fent.find(next_path);
