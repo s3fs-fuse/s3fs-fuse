@@ -122,6 +122,7 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
             struct curl_slist *tmp = *p;
             *p = (*p)->next;
             free(tmp);
+            break;
         }
     }
 
