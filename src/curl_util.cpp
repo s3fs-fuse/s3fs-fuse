@@ -103,14 +103,16 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
 
 struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
 {
-    if(!key){
+    if(!list || !key){
         return list;
     }
 
     std::string strkey = trim(std::string(key));
-    struct curl_slist **p = &list;
-    for(;*p; p = &(*p)->next){
-        std::string strcur = (*p)->data;
+    struct curl_slist *pprev, *pcur, *pnext;
+    for(pprev = NULL, pcur = list, pnext = NULL; pcur; pcur = pnext){
+        pnext = pcur->next;
+
+        std::string strcur = pcur->data;
         size_t pos;
         if(std::string::npos != (pos = strcur.find(':', 0))){
             strcur.erase(pos);
@@ -118,13 +120,18 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
 
         int result = strcasecmp(strkey.c_str(), strcur.c_str());
         if(0 == result){
-            free((*p)->data);
-            struct curl_slist *tmp = *p;
-            *p = (*p)->next;
-            free(tmp);
+            if(pcur == list){
+                list = pnext;
+            }
+            if(pprev){
+                pprev->next = pnext;
+            }
+            free(pcur->data);
+            free(pcur);
+        }else{
+            pprev = pcur;
         }
     }
-
     return list;
 }
 
