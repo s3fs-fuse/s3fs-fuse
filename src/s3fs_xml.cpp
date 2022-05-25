@@ -66,7 +66,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
                     if(nslist[0] && nslist[0]->href){
                         int len = xmlStrlen(nslist[0]->href);
                         if(0 < len){
-                            strNs = std::string((const char*)(nslist[0]->href), len);
+                            strNs = std::string(reinterpret_cast<const char*>(nslist[0]->href), len);
                         }
                     }
                     S3FS_XMLFREE(nslist);
@@ -94,7 +94,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
     xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
 
     if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-        xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
+        xmlXPathRegisterNs(ctx, reinterpret_cast<xmlChar*>(const_cast<char*>("s3")), reinterpret_cast<xmlChar*>(const_cast<char*>(xmlnsurl.c_str())));
         exp_string = "/s3:ListBucketResult/s3:";
     } else {
         exp_string = "/ListBucketResult/";
@@ -102,7 +102,7 @@ static xmlChar* get_base_exp(xmlDocPtr doc, const char* exp)
 
     exp_string += exp;
 
-    if(NULL == (marker_xp = xmlXPathEvalExpression((xmlChar *)exp_string.c_str(), ctx))){
+    if(NULL == (marker_xp = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(exp_string.c_str())), ctx))){
         xmlXPathFreeContext(ctx);
         return NULL;
     }
@@ -148,14 +148,14 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
         return NULL;
     }
     // basepath(path) is as same as fullpath.
-    if(0 == strcmp((char*)fullpath, path)){
+    if(0 == strcmp(reinterpret_cast<char*>(fullpath), path)){
         xmlFree(fullpath);
         return (char*)c_strErrorObjectName;
     }
 
     // Make dir path and filename
-    std::string   strdirpath = mydirname(std::string((char*)fullpath));
-    std::string   strmybpath = mybasename(std::string((char*)fullpath));
+    std::string   strdirpath = mydirname(std::string(reinterpret_cast<char*>(fullpath)));
+    std::string   strmybpath = mybasename(std::string(reinterpret_cast<char*>(fullpath)));
     const char* dirpath = strdirpath.c_str();
     const char* mybname = strmybpath.c_str();
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
@@ -217,7 +217,7 @@ static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const c
     xmlChar*          exp_value;
 
     // search exp_key tag
-    if(NULL == (exp = xmlXPathEvalExpression((xmlChar*)exp_key, ctx))){
+    if(NULL == (exp = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(exp_key)), ctx))){
         S3FS_PRN_ERR("Could not find key(%s).", exp_key);
         return NULL;
     }
@@ -253,7 +253,7 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
     std::string ex_date;
 
     if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-        xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
+        xmlXPathRegisterNs(ctx, reinterpret_cast<xmlChar*>(const_cast<char*>("s3")), reinterpret_cast<xmlChar*>(const_cast<char*>(xmlnsurl.c_str())));
         ex_upload += "s3:";
         ex_key    += "s3:";
         ex_id     += "s3:";
@@ -266,7 +266,7 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
 
     // get "Upload" Tags
     xmlXPathObjectPtr  upload_xp;
-    if(NULL == (upload_xp = xmlXPathEvalExpression((xmlChar*)ex_upload.c_str(), ctx))){
+    if(NULL == (upload_xp = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(ex_upload.c_str())), ctx))){
         S3FS_PRN_ERR("xmlXPathEvalExpression returns null.");
         return false;
     }
@@ -291,26 +291,26 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
         if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_key.c_str()))){
             continue;
         }
-        if('/' != *((char*)ex_value)){
+        if('/' != *(reinterpret_cast<char*>(ex_value))){
             part.key = "/";
         }else{
             part.key = "";
         }
-        part.key += (char*)ex_value;
+        part.key += reinterpret_cast<char*>(ex_value);
         S3FS_XMLFREE(ex_value);
 
         // search "UploadId" tag
         if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_id.c_str()))){
             continue;
         }
-        part.id = (char*)ex_value;
+        part.id = reinterpret_cast<char*>(ex_value);
         S3FS_XMLFREE(ex_value);
 
         // search "Initiated" tag
         if(NULL == (ex_value = get_exp_value_xml(doc, ctx, ex_date.c_str()))){
             continue;
         }
-        part.date = (char*)ex_value;
+        part.date = reinterpret_cast<char*>(ex_value);
         S3FS_XMLFREE(ex_value);
 
         list.push_back(part);
@@ -330,7 +330,7 @@ bool is_truncated(xmlDocPtr doc)
     if(!strTruncate){
         return false;
     }
-    if(0 == strcasecmp((const char*)strTruncate, "true")){
+    if(0 == strcasecmp(reinterpret_cast<const char*>(strTruncate), "true")){
         result = true;
     }
     xmlFree(strTruncate);
@@ -342,7 +342,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
     xmlXPathObjectPtr contents_xp;
     xmlNodeSetPtr content_nodes;
 
-    if(NULL == (contents_xp = xmlXPathEvalExpression((xmlChar*)ex_contents, ctx))){
+    if(NULL == (contents_xp = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(ex_contents)), ctx))){
         S3FS_PRN_ERR("xmlXPathEvalExpression returns null.");
         return -1;
     }
@@ -361,7 +361,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
 
         // object name
         xmlXPathObjectPtr key;
-        if(NULL == (key = xmlXPathEvalExpression((xmlChar*)ex_key, ctx))){
+        if(NULL == (key = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(ex_key)), ctx))){
             S3FS_PRN_WARN("key is null. but continue.");
             continue;
         }
@@ -376,21 +376,21 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
         if(!name){
             S3FS_PRN_WARN("name is something wrong. but continue.");
 
-        }else if((const char*)name != c_strErrorObjectName){
+        }else if(reinterpret_cast<const char*>(name) != c_strErrorObjectName){
             is_dir  = isCPrefix ? true : false;
             stretag = "";
 
             if(!isCPrefix && ex_etag){
                 // Get ETag
                 xmlXPathObjectPtr ETag;
-                if(NULL != (ETag = xmlXPathEvalExpression((xmlChar*)ex_etag, ctx))){
+                if(NULL != (ETag = xmlXPathEvalExpression(reinterpret_cast<xmlChar*>(const_cast<char*>(ex_etag)), ctx))){
                     if(xmlXPathNodeSetIsEmpty(ETag->nodesetval)){
                         S3FS_PRN_INFO("ETag->nodesetval is empty.");
                     }else{
                         xmlNodeSetPtr etag_nodes = ETag->nodesetval;
                         xmlChar* petag = xmlNodeListGetString(doc, etag_nodes->nodeTab[0]->xmlChildrenNode, 1);
                         if(petag){
-                            stretag = (char*)petag;
+                            stretag = reinterpret_cast<char*>(petag);
                             xmlFree(petag);
                         }
                     }
@@ -431,7 +431,7 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
 
     // If there is not <Prefix>, use path instead of it.
     xmlChar* pprefix = get_prefix(doc);
-    std::string prefix  = (pprefix ? (char*)pprefix : path ? path : "");
+    std::string prefix  = (pprefix ? reinterpret_cast<char*>(pprefix) : path ? path : "");
     if(pprefix){
         xmlFree(pprefix);
     }
@@ -439,7 +439,7 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
     xmlXPathContextPtr ctx = xmlXPathNewContext(doc);
 
     if(!noxmlns && GetXmlNsUrl(doc, xmlnsurl)){
-        xmlXPathRegisterNs(ctx, (xmlChar*)"s3", (xmlChar*)xmlnsurl.c_str());
+        xmlXPathRegisterNs(ctx, reinterpret_cast<xmlChar*>(const_cast<char*>("s3")), reinterpret_cast<xmlChar*>(const_cast<char*>(xmlnsurl.c_str())));
         ex_contents+= "s3:";
         ex_key     += "s3:";
         ex_cprefix += "s3:";

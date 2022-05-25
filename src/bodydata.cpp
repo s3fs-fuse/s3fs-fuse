@@ -63,7 +63,7 @@ bool BodyData::Resize(size_t addbytes)
     }
     // realloc
     char* newtext;
-    if(NULL == (newtext = (char*)realloc(text, (bufsize + need_size)))){
+    if(NULL == (newtext = reinterpret_cast<char*>(realloc(text, (bufsize + need_size))))){
         S3FS_PRN_CRIT("not enough memory (realloc returned NULL)");
         free(text);
         text = NULL;

@@ -233,7 +233,7 @@ static bool is_special_name_folder_object(const char* path)
 //
 static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta, dirtype* pDirType)
 {
-    dirtype TypeTmp;
+    dirtype TypeTmp = DIRTYPE_UNKNOWN;
     int  result  = -1;
     bool isforce = false;
     dirtype* pType = pDirType ? pDirType : &TypeTmp;
@@ -2767,10 +2767,10 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         if(true == (truncated = is_truncated(doc))){
             xmlChar* tmpch;
             if(NULL != (tmpch = get_next_continuation_token(doc))){
-                next_continuation_token = (char*)tmpch;
+                next_continuation_token = reinterpret_cast<char*>(tmpch);
                 xmlFree(tmpch);
             }else if(NULL != (tmpch = get_next_marker(doc))){
-                next_marker = (char*)tmpch;
+                next_marker = reinterpret_cast<char*>(tmpch);
                 xmlFree(tmpch);
             }
 
@@ -3650,7 +3650,7 @@ static bool set_mountpoint_attribute(struct stat& mpst)
 //
 static int set_bucket(const char* arg)
 {
-    char *bucket_name = (char*)arg;
+    char *bucket_name = const_cast<char*>(arg);
     if(strstr(arg, ":")){
         if(strstr(arg, "://")){
             S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
