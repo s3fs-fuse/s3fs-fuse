@@ -103,6 +103,9 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
     while(S3fsSignals::enableUsr1){
         // wait
         pSem->wait();
+
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(!S3fsSignals::enableUsr1){
             break;    // assap
         }

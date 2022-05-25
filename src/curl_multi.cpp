@@ -337,17 +337,17 @@ void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
     S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
     void*     result  = NULL;
     if(!s3fscurl){
-        return (void*)(intptr_t)(-EIO);
+        return reinterpret_cast<void*>(static_cast<intptr_t>(-EIO));
     }
     if(s3fscurl->fpLazySetup){
         if(!s3fscurl->fpLazySetup(s3fscurl)){
             S3FS_PRN_ERR("Failed to lazy setup, then respond EIO.");
-            result  = (void*)(intptr_t)(-EIO);
+            result  = reinterpret_cast<void*>(static_cast<intptr_t>(-EIO));
         }
     }
 
     if(!result){
-        result = (void*)(intptr_t)(s3fscurl->RequestPerform());
+        result = reinterpret_cast<void*>(static_cast<intptr_t>(s3fscurl->RequestPerform()));
         s3fscurl->DestroyCurlHandle(true, false);
     }
 

@@ -399,11 +399,11 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
     }
     S3FS_PRN_DBG("Try to load mime types from %s file.", MimeFile.c_str());
 
-    std::string line;
     std::ifstream MT(MimeFile.c_str());
     if(MT.good()){
         S3FS_PRN_DBG("The old mime types are cleared to load new mime types.");
         S3fsCurl::mimeTypes.clear();
+	    std::string line;
 
         while(getline(MT, line)){
             if(line.empty()){
@@ -645,7 +645,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
     ssize_t totalread;
     // read and set
     for(totalread = 0, readbytes = 0; totalread < copysize; totalread += readbytes){
-        readbytes = pread(pCurl->partdata.fd, &((char*)ptr)[totalread], (copysize - totalread), pCurl->partdata.startpos + totalread);
+        readbytes = pread(pCurl->partdata.fd, &(static_cast<char*>(ptr))[totalread], (copysize - totalread), pCurl->partdata.startpos + totalread);
         if(0 == readbytes){
             // eof
             break;
@@ -684,7 +684,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
 
     // write
     for(totalwrite = 0, writebytes = 0; totalwrite < copysize; totalwrite += writebytes){
-        writebytes = pwrite(pCurl->partdata.fd, &((char*)ptr)[totalwrite], (copysize - totalwrite), pCurl->partdata.startpos + totalwrite);
+        writebytes = pwrite(pCurl->partdata.fd, &(static_cast<char*>(ptr))[totalwrite], (copysize - totalwrite), pCurl->partdata.startpos + totalwrite);
         if(0 == writebytes){
             // eof?
             break;
@@ -792,7 +792,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
         char* p_key;
         size_t keylength;
 
-        if(NULL != (p_key = (char *)s3fs_decode64(onekey.c_str(), onekey.size(), &keylength))) {
+        if(NULL != (p_key = reinterpret_cast<char*>(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength)))) {
             raw_key = std::string(p_key, keylength);
             base64_key = onekey;
             delete[] p_key;
@@ -803,7 +803,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     } else {
         char* pbase64_key;
 
-        if(NULL != (pbase64_key = s3fs_base64((unsigned char*)onekey.c_str(), onekey.length()))) {
+        if(NULL != (pbase64_key = s3fs_base64(reinterpret_cast<unsigned char*>(const_cast<char*>(onekey.c_str())), onekey.length()))) {
             raw_key = onekey;
             base64_key = pbase64_key;
             delete[] pbase64_key;
@@ -929,6 +929,9 @@ bool S3fsCurl::LoadEnvSseCKeys()
     while(getline(fullkeys, onekey, ':')){
         S3fsCurl::PushbackSseKeys(onekey);
     }
+
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(S3fsCurl::sseckeys.empty()){
         S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", envkeys);
         return false;
@@ -1538,7 +1541,7 @@ bool S3fsCurl::UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl)
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_READFUNCTION, UploadReadCallback)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_READDATA, (void*)s3fscurl)){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(s3fscurl))){
         return false;
     }
     if(!S3fsCurl::AddUserAgent(s3fscurl->hCurl)){                            // put User-Agent
@@ -1600,7 +1603,7 @@ bool S3fsCurl::PreGetObjectRequestSetCurlOpts(S3fsCurl* s3fscurl)
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEFUNCTION, DownloadWriteCallback)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, (void*)s3fscurl)){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(s3fscurl))){
         return false;
     }
     if(!S3fsCurl::AddUserAgent(s3fscurl->hCurl)){                            // put User-Agent
@@ -1707,10 +1710,10 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
             remaining = size;
             p = data;
             do {
-                char* eol = (char*)memchr(p, '\n', remaining);
+                char* eol = reinterpret_cast<char*>(memchr(p, '\n', remaining));
                 int newline = 0;
                 if (eol == NULL) {
-                    eol = (char*)memchr(p, '\r', remaining);
+                    eol = reinterpret_cast<char*>(memchr(p, '\r', remaining));
                 } else {
                     if (eol > p && *(eol - 1) == '\r') {
                         newline++;
@@ -2083,7 +2086,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, S3fsCurl::DownloadWriteCallback)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)this)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(this))){
                 return false;
             }
             break;
@@ -2146,7 +2149,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){
@@ -2179,7 +2182,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::UploadReadCallback)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
                 return false;
             }
             break;
@@ -2237,7 +2240,7 @@ bool S3fsCurl::RemakeHandle()
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
                     return false;
                 }
-                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this)){
+                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
                     return false;
                 }
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){
@@ -2904,7 +2907,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
             return false;
         }
-        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this)){
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
             return false;
         }
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){
@@ -3291,8 +3294,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     bodydata.Clear();
 
     // Make request headers
-    std::string strMD5;
     if(S3fsCurl::is_content_md5){
+        std::string strMD5;
         if(-1 != fd){
             strMD5 = s3fs_get_content_md5(fd);
             if(0 == strMD5.length()){
@@ -3331,9 +3334,9 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
-    std::string ssevalue;
     // do not add SSE for create bucket
     if(0 != strcmp(tpath, "/")){
+        std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
             S3FS_PRN_WARN("Failed to set SSE header, but continue...");
         }
@@ -3445,13 +3448,13 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
     if(!tpath){
         return -EINVAL;
     }
-    sse_type_t ssetype = sse_type_t::SSE_DISABLE;
+    sse_type_t local_ssetype = sse_type_t::SSE_DISABLE;
     std::string ssevalue;
-    if(!get_object_sse_type(tpath, ssetype, ssevalue)){
+    if(!get_object_sse_type(tpath, local_ssetype, ssevalue)){
         S3FS_PRN_WARN("Failed to get SSE type for file(%s).", SAFESTRPTR(tpath));
     }
 
-    if(0 != (result = PreGetObjectRequest(tpath, fd, start, size, ssetype, ssevalue))){
+    if(0 != (result = PreGetObjectRequest(tpath, fd, start, size, local_ssetype, ssevalue))){
         return result;
     }
     if(!fpLazySetup || !fpLazySetup(this)){
@@ -3759,7 +3762,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, (void*)this)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){

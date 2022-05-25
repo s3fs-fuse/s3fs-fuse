@@ -172,7 +172,7 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 //-------------------------------------------------------------------
 std::string mydirname(const std::string& path)
 {
-    return std::string(dirname((char*)path.c_str()));
+    return std::string(dirname(const_cast<char*>(path.c_str())));
 }
 
 // safe variant of dirname
@@ -187,7 +187,7 @@ std::string mydirname(const char* path)
 
 std::string mybasename(const std::string& path)
 {
-    return std::string(basename((char*)path.c_str()));
+    return std::string(basename(const_cast<char*>(path.c_str())));
 }
 
 // safe variant of basename
