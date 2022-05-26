@@ -109,7 +109,7 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
 
     std::string strkey = trim(std::string(key));
     struct curl_slist **p = &list;
-    for(;*p; p = &(*p)->next){
+    while(*p){
         std::string strcur = (*p)->data;
         size_t pos;
         if(std::string::npos != (pos = strcur.find(':', 0))){
@@ -122,6 +122,8 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
             struct curl_slist *tmp = *p;
             *p = (*p)->next;
             free(tmp);
+        }else{
+            p = &(*p)->next;
         }
     }
 
