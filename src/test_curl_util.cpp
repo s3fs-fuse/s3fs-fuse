@@ -105,9 +105,55 @@ void test_sort_insert()
     curl_slist_free_all(list);
 }
 
+void test_slist_remove()
+{
+    struct curl_slist* list = NULL;
+
+    // remove no elements
+    ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
+    list = curl_slist_remove(list, "1");
+    ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
+
+    // remove only element
+    list = NULL;
+    list = curl_slist_sort_insert(list, "1", "val");
+    ASSERT_EQUALS(static_cast<size_t>(1), curl_slist_length(list));
+    list = curl_slist_remove(list, "1");
+    ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
+
+    // remove head element
+    list = NULL;
+    list = curl_slist_sort_insert(list, "1", "val");
+    list = curl_slist_sort_insert(list, "2", "val");
+    ASSERT_EQUALS(static_cast<size_t>(2), curl_slist_length(list));
+    list = curl_slist_remove(list, "1");
+    ASSERT_EQUALS(static_cast<size_t>(1), curl_slist_length(list));
+    curl_slist_free_all(list);
+
+    // remove tail element
+    list = NULL;
+    list = curl_slist_sort_insert(list, "1", "val");
+    list = curl_slist_sort_insert(list, "2", "val");
+    ASSERT_EQUALS(static_cast<size_t>(2), curl_slist_length(list));
+    list = curl_slist_remove(list, "2");
+    ASSERT_EQUALS(static_cast<size_t>(1), curl_slist_length(list));
+    curl_slist_free_all(list);
+
+    // remove middle element
+    list = NULL;
+    list = curl_slist_sort_insert(list, "1", "val");
+    list = curl_slist_sort_insert(list, "2", "val");
+    list = curl_slist_sort_insert(list, "3", "val");
+    ASSERT_EQUALS(static_cast<size_t>(3), curl_slist_length(list));
+    list = curl_slist_remove(list, "2");
+    ASSERT_EQUALS(static_cast<size_t>(2), curl_slist_length(list));
+    curl_slist_free_all(list);
+}
+
 int main(int argc, char *argv[])
 {
     test_sort_insert();
+    test_slist_remove();
     return 0;
 }
 
