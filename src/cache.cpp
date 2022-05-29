@@ -412,6 +412,9 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
 // Updates only meta data if cached data exists.
 // And when these are updated, it also updates the cache time.
 //
+// Since the file mode may change while the file is open, it is
+// updated as well.
+//
 bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
 {
     if(CacheSize < 1){
@@ -445,6 +448,9 @@ bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
 
     // Update time.
     SetStatCacheTime(ent->cache_date);
+
+    // Update only mode
+    ent->stbuf.st_mode = get_mode(meta);
 
     return true;
 }
