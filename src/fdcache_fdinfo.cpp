@@ -609,13 +609,13 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
         // Multipart uploading hasn't started yet, so start it.
         //
         S3fsCurl    s3fscurl(true);
-        std::string upload_id;
+        std::string tmp_upload_id;
         int         result;
-        if(0 != (result = s3fscurl.PreMultipartPostRequest(path, meta, upload_id, true))){
+        if(0 != (result = s3fscurl.PreMultipartPostRequest(path, meta, tmp_upload_id, true))){
             S3FS_PRN_ERR("failed to setup multipart upload(create upload id) by errno(%d)", result);
             return result;
         }
-        if(!InitialUploadInfo(upload_id, AutoLock::ALREADY_LOCKED)){
+        if(!InitialUploadInfo(tmp_upload_id, AutoLock::ALREADY_LOCKED)){
             S3FS_PRN_ERR("failed to setup multipart upload(set upload id to object)");
             return result;
         }
