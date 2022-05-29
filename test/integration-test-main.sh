@@ -1222,6 +1222,36 @@ function test_update_directory_time_subdir() {
     rm -rf "${TEST_DIR}"
 }
 
+# [NOTE]
+# This test changes the file mode while creating/editing a new file,
+# and finally closes it.
+# Test with the sed command as it occurs when in place mode of the sed
+# command. (If trying it with a standard C function(and shell script),
+# it will be not the same result of sed, so sed is used.)
+#
+function test_update_chmod_opened_file() {
+    describe "Testing create, modify the file by sed in place mode"
+
+    # test file
+    local BEFORE_STRING_DATA; BEFORE_STRING_DATA="sed in place test : BEFORE DATA"
+    local AFTER_STRING_DATA;  AFTER_STRING_DATA="sed in place test : AFTER DATA"
+    echo "${BEFORE_STRING_DATA}" > "${TEST_TEXT_FILE}"
+
+    # sed in place
+    sed -i -e 's/BEFORE DATA/AFTER DATA/g' "${TEST_TEXT_FILE}"
+
+    # compare result
+    local RESULT_STRING; RESULT_STRING=$(cat "${TEST_TEXT_FILE}")
+
+    if [ -z "${RESULT_STRING}" ] || [ "${RESULT_STRING}" != "${AFTER_STRING_DATA}" ]; then
+       echo "the file conversion by sed in place command failed."
+       return 1
+    fi
+
+    # clean up
+    rm_test_file "${ALT_TEST_TEXT_FILE}"
+}
+
 function test_rm_rf_dir {
    describe "Test that rm -rf will remove directory with contents ..."
    # Create a dir with some files and directories
@@ -1890,6 +1920,7 @@ function add_all_tests {
         add_tests test_update_directory_time_touch_a
     fi
     add_tests test_update_directory_time_subdir
+    add_tests test_update_chmod_opened_file
 
     add_tests test_rm_rf_dir
     add_tests test_copy_file
