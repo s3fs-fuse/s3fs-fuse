@@ -86,16 +86,16 @@ int AutoFdEntity::Detach()
     return fd;
 }
 
-bool AutoFdEntity::Attach(const char* path, int existfd)
+FdEntity* AutoFdEntity::Attach(const char* path, int existfd)
 {
     Close();
 
     if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, false))){
         S3FS_PRN_DBG("Could not find fd entity object(file=%s, pseudo_fd=%d)", path, existfd);
-        return false;
+        return NULL;
     }
     pseudo_fd = existfd;
-    return true;
+    return pFdEntity;
 }
 
 FdEntity* AutoFdEntity::Open(const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
