@@ -32,6 +32,17 @@
 class FdEntity
 {
     private:
+        // [NOTE]
+        // Distinguish between meta pending and new file creation pending,
+        // because the processing(request) at these updates is different.
+        // Therefore, the pending state is expressed by this enum type.
+        //
+        enum pending_status_t {
+            NO_UPDATE_PENDING = 0,
+            UPDATE_META_PENDING,        // pending meta header
+            CREATE_FILE_PENDING         // pending file creation and meta header
+        };
+
         static bool     mixmultipart;   // whether multipart uploading can use copy api.
 
         pthread_mutex_t fdent_lock;
@@ -49,7 +60,7 @@ class FdEntity
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)
         std::string     mirrorpath;     // mirror file path to local cache file path
-        bool            is_meta_pending;
+        pending_status_t pending_status;// status for new file creation and meta update
         struct timespec holding_mtime;  // if mtime is updated while the file is open, it is set time_t value
 
     private:
@@ -73,7 +84,6 @@ class FdEntity
         ssize_t WriteNoMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
-        int UploadPendingMeta();
 
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
@@ -95,6 +105,7 @@ class FdEntity
         int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
+        int UploadPending(int fd = -1);
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(struct timespec time, bool lock_already_held = false);

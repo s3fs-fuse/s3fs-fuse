@@ -31,10 +31,12 @@ testdir = test
 
 noinst_PROGRAMS = \
     junk_data \
-    write_multiblock
+    write_multiblock \
+    mknod_test
 
 junk_data_SOURCES = junk_data.c
 write_multiblock_SOURCES = write_multiblock.cc
+mknod_test_SOURCES = mknod_test.c
 
 #
 # Local variables:

@@ -96,7 +96,7 @@ ino_t FdEntity::GetInode(int fd)
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), path(SAFESTRPTR(tpath)),
     physical_fd(-1), pfile(NULL), inode(0), size_orgmeta(0),
-    cachepath(SAFESTRPTR(cpath)), is_meta_pending(false)
+    cachepath(SAFESTRPTR(cpath)), pending_status(NO_UPDATE_PENDING)
 {
     holding_mtime.tv_sec = -1;
     holding_mtime.tv_nsec = 0;
@@ -1255,7 +1255,7 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     s3fscurl.DestroyCurlHandle();
 
     // Clear the dirty flag, because the meta data is updated.
-    is_meta_pending = false;
+    pending_status = NO_UPDATE_PENDING;
 
     // reset upload_id
     if(!pseudo_obj->InitialUploadInfo(upload_id)){
@@ -1544,15 +1544,15 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             // So the file has already been removed, skip error.
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
-        // put pending headers
-        if(0 != (result = UploadPendingMeta())){
+        // put pending headers or create new file
+        if(0 != (result = UploadPending())){
             return result;
         }
     }
 
     if(0 == result){
         pagelist.ClearAllModified();
-        is_meta_pending = false;
+        pending_status = NO_UPDATE_PENDING;
     }
     return result;
 }
@@ -1672,15 +1672,15 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             // So the file has already been removed, skip error.
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
-        // put pending headers
-        if(0 != (result = UploadPendingMeta())){
+        // put pending headers or create new file
+        if(0 != (result = UploadPending())){
             return result;
         }
     }
 
     if(0 == result){
         pagelist.ClearAllModified();
-        is_meta_pending = false;
+        pending_status = NO_UPDATE_PENDING;
     }
     return result;
 }
@@ -2089,29 +2089,51 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     if(0 <= atime.tv_sec){
         SetAtime(atime, true);
     }
-    is_meta_pending |= (IsUploading(true) || pagelist.IsModified());
 
-    return is_meta_pending;
+    if(NO_UPDATE_PENDING == pending_status && (IsUploading(true) || pagelist.IsModified())){
+        pending_status = UPDATE_META_PENDING;
+    }
+
+    return (NO_UPDATE_PENDING != pending_status);
 }
 
 // global function in s3fs.cpp
 int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size = true);
 
-int FdEntity::UploadPendingMeta()
+int FdEntity::UploadPending(int fd)
 {
-    if(!is_meta_pending) {
-       return 0;
-    }
+    int result;
 
-    headers_t updatemeta = orgmeta;
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(path.c_str()));
-    updatemeta["x-amz-metadata-directive"] = "REPLACE";
-    // put headers, no need to update mtime to avoid dead lock
-    int result = put_headers(path.c_str(), updatemeta, true);
-    if(0 != result){
-        S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
+    if(NO_UPDATE_PENDING == pending_status){
+       // nothing to do
+       result = 0;
+
+    }else if(UPDATE_META_PENDING == pending_status){
+        headers_t updatemeta = orgmeta;
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(path.c_str()));
+        updatemeta["x-amz-metadata-directive"] = "REPLACE";
+
+        // put headers, no need to update mtime to avoid dead lock
+        result = put_headers(path.c_str(), updatemeta, true);
+        if(0 != result){
+            S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
+        }else{
+            pending_status = NO_UPDATE_PENDING;
+        }
+
+    }else{  // CREATE_FILE_PENDING == pending_status
+        if(-1 == fd){
+            S3FS_PRN_ERR("could not create a new file(%s), because fd is not specified.", path.c_str());
+            result = -EBADF;
+        }else{
+            result = Flush(fd, true);
+            if(0 != result){
+                S3FS_PRN_ERR("failed to flush for file(%s) by(%d).", path.c_str(), result);
+            }else{
+                pending_status = NO_UPDATE_PENDING;
+            }
+        }
     }
-    is_meta_pending = false;
     return result;
 }
 
@@ -2194,7 +2216,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 void FdEntity::MarkDirtyNewFile()
 {
     pagelist.Init(0, false, true);
-    is_meta_pending = true;
+    pending_status = CREATE_FILE_PENDING;
 }
 
 /*

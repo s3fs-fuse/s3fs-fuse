@@ -48,7 +48,7 @@ class AutoFdEntity
 
       bool Close();
       int Detach();
-      bool Attach(const char* path, int existfd);
+      FdEntity* Attach(const char* path, int existfd);
       int GetPseudoFd() const { return pseudo_fd; }
 
       FdEntity* Open(const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);

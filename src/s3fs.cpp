@@ -2488,9 +2488,16 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         // The pseudo fd stored in fi->fh is attached to AutoFdEntry so that it can be
         // destroyed here.
         //
-        if(!autoent.Attach(path, static_cast<int>(fi->fh))){
+        FdEntity* ent;
+        if(NULL == (ent = autoent.Attach(path, static_cast<int>(fi->fh)))){
             S3FS_PRN_ERR("could not find pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
             return -EIO;
+        }
+
+        int result = ent->UploadPending(static_cast<int>(fi->fh));
+        if(0 != result){
+            S3FS_PRN_ERR("could not upload pending data(meta, etc) for pseudo_fd(%llu) / path(%s)", (unsigned long long)(fi->fh), path);
+            return result;
         }
     }
 

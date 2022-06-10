@@ -749,6 +749,16 @@ function test_hardlink {
     rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
+function test_mknod {
+    describe "Testing mknod system call function ..."
+
+    local MKNOD_TEST_FILE_BASENAME="mknod_testfile"
+
+    rm -f "${MKNOD_TEST_FILE_BASENAME}*"
+
+    ../../mknod_test "${MKNOD_TEST_FILE_BASENAME}"
+}
+
 function test_symlink {
     describe "Testing symlinks ..."
 
@@ -1894,6 +1904,9 @@ function add_all_tests {
     add_tests test_special_characters
     add_tests test_hardlink
     add_tests test_symlink
+    if ! uname | grep -q Darwin; then
+        add_tests test_mknod
+    fi
     add_tests test_extended_attributes
     add_tests test_mtime_file
 
