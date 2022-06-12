@@ -28,6 +28,8 @@
 #include "metaheader.h"
 #include "string_util.h"
 
+static const struct timespec DEFAULT_TIMESPEC = {-1, 0};
+
 //-------------------------------------------------------------------
 // Utility functions for convert
 //-------------------------------------------------------------------
@@ -49,14 +51,15 @@ static struct timespec cvt_string_to_time(const char *str)
             strmtime.erase(pos);
         }
     }
-    return {static_cast<time_t>(cvt_strtoofft(strmtime.c_str(), /*base=*/ 10)), nsec};
+    struct timespec ts = {static_cast<time_t>(cvt_strtoofft(strmtime.c_str(), /*base=*/ 10)), nsec};
+    return ts;
 }
 
 static struct timespec get_time(const headers_t& meta, const char *header)
 {
     headers_t::const_iterator iter;
     if(meta.end() == (iter = meta.find(header))){
-        return {-1, 0};
+        return DEFAULT_TIMESPEC;
     }
     return cvt_string_to_time((*iter).second.c_str());
 }
@@ -72,9 +75,10 @@ struct timespec get_mtime(const headers_t& meta, bool overcheck)
         return t;
     }
     if(overcheck){
-        return {get_lastmodified(meta), 0};
+        struct timespec ts = {get_lastmodified(meta), 0};
+        return ts;
     }
-    return {-1, 0};
+    return DEFAULT_TIMESPEC;
 }
 
 struct timespec get_ctime(const headers_t& meta, bool overcheck)
@@ -84,9 +88,10 @@ struct timespec get_ctime(const headers_t& meta, bool overcheck)
         return t;
     }
     if(overcheck){
-        return {get_lastmodified(meta), 0};
+        struct timespec ts = {get_lastmodified(meta), 0};
+        return ts;
     }
-    return {-1, 0};
+    return DEFAULT_TIMESPEC;
 }
 
 struct timespec get_atime(const headers_t& meta, bool overcheck)
@@ -96,9 +101,10 @@ struct timespec get_atime(const headers_t& meta, bool overcheck)
         return t;
     }
     if(overcheck){
-        return {get_lastmodified(meta), 0};
+        struct timespec ts = {get_lastmodified(meta), 0};
+        return ts;
     }
-    return {-1, 0};
+    return DEFAULT_TIMESPEC;
 }
 
 off_t get_size(const char *s)
