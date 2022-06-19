@@ -82,7 +82,7 @@ bool TestMknod(const char* basepath, mode_t mode)
             break;
         case S_IFBLK:
             str_mode = str_mode_blk;
-            dev      = makedev((long long)(259), 0);     // temporary value
+            dev      = makedev((unsigned int)(259), 0);     // temporary value
             sprintf(filepath, "%s.%s", basepath, str_ext_blk);
             break;
         case S_IFIFO:
@@ -93,7 +93,8 @@ bool TestMknod(const char* basepath, mode_t mode)
         case S_IFSOCK:
             str_mode = str_mode_sock;
             dev      = 0;
-            sprintf(filepath, "%s.%s", basepath, str_ext_sock);
+            snprintf(filepath, S3FS_TEST_PATH_MAX, "%s.%s", basepath, str_ext_sock);
+            filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         default:
             fprintf(stderr, "[ERROR] Called function with wrong mode argument.\n");
@@ -137,11 +138,11 @@ int main(int argc, char *argv[])
 {
     // Parse parameters
     if(2 != argc){
-        fprintf(stderr, "[ERROR] No paraemter is specified.\n");
+        fprintf(stderr, "[ERROR] No parameter is specified.\n");
         fprintf(stderr, "%s\n", usage_string);
         exit(EXIT_FAILURE);
     }
-    if(0 == strcasecmp("-h", argv[1]) || 0 == strcasecmp("--help", argv[1])){
+    if(0 == strcmp("-h", argv[1]) || 0 == strcmp("--help", argv[1])){
         fprintf(stdout, "%s\n", usage_string);
         exit(EXIT_SUCCESS);
     }
@@ -155,6 +156,9 @@ int main(int argc, char *argv[])
     // [NOTE]
     // Privilege is required to execute S_IFBLK.
     //
+    if(0 != geteuid()){
+        fprintf(stderr, "[WARNING] Skipping mknod(S_IFBLK) due to missing root privileges.\n");
+    }
     if(!TestMknod(argv[1], S_IFREG)  ||
        !TestMknod(argv[1], S_IFCHR)  ||
        !TestMknod(argv[1], S_IFIFO)  ||

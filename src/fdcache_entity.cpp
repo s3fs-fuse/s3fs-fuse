@@ -1545,7 +1545,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending())){
+        if(0 != (result = UploadPending(-1))){
             return result;
         }
     }
@@ -1673,7 +1673,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending())){
+        if(0 != (result = UploadPending(-1))){
             return result;
         }
     }
