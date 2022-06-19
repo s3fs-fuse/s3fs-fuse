@@ -1893,6 +1893,84 @@ function test_write_data_with_skip() {
     rm_test_file "${_TMP_SKIPWRITE_FILE}"
 }
 
+function test_chmod_mountpoint {
+    describe "Testing chmod to mount point..."
+
+    local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
+
+    local ORIGINAL_PERMISSIONS; ORIGINAL_PERMISSIONS=$(get_permissions "${MOUNTPOINT_DIR}")
+
+    chmod 0777 "${MOUNTPOINT_DIR}";
+
+    # if they're the same, we have a problem.
+    local CHANGED_PERMISSIONS; CHANGED_PERMISSIONS=$(get_permissions "${MOUNTPOINT_DIR}")
+    if [ "${CHANGED_PERMISSIONS}" = "${ORIGINAL_PERMISSIONS}" ]
+    then
+      echo "Could not modify mount point(${MOUNTPOINT_DIR}) permissions"
+      return 1
+    fi
+}
+
+function test_chown_mountpoint {
+    describe "Testing chown mount point..."
+
+    local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
+
+    local ORIGINAL_PERMISSIONS
+    if [ "$(uname)" = "Darwin" ]; then
+        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" "${MOUNTPOINT_DIR}")
+    else
+        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g "${MOUNTPOINT_DIR}")
+    fi
+
+    # [NOTE]
+    # Prevents test interruptions due to permission errors, etc.
+    # If the chown command fails, an error will occur with the
+    # following judgment statement. So skip the chown command error.
+    # '|| true' was added due to a problem with MacOS and ensure_diskfree option.
+    #
+    chown 1000:1000 "${MOUNTPOINT_DIR}" || true
+
+    # if they're the same, we have a problem.
+    local CHANGED_PERMISSIONS
+    if [ "$(uname)" = "Darwin" ]; then
+        CHANGED_PERMISSIONS=$(stat -f "%u:%g" "${MOUNTPOINT_DIR}")
+    else
+        CHANGED_PERMISSIONS=$(stat --format=%u:%g "${MOUNTPOINT_DIR}")
+    fi
+    if [ "${CHANGED_PERMISSIONS}" = "${ORIGINAL_PERMISSIONS}" ]
+    then
+      if [ "${ORIGINAL_PERMISSIONS}" = "1000:1000" ]
+      then
+        echo "Could not be strict check because original file permission 1000:1000"
+      else
+        echo "Could not modify mount point(${MOUNTPOINT_DIR}) ownership($ORIGINAL_PERMISSIONS to 1000:1000)"
+        return 1
+      fi
+    fi
+}
+
+function test_time_mountpoint {
+    describe "Testing atime/ctime/mtime to mount point..."
+
+    local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
+
+    local base_atime; base_atime=$(get_atime "${MOUNTPOINT_DIR}")
+    local base_ctime; base_ctime=$(get_ctime "${MOUNTPOINT_DIR}")
+    local base_mtime; base_mtime=$(get_mtime "${MOUNTPOINT_DIR}")
+
+    touch "${MOUNTPOINT_DIR}"
+
+    local atime; atime=$(get_atime "${MOUNTPOINT_DIR}")
+    local ctime; ctime=$(get_ctime "${MOUNTPOINT_DIR}")
+    local mtime; mtime=$(get_mtime "${MOUNTPOINT_DIR}")
+
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
+       echo "chmod expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
+    fi
+}
+
 function add_all_tests {
     # shellcheck disable=SC2009
     if ps u -p "${S3FS_PID}" | grep -q use_cache; then
@@ -1981,6 +2059,13 @@ function add_all_tests {
         add_tests test_ensurespace_move_file
     fi
     add_tests test_write_data_with_skip
+
+    # [NOTE]
+    # The test on CI will fail depending on the permissions, so skip these(chmod/chown).
+    #
+    # add_tests test_chmod_mountpoint
+    # add_tests test_chown_mountpoint
+    add_tests test_time_mountpoint
 }
 
 init_suite
