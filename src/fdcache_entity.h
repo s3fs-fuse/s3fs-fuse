@@ -105,7 +105,7 @@ class FdEntity
         int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
-        int UploadPending(int fd = -1);
+        int UploadPending(int fd);
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(struct timespec time, bool lock_already_held = false);
