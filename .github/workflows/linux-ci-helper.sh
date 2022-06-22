@@ -64,7 +64,7 @@ CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix
 #-----------------------------------------------------------
 # OS dependent variables
 #-----------------------------------------------------------
-if [ "${CONTAINER_FULLNAME}" = "ubuntu:21.10" ]; then
+if [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
@@ -112,14 +112,6 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "debian:stretch" ]; then
-    PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
-    INSTALL_CHECKER_PKGS="cppcheck shellcheck"
-    INSTALL_CHECKER_PKG_OPTIONS=""
-
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
@@ -145,7 +137,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:35" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:36" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
