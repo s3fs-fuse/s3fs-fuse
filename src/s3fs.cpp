@@ -90,7 +90,7 @@ static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_specified_endpoint = false;
 static int s3fs_init_deferred_exit_status = 0;
-static bool support_compat_dir    = true;// default supports compatibility directory type
+static bool support_compat_dir    = false;// default does not support compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
 static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
@@ -4164,7 +4164,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(0 == strcmp(arg, "notsup_compat_dir")){
+            S3FS_PRN_WARN("notsup_compat_dir is enabled by default and a future version will remove this option.");
+
             support_compat_dir = false;
+            return 0;
+        }
+        if(0 == strcmp(arg, "compat_dir")){
+            support_compat_dir = true;
             return 0;
         }
         if(0 == strcmp(arg, "enable_content_md5")){

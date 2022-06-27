@@ -48,7 +48,6 @@ if [ -n "${ALL_TESTS}" ]; then
         "max_stat_cache_size=100"
         nocopyapi
         nomultipart
-        notsup_compat_dir
         sigv2
         sigv4
         "singlepart_copy_limit=10"  # limit size to exercise multipart code paths

@@ -331,15 +331,13 @@ This name will be added to logging messages and user agent headers sent by s3fs.
 s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
 As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.
 .TP
-\fB\-o\fR notsup_compat_dir (disable support of alternative directory names)
+\fB\-o\fR compat_dir (enable support of alternative directory names)
 .RS
-s3fs supports the three different naming schemas "dir/", "dir" and "dir_$folder$" to map directory names to S3 objects and vice versa. As a fourth variant, directories can be determined indirectly if there is a file object with a path (e.g. "/dir/file") but without the parent directory.
+s3fs supports two different naming schemas "dir/" and "dir" to map directory names to S3 objects and vice versa by default. As a third variant, directories can be determined indirectly if there is a file object with a path (e.g. "/dir/file") but without the parent directory.  This option enables a fourth variant, "dir_$folder$", created by older applications.
 .TP
 S3fs uses only the first schema "dir/" to create S3 objects for directories.
 .TP
 The support for these different naming schemas causes an increased communication effort.
-.TP
-If all applications exclusively use the "dir/" naming scheme and the bucket does not contain any objects with a different naming scheme, this option can be used to disable support for alternative naming schemes. This reduces access time and can save costs.
 .RE
 .TP
 \fB\-o\fR use_wtf8 - support arbitrary file system encoding.
