@@ -1879,11 +1879,7 @@ function add_all_tests {
     add_tests test_chown
     add_tests test_list
     add_tests test_remove_nonempty_directory
-    # shellcheck disable=SC2009
-    if ! ps u -p "${S3FS_PID}" | grep -q notsup_compat_dir; then
-        # TODO: investigate why notsup_compat_dir fails
-        add_tests test_external_directory_creation
-    fi
+    add_tests test_external_directory_creation
     add_tests test_external_modification
     add_tests test_external_creation
     add_tests test_read_external_object
