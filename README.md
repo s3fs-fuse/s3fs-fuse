@@ -158,6 +158,7 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 
 ## References
 
+* [CSI for S3](https://github.com/ctrox/csi-s3) - Kubernetes CSI driver
 * [docker-s3fs-client](https://github.com/efrecon/docker-s3fs-client) - Docker image containing s3fs
 * [goofys](https://github.com/kahing/goofys) - similar to s3fs but has better performance and less POSIX compatibility
 * [s3backer](https://github.com/archiecobbs/s3backer) - mount an S3 bucket as a single file
