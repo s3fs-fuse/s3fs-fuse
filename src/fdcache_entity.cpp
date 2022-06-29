@@ -1847,7 +1847,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             }
 
             // Clear the dirty flag, because the meta data is updated.
-            is_meta_pending = false;
+            pending_status = NO_UPDATE_PENDING;
         }
 
         //
@@ -1900,8 +1900,8 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         pseudo_obj->ClearUntreated();
         pseudo_obj->ClearUploadInfo();         // clear multipart upload info
 
-        // put pending headers
-        if(0 != (result = UploadPendingMeta())){
+        // put pending headers or create new file
+        if(0 != (result = UploadPending(-1))){
             return result;
         }
     }
@@ -2335,7 +2335,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
 
     if(!isuploading && pseudo_obj->IsUploading()){
         // Clear the dirty flag, because the meta data is updated.
-        is_meta_pending = false;
+        pending_status = NO_UPDATE_PENDING;
     }
 
     return wsize;
