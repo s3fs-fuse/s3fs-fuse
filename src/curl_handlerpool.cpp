@@ -103,7 +103,7 @@ void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
         S3FS_PRN_DBG("Return handler to pool");
         mPool.push_back(hCurl);
 
-        while(mMaxHandlers <= static_cast<int>(mPool.size())){
+        while(mMaxHandlers < static_cast<int>(mPool.size())){
             CURL* hOldCurl = mPool.front();
             mPool.pop_front();
             if(hOldCurl){
