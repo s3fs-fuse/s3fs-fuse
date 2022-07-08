@@ -30,7 +30,7 @@ COMMON_FLAGS="-g -O0 -Wno-cpp"
 make clean
 ./configure CXXFLAGS="$COMMON_FLAGS -D_GLIBCXX_DEBUG"
 make
-DBGLEVEL=debug make check -C test/
+make check -C test/
 
 # run tests under AddressSanitizer, https://clang.llvm.org/docs/AddressSanitizer.html
 make clean
@@ -39,6 +39,7 @@ make
 ASAN_OPTIONS='detect_leaks=1,detect_stack_use_after_return=1' make check -C test/
 
 # run tests under MemorySanitizer, https://clang.llvm.org/docs/MemorySanitizer.html
+# TODO: this requires a custom libc++
 #make clean
 #./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=memory"
 #make
@@ -55,6 +56,12 @@ make clean
 ./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
 make
 make check -C test/
+
+# run tests with Valgrind
+make clean
+./configure CXXFLAGS="$COMMON_FLAGS"
+make
+RETRIES=100 VALGRIND="--leak-check=full" make check -C test/
 
 #
 # Local variables:
