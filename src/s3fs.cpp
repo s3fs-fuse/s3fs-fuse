@@ -721,7 +721,6 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
 
 //
 // create or update s3 meta
-// ow_sse_flg is for over writing sse header by use_sse option.
 // @return fuse return code
 //
 int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size)
@@ -733,11 +732,12 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
     S3FS_PRN_INFO2("[path=%s]", path);
 
     // files larger than 5GB must be modified via the multipart interface
-    // *** If there is not target object(a case of move command),
-    //     get_object_attribute() returns error with initializing buf.
+    // call use_st_size as false when the file does not exist(ex. rename object)
     if(use_st_size){
         struct stat buf;
-        (void)get_object_attribute(path, &buf);
+        if(0 != (result = get_object_attribute(path, &buf))){
+          return result;
+        }
         size = buf.st_size;
     }else{
         size = get_size(meta);
@@ -2297,7 +2297,9 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     AutoFdEntity autoent;
     FdEntity*    ent;
     headers_t    meta;
-    get_object_attribute(path, NULL, &meta, true, NULL, true);    // no truncate cache
+    if(0 != (result = get_object_attribute(path, NULL, &meta, true, NULL, true))){    // no truncate cache
+      return result;
+    }
     if(NULL == (ent = autoent.Open(path, &meta, st.st_size, st.st_mtime, fi->flags, false, true, false, AutoLock::NONE))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
