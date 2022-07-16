@@ -397,11 +397,18 @@ function test_external_modification {
 function test_external_creation {
     describe "Test external creation of an object ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
+
+    # [NOTE]
+    # If noobj_cache is enabled, register that cache here.
+    #
+    [ ! -e "${TEST_TEXT_FILE}" ]
+
+    # [NOTE]
+    # If noobj_cache is enabled, we cannot be sure that it is registered in that cache.
+    # That's because an error will occur if the upload by aws cli takes more than 1 second.
+    #
     echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
-    # shellcheck disable=SC2009
-    if ! ps u -p "${S3FS_PID}" | grep -q disable_noobj_cache; then
-        [ ! -e "${TEST_TEXT_FILE}" ]
-    fi
+
     sleep 1
     [ -e "${TEST_TEXT_FILE}" ]
     rm -f "${TEST_TEXT_FILE}"
