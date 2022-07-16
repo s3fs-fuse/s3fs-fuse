@@ -254,12 +254,23 @@ function run_suite {
        ALT_TEST_TEXT_FILE="test-s3fs-ALT-${RANDOM}.txt"
        # shellcheck disable=SC2034
        BIG_FILE="big-file-s3fs-${RANDOM}.txt"
-       "${t}" "${key_prefix}" && rc=$? || rc=$?
-       if [ $rc = 0 ]; then
+       # The following sequence runs tests in a subshell to allow continuation
+       # on test failure, but still allowing errexit to be in effect during
+       # the test.
+       #
+       # See:
+       #     https://groups.google.com/d/msg/gnu.bash.bug/NCK_0GmIv2M/dkeZ9MFhPOIJ
+       # Other ways of trying to capture the return value will also disable
+       # errexit in the function due to bash... compliance with POSIX?
+       set +o errexit
+       (set -o errexit; $t $key_prefix)
+       # shellcheck disable=SC2181
+       if [ $? == 0 ]; then
            report_pass "${t}"
        else
            report_fail "${t}"
        fi
+       set -o errexit
    done
    cd "${orig_dir}"
    clean_run_dir
