@@ -427,7 +427,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
               }
             }
         }
-        if(support_compat_dir && 0 != result && std::string::npos == strpath.find("_$folder$", 0)){
+        if(0 != result && std::string::npos == strpath.find("_$folder$", 0)){
             // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
             if('/' == *strpath.rbegin()){
                 strpath.erase(strpath.length() - 1);
@@ -440,7 +440,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             }
         }
     }else{
-        if(support_compat_dir && '/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
+        if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
             // check a case of that "object" does not have attribute and "object" is possible to be directory.
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
                 // found "no dir object".
