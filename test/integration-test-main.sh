@@ -794,7 +794,7 @@ function test_extended_attributes {
 
     # remove value
     del_xattr key1 "${TEST_TEXT_FILE}"
-    get_xattr key1 "${TEST_TEXT_FILE}" && exit 1
+    get_xattr key1 "${TEST_TEXT_FILE}" && return 1
     get_xattr key2 "${TEST_TEXT_FILE}" | grep -q '^value2$'
 
     rm_test_file
