@@ -27,8 +27,8 @@
 class S3fsCurl;
 
 typedef std::vector<S3fsCurl*>       s3fscurllist_t;
-typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl);    // callback for succeed multi request
-typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl); // callback for failure and retrying
+typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, void* param);  // callback for succeed multi request
+typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);            // callback for failure and retrying
 
 //----------------------------------------------
 // class S3fsMultiCurl
@@ -43,6 +43,7 @@ class S3fsMultiCurl
 
         S3fsMultiSuccessCallback SuccessCallback;
         S3fsMultiRetryCallback   RetryCallback;
+        void*                    pSuccessCallbackParam;
 
         pthread_mutex_t completed_tids_lock;
         std::vector<pthread_t> completed_tids;
@@ -62,6 +63,7 @@ class S3fsMultiCurl
 
         S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
         S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
+        void* SetSuccessCallbackParam(void* param);
         bool Clear() { return ClearEx(true); }
         bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
         int Request();

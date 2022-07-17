@@ -221,9 +221,9 @@ class S3fsCurl
         static size_t UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
         static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
 
-        static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl);
-        static bool CopyMultipartPostCallback(S3fsCurl* s3fscurl);
-        static bool MixMultipartPostCallback(S3fsCurl* s3fscurl);
+        static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
+        static bool CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
+        static bool MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
         static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
         static S3fsCurl* CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
         static S3fsCurl* MixMultipartPostRetryCallback(S3fsCurl* s3fscurl);

@@ -1049,18 +1049,22 @@ int S3fsCurl::SetMaxMultiRequest(int max)
     return old;
 }
 
-bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl)
+// cppcheck-suppress unmatchedSuppression
+// cppcheck-suppress constParameter
+bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
-    if(!s3fscurl){
+    if(!s3fscurl || param){     // this callback does not need a parameter
         return false;
     }
 
     return s3fscurl->UploadMultipartPostComplete();
 }
 
-bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl)
+// cppcheck-suppress unmatchedSuppression
+// cppcheck-suppress constParameter
+bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
-    if(!s3fscurl){
+    if(!s3fscurl || param){     // this callback does not need a parameter
         return false;
     }
 
@@ -4111,9 +4115,11 @@ bool S3fsCurl::UploadMultipartPostComplete()
     return true;
 }
 
-bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl)
+// cppcheck-suppress unmatchedSuppression
+// cppcheck-suppress constParameter
+bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
-    if(!s3fscurl){
+    if(!s3fscurl || param){     // this callback does not need a parameter
         return false;
     }
 

@@ -114,7 +114,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
-static bool multi_head_callback(S3fsCurl* s3fscurl);
+static bool multi_head_callback(S3fsCurl* s3fscurl, void* param);
 static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
@@ -2533,16 +2533,43 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
-static bool multi_head_callback(S3fsCurl* s3fscurl)
+struct multi_head_callback_param
+{
+    void*           buf;
+    fuse_fill_dir_t filler;
+};
+
+static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl){
         return false;
     }
+
+    // Add stat cache
     std::string saved_path = s3fscurl->GetSpecialSavedPath();
     if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
         S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
         return false;
     }
+
+    // Get stats from stats cache(for converting from meta), and fill
+    std::string bpath = mybasename(saved_path);
+    if(use_wtf8){
+        bpath = s3fs_wtf8_decode(bpath);
+    }
+    if(param){
+        struct multi_head_callback_param* pcbparam = reinterpret_cast<struct multi_head_callback_param*>(param);
+        struct stat st;
+        if(StatCache::getStatCacheData()->GetStat(saved_path, &st)){
+            pcbparam->filler(pcbparam->buf, bpath.c_str(), &st, 0);
+        }else{
+            S3FS_PRN_INFO2("Could not find %s file in stat cache.", saved_path.c_str());
+            pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
+        }
+    }else{
+        S3FS_PRN_WARN("param(fuse_fill_dir_t filler) is NULL, then can not call filler.");
+    }
+
     return true;
 }
 
@@ -2597,6 +2624,12 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     curlmulti.SetSuccessCallback(multi_head_callback);
     curlmulti.SetRetryCallback(multi_head_retry_callback);
 
+    // Callback function parameter
+    struct multi_head_callback_param param;
+    param.buf    = buf;
+    param.filler = filler;
+    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&param));
+
     s3obj_list_t::iterator iter;
 
     fillerlist.clear();
@@ -2604,16 +2637,25 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
         std::string disppath = path + (*iter);
         std::string etag     = head.GetETag((*iter).c_str());
+        struct stat st;
+
+        // [NOTE]
+        // If there is a cache hit, file stat is filled by filler at here.
+        //
+        if(StatCache::getStatCacheData()->HasStat(disppath, &st, etag.c_str())){
+            std::string bpath = mybasename(disppath);
+            if(use_wtf8){
+                bpath = s3fs_wtf8_decode(bpath);
+            }
+            filler(buf, bpath.c_str(), &st, 0);
+            continue;
+        }
 
         std::string fillpath = disppath;
         if('/' == *disppath.rbegin()){
             fillpath.erase(fillpath.length() -1);
         }
         fillerlist.push_back(fillpath);
-
-        if(StatCache::getStatCacheData()->HasStat(disppath, etag.c_str())){
-            continue;
-        }
 
         // First check for directory, start checking "not SSE-C".
         // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
@@ -2642,24 +2684,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         }else{
             S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
             return result;
-        }
-    }
-
-    // populate fuse buffer
-    // here is best position, because a case is cache size < files in directory
-    //
-    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
-        struct stat st;
-        bool in_cache = StatCache::getStatCacheData()->GetStat((*iter), &st);
-        std::string bpath = mybasename((*iter));
-        if(use_wtf8){
-            bpath = s3fs_wtf8_decode(bpath);
-        }
-        if(in_cache){
-            filler(buf, bpath.c_str(), &st, 0);
-        }else{
-            S3FS_PRN_INFO2("Could not find %s file in stat cache.", (*iter).c_str());
-            filler(buf, bpath.c_str(), 0, 0);
         }
     }
 
