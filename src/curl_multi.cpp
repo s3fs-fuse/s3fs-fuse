@@ -31,7 +31,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), RetryCallback(NULL)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), RetryCallback(NULL), pSuccessCallbackParam(NULL)
 {
     int result;
     pthread_mutexattr_t attr;
@@ -91,6 +91,13 @@ S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback fu
 {
     S3fsMultiRetryCallback old = RetryCallback;
     RetryCallback = function;
+    return old;
+}
+
+void* S3fsMultiCurl::SetSuccessCallbackParam(void* param)
+{
+    void* old = pSuccessCallbackParam;
+    pSuccessCallbackParam = param;
     return old;
 }
   
@@ -197,7 +204,7 @@ int S3fsMultiCurl::MultiRead()
                 isPostpone = true;
             }else if(400 > responseCode){
                 // add into stat cache
-                if(SuccessCallback && !SuccessCallback(s3fscurl)){
+                if(SuccessCallback && !SuccessCallback(s3fscurl, pSuccessCallbackParam)){
                     S3FS_PRN_WARN("error from callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(400 == responseCode){

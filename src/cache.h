@@ -150,6 +150,10 @@ class StatCache
         {
             return GetStat(key, NULL, NULL, overcheck, etag, NULL);
         }
+        bool HasStat(const std::string& key, struct stat* pst, const char* etag)
+        {
+            return GetStat(key, pst, NULL, true, etag, NULL);
+        }
 
         // Cache For no object
         bool IsNoObjectCache(const std::string& key, bool overcheck = true);
