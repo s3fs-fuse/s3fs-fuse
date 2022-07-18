@@ -91,8 +91,9 @@ bool UntreatedParts::AddPart(off_t start, off_t size)
             return true;
 
         }else if((start + size) < iter->start){
-			// The part to add should be inserted before the current part.
+            // The part to add should be inserted before the current part.
             untreated_list.insert(iter, untreatedpart(start, size, last_tag));
+            // success to stretch and compress existed parts
             return true;
         }
     }
@@ -134,90 +135,6 @@ bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t
 }
 
 // [NOTE]
-// The part with the last tag cannot be taken out if it has not reached max_size.
-//
-bool UntreatedParts::TakeoutPart(off_t& start, off_t& size, off_t max_size, off_t min_size)
-{
-    if(max_size <= 0 || min_size < 0 || max_size < min_size){
-        S3FS_PRN_ERR("Paramter are wrong(max_size=%lld, min_size=%lld).", static_cast<long long int>(max_size), static_cast<long long int>(min_size));
-        return false;
-    }
-    AutoLock auto_lock(&untreated_list_lock);
-
-    // Check the overlap with the existing part and add the part.
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
-        if(iter->untreated_tag == last_tag){
-            // Last updated part
-            if(max_size <= iter->size){
-                // Take out only when the maximum part size is exceeded
-                start       = iter->start;
-                size        = max_size;
-                iter->start = iter->start + max_size;
-                iter->size  = iter->size  - max_size;
-
-                if(iter->size == 0){
-                    untreated_list.erase(iter);
-                }
-                return true;
-            }
-		}else{
-            // Parts updated in the past
-            if(min_size <= iter->size){
-                if(iter->size <= max_size){
-                    // Take out the whole part( min <= part size <= max )
-                    start = iter->start;
-                    size  = iter->size;
-                    untreated_list.erase(iter);
-                }else{
-                    // Partially take out part( max < part size )
-                    start       = iter->start;
-                    size        = max_size;
-                    iter->start = iter->start + max_size;
-                    iter->size  = iter->size  - max_size;
-                }
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// [NOTE]
-// This method returns the part from the beginning, ignoring conditions
-// such as whether it is being updated(the last updated part) or less
-// than the minimum size.
-//
-bool UntreatedParts::TakeoutPartFromBegin(off_t& start, off_t& size, off_t max_size)
-{
-    if(max_size <= 0){
-        S3FS_PRN_ERR("Paramter is wrong(max_size=%lld).", static_cast<long long int>(max_size));
-        return false;
-    }
-    AutoLock auto_lock(&untreated_list_lock);
-
-    if(untreated_list.empty()){
-        return false;
-    }
-
-    untreated_list_t::iterator iter = untreated_list.begin();
-    if(iter->size <= max_size){
-        // Take out the whole part( part size <= max )
-        start = iter->start;
-        size  = iter->size;
-
-        untreated_list.erase(iter);
-    }else{
-        // Take out only when the maximum part size is exceeded
-        start       = iter->start;
-        size        = max_size;
-
-        iter->start = iter->start + max_size;
-        iter->size  = iter->size  - max_size;
-    }
-    return true;
-}
-
-// [NOTE]
 // If size is specified as 0, all areas(parts) after start will be deleted.
 //
 bool UntreatedParts::ClearParts(off_t start, off_t size)
@@ -251,7 +168,7 @@ bool UntreatedParts::ClearParts(off_t start, off_t size)
             }
         }else if(start < (iter->start + iter->size)){
             // clear area overlaps with iter area(on the end side)
-            if(0 == size || (iter->start + iter->size) <= (start + size)	){
+            if(0 == size || (iter->start + iter->size) <= (start + size)){
                 // start to iter->end is clear
                 iter->size = start - iter->start;
             }else{
@@ -272,6 +189,85 @@ bool UntreatedParts::ClearParts(off_t start, off_t size)
         }
     }
     return true;
+}
+
+//
+// Update the last updated Untreated part
+//
+bool UntreatedParts::GetLastUpdatePart(off_t& start, off_t& size)
+{
+    AutoLock auto_lock(&untreated_list_lock);
+
+    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+        if(iter->untreated_tag == last_tag){
+            start = iter->start;
+            size  = iter->size;
+            return true;
+        }
+    }
+    return false;
+}
+
+//
+// Replaces the last updated Untreated part.
+//
+// [NOTE]
+// If size <= 0, delete that part
+//
+bool UntreatedParts::ReplaceLastUpdatePart(off_t start, off_t size)
+{
+    AutoLock auto_lock(&untreated_list_lock);
+
+    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+        if(iter->untreated_tag == last_tag){
+            if(0 < size){
+                iter->start = start;
+                iter->size  = size;
+            }else{
+                iter = untreated_list.erase(iter);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+//
+// Remove the last updated Untreated part.
+//
+bool UntreatedParts::RemoveLastUpdatePart()
+{
+    AutoLock auto_lock(&untreated_list_lock);
+
+    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+        if(iter->untreated_tag == last_tag){
+            untreated_list.erase(iter);
+            return true;
+        }
+    }
+    return false;
+}
+
+//
+// Duplicate the internally untreated_list.
+//
+bool UntreatedParts::Duplicate(untreated_list_t& list)
+{
+    AutoLock auto_lock(&untreated_list_lock);
+
+    list = untreated_list;
+    return true;
+}
+
+void UntreatedParts::Dump()
+{
+    AutoLock auto_lock(&untreated_list_lock);
+
+    S3FS_PRN_DBG("untreated list = [");
+    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+        S3FS_PRN_DBG("    {%014lld - %014lld : tag=%ld}", static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->untreated_tag);
+    }
+    S3FS_PRN_DBG("]");
 }
 
 /*

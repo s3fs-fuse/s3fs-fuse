@@ -243,7 +243,7 @@ struct filepart
         petag = petagobj;
     }
 
-    int get_part_number()
+    int get_part_number() const
     {
         if(!petag){
             return -1;
@@ -282,9 +282,13 @@ struct untreatedpart
         untreated_tag = 0;
     }
 
+    // [NOTE]
+    // Check if the areas overlap
+    // However, even if the areas do not overlap, this method returns true if areas are adjacent.
+    //
     bool check_overlap(off_t chk_start, off_t chk_size)
     {
-        if(chk_start < 0 || chk_size <= 0 || (chk_start + chk_size) < start || (start + size) < chk_start){
+        if(chk_start < 0 || chk_size <= 0 || start < 0 || size <= 0 || (chk_start + chk_size) < start || (start + size) < chk_start){
             return false;
         }
         return true;
@@ -307,6 +311,29 @@ struct untreatedpart
 };
 
 typedef std::list<untreatedpart> untreated_list_t;
+
+//
+// Information on each part of multipart upload
+//
+struct mp_part
+{
+    off_t  start;
+    off_t  size;
+    int    part_num;        // Set only for information to upload
+
+    mp_part(off_t set_start = 0, off_t set_size = 0, int part = 0) : start(set_start), size(set_size), part_num(part) {}
+};
+
+typedef std::list<struct mp_part> mp_part_list_t;
+
+inline off_t total_mp_part_list(const mp_part_list_t& mplist)
+{
+    off_t size = 0;
+    for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
+        size += iter->size;
+    }
+    return size;
+}
 
 //-------------------------------------------------------------------
 // mimes_t

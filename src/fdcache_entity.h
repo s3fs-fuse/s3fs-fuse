@@ -44,6 +44,7 @@ class FdEntity
         };
 
         static bool     mixmultipart;   // whether multipart uploading can use copy api.
+        static bool     streamupload;   // whether stream uploading.
 
         pthread_mutex_t fdent_lock;
         bool            is_lock_init;
@@ -81,13 +82,17 @@ class FdEntity
         int RowFlushNoMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
         int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
         int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
+        int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
         ssize_t WriteNoMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
+        ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
 
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
         static bool SetNoMixMultipart();
+        static bool GetStreamUpload() { return streamupload; }
+        static bool SetStreamUpload(bool isstream);
 
         explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
         ~FdEntity();
