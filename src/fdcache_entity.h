@@ -24,6 +24,7 @@
 #include "autolock.h"
 #include "fdcache_page.h"
 #include "fdcache_fdinfo.h"
+#include "fdcache_untreated.h"
 #include "metaheader.h"
 
 //------------------------------------------------
@@ -50,6 +51,7 @@ class FdEntity
         bool            is_lock_init;
         std::string     path;           // object path
         int             physical_fd;    // physical file(cache or temporary file) descriptor
+        UntreatedParts  untreated_list; // list of untreated parts that have been written and not yet uploaded(for streamupload)
         fdinfo_map_t    pseudo_fd_map;  // pseudo file descriptor information map
         FILE*           pfile;          // file pointer(tmp file or cache file)
         ino_t           inode;          // inode number for cache file
@@ -87,6 +89,8 @@ class FdEntity
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
+
+        bool AddUntreated(off_t start, off_t size);
 
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
@@ -143,6 +147,9 @@ class FdEntity
         bool PunchHole(off_t start = 0, size_t size = 0);
 
         void MarkDirtyNewFile();
+
+        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size);
+        bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
 };
 
 typedef std::map<std::string, class FdEntity*> fdent_map_t;   // key=path, value=FdEntity*
