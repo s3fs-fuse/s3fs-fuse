@@ -198,6 +198,33 @@ struct etagpair
 
 typedef std::list<etagpair> etaglist_t;
 
+struct petagpool
+{
+    std::list<etagpair*> petaglist;
+
+    ~petagpool()
+    {
+        clear();
+    }
+
+    void clear()
+    {
+        for(std::list<etagpair*>::iterator it = petaglist.begin(); petaglist.end() != it; ++it){
+            if(*it){
+                delete (*it);
+            }
+        }
+        petaglist.clear();
+    }
+
+    etagpair* add(const etagpair& etag_entity)
+    {
+        etagpair* petag = new etagpair(etag_entity);
+        petaglist.push_back(petag);
+        return petag;
+    }
+};
+
 //
 // Each part information for Multipart upload
 //

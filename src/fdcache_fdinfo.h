@@ -26,6 +26,8 @@
 #include "metaheader.h"
 #include "autolock.h"
 
+class FdEntity;
+
 //------------------------------------------------
 // Structure of parameters to pass to thread
 //------------------------------------------------
@@ -61,8 +63,7 @@ class PseudoFdInfo
         std::string             upload_id;
         int                     upload_fd;          // duplicated fd for uploading
         filepart_list_t         upload_list;
-        UntreatedParts          untreated_list;     // list of untreated parts that have been written and not yet uploaded(for streamupload)
-        etaglist_t              etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
+        petagpool               etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
         bool                    is_lock_init;
         pthread_mutex_t         upload_list_lock;   // protects upload_id and upload_list
         Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
@@ -76,8 +77,6 @@ class PseudoFdInfo
         bool Clear();
         void CloseUploadFd(AutoLock::Type type = AutoLock::NONE);
         bool OpenUploadFd(AutoLock::Type type = AutoLock::NONE);
-        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size);
-        bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type = AutoLock::NONE);
         int WaitAllThreadsExit();
@@ -103,14 +102,10 @@ class PseudoFdInfo
 
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = NULL);
 
-        void ClearUntreated(AutoLock::Type type = AutoLock::NONE);
-        bool ClearUntreated(off_t start, off_t size);
-        bool GetLastUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE);
-        bool AddUntreated(off_t start, off_t size);
-
         bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& upload_list, const mp_part_list_t& copy_list, int& result);
-        ssize_t UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta);
-        bool ExtractUploadPartsFromAllArea(mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, off_t max_mp_size, off_t file_size, bool use_copy);
+
+        ssize_t UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta, FdEntity* pfdent);
+        bool ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, off_t max_mp_size, off_t file_size, bool use_copy);
 };
 
 typedef std::map<int, class PseudoFdInfo*> fdinfo_map_t;

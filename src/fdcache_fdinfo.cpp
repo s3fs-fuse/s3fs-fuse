@@ -30,6 +30,7 @@
 #include "s3fs.h"
 #include "fdcache_fdinfo.h"
 #include "fdcache_pseudofd.h"
+#include "fdcache_entity.h"
 #include "curl.h"
 #include "string_util.h"
 #include "threadpoolman.h"
@@ -334,79 +335,15 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
     int partnumber = static_cast<int>(upload_list.size()) + 1;
 
     // add new part
-    etag_entities.push_back(etagpair(NULL, partnumber));        // [NOTE] Create the etag entity and register it in the list.
-    etagpair&   etag_entity = etag_entities.back();
-    filepart    newpart(false, physical_fd, start, size, is_copy, &etag_entity);
+    etagpair*   petag_entity = etag_entities.add(etagpair(NULL, partnumber));              // [NOTE] Create the etag entity and register it in the list.
+    filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
     upload_list.push_back(newpart);
 
     // set etag pointer
     if(ppetag){
-        *ppetag = &etag_entity;
+        *ppetag = petag_entity;
     }
 
-    return true;
-}
-
-void PseudoFdInfo::ClearUntreated(AutoLock::Type type)
-{
-    AutoLock auto_lock(&upload_list_lock, type);
-
-    untreated_list.ClearAll();
-}
-
-bool PseudoFdInfo::ClearUntreated(off_t start, off_t size)
-{
-    AutoLock auto_lock(&upload_list_lock);
-
-    return untreated_list.ClearParts(start, size);
-}
-
-bool PseudoFdInfo::GetLastUntreated(off_t& start, off_t& size, off_t max_size, off_t min_size)
-{
-    AutoLock auto_lock(&upload_list_lock);
-
-    return untreated_list.GetLastUpdatedPart(start, size, max_size, min_size);
-}
-
-bool PseudoFdInfo::AddUntreated(off_t start, off_t size)
-{
-    AutoLock auto_lock(&upload_list_lock);
-
-    bool result = untreated_list.AddPart(start, size);
-    if(!result){
-        S3FS_PRN_DBG("Failed adding untreated area part.");
-    }else if(S3fsLog::IsS3fsLogDbg()){
-        untreated_list.Dump();
-    }
-
-    return result;
-}
-
-bool PseudoFdInfo::GetLastUpdateUntreatedPart(off_t& start, off_t& size)
-{
-    // Get last untreated area
-    if(!untreated_list.GetLastUpdatePart(start, size)){
-        return false;
-    }
-    return true;
-}
-
-bool PseudoFdInfo::ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size)
-{
-    if(0 < front_size){
-        if(!untreated_list.ReplaceLastUpdatePart(front_start, front_size)){
-            return false;
-        }
-    }else{
-        if(!untreated_list.RemoveLastUpdatePart()){
-            return false;
-        }
-    }
-    if(0 < behind_size){
-        if(!untreated_list.AddPart(behind_start, behind_size)){
-            return false;
-        }
-    }
     return true;
 }
 
@@ -434,16 +371,15 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
     AutoLock auto_lock(&upload_list_lock, type);
 
     // insert new part
-    etag_entities.push_back(etagpair(NULL, part_num));
-    etagpair&   etag_entity = etag_entities.back();
-    filepart    newpart(false, physical_fd, start, size, is_copy, &etag_entity);
+    etagpair*   petag_entity = etag_entities.add(etagpair(NULL, part_num));
+    filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
     upload_list.push_back(newpart);
 
     // sort by part number
     upload_list.sort(filepart_partnum_compare);
 
     // set etag pointer
-    *ppetag = &etag_entity;
+    *ppetag = petag_entity;
 
     return true;
 }
@@ -540,12 +476,12 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
 //   alignment(to backward), and if that gap area is remained, that area is
 //   rest to untreated area.
 //
-ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta)
+ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta, FdEntity* pfdent)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(path), pseudo_fd, physical_fd);
 
-    if(!path || -1 == physical_fd || -1 == pseudo_fd){
-        S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", pseudo_fd, physical_fd, path);
+    if(!path || -1 == physical_fd || -1 == pseudo_fd || !pfdent){
+        S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable, or pfdent is NULL.", pseudo_fd, physical_fd, path);
         return -EBADF;
     }
     AutoLock auto_lock(&upload_list_lock);
@@ -555,7 +491,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     //
     off_t last_untreated_start = 0;
     off_t last_untreated_size  = 0;
-    if(!GetLastUpdateUntreatedPart(last_untreated_start, last_untreated_size) || last_untreated_start < 0 || last_untreated_size <= 0){
+    if(!pfdent->GetLastUpdateUntreatedPart(last_untreated_start, last_untreated_size) || last_untreated_start < 0 || last_untreated_size <= 0){
         S3FS_PRN_WARN("Not found last update untreated area or it is empty, thus return without any error.");
         return 0;
     }
@@ -646,7 +582,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     off_t behind_rem_start = aligned_start + aligned_size;
     off_t behind_rem_size  = (last_untreated_start + last_untreated_size) - behind_rem_start;
 
-    if(!ReplaceLastUpdateUntreatedPart(front_rem_start, front_rem_size, behind_rem_start, behind_rem_size)){
+    if(!pfdent->ReplaceLastUpdateUntreatedPart(front_rem_start, front_rem_size, behind_rem_start, behind_rem_size)){
         S3FS_PRN_WARN("The last untreated area could not be detected and the uploaded area could not be excluded from it, but continue because it does not affect the overall processing.");
     }
 
@@ -787,10 +723,10 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, o
 // use_copy             : Specify true if copy multipart upload is available.
 //
 // [NOTE]
-// The untreated_list does not change, but upload_list is changed.
+// The untreated_list in fdentity does not change, but upload_list is changed.
 // (If you want to restore it, you can use cancel_upload_list.)
 //
-bool PseudoFdInfo::ExtractUploadPartsFromAllArea(mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, off_t max_mp_size, off_t file_size, bool use_copy)
+bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, off_t max_mp_size, off_t file_size, bool use_copy)
 {
     AutoLock auto_lock(&upload_list_lock);
 
