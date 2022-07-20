@@ -114,7 +114,7 @@ class FdEntity
         int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
-        int UploadPending(int fd);
+        int UploadPending(int fd, AutoLock::Type type);
 
         bool GetStats(struct stat& st, bool lock_already_held = false);
         int SetCtime(struct timespec time, bool lock_already_held = false);
@@ -137,8 +137,8 @@ class FdEntity
         int Load(off_t start, off_t size, AutoLock::Type type, bool is_modified_flag = false);  // size=0 means loading to end
 
         off_t BytesModified();
-        int RowFlush(int fd, const char* tpath, bool force_sync = false);
-        int Flush(int fd, bool force_sync = false) { return RowFlush(fd, NULL, force_sync); }
+        int RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync = false);
+        int Flush(int fd, AutoLock::Type type, bool force_sync = false) { return RowFlush(fd, NULL, type, force_sync); }
 
         ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
         ssize_t Write(int fd, const char* bytes, off_t start, size_t size);
