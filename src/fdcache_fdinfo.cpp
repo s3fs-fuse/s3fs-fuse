@@ -433,6 +433,8 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
             delete thargs;
             return false;
         }
+
+        AutoLock auto_lock(&upload_list_lock);
         ++instruct_count;
     }
     return true;
