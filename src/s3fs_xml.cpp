@@ -147,19 +147,20 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
         S3FS_PRN_ERR("could not get object full path name..");
         return NULL;
     }
-    // basepath(path) is as same as fullpath.
-    if(0 == strcmp(reinterpret_cast<char*>(fullpath), path)){
-        xmlFree(fullpath);
+    std::string strfullpath = reinterpret_cast<char*>(fullpath);
+    xmlFree(fullpath);
+
+    // basepath(path) is as same as strfullpath.
+    if(0 == strcmp(strfullpath.c_str(), path)){
         return (char*)c_strErrorObjectName;
     }
 
     // Make dir path and filename
-    std::string   strdirpath = mydirname(std::string(reinterpret_cast<char*>(fullpath)));
-    std::string   strmybpath = mybasename(std::string(reinterpret_cast<char*>(fullpath)));
+    std::string   strdirpath = mydirname(strfullpath.c_str());
+    std::string   strmybpath = mybasename(strfullpath.c_str());
     const char* dirpath = strdirpath.c_str();
     const char* mybname = strmybpath.c_str();
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
-    xmlFree(fullpath);
 
     if('\0' == mybname[0]){
         return NULL;
