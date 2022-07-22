@@ -1384,7 +1384,7 @@ off_t FdEntity::BytesModified()
 // Files smaller than the minimum part size will not be multipart uploaded,
 // but will be uploaded as single part(normally).
 //
-int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
+int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd, physical_fd);
 
@@ -1392,7 +1392,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, bool force_sync)
         return -EBADF;
     }
 
-    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock(&fdent_lock, type);
 
     // check pseudo fd and its flag
     fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
@@ -1594,7 +1594,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1))){
+        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
             return result;
         }
     }
@@ -1722,7 +1722,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1))){
+        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
             return result;
         }
     }
@@ -1901,7 +1901,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         pseudo_obj->ClearUploadInfo();         // clear multipart upload info
 
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1))){
+        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
             return result;
         }
     }
@@ -2384,8 +2384,9 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 // global function in s3fs.cpp
 int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size = true);
 
-int FdEntity::UploadPending(int fd)
+int FdEntity::UploadPending(int fd, AutoLock::Type type)
 {
+    AutoLock auto_lock(&fdent_lock, type);
     int result;
 
     if(NO_UPDATE_PENDING == pending_status){
@@ -2410,7 +2411,7 @@ int FdEntity::UploadPending(int fd)
             S3FS_PRN_ERR("could not create a new file(%s), because fd is not specified.", path.c_str());
             result = -EBADF;
         }else{
-            result = Flush(fd, true);
+            result = Flush(fd, AutoLock::ALREADY_LOCKED, true);
             if(0 != result){
                 S3FS_PRN_ERR("failed to flush for file(%s) by(%d).", path.c_str(), result);
             }else{
