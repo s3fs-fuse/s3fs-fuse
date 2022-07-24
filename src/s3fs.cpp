@@ -4529,6 +4529,14 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // mutex for basename/dirname
+    if(!init_basename_lock()){
+        S3FS_PRN_EXIT("could not initialize mutex for basename/dirname.");
+        s3fs_destroy_global_ssl();
+        destroy_parser_xml_lock();
+        exit(EXIT_FAILURE);
+    }
+
     // init curl (without mime types)
     //
     // [NOTE]
@@ -4549,6 +4557,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4563,6 +4572,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4579,6 +4589,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::FinalCheckSse()){
@@ -4586,6 +4597,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4605,6 +4617,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4619,6 +4632,7 @@ int main(int argc, char* argv[])
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
             destroy_parser_xml_lock();
+            destroy_basename_lock();
             exit(EXIT_FAILURE);
         }
     }
@@ -4629,6 +4643,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4638,6 +4653,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4681,6 +4697,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(exitcode);
     }
 
@@ -4695,6 +4712,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4704,6 +4722,7 @@ int main(int argc, char* argv[])
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
+        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -4764,6 +4783,7 @@ int main(int argc, char* argv[])
     }
     s3fs_destroy_global_ssl();
     destroy_parser_xml_lock();
+    destroy_basename_lock();
 
     // cleanup xml2
     xmlCleanupParser();
