@@ -28,7 +28,7 @@
 //-------------------------------------------------------------------
 // headers_t
 //-------------------------------------------------------------------
-struct header_nocase_cmp : public std::binary_function<std::string, std::string, bool>
+struct header_nocase_cmp
 {
     bool operator()(const std::string &strleft, const std::string &strright) const
     {
