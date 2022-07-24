@@ -830,7 +830,7 @@ function test_mtime_file {
     cp -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
     local testmtime; testmtime=$(get_mtime "${TEST_TEXT_FILE}")
     local altmtime;  altmtime=$(get_mtime "${ALT_TEST_TEXT_FILE}")
-    if [ "$testmtime" -ne "$altmtime" ]
+    if [ "${testmtime}" != "${altmtime}" ]
     then
        echo "File times do not match:  $testmtime != $altmtime"
        return 1
@@ -873,7 +873,7 @@ function test_update_time_chmod() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -897,7 +897,7 @@ function test_update_time_chown() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -921,7 +921,7 @@ function test_update_time_xattr() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -945,7 +945,7 @@ function test_update_time_touch() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -eq "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -eq "${mtime}" ]; then
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
@@ -969,7 +969,7 @@ function test_update_time_touch_a() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -eq "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
         echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
         return 1
     fi
@@ -993,7 +993,7 @@ function test_update_time_append() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -eq "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
         echo "append expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime and same atime: $base_atime == $atime"
         return 1
     fi
@@ -1018,7 +1018,7 @@ function test_update_time_cp_p() {
     local atime; atime=$(get_atime "${TIME_TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TIME_TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TIME_TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "cp with -p option expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -1042,7 +1042,7 @@ function test_update_time_mv() {
     local atime; atime=$(get_atime "${TIME2_TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TIME2_TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TIME2_TEST_TEXT_FILE}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "mv expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -1076,7 +1076,7 @@ function test_update_directory_time_chmod() {
     local atime; atime=$(get_atime "${TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -1101,7 +1101,7 @@ function test_update_directory_time_chown {
     local atime; atime=$(get_atime "${TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -1126,7 +1126,7 @@ function test_update_directory_time_set_xattr {
     local atime; atime=$(get_atime "${TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
@@ -1151,7 +1151,7 @@ function test_update_directory_time_touch {
     local atime; atime=$(get_atime "${TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
-    if [ "${base_atime}" -eq "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -eq "${mtime}" ]; then
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
@@ -1176,7 +1176,7 @@ function test_update_directory_time_touch_a {
     local atime; atime=$(get_atime "${TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
-    if [ "${base_atime}" -eq "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
         echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
         return 1
     fi
@@ -1215,21 +1215,21 @@ function test_update_directory_time_subdir() {
     local atime; atime=$(get_atime "${TIME_TEST_DIR}")
     local ctime; ctime=$(get_ctime "${TIME_TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TIME_TEST_DIR}")
-    if [ "${base_atime}" -ne "${atime}" ] || [ "${base_ctime}" -eq "${ctime}" ] || [ "${base_mtime}" -ne "${mtime}" ]; then
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
        echo "mv expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
     atime=$(get_atime "${TIME2_TEST_SUBDIR}")
     ctime=$(get_ctime "${TIME2_TEST_SUBDIR}")
     mtime=$(get_mtime "${TIME2_TEST_SUBDIR}")
-    if [ "${subdir_atime}" -ne "${atime}" ] || [ "${subdir_ctime}" -ne "${ctime}" ] || [ "${subdir_mtime}" -ne "${mtime}" ]; then
+    if [ "${subdir_atime}" != "${atime}" ] || [ "${subdir_ctime}" != "${ctime}" ] || [ "${subdir_mtime}" != "${mtime}" ]; then
        echo "mv for sub-directory expected same ctime: $subdir_ctime == $ctime, mtime: $subdir_mtime == $mtime, atime: $subdir_atime == $atime"
        return 1
     fi
     atime=$(get_atime "${TIME2_TEST_FILE_INDIR}")
     ctime=$(get_ctime "${TIME2_TEST_FILE_INDIR}")
     mtime=$(get_mtime "${TIME2_TEST_FILE_INDIR}")
-    if [ "${subfile_atime}" -ne "${atime}" ] || [ "${subfile_ctime}" -ne "${ctime}" ] || [ "${subfile_mtime}" -ne "${mtime}" ]; then
+    if [ "${subfile_atime}" != "${atime}" ] || [ "${subfile_ctime}" != "${ctime}" ] || [ "${subfile_mtime}" != "${mtime}" ]; then
        echo "mv for a file in directory expected same ctime: $subfile_ctime == $ctime, mtime: $subfile_mtime == $mtime, atime: $subfile_atime == $atime"
        return 1
     fi

@@ -296,25 +296,31 @@ function run_suite {
 
 function get_ctime() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%c" "$1"
+        # ex: "1657504903.019784214"
+        stat -f "%Fc" "$1"
     else
-        stat -c "%Z" "$1"
+        # ex: "2022-07-24 12:45:18.621046168 +0000"
+        stat -c "%z" "$1"
     fi
 }
 
 function get_mtime() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%m" "$1"
+        # ex: "1657504903.019784214"
+        stat -f "%Fm" "$1"
     else
-        stat -c "%Y" "$1"
+        # ex: "2022-07-24 12:45:18.621046168 +0000"
+        stat -c "%y" "$1"
     fi
 }
 
 function get_atime() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%a" "$1"
+        # ex: "1657504903.019784214"
+        stat -f "%Fa" "$1"
     else
-        stat -c "%X" "$1"
+        # ex: "2022-07-24 12:45:18.621046168 +0000"
+        stat -c "%x" "$1"
     fi
 }
 
