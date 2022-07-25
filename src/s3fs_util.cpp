@@ -447,6 +447,129 @@ void print_launch_message(int argc, char** argv)
     S3FS_PRN_LAUNCH_INFO("%s", message.c_str());
 }
 
+//-------------------------------------------------------------------
+// Utility for nanosecond time(timespec)
+//-------------------------------------------------------------------
+const struct timespec S3FS_OMIT_TS = {0, UTIME_OMIT};
+
+//
+// result: -1  ts1 <  ts2
+//          0  ts1 == ts2
+//          1  ts1 >  ts2
+//
+int compare_timespec(const struct timespec& ts1, const struct timespec& ts2)
+{
+    if(ts1.tv_sec < ts2.tv_sec){
+        return -1;
+    }else if(ts1.tv_sec > ts2.tv_sec){
+        return 1;
+    }else{
+        if(ts1.tv_nsec < ts2.tv_nsec){
+            return -1;
+        }else if(ts1.tv_nsec > ts2.tv_nsec){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+//
+// result: -1  st <  ts
+//          0  st == ts
+//          1  st >  ts
+//
+int compare_timespec(const struct stat& st, stat_time_type type, const struct timespec& ts)
+{
+    struct timespec st_ts;
+    set_stat_to_timespec(st, type, st_ts);
+
+    return compare_timespec(st_ts, ts);
+}
+
+void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts)
+{
+    if(ST_TYPE_ATIME == type){
+        #if defined(__APPLE__)
+            st.st_atime             = ts.tv_sec;
+            st.st_atimespec.tv_nsec = ts.tv_nsec;
+        #else
+            st.st_atim.tv_sec       = ts.tv_sec;
+            st.st_atim.tv_nsec      = ts.tv_nsec;
+        #endif
+    }else if(ST_TYPE_MTIME == type){
+        #if defined(__APPLE__)
+            st.st_mtime             = ts.tv_sec;
+            st.st_mtimespec.tv_nsec = ts.tv_nsec;
+        #else
+            st.st_mtim.tv_sec       = ts.tv_sec;
+            st.st_mtim.tv_nsec      = ts.tv_nsec;
+        #endif
+    }else if(ST_TYPE_CTIME == type){
+        #if defined(__APPLE__)
+            st.st_ctime             = ts.tv_sec;
+            st.st_ctimespec.tv_nsec = ts.tv_nsec;
+        #else
+            st.st_ctim.tv_sec       = ts.tv_sec;
+            st.st_ctim.tv_nsec      = ts.tv_nsec;
+        #endif
+    }else{
+        S3FS_PRN_ERR("unknown type(%d), so skip to set value.", type);
+    }
+}
+
+struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts)
+{
+    if(ST_TYPE_ATIME == type){
+        #if defined(__APPLE__)
+           ts.tv_sec  = st.st_atime;
+           ts.tv_nsec = st.st_atimespec.tv_nsec;
+        #else
+           ts         = st.st_atim;
+        #endif
+    }else if(ST_TYPE_MTIME == type){
+        #if defined(__APPLE__)
+           ts.tv_sec  = st.st_mtime;
+           ts.tv_nsec = st.st_mtimespec.tv_nsec;
+        #else
+           ts         = st.st_mtim;
+        #endif
+    }else if(ST_TYPE_CTIME == type){
+        #if defined(__APPLE__)
+           ts.tv_sec  = st.st_ctime;
+           ts.tv_nsec = st.st_ctimespec.tv_nsec;
+        #else
+           ts         = st.st_ctim;
+        #endif
+    }else{
+        S3FS_PRN_ERR("unknown type(%d), so use 0 as timespec.", type);
+        ts.tv_sec     = 0;
+        ts.tv_nsec    = 0;
+    }
+    return &ts;
+}
+
+std::string str_stat_time(const struct stat& st, stat_time_type type)
+{
+    struct timespec ts;
+    return str(*set_stat_to_timespec(st, type, ts));
+}
+
+struct timespec* s3fs_realtime(struct timespec& ts)
+{
+    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_REALTIME), &ts)){
+        S3FS_PRN_WARN("failed to clock_gettime by errno(%d)", errno);
+        ts.tv_sec  = time(NULL);
+        ts.tv_nsec = 0;
+    }
+    return &ts;
+}
+
+std::string s3fs_str_realtime()
+{
+    struct timespec ts;
+    return str(*(s3fs_realtime(ts)));
+}
+
 /*
 * Local variables:
 * tab-width: 4

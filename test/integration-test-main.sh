@@ -824,16 +824,39 @@ function test_mtime_file {
 
     # create the test file again
     mk_test_file
-    sleep 1 # allow for some time to pass to compare the timestamps between test & alt
 
     #copy the test file with preserve mode
     cp -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
+
     local testmtime; testmtime=$(get_mtime "${TEST_TEXT_FILE}")
+    local testctime; testctime=$(get_ctime "${TEST_TEXT_FILE}")
+    local testatime; testatime=$(get_atime "${TEST_TEXT_FILE}")
     local altmtime;  altmtime=$(get_mtime "${ALT_TEST_TEXT_FILE}")
-    if [ "${testmtime}" != "${altmtime}" ]
-    then
-       echo "File times do not match:  $testmtime != $altmtime"
-       return 1
+    local altctime;  altctime=$(get_ctime "${ALT_TEST_TEXT_FILE}")
+    local altatime;  altatime=$(get_atime "${ALT_TEST_TEXT_FILE}")
+
+    if [ "${testmtime}" != "${altmtime}" ] || [ "${testctime}" = "${altctime}" ] || [ "${testatime}" != "${altatime}" ]; then
+       # [NOTE]{FIXME]
+       # On macos10, the mtime of the file copied by "cp -p" is
+       # truncated to usec from nsec, and it cannot be solved.
+       # This is because the timespec.tv_sec value of the mtime
+       # of the original file is truncated in usec units at calling
+       # s3fs_utimens.
+       # (ex. "1658768609.505917125" vs "1658768609.505917000")
+       # Now this workaround is not found, so for macos compare
+       # mtime with only usec.
+       #
+       if ! uname | grep -q Darwin; then
+           echo "cp(-p) expected times: mtime( ${testmtime} == ${altmtime} ), ctime( ${testctime} != ${altctime} ), atime( ${testatime} == ${altatime} )"
+           return 1
+       else
+           testmtime=$(echo "${testmtime}" | cut -c 1-17)
+           altmtime=$(echo "${altmtime}" | cut -c 1-17)
+           if [ "${testmtime}" != "${altmtime}" ] || [ "${testctime}" = "${altctime}" ] || [ "${testatime}" != "${altatime}" ]; then
+               echo "cp(-p) expected times: mtime( ${testmtime} == ${altmtime} ), ctime( ${testctime} != ${altctime} ), atime( ${testatime} == ${altatime} )"
+               return 1
+           fi
+       fi
     fi
 
     rm_test_file

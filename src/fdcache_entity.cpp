@@ -412,11 +412,17 @@ bool FdEntity::IsUploading(bool lock_already_held)
 // If the open is successful, returns pseudo fd.
 // If it fails, it returns an error code with a negative value.
 //
-int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, AutoLock::Type type)
+// ts_mctime argument is a variable for mtime/ctime.
+// If you want to disable this variable, specify UTIME_OMIT for
+// tv_nsec in timespec member(in this case tv_sec member is ignored).
+// This is similar to utimens operation.
+// You can use "S3FS_OMIT_TS" global variable for UTIME_OMIT.
+//
+int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type)
 {
     AutoLock auto_lock(&fdent_lock, type);
 
-    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][time=%lld][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), static_cast<long long>(time), flags);
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
 
     if (!auto_lock.isLockAcquired()) {
         // had to wait for fd lock, return
@@ -480,7 +486,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
             // using cache
             struct stat st;
             if(stat(cachepath.c_str(), &st) == 0){
-                if(st.st_mtime < time){
+                if(0 > compare_timespec(st, ST_TYPE_MTIME, ts_mctime)){
                     S3FS_PRN_DBG("cache file stale, removing: %s", cachepath.c_str());
                     if(unlink(cachepath.c_str()) != 0){
                         return (0 == errno ? -EIO : -errno);
@@ -547,13 +553,13 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
                 }else{
                     // [NOTE]
                     // The modify flag must not be set when opening a file,
-                    // if the time parameter(mtime) is specified(not -1) and
-                    // the cache file does not exist.
+                    // if the ts_mctime parameter(mtime) is specified(tv_nsec != UTIME_OMIT)
+                    // and the cache file does not exist.
                     // If mtime is specified for the file and the cache file
                     // mtime is older than it, the cache file is removed and
                     // the processing comes here.
                     //
-                    pagelist.Resize(size, false, (0 <= time ? false : true));
+                    pagelist.Resize(size, false, (UTIME_OMIT == ts_mctime.tv_nsec ? true : false));
 
                     is_truncate = true;
                 }
@@ -597,13 +603,14 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
             }else{
                 // [NOTE]
                 // The modify flag must not be set when opening a file,
-                // if the time parameter(mtime) is specified(not -1) and
-                // the cache file does not exist.
+                // if the ts_mctime parameter(mtime) is specified(tv_nsec != UTIME_OMIT)
+                // and the cache file does not exist.
                 // If mtime is specified for the file and the cache file
                 // mtime is older than it, the cache file is removed and
                 // the processing comes here.
                 //
-                pagelist.Resize(size, false, (0 <= time ? false : true));
+                pagelist.Resize(size, false, (UTIME_OMIT == ts_mctime.tv_nsec ? true : false));
+
                 is_truncate = true;
             }
         }
@@ -644,10 +651,9 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, time_t time, int flags, A
         }
 
         // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
-        if(-1 != time){
-            struct timespec ts = {time, 0};
-            if(0 != SetMCtime(ts, ts, /*lock_already_held=*/ true)){
-                S3FS_PRN_ERR("failed to set mtime. errno(%d)", errno);
+        if(UTIME_OMIT != ts_mctime.tv_nsec){
+            if(0 != SetMCtime(ts_mctime, ts_mctime, /*lock_already_held=*/ true)){
+                S3FS_PRN_ERR("failed to set mtime/ctime. errno(%d)", errno);
                 fclose(pfile);
                 pfile       = NULL;
                 physical_fd = -1;
@@ -787,7 +793,7 @@ int FdEntity::SetCtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%lld]", path.c_str(), physical_fd, static_cast<long long>(time.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(-1 == time.tv_sec){
         return 0;
@@ -800,7 +806,7 @@ int FdEntity::SetAtime(struct timespec time, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%lld]", path.c_str(), physical_fd, static_cast<long long>(time.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(-1 == time.tv_sec){
         return 0;
@@ -816,34 +822,35 @@ int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
 
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%lld][ctime=%lld]", path.c_str(), physical_fd, static_cast<long long>(mtime.tv_sec), static_cast<long long>(ctime.tv_sec));
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s][ctime=%s]", path.c_str(), physical_fd, str(mtime).c_str(), str(ctime).c_str());
 
     if(mtime.tv_sec < 0 || ctime.tv_sec < 0){
         return 0;
     }
 
     if(-1 != physical_fd){
-        struct timeval tv[2];
-        tv[0].tv_sec = mtime.tv_sec;
-        tv[0].tv_usec = mtime.tv_nsec / 1000;
-        tv[1].tv_sec = ctime.tv_sec;
-        tv[1].tv_usec = ctime.tv_nsec / 1000;
-        if(-1 == futimes(physical_fd, tv)){
-            S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
+        struct timespec ts[2];
+        ts[0].tv_sec  = mtime.tv_sec;
+        ts[0].tv_nsec = mtime.tv_nsec;
+        ts[1].tv_sec  = ctime.tv_sec;
+        ts[1].tv_nsec = ctime.tv_nsec;
+        if(-1 == futimens(physical_fd, ts)){
+            S3FS_PRN_ERR("futimens failed. errno(%d)", errno);
             return -errno;
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct timeval n_time[2];
-        n_time[0].tv_sec  = ctime.tv_sec;
-        n_time[0].tv_usec = ctime.tv_nsec / 1000;
-        n_time[1].tv_sec  = mtime.tv_sec;
-        n_time[1].tv_usec = mtime.tv_nsec / 1000;
-        if(-1 == utimes(cachepath.c_str(), n_time)){
-            S3FS_PRN_ERR("utime failed. errno(%d)", errno);
+        struct timespec ts[2];
+        ts[0].tv_sec  = ctime.tv_sec;
+        ts[0].tv_nsec = ctime.tv_nsec;
+        ts[1].tv_sec  = mtime.tv_sec;
+        ts[1].tv_nsec = mtime.tv_nsec;
+        if(-1 == utimensat(AT_FDCWD, cachepath.c_str(), ts, 0)){
+            S3FS_PRN_ERR("utimensat failed. errno(%d)", errno);
             return -errno;
         }
     }
+
     orgmeta["x-amz-meta-mtime"] = str(mtime);
     orgmeta["x-amz-meta-ctime"] = str(ctime);
 
@@ -857,7 +864,9 @@ bool FdEntity::UpdateCtime()
     if(!GetStats(st, /*lock_already_held=*/ true)){
         return false;
     }
-    orgmeta["x-amz-meta-ctime"] = str(st.st_ctime);
+
+    orgmeta["x-amz-meta-ctime"] = str_stat_time(st, ST_TYPE_CTIME);
+
     return true;
 }
 
@@ -868,7 +877,9 @@ bool FdEntity::UpdateAtime()
     if(!GetStats(st, /*lock_already_held=*/ true)){
         return false;
     }
-    orgmeta["x-amz-meta-atime"] = str(st.st_atime);
+
+    orgmeta["x-amz-meta-atime"] = str_stat_time(st, ST_TYPE_ATIME);
+
     return true;
 }
 
@@ -896,7 +907,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
         if(!GetStats(st, /*lock_already_held=*/ true)){
             return false;
         }
-        orgmeta["x-amz-meta-mtime"] = str(st.st_mtime);
+        orgmeta["x-amz-meta-mtime"] = str_stat_time(st, ST_TYPE_MTIME);
     }
     return true;
 }
@@ -904,6 +915,8 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 bool FdEntity::SetHoldingMtime(struct timespec mtime, bool lock_already_held)
 {
     AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
     if(mtime.tv_sec < 0){
         return false;
@@ -924,34 +937,33 @@ bool FdEntity::ClearHoldingMtime(bool lock_already_held)
         return false;
     }
     if(-1 != physical_fd){
-        struct timeval tv[2];
-        tv[0].tv_sec = holding_mtime.tv_sec;
-        tv[0].tv_usec = holding_mtime.tv_nsec / 1000;
-#if defined(__APPLE__)
-        tv[1].tv_sec = st.st_ctime;
-        tv[1].tv_usec = st.st_ctimespec.tv_nsec / 1000;
-#else
-        tv[1].tv_sec = st.st_ctim.tv_sec;
-        tv[1].tv_usec = st.st_ctim.tv_nsec / 1000;
-#endif
-        if(-1 == futimes(physical_fd, tv)){
-            S3FS_PRN_ERR("futimes failed. errno(%d)", errno);
+        struct timespec ts[2];
+        struct timespec ts_ctime;
+
+        ts[0].tv_sec  = holding_mtime.tv_sec;
+        ts[0].tv_nsec = holding_mtime.tv_nsec;
+
+        set_stat_to_timespec(st, ST_TYPE_CTIME, ts_ctime);
+        ts[1].tv_sec  = ts_ctime.tv_sec;
+        ts[1].tv_nsec = ts_ctime.tv_nsec;
+
+        if(-1 == futimens(physical_fd, ts)){
+            S3FS_PRN_ERR("futimens failed. errno(%d)", errno);
             return false;
         }
     }else if(!cachepath.empty()){
         // not opened file yet.
-        struct timeval n_time[2];
-#if defined(__APPLE__)
-        n_time[0].tv_sec = st.st_ctime;
-        n_time[0].tv_usec = st.st_ctimespec.tv_nsec / 1000;
-#else
-        n_time[0].tv_sec = st.st_ctime;
-        n_time[0].tv_usec = st.st_ctim.tv_nsec / 1000;
-#endif
-        n_time[1].tv_sec = holding_mtime.tv_sec;
-        n_time[1].tv_usec = holding_mtime.tv_nsec / 1000;
-        if(-1 == utimes(cachepath.c_str(), n_time)){
-            S3FS_PRN_ERR("utime failed. errno(%d)", errno);
+        struct timespec ts[2];
+        struct timespec ts_ctime;
+
+        set_stat_to_timespec(st, ST_TYPE_CTIME, ts_ctime);
+        ts[0].tv_sec  = ts_ctime.tv_sec;
+        ts[0].tv_nsec = ts_ctime.tv_nsec;
+
+        ts[1].tv_sec  = holding_mtime.tv_sec;
+        ts[1].tv_nsec = holding_mtime.tv_nsec;
+        if(-1 == utimensat(AT_FDCWD, cachepath.c_str(), ts, 0)){
+            S3FS_PRN_ERR("utimensat failed. errno(%d)", errno);
             return false;
         }
     }

@@ -56,6 +56,24 @@ bool compare_sysname(const char* target);
 
 void print_launch_message(int argc, char** argv);
 
+//
+// Utility for nanosecond time(timespec)
+//
+enum stat_time_type{
+    ST_TYPE_ATIME,
+    ST_TYPE_MTIME,
+    ST_TYPE_CTIME
+};
+extern const struct timespec S3FS_OMIT_TS;
+
+int compare_timespec(const struct timespec& ts1, const struct timespec& ts2);
+int compare_timespec(const struct stat& st, stat_time_type type, const struct timespec& ts);
+void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts);
+struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts);
+std::string str_stat_time(const struct stat& st, stat_time_type type);
+struct timespec* s3fs_realtime(struct timespec& ts);
+std::string s3fs_str_realtime();
+
 #endif // S3FS_S3FS_UTIL_H_
 
 /*
