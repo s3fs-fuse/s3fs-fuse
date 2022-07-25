@@ -51,7 +51,7 @@ class AutoFdEntity
       FdEntity* Attach(const char* path, int existfd);
       int GetPseudoFd() const { return pseudo_fd; }
 
-      FdEntity* Open(const char* path, headers_t* pmeta, off_t size, time_t time, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);
+      FdEntity* Open(const char* path, headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
       FdEntity* OpenExistFdEntity(const char* path, int flags = O_RDONLY);
 };
