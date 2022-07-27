@@ -336,7 +336,7 @@ class S3fsCurl
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
-        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
+        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true, AutoLock::Type locktype = AutoLock::NONE);
 
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
