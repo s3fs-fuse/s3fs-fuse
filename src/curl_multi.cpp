@@ -27,6 +27,7 @@
 #include "curl_multi.h"
 #include "curl.h"
 #include "autolock.h"
+#include "psemaphore.h"
 
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 

@@ -21,9 +21,7 @@
 #include <cstdlib>
 #include <limits>
 #include <stdint.h>
-#include <strings.h>
 #include <string>
-#include <map>
 
 #include "common.h"
 #include "s3fs.h"

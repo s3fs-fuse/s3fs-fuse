@@ -21,7 +21,7 @@
 #ifndef S3FS_SIGHANDLERS_H_
 #define S3FS_SIGHANDLERS_H_
 
-#include "psemaphore.h"
+class Semaphore;
 
 //----------------------------------------------
 // class S3fsSignals

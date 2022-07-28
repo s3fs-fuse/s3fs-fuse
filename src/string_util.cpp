@@ -25,7 +25,6 @@
 #include <climits>
 #include <iomanip>
 
-#include <stdexcept>
 #include <sstream>
 
 #include "common.h"

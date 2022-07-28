@@ -20,11 +20,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <errno.h>
 #include <unistd.h>
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <climits>
 
 #include "common.h"
 #include "s3fs.h"

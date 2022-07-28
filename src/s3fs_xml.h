@@ -22,13 +22,12 @@
 #define S3FS_S3FS_XML_H_
 
 #include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
-#include <libxml/tree.h>
 
 #include <string>
 
-#include "s3objlist.h"
 #include "mpu_util.h"
+
+class S3ObjList;
 
 //-------------------------------------------------------------------
 // Functions
