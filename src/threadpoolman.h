@@ -60,7 +60,7 @@ class ThreadPoolMan
     private:
         static ThreadPoolMan* singleton;
 
-        volatile bool         is_exit;
+        bool                  is_exit;
         Semaphore             thpoolman_sem;
 
         bool                  is_lock_init;
@@ -69,11 +69,17 @@ class ThreadPoolMan
 
         thpoolman_params_t    instruction_list;
 
+        bool                  is_exit_flag_init;
+        pthread_mutex_t       thread_exit_flag_lock;
+
     private:
         static void* Worker(void* arg);
 
         explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
+
+        bool IsExit();
+        void SetExitFlag(bool exit_flag);
 
         bool StopThreads();
         bool StartThreads(int count);
