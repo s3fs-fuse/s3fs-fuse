@@ -225,7 +225,7 @@ std::string mydirname(const std::string& path)
 {
     AutoLock auto_lock(pbasename_lock);
 
-    return std::string(dirname(const_cast<char*>(path.c_str())));
+    return mydirname(path.c_str());
 }
 
 // safe variant of dirname
@@ -235,14 +235,18 @@ std::string mydirname(const char* path)
     if(!path || '\0' == path[0]){
         return std::string("");
     }
-    return mydirname(std::string(path));
+
+    char *buf = strdup(path);
+    std::string result = dirname(buf);
+    free(buf);
+    return result;
 }
 
 std::string mybasename(const std::string& path)
 {
     AutoLock auto_lock(pbasename_lock);
 
-    return std::string(basename(const_cast<char*>(path.c_str())));
+    return mybasename(path.c_str());
 }
 
 // safe variant of basename
@@ -252,7 +256,11 @@ std::string mybasename(const char* path)
     if(!path || '\0' == path[0]){
         return std::string("");
     }
-    return mybasename(std::string(path));
+
+    char *buf = strdup(path);
+    std::string result = basename(buf);
+    free(buf);
+    return result;
 }
 
 // mkdir --parents
