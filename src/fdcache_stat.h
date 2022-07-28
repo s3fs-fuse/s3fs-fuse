@@ -21,6 +21,8 @@
 #ifndef S3FS_FDCACHE_STAT_H_
 #define S3FS_FDCACHE_STAT_H_
 
+#include <string>
+
 //------------------------------------------------
 // CacheFileStat
 //------------------------------------------------

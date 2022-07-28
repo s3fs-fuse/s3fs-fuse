@@ -20,13 +20,12 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <errno.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/types.h>
 #include <getopt.h>
-
-#include <fstream>
 
 #include "common.h"
 #include "s3fs.h"

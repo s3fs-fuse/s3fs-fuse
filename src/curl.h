@@ -21,17 +21,14 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
-#include <cassert>
 #include <curl/curl.h>
 #include <list>
 #include <map>
-#include <strings.h>
 #include <vector>
 
 #include "common.h"
 #include "curl_handlerpool.h"
 #include "bodydata.h"
-#include "psemaphore.h"
 #include "metaheader.h"
 #include "fdcache_page.h"
 #include "s3fs_cred.h"
@@ -80,6 +77,7 @@ typedef std::map<CURL*, progress_t> curlprogress_t;
 // class S3fsCurl
 //----------------------------------------------
 class S3fsCurl;
+class Semaphore;
 
 // Prototype function for lazy setup options for curl handle
 typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);

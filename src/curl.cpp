@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <errno.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>

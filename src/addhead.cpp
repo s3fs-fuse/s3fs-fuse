@@ -20,13 +20,16 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <sstream>
 #include <fstream>
+#include <strings.h>
+#include <vector>
 
-#include "common.h"
 #include "s3fs.h"
 #include "addhead.h"
 #include "curl_util.h"
+#include "s3fs_logger.h"
 
 //-------------------------------------------------------------------
 // Symbols

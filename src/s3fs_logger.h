@@ -23,6 +23,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <string>
 #include <syslog.h>
 #include <sys/time.h>
 

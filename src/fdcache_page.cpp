@@ -19,7 +19,6 @@
  */
 
 #include <cstdio>
-#include <cstdlib>
 #include <cerrno>
 #include <unistd.h>
 #include <sstream>
