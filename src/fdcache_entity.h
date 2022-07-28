@@ -58,7 +58,7 @@ class FdEntity
         headers_t       orgmeta;        // original headers at opening
         off_t           size_orgmeta;   // original file size in original headers
 
-        pthread_mutex_t fdent_data_lock;// protects the following members
+        mutable pthread_mutex_t fdent_data_lock;// protects the following members
         PageList        pagelist;
         std::string     cachepath;      // local cache file path
                                         // (if this is empty, does not load/save pagelist.)

@@ -770,7 +770,7 @@ bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 
 bool FdEntity::IsModified() const
 {
-    AutoLock auto_data_lock(const_cast<pthread_mutex_t *>(&fdent_data_lock));
+    AutoLock auto_data_lock(&fdent_data_lock);
     return pagelist.IsModified();
 }
 
