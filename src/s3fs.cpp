@@ -3759,6 +3759,7 @@ static bool set_mountpoint_attribute(struct stat& mpst)
 //
 static int set_bucket(const char* arg)
 {
+    // TODO: Mutates input.  Consider some other tokenization.
     char *bucket_name = const_cast<char*>(arg);
     if(strstr(arg, ":")){
         if(strstr(arg, "://")){
