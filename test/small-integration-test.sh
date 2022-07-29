@@ -42,7 +42,7 @@ export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
 if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
-        "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr"
+        "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat"
         enable_content_md5
         disable_noobj_cache
         "max_stat_cache_size=100"
