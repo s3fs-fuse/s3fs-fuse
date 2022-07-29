@@ -21,13 +21,14 @@
 #include <errno.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <fstream>
 #include <sstream>
 
 #include "common.h"
-#include "s3fs.h"
 #include "s3fs_cred.h"
+#include "s3fs_logger.h"
 #include "curl.h"
 #include "string_util.h"
 #include "metaheader.h"

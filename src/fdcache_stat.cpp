@@ -21,9 +21,9 @@
 #include <cerrno>
 #include <unistd.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "fdcache_stat.h"
 #include "fdcache.h"
 #include "s3fs_util.h"

@@ -21,8 +21,12 @@
 #ifndef S3FS_FDCACHE_AUTO_H_
 #define S3FS_FDCACHE_AUTO_H_
 
+#include <fcntl.h>
+
 #include "autolock.h"
-#include "fdcache_entity.h"
+#include "metaheader.h"
+
+class FdEntity;
 
 //------------------------------------------------
 // class AutoFdEntity

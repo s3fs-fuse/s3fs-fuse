@@ -23,13 +23,12 @@
 #include <cerrno>
 #include <climits>
 #include <unistd.h>
-#include <sys/types.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
 
-#include "common.h"
-#include "s3fs.h"
 #include "fdcache.h"
-#include "fdcache_pseudofd.h"
+#include "fdcache_stat.h"
 #include "s3fs_util.h"
 #include "s3fs_logger.h"
 #include "s3fs_cred.h"

@@ -18,14 +18,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cerrno>
-#include <cstdio>
-#include <cstdlib>
-
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <vector>
 
-#include "common.h"
 #include "s3fs.h"
+#include "s3fs_logger.h"
 #include "s3fs_util.h"
 #include "cache.h"
 #include "autolock.h"
@@ -571,7 +570,7 @@ bool StatCache::TruncateCache()
             erase_iters.push_back(iter);
         }
         if(erase_count < erase_iters.size()){
-            sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
+            std::sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
             while(erase_count < erase_iters.size()){
                 erase_iters.pop_back();
             }

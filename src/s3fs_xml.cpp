@@ -24,6 +24,7 @@
 
 #include "common.h"
 #include "s3fs.h"
+#include "s3fs_logger.h"
 #include "s3fs_xml.h"
 #include "s3fs_util.h"
 #include "s3objlist.h"

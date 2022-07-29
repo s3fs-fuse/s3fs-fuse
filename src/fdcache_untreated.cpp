@@ -20,8 +20,7 @@
 
 #include <cstdlib>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "fdcache_untreated.h"
 #include "autolock.h"
 

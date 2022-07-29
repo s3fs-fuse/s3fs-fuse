@@ -23,12 +23,7 @@
 #include <cerrno>
 #include <pthread.h>
 #include <unistd.h>
-#include <syslog.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <cstring>
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
@@ -36,11 +31,9 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <string>
-#include <map>
 
-#include "common.h"
-#include "s3fs.h"
 #include "s3fs_auth.h"
+#include "s3fs_logger.h"
 
 //-------------------------------------------------------------------
 // Utility Function for version

@@ -23,8 +23,7 @@
 #include <stdint.h>
 #include <string>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "string_util.h"
 #include "test_util.h"
 

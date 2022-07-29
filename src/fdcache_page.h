@@ -24,8 +24,6 @@
 #include <list>
 #include <sys/types.h>
 
-#include "fdcache_stat.h"
-
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
@@ -68,6 +66,7 @@ typedef std::list<struct fdpage> fdpage_list_t;
 //------------------------------------------------
 // Class PageList
 //------------------------------------------------
+class CacheFileStat;
 class FdEntity;
 
 // cppcheck-suppress copyCtorAndEqOperator

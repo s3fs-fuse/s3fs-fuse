@@ -23,16 +23,19 @@
 #include <cerrno>
 #include <unistd.h>
 #include <limits.h>
-#include <sys/time.h>
+#include <sys/stat.h>
 
 #include "common.h"
-#include "s3fs.h"
 #include "fdcache_entity.h"
+#include "fdcache_stat.h"
+#include "fdcache_untreated.h"
 #include "fdcache.h"
 #include "string_util.h"
+#include "s3fs_logger.h"
 #include "s3fs_util.h"
 #include "autolock.h"
 #include "curl.h"
+#include "s3fs_cred.h"
 
 //------------------------------------------------
 // Symbols

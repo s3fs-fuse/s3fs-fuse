@@ -23,7 +23,7 @@
 #include <curl/curl.h>
 
 #include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "curl_util.h"
 #include "string_util.h"
 #include "s3fs_auth.h"

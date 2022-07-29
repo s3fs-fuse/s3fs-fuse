@@ -21,6 +21,8 @@
 #ifndef S3FS_STRING_UTIL_H_
 #define S3FS_STRING_UTIL_H_
 
+#include <cstring>
+
 //
 // A collection of string utilities for manipulating URLs and HTTP responses.
 //

@@ -21,10 +21,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "fdcache_fdinfo.h"
 #include "fdcache_pseudofd.h"
 #include "fdcache_entity.h"

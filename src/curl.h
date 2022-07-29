@@ -26,12 +26,10 @@
 #include <map>
 #include <vector>
 
-#include "common.h"
-#include "curl_handlerpool.h"
+#include "autolock.h"
 #include "bodydata.h"
 #include "metaheader.h"
 #include "fdcache_page.h"
-#include "s3fs_cred.h"
 
 //----------------------------------------------
 // Avoid dependency on libcurl version
@@ -76,6 +74,8 @@ typedef std::map<CURL*, progress_t> curlprogress_t;
 //----------------------------------------------
 // class S3fsCurl
 //----------------------------------------------
+class CurlHandlerPool;
+class S3fsCred;
 class S3fsCurl;
 class Semaphore;
 

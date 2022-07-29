@@ -21,6 +21,8 @@
 #ifndef S3FS_FDCACHE_ENTITY_H_
 #define S3FS_FDCACHE_ENTITY_H_
 
+#include <fcntl.h>
+
 #include "autolock.h"
 #include "fdcache_page.h"
 #include "fdcache_fdinfo.h"

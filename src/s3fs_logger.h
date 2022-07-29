@@ -27,6 +27,8 @@
 #include <syslog.h>
 #include <sys/time.h>
 
+#include "common.h"
+
 #ifdef CLOCK_MONOTONIC_COARSE
 #define S3FS_CLOCK_MONOTONIC    CLOCK_MONOTONIC_COARSE
 #else
