@@ -99,23 +99,17 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
 //-------------------------------------------------------------------
 S3fsCred::S3fsCred() :
     is_lock_init(false),
-    passwd_file(""),
     aws_profile(DEFAULT_AWS_PROFILE_NAME),
     load_iamrole(false),
-    AWSAccessKeyId(""),
-    AWSSecretAccessKey(""),
-    AWSAccessToken(""),
     AWSAccessTokenExpire(0),
     is_ecs(false),
     is_use_session_token(false),
     is_ibm_iam_auth(false),
     IAM_cred_url("http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
     IAM_api_version(2),
-    IAMv2_api_token(""),
     IAM_field_count(4),
     IAM_token_field("Token"),
-    IAM_expiry_field("Expiration"),
-    IAM_role("")
+    IAM_expiry_field("Expiration")
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);

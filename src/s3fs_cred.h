@@ -119,7 +119,7 @@ class S3fsCred
         bool ParseS3fsPasswdFile(bucketkvmap_t& resmap);
         bool ReadS3fsPasswdFile(AutoLock::Type type);
 
-        int CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& access_key_id, std::string& secret_access_key);
+        static int CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& access_key_id, std::string& secret_access_key);
         bool ReadAwsCredentialFile(const std::string &filename, AutoLock::Type type);
 
         bool InitialS3fsCredentials();
@@ -130,7 +130,7 @@ class S3fsCred
         bool SetIAMCredentials(const char* response, AutoLock::Type type);
         bool SetIAMRoleFromMetaData(const char* response, AutoLock::Type type);
 
-        bool CheckForbiddenBucketParams();
+        static bool CheckForbiddenBucketParams();
 
     public:
         static bool SetBucket(const char* bucket);

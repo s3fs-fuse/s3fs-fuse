@@ -216,7 +216,8 @@ bool ThreadPoolMan::StopThreads()
     thread_list.clear();
 
     // reset semaphore(to zero)
-    while(thpoolman_sem.try_wait());
+    while(thpoolman_sem.try_wait()){
+    }
 
     // clear instructions
     for(thpoolman_params_t::const_iterator iter = instruction_list.begin(); iter != instruction_list.end(); ++iter){
