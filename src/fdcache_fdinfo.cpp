@@ -48,47 +48,38 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 {
     pseudofdinfo_thparam*   pthparam = static_cast<pseudofdinfo_thparam*>(arg);
     if(!pthparam || !(pthparam->ppseudofdinfo)){
+        if(pthparam){
+            delete pthparam;
+        }
         return (void*)(intptr_t)(-EIO);
     }
     S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
-    if(0 != pthparam->ppseudofdinfo->last_result){
-        S3FS_PRN_DBG("Already occurred error, thus this thread worker is exiting.");
-
+    int       result;
+    S3fsCurl* s3fscurl;
+    {
         AutoLock auto_lock(&(pthparam->ppseudofdinfo->upload_list_lock));
 
-        if(0 < pthparam->ppseudofdinfo->instruct_count){
-            --(pthparam->ppseudofdinfo->instruct_count);
-        }else{
-            S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
-            return (void*)(intptr_t)(-EIO);
-        }
-        ++(pthparam->ppseudofdinfo->completed_count);
+        if(0 != (result = pthparam->ppseudofdinfo->last_result)){
+            S3FS_PRN_DBG("Already occurred error, thus this thread worker is exiting.");
 
-        return (void*)(intptr_t)(pthparam->ppseudofdinfo->last_result);
+            if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::ALREADY_LOCKED)){    // result will be overwritten with the same value.
+                result = -EIO;
+            }
+            delete pthparam;
+            return (void*)(intptr_t)(result);
+        }
     }
 
-
     // setup and make curl object
-    int       result = 0;
-    S3fsCurl* s3fscurl;
     if(NULL == (s3fscurl = S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result))){
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
-        AutoLock auto_lock(&(pthparam->ppseudofdinfo->upload_list_lock));
-
-        if(0 < pthparam->ppseudofdinfo->instruct_count){
-            --(pthparam->ppseudofdinfo->instruct_count);
-        }else{
-            S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
-            return (void*)(intptr_t)(-EIO);
+        if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
+            result = -EIO;
         }
-        ++(pthparam->ppseudofdinfo->completed_count);
-
-        if(0 != result){
-            pthparam->ppseudofdinfo->last_result = result;
-        }
+        delete pthparam;
         return (void*)(intptr_t)(result);
     }
 
@@ -106,18 +97,11 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
     delete s3fscurl;
 
     // set result
-    {
-        AutoLock auto_lock(&(pthparam->ppseudofdinfo->upload_list_lock));
-
-        if(0 < pthparam->ppseudofdinfo->instruct_count){
-            --(pthparam->ppseudofdinfo->instruct_count);
-        }
-        ++(pthparam->ppseudofdinfo->completed_count);
-
-        if(0 != result){
-            pthparam->ppseudofdinfo->last_result = result;
-        }
+    if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
+        S3FS_PRN_WARN("This thread worker is about to end, so it doesn't return an EIO here and runs to the end.");
     }
+    delete pthparam;
+
     return (void*)(intptr_t)(result);
 }
 
@@ -273,6 +257,24 @@ bool PseudoFdInfo::InitialUploadInfo(const std::string& id, AutoLock::Type type)
     return true;
 }
 
+bool PseudoFdInfo::CompleteInstruction(int result, AutoLock::Type type)
+{
+    AutoLock auto_lock(&upload_list_lock, type);
+
+    if(0 != result){
+        last_result = result;
+    }
+
+    if(0 >= instruct_count){
+        S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
+        return false;
+    }
+    --instruct_count;
+    ++completed_count;
+
+    return true;
+}
+
 bool PseudoFdInfo::GetUploadId(std::string& id) const
 {
     if(!IsUploading()){
@@ -385,9 +387,11 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
 // This method only launches the upload thread.
 // Check the maximum number of threads before calling.
 //
-bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy)
+bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, AutoLock::Type type)
 {
     //S3FS_PRN_DBG("[path=%s][mplist(%zu)]", SAFESTRPTR(path), mplist.size());
+
+    AutoLock auto_lock(&upload_list_lock, type);
 
     if(mplist.empty()){
         // nothing to do
@@ -441,11 +445,11 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
 
     result = 0;
 
-    if(!OpenUploadFd(AutoLock::ALREADY_LOCKED)){
+    if(!OpenUploadFd(AutoLock::NONE)){
         return false;
     }
 
-    if(!ParallelMultipartUpload(path, upload_list, false) || !ParallelMultipartUpload(path, copy_list, true)){
+    if(!ParallelMultipartUpload(path, upload_list, false, AutoLock::NONE) || !ParallelMultipartUpload(path, copy_list, true, AutoLock::NONE)){
         S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), upload_list.size(), copy_list.size());
         return false;
     }
@@ -568,7 +572,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     //
     // Upload Multipart parts
     //
-    if(!ParallelMultipartUpload(path, to_upload_list, false)){
+    if(!ParallelMultipartUpload(path, to_upload_list, false, AutoLock::ALREADY_LOCKED)){
         S3FS_PRN_ERR("Failed to upload multipart parts.");
         return -EIO;
     }
@@ -614,7 +618,13 @@ int PseudoFdInfo::WaitAllThreadsExit()
             }
         }
     }
-    return last_result;
+
+    int result;
+    {
+        AutoLock auto_lock(&upload_list_lock);
+        result = last_result;
+    }
+    return result;
 }
 
 //
