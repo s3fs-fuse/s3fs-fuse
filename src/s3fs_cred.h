@@ -53,7 +53,7 @@ class S3fsCred
 
         static std::string  bucket_name;
 
-        pthread_mutex_t     token_lock;
+        mutable pthread_mutex_t token_lock;
         bool                is_lock_init;
 
         std::string         passwd_file;
@@ -104,7 +104,7 @@ class S3fsCred
 
         bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey, AutoLock::Type type);
         bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken, AutoLock::Type type);
-        bool IsSetAccessKeys(AutoLock::Type type);
+        bool IsSetAccessKeys(AutoLock::Type type) const;
 
         bool SetIsECS(bool flag);
         bool SetIsUseSessionToken(bool flag);
@@ -112,20 +112,20 @@ class S3fsCred
         bool SetIsIBMIAMAuth(bool flag);
 
         int SetIMDSVersion(int version, AutoLock::Type type);
-        int GetIMDSVersion(AutoLock::Type type);
+        int GetIMDSVersion(AutoLock::Type type) const;
 
         bool SetIAMv2APIToken(const std::string& token, AutoLock::Type type);
-        std::string GetIAMv2APIToken(AutoLock::Type type);
+        std::string GetIAMv2APIToken(AutoLock::Type type) const;
 
         bool SetIAMRole(const char* role, AutoLock::Type type);
-        std::string GetIAMRole(AutoLock::Type type);
-        bool IsSetIAMRole(AutoLock::Type type);
+        std::string GetIAMRole(AutoLock::Type type) const;
+        bool IsSetIAMRole(AutoLock::Type type) const;
         size_t SetIAMFieldCount(size_t field_count);
         std::string SetIAMCredentialsURL(const char* url);
         std::string SetIAMTokenField(const char* token_field);
         std::string SetIAMExpiryField(const char* expiry_field);
 
-        bool IsReadableS3fsPasswdFile();
+        bool IsReadableS3fsPasswdFile() const;
         bool CheckS3fsPasswdFilePerms();
         bool ParseS3fsPasswdFile(bucketkvmap_t& resmap);
         bool ReadS3fsPasswdFile(AutoLock::Type type);

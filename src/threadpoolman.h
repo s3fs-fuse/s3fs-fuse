@@ -70,7 +70,7 @@ class ThreadPoolMan
         thpoolman_params_t    instruction_list;
 
         bool                  is_exit_flag_init;
-        pthread_mutex_t       thread_exit_flag_lock;
+        mutable pthread_mutex_t thread_exit_flag_lock;
 
     private:
         static void* Worker(void* arg);
@@ -78,7 +78,7 @@ class ThreadPoolMan
         explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
 
-        bool IsExit();
+        bool IsExit() const;
         void SetExitFlag(bool exit_flag);
 
         bool StopThreads();

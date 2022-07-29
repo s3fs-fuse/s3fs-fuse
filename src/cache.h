@@ -163,7 +163,7 @@ class StatCache
         bool AddNoObjectCache(const std::string& key);
 
         // Add stat cache
-        bool AddStat(const std::string& key, headers_t& meta, bool forcedir = false, bool no_truncate = false);
+        bool AddStat(const std::string& key, const headers_t& meta, bool forcedir = false, bool no_truncate = false);
 
         // Update meta stats
         bool UpdateMetaStats(const std::string& key, headers_t& meta);

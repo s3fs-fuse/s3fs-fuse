@@ -334,7 +334,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     return false;
 }
 
-bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, bool no_truncate)
+bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forcedir, bool no_truncate)
 {
     if(!no_truncate && CacheSize< 1){
         return true;
@@ -372,7 +372,7 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
     ent->meta.clear();
     SetStatCacheTime(ent->cache_date);    // Set time.
     //copy only some keys
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(headers_t::const_iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string tag   = lower(iter->first);
         std::string value = iter->second;
         if(tag == "content-type"){

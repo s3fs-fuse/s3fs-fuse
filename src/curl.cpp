@@ -1988,7 +1988,7 @@ bool S3fsCurl::SetUseAhbe(bool ahbe)
     return old;
 }
 
-bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle)
+bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle) const
 {
     responseCode = -1;
 

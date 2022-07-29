@@ -339,7 +339,7 @@ class S3fsCurl
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
         bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
-        bool GetResponseCode(long& responseCode, bool from_curl_handle = true);
+        bool GetResponseCode(long& responseCode, bool from_curl_handle = true) const;
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
@@ -371,9 +371,9 @@ class S3fsCurl
         std::string GetSpecialSavedPath() const { return saved_path; }
         std::string GetUrl() const { return url; }
         std::string GetOp() const { return op; }
-        headers_t* GetResponseHeaders() { return &responseHeaders; }
-        BodyData* GetBodyData() { return &bodydata; }
-        BodyData* GetHeadData() { return &headdata; }
+        const headers_t* GetResponseHeaders() const { return &responseHeaders; }
+        const BodyData* GetBodyData() const { return &bodydata; }
+        const BodyData* GetHeadData() const { return &headdata; }
         CURLcode GetCurlCode() const { return curlCode; }
         long GetLastResponseCode() const { return LastResponseCode; }
         bool SetUseAhbe(bool ahbe);

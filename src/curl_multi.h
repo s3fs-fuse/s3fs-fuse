@@ -62,7 +62,7 @@ class S3fsMultiCurl
         explicit S3fsMultiCurl(int maxParallelism);
         ~S3fsMultiCurl();
 
-        int GetMaxParallelism() { return maxParallelism; }
+        int GetMaxParallelism() const { return maxParallelism; }
 
         S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
         S3fsMultiNotFoundCallback SetNotFoundCallback(S3fsMultiNotFoundCallback function);

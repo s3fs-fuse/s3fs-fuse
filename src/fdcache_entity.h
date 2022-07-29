@@ -49,7 +49,7 @@ class FdEntity
         static bool     mixmultipart;   // whether multipart uploading can use copy api.
         static bool     streamupload;   // whether stream uploading.
 
-        pthread_mutex_t fdent_lock;
+        mutable pthread_mutex_t fdent_lock;
         bool            is_lock_init;
         std::string     path;           // object path
         int             physical_fd;    // physical file(cache or temporary file) descriptor
@@ -73,7 +73,7 @@ class FdEntity
         static ino_t GetInode(int fd);
 
         void Clear();
-        ino_t GetInode();
+        ino_t GetInode() const;
         int OpenMirrorFile();
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0);  // size=0 means loading to end
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type locktype = AutoLock::NONE);
@@ -105,12 +105,12 @@ class FdEntity
 
         void Close(int fd);
         bool IsOpen() const { return (-1 != physical_fd); }
-        bool FindPseudoFd(int fd, AutoLock::Type locktype = AutoLock::NONE);
+        bool FindPseudoFd(int fd, AutoLock::Type locktype = AutoLock::NONE) const;
         int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type);
         bool LoadAll(int fd, headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
         int Dup(int fd, AutoLock::Type locktype = AutoLock::NONE);
         int OpenPseudoFd(int flags = O_RDONLY, AutoLock::Type locktype = AutoLock::NONE);
-        int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE);
+        int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE) const;
         const char* GetPath() const { return path.c_str(); }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const { return physical_fd; }
@@ -118,7 +118,7 @@ class FdEntity
         bool MergeOrgMeta(headers_t& updatemeta);
         int UploadPending(int fd, AutoLock::Type type);
 
-        bool GetStats(struct stat& st, AutoLock::Type locktype = AutoLock::NONE);
+        bool GetStats(struct stat& st, AutoLock::Type locktype = AutoLock::NONE) const;
         int SetCtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
         int SetAtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
         int SetMCtime(struct timespec mtime, struct timespec ctime, AutoLock::Type locktype = AutoLock::NONE);
@@ -128,8 +128,8 @@ class FdEntity
         bool UpdateMCtime();
         bool SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype = AutoLock::NONE);
         bool ClearHoldingMtime(AutoLock::Type locktype = AutoLock::NONE);
-        bool GetSize(off_t& size);
-        bool GetXattr(std::string& xattr);
+        bool GetSize(off_t& size) const;
+        bool GetXattr(std::string& xattr) const;
         bool SetXattr(const std::string& xattr);
         bool SetMode(mode_t mode);
         bool SetUId(uid_t uid);
@@ -150,7 +150,7 @@ class FdEntity
 
         void MarkDirtyNewFile();
 
-        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size);
+        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const;
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
 };
 
