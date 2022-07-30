@@ -3759,21 +3759,23 @@ static bool set_mountpoint_attribute(struct stat& mpst)
 //
 static int set_bucket(const char* arg)
 {
-    // TODO: Mutates input.  Consider some other tokenization.
-    char *bucket_name = const_cast<char*>(arg);
+    char* bucket_name = strdup(arg);
     if(strstr(arg, ":")){
         if(strstr(arg, "://")){
             S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            free(bucket_name);
             return -1;
         }
         if(!S3fsCred::SetBucket(strtok(bucket_name, ":"))){
             S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            free(bucket_name);
             return -1;
         }
         char* pmount_prefix = strtok(NULL, "");
         if(pmount_prefix){
             if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
                 S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
+                free(bucket_name);
                 return -1;
             }
             mount_prefix = pmount_prefix;
@@ -3785,9 +3787,11 @@ static int set_bucket(const char* arg)
     }else{
         if(!S3fsCred::SetBucket(arg)){
             S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            free(bucket_name);
             return -1;
         }
     }
+    free(bucket_name);
     return 0;
 }
 
