@@ -21,9 +21,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
+#include <stdint.h>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "threadpoolman.h"
 #include "autolock.h"
 

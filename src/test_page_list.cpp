@@ -18,7 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "fdcache.h"
+#include "fdcache_page.h"
+#include "fdcache_stat.h"
 #include "test_util.h"
 
 bool CacheFileStat::Open() { return false; }

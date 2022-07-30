@@ -21,9 +21,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <vector>
 
-#include "common.h"
 #include "s3fs.h"
+#include "s3fs_logger.h"
 #include "curl_multi.h"
 #include "curl.h"
 #include "autolock.h"

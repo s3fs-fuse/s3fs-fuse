@@ -22,8 +22,7 @@
 #include <csignal>
 #include <pthread.h>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "sighandlers.h"
 #include "fdcache.h"
 

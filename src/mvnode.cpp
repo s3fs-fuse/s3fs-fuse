@@ -20,8 +20,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
-#include "common.h"
 #include "s3fs.h"
 #include "mvnode.h"
 

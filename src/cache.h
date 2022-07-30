@@ -21,6 +21,8 @@
 #ifndef S3FS_CACHE_H_
 #define S3FS_CACHE_H_
 
+#include <cstring>
+
 #include "metaheader.h"
 
 //-------------------------------------------------------------------

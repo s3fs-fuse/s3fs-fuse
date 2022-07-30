@@ -26,14 +26,13 @@
 #include <pwd.h>
 #include <libgen.h>
 #include <dirent.h>
-#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
 
 #include <string>
 #include <sstream>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs_help.h"

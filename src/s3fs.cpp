@@ -23,15 +23,16 @@
 #include <errno.h>
 #include <unistd.h>
 #include <dirent.h>
-#include <pwd.h>
 #include <sys/types.h>
 #include <getopt.h>
 
 #include "common.h"
 #include "s3fs.h"
+#include "s3fs_logger.h"
 #include "metaheader.h"
 #include "fdcache.h"
 #include "fdcache_auto.h"
+#include "fdcache_stat.h"
 #include "curl.h"
 #include "curl_multi.h"
 #include "s3objlist.h"
@@ -40,9 +41,9 @@
 #include "addhead.h"
 #include "sighandlers.h"
 #include "s3fs_xml.h"
-#include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs_auth.h"
+#include "s3fs_cred.h"
 #include "s3fs_help.h"
 #include "s3fs_util.h"
 #include "mpu_util.h"

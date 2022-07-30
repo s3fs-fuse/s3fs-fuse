@@ -20,8 +20,7 @@
 
 #include <cstdio>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "curl_handlerpool.h"
 #include "autolock.h"
 

@@ -21,12 +21,13 @@
 #ifndef S3FS_FDCACHE_FDINFO_H_
 #define S3FS_FDCACHE_FDINFO_H_
 
-#include "fdcache_untreated.h"
 #include "psemaphore.h"
 #include "metaheader.h"
 #include "autolock.h"
+#include "types.h"
 
 class FdEntity;
+class UntreatedParts;
 
 //------------------------------------------------
 // Structure of parameters to pass to thread

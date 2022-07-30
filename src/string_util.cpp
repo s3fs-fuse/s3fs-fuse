@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
@@ -27,8 +26,7 @@
 
 #include <sstream>
 
-#include "common.h"
-#include "s3fs.h"
+#include "s3fs_logger.h"
 #include "string_util.h"
 
 //-------------------------------------------------------------------

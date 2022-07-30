@@ -22,6 +22,7 @@
 #define S3FS_METAHEADER_H_
 
 #include <string>
+#include <strings.h>
 #include <map>
 
 //-------------------------------------------------------------------

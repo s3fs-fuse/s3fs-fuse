@@ -19,10 +19,10 @@
  */
 
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #include "common.h"
-#include "s3fs.h"
 #include "metaheader.h"
 #include "string_util.h"
 
