@@ -52,7 +52,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
         if(pthparam){
             delete pthparam;
         }
-        return (void*)(intptr_t)(-EIO);
+        return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
@@ -68,7 +68,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
                 result = -EIO;
             }
             delete pthparam;
-            return (void*)(intptr_t)(result);
+            return reinterpret_cast<void*>(result);
         }
     }
 
@@ -81,7 +81,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
             result = -EIO;
         }
         delete pthparam;
-        return (void*)(intptr_t)(result);
+        return reinterpret_cast<void*>(result);
     }
 
     // Send request and get result
@@ -103,7 +103,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
     }
     delete pthparam;
 
-    return (void*)(intptr_t)(result);
+    return reinterpret_cast<void*>(result);
 }
 
 //------------------------------------------------

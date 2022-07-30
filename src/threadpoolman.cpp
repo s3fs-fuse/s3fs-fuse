@@ -71,7 +71,7 @@ void* ThreadPoolMan::Worker(void* arg)
 
     if(!psingleton){
         S3FS_PRN_ERR("The parameter for worker thread is invalid.");
-        return (void*)(intptr_t)(-EIO);
+        return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Start worker thread in ThreadPoolMan.");
 
@@ -102,9 +102,8 @@ void* ThreadPoolMan::Worker(void* arg)
 
         if(pparam){
             void* retval     = pparam->pfunc(pparam->args);
-            int   int_retval = (int)(intptr_t)(retval);
-            if(0 != int_retval){
-                S3FS_PRN_WARN("The instruction function returned with somthign error code(%d).", int_retval);
+            if(NULL != retval){
+                S3FS_PRN_WARN("The instruction function returned with somthign error code(%ld).", reinterpret_cast<long>(retval));
             }
             if(pparam->psem){
                 pparam->psem->post();
@@ -113,7 +112,7 @@ void* ThreadPoolMan::Worker(void* arg)
         }
     }
 
-    return (void*)(intptr_t)(0);
+    return NULL;
 }
 
 //------------------------------------------------
@@ -210,7 +209,7 @@ bool ThreadPoolMan::StopThreads()
         if(result){
             S3FS_PRN_ERR("failed pthread_join - result(%d)", result);
         }else{
-            S3FS_PRN_DBG("succeed pthread_join - return code(%d)", (int)(intptr_t)(retval));
+            S3FS_PRN_DBG("succeed pthread_join - return code(%ld)", reinterpret_cast<long>(retval));
         }
     }
     thread_list.clear();
