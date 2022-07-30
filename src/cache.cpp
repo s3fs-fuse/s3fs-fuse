@@ -234,7 +234,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
             if(ent->noobjcache){
                 if(!IsCacheNoObject){
                     // need to delete this cache.
-                    DelStat(strpath, /*lock_already_held=*/ true);
+                    DelStat(strpath, AutoLock::ALREADY_LOCKED);
                 }else{
                     // noobjcache = true means no object.
                 }
@@ -288,7 +288,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
     }
 
     if(is_delete_cache){
-        DelStat(strpath, /*lock_already_held=*/ true);
+        DelStat(strpath, AutoLock::ALREADY_LOCKED);
     }
     return false;
 }
@@ -329,7 +329,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     }
 
     if(is_delete_cache){
-        DelStat(strpath, /*lock_already_held=*/ true);
+        DelStat(strpath, AutoLock::ALREADY_LOCKED);
     }
     return false;
 }
@@ -401,7 +401,7 @@ bool StatCache::AddStat(const std::string& key, headers_t& meta, bool forcedir, 
     if(!S_ISLNK(ent->stbuf.st_mode)){
         if(symlink_cache.end() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
-            DelSymlink(key.c_str(), true);
+            DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
         }
     }
     return true;
@@ -504,7 +504,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     // check symbolic link cache
     if(symlink_cache.end() != symlink_cache.find(key)){
         // if symbolic link cache has key, thus remove it.
-        DelSymlink(key.c_str(), true);
+        DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
     }
     return true;
 }
@@ -588,14 +588,14 @@ bool StatCache::TruncateCache()
     return true;
 }
 
-bool StatCache::DelStat(const char* key, bool lock_already_held)
+bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
 {
     if(!key){
         return false;
     }
     S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key);
 
-    AutoLock lock(&StatCache::stat_cache_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     stat_cache_t::iterator iter;
     if(stat_cache.end() != (iter = stat_cache.find(std::string(key)))){
@@ -650,7 +650,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     }
 
     if(is_delete_cache){
-        DelSymlink(strpath.c_str(), /*lock_already_held=*/ true);
+        DelSymlink(strpath.c_str(), AutoLock::ALREADY_LOCKED);
     }
     return false;
 }
@@ -746,14 +746,14 @@ bool StatCache::TruncateSymlink()
     return true;
 }
 
-bool StatCache::DelSymlink(const char* key, bool lock_already_held)
+bool StatCache::DelSymlink(const char* key, AutoLock::Type locktype)
 {
     if(!key){
         return false;
     }
     S3FS_PRN_INFO3("delete symbolic link cache entry[path=%s]", key);
 
-    AutoLock lock(&StatCache::stat_cache_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     symlink_cache_t::iterator iter;
     if(symlink_cache.end() != (iter = symlink_cache.find(std::string(key)))){

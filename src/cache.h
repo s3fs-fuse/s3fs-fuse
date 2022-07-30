@@ -23,6 +23,7 @@
 
 #include <cstring>
 
+#include "autolock.h"
 #include "metaheader.h"
 
 //-------------------------------------------------------------------
@@ -171,16 +172,16 @@ class StatCache
         void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
 
         // Delete stat cache
-        bool DelStat(const char* key, bool lock_already_held = false);
-        bool DelStat(const std::string& key, bool lock_already_held = false)
+        bool DelStat(const char* key, AutoLock::Type locktype = AutoLock::NONE);
+        bool DelStat(const std::string& key, AutoLock::Type locktype = AutoLock::NONE)
         {
-            return DelStat(key.c_str(), lock_already_held);
+            return DelStat(key.c_str(), locktype);
         }
 
         // Cache for symbolic link
         bool GetSymlink(const std::string& key, std::string& value);
         bool AddSymlink(const std::string& key, const std::string& value);
-        bool DelSymlink(const char* key, bool lock_already_held = false);
+        bool DelSymlink(const char* key, AutoLock::Type locktype = AutoLock::NONE);
 };
 
 //-------------------------------------------------------------------

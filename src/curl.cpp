@@ -1834,7 +1834,7 @@ S3fsCurl::~S3fsCurl()
     DestroyCurlHandle();
 }
 
-bool S3fsCurl::ResetHandle(bool lock_already_held)
+bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
 {
     bool run_once;
     {
@@ -1912,7 +1912,7 @@ bool S3fsCurl::ResetHandle(bool lock_already_held)
         }
     }
 
-    AutoLock lock(&S3fsCurl::curl_handles_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
     S3fsCurl::curl_times[hCurl]    = time(0);
     S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
@@ -1944,7 +1944,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
             }
         }
     }
-    ResetHandle(/*lock_already_held=*/ true);
+    ResetHandle(AutoLock::ALREADY_LOCKED);
 
     return true;
 }

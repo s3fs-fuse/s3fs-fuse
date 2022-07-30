@@ -228,7 +228,7 @@ void FdEntity::Close(int fd)
     }
 
     // check pseudo fd count
-    if(-1 != physical_fd && 0 == GetOpenCount(true)){
+    if(-1 != physical_fd && 0 == GetOpenCount(AutoLock::ALREADY_LOCKED)){
         AutoLock auto_data_lock(&fdent_data_lock);
         if(!cachepath.empty()){
             // [NOTE]
@@ -260,9 +260,9 @@ void FdEntity::Close(int fd)
     }
 }
 
-int FdEntity::Dup(int fd, bool lock_already_held)
+int FdEntity::Dup(int fd, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), fd, physical_fd, pseudo_fd_map.size());
 
@@ -282,9 +282,9 @@ int FdEntity::Dup(int fd, bool lock_already_held)
     return pseudo_fd;
 }
 
-int FdEntity::OpenPseudoFd(int flags, bool lock_already_held)
+int FdEntity::OpenPseudoFd(int flags, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), physical_fd, pseudo_fd_map.size());
 
@@ -298,9 +298,9 @@ int FdEntity::OpenPseudoFd(int flags, bool lock_already_held)
     return pseudo_fd;
 }
 
-int FdEntity::GetOpenCount(bool lock_already_held)
+int FdEntity::GetOpenCount(AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     return static_cast<int>(pseudo_fd_map.size());
 }
@@ -362,9 +362,9 @@ int FdEntity::OpenMirrorFile()
     return mirrorfd;
 }
 
-bool FdEntity::FindPseudoFd(int fd, bool lock_already_held)
+bool FdEntity::FindPseudoFd(int fd, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     if(-1 == fd){
         return false;
@@ -375,9 +375,9 @@ bool FdEntity::FindPseudoFd(int fd, bool lock_already_held)
     return true;
 }
 
-PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held)
+PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     if(-1 == fd){
         return NULL;
@@ -398,9 +398,9 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, bool lock_alre
     return iter->second;
 }
 
-bool FdEntity::IsUploading(bool lock_already_held)
+bool FdEntity::IsUploading(AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
         PseudoFdInfo* ppseudoinfo = iter->second;
@@ -655,7 +655,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 
         // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
         if(UTIME_OMIT != ts_mctime.tv_nsec){
-            if(0 != SetMCtime(ts_mctime, ts_mctime, /*lock_already_held=*/ true)){
+            if(0 != SetMCtime(ts_mctime, ts_mctime, AutoLock::ALREADY_LOCKED)){
                 S3FS_PRN_ERR("failed to set mtime/ctime. errno(%d)", errno);
                 fclose(pfile);
                 pfile       = NULL;
@@ -697,7 +697,7 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 
     S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
-    if(-1 == physical_fd || !FindPseudoFd(fd, true)){
+    if(-1 == physical_fd || !FindPseudoFd(fd, AutoLock::ALREADY_LOCKED)){
         S3FS_PRN_ERR("pseudo_fd(%d) and physical_fd(%d) for path(%s) is not opened yet", fd, physical_fd, path.c_str());
         return false;
     }
@@ -777,9 +777,9 @@ bool FdEntity::IsModified() const
     return pagelist.IsModified();
 }
 
-bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
+bool FdEntity::GetStats(struct stat& st, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
     if(-1 == physical_fd){
         return false;
     }
@@ -792,9 +792,9 @@ bool FdEntity::GetStats(struct stat& st, bool lock_already_held)
     return true;
 }
 
-int FdEntity::SetCtime(struct timespec time, bool lock_already_held)
+int FdEntity::SetCtime(struct timespec time, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
@@ -805,9 +805,9 @@ int FdEntity::SetCtime(struct timespec time, bool lock_already_held)
     return 0;
 }
 
-int FdEntity::SetAtime(struct timespec time, bool lock_already_held)
+int FdEntity::SetAtime(struct timespec time, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
@@ -821,9 +821,9 @@ int FdEntity::SetAtime(struct timespec time, bool lock_already_held)
 // [NOTE]
 // This method updates mtime as well as ctime.
 //
-int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_already_held)
+int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s][ctime=%s]", path.c_str(), physical_fd, str(mtime).c_str(), str(ctime).c_str());
 
@@ -864,7 +864,7 @@ bool FdEntity::UpdateCtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
-    if(!GetStats(st, /*lock_already_held=*/ true)){
+    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
         return false;
     }
 
@@ -877,7 +877,7 @@ bool FdEntity::UpdateAtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
-    if(!GetStats(st, /*lock_already_held=*/ true)){
+    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
         return false;
     }
 
@@ -901,13 +901,13 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
         // overwritten.
         //
         if(clear_holding_mtime){
-            if(!ClearHoldingMtime(true)){
+            if(!ClearHoldingMtime(AutoLock::ALREADY_LOCKED)){
                 return false;
             }
         }
     }else{
         struct stat st;
-        if(!GetStats(st, /*lock_already_held=*/ true)){
+        if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
             return false;
         }
         orgmeta["x-amz-meta-mtime"] = str_stat_time(st, ST_TYPE_MTIME);
@@ -915,9 +915,9 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
     return true;
 }
 
-bool FdEntity::SetHoldingMtime(struct timespec mtime, bool lock_already_held)
+bool FdEntity::SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
@@ -928,15 +928,15 @@ bool FdEntity::SetHoldingMtime(struct timespec mtime, bool lock_already_held)
     return true;
 }
 
-bool FdEntity::ClearHoldingMtime(bool lock_already_held)
+bool FdEntity::ClearHoldingMtime(AutoLock::Type locktype)
 {
-    AutoLock auto_lock(&fdent_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&fdent_lock, locktype);
 
     if(holding_mtime.tv_sec < 0){
         return false;
     }
     struct stat st;
-    if(!GetStats(st, true)){
+    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
         return false;
     }
     if(-1 != physical_fd){
@@ -2383,13 +2383,13 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     struct timespec ctime = get_ctime(updatemeta, false);      // not overcheck
     struct timespec atime = get_atime(updatemeta, false);      // not overcheck
     if(0 <= mtime.tv_sec){
-        SetMCtime(mtime, (ctime.tv_sec < 0 ? mtime : ctime), true);
+        SetMCtime(mtime, (ctime.tv_sec < 0 ? mtime : ctime), AutoLock::ALREADY_LOCKED);
     }
     if(0 <= atime.tv_sec){
-        SetAtime(atime, true);
+        SetAtime(atime, AutoLock::ALREADY_LOCKED);
     }
 
-    if(NO_UPDATE_PENDING == pending_status && (IsUploading(true) || pagelist.IsModified())){
+    if(NO_UPDATE_PENDING == pending_status && (IsUploading(AutoLock::ALREADY_LOCKED) || pagelist.IsModified())){
         pending_status = UPDATE_META_PENDING;
     }
 

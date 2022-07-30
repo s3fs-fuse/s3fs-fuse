@@ -76,8 +76,8 @@ class FdEntity
         ino_t GetInode();
         int OpenMirrorFile();
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0);  // size=0 means loading to end
-        PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable, bool lock_already_held = false);
-        bool IsUploading(bool lock_already_held = false);
+        PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type locktype = AutoLock::NONE);
+        bool IsUploading(AutoLock::Type locktype = AutoLock::NONE);
         bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
         bool SetAllStatusUnloaded() { return SetAllStatus(false); }
         int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
@@ -105,12 +105,12 @@ class FdEntity
 
         void Close(int fd);
         bool IsOpen() const { return (-1 != physical_fd); }
-        bool FindPseudoFd(int fd, bool lock_already_held = false);
+        bool FindPseudoFd(int fd, AutoLock::Type locktype = AutoLock::NONE);
         int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type);
         bool LoadAll(int fd, headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
-        int Dup(int fd, bool lock_already_held = false);
-        int OpenPseudoFd(int flags = O_RDONLY, bool lock_already_held = false);
-        int GetOpenCount(bool lock_already_held = false);
+        int Dup(int fd, AutoLock::Type locktype = AutoLock::NONE);
+        int OpenPseudoFd(int flags = O_RDONLY, AutoLock::Type locktype = AutoLock::NONE);
+        int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE);
         const char* GetPath() const { return path.c_str(); }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const { return physical_fd; }
@@ -118,16 +118,16 @@ class FdEntity
         bool MergeOrgMeta(headers_t& updatemeta);
         int UploadPending(int fd, AutoLock::Type type);
 
-        bool GetStats(struct stat& st, bool lock_already_held = false);
-        int SetCtime(struct timespec time, bool lock_already_held = false);
-        int SetAtime(struct timespec time, bool lock_already_held = false);
-        int SetMCtime(struct timespec mtime, struct timespec ctime, bool lock_already_held = false);
+        bool GetStats(struct stat& st, AutoLock::Type locktype = AutoLock::NONE);
+        int SetCtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
+        int SetAtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
+        int SetMCtime(struct timespec mtime, struct timespec ctime, AutoLock::Type locktype = AutoLock::NONE);
         bool UpdateCtime();
         bool UpdateAtime();
         bool UpdateMtime(bool clear_holding_mtime = false);
         bool UpdateMCtime();
-        bool SetHoldingMtime(struct timespec mtime, bool lock_already_held = false);
-        bool ClearHoldingMtime(bool lock_already_held = false);
+        bool SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype = AutoLock::NONE);
+        bool ClearHoldingMtime(AutoLock::Type locktype = AutoLock::NONE);
         bool GetSize(off_t& size);
         bool GetXattr(std::string& xattr);
         bool SetXattr(const std::string& xattr);
