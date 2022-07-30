@@ -153,7 +153,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     // basepath(path) is as same as fullpath.
     if(0 == strcmp(reinterpret_cast<char*>(fullpath), path)){
         xmlFree(fullpath);
-        return (char*)c_strErrorObjectName;
+        return const_cast<char*>(c_strErrorObjectName);
     }
 
     // Make dir path and filename
@@ -172,15 +172,15 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     if(0 < strlen(dirpath)){
         // case of "/"
         if(0 == strcmp(mybname, "/") && 0 == strcmp(dirpath, "/")){
-            return (char*)c_strErrorObjectName;
+            return const_cast<char*>(c_strErrorObjectName);
         }
         // case of "."
         if(0 == strcmp(mybname, ".") && 0 == strcmp(dirpath, ".")){
-            return (char*)c_strErrorObjectName;
+            return const_cast<char *>(c_strErrorObjectName);
         }
         // case of ".."
         if(0 == strcmp(mybname, "..") && 0 == strcmp(dirpath, ".")){
-            return (char*)c_strErrorObjectName;
+            return const_cast<char *>(c_strErrorObjectName);
         }
         // case of "name"
         if(0 == strcmp(dirpath, ".")){
@@ -206,7 +206,7 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
         }
     }
     // case of something wrong
-    return (char*)c_strErrorObjectName;
+    return const_cast<char*>(c_strErrorObjectName);
 }
 
 static xmlChar* get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key)

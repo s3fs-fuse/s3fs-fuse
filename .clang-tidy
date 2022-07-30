@@ -7,6 +7,7 @@ Checks: '
     -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
     -bugprone-unhandled-self-assignment,
+    cppcoreguidelines-pro-type-cstyle-cast,
     google-*,
     -google-build-using-namespace,
     -google-readability-casting,

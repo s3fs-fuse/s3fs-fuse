@@ -140,9 +140,9 @@ int S3fsMultiCurl::MultiPerform()
                     success = false;
                     S3FS_PRN_ERR("failed pthread_join - rc(%d) %s", rc, strerror(rc));
                 } else {
-                    int int_retval = (int)(intptr_t)(retval);
+                    long int_retval = reinterpret_cast<long>(retval);
                     if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                        S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
+                        S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
                     }
                 }
             }
@@ -176,9 +176,9 @@ int S3fsMultiCurl::MultiPerform()
             success = false;
             S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
         } else {
-            int int_retval = (int)(intptr_t)(retval);
+            long int_retval = reinterpret_cast<long>(retval);
             if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
+                S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
             }
         }
     }
