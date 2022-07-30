@@ -243,7 +243,7 @@ class S3fsCurl
         static int RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
         // methods
-        bool ResetHandle(bool lock_already_held = false);
+        bool ResetHandle(AutoLock::Type locktype = AutoLock::NONE);
         bool RemakeHandle();
         bool ClearInternalData();
         void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);

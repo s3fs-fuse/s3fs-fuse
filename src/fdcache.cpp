@@ -402,7 +402,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 
     FdEntity*   ent;
     int         fd = -1;
-    if(NULL == (ent = FdManager::singleton.GetFdEntity(path, fd, false, true))){
+    if(NULL == (ent = FdManager::singleton.GetFdEntity(path, fd, false, AutoLock::ALREADY_LOCKED))){
         return false;
     }
     return (0 < ent->GetOpenCount());
@@ -479,14 +479,14 @@ FdManager::~FdManager()
     }
 }
 
-FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, bool lock_already_held)
+FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, AutoLock::Type locktype)
 {
     S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
     if(!path || '\0' == path[0]){
         return NULL;
     }
-    AutoLock auto_lock(&FdManager::fd_manager_lock, lock_already_held ? AutoLock::ALREADY_LOCKED : AutoLock::NONE);
+    AutoLock auto_lock(&FdManager::fd_manager_lock, locktype);
 
     fdent_map_t::iterator iter = fent.find(std::string(path));
     if(fent.end() != iter && iter->second){
