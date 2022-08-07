@@ -76,12 +76,15 @@ class PseudoFdInfo
         static void* MultipartUploadThreadWorker(void* arg);
 
         bool Clear();
-        void CloseUploadFd(AutoLock::Type type = AutoLock::NONE);
+        void CloseUploadFd();
         bool OpenUploadFd(AutoLock::Type type = AutoLock::NONE);
+        bool ResetUploadInfo(AutoLock::Type type);
+        bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp, AutoLock::Type type);
         bool CompleteInstruction(int result, AutoLock::Type type = AutoLock::NONE);
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, AutoLock::Type type = AutoLock::NONE);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type = AutoLock::NONE);
         int WaitAllThreadsExit();
+        bool CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 
     public:
@@ -95,8 +98,8 @@ class PseudoFdInfo
         bool Readable() const;
 
         bool Set(int fd, int open_flags);
-        bool ClearUploadInfo(bool is_clear_part = false, AutoLock::Type type = AutoLock::NONE);
-        bool InitialUploadInfo(const std::string& id, AutoLock::Type type = AutoLock::NONE);
+        bool ClearUploadInfo(bool is_cancel_mp = false);
+        bool InitialUploadInfo(const std::string& id){ return RowInitialUploadInfo(id, true, AutoLock::NONE); }
 
         bool IsUploading() const { return !upload_id.empty(); }
         bool GetUploadId(std::string& id) const;
