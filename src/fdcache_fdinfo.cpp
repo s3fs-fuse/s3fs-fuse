@@ -145,7 +145,9 @@ PseudoFdInfo::~PseudoFdInfo()
 
 bool PseudoFdInfo::Clear()
 {
-    CancelAllThreads();
+    if(!CancelAllThreads() || !ResetUploadInfo(AutoLock::NONE)){
+        return false;
+    }
     CloseUploadFd();
 
     if(-1 != pseudo_fd){
