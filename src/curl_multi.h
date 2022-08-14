@@ -28,6 +28,7 @@ class S3fsCurl;
 
 typedef std::vector<S3fsCurl*>       s3fscurllist_t;
 typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, void* param);  // callback for succeed multi request
+typedef bool (*S3fsMultiNotFoundCallback)(S3fsCurl* s3fscurl, void* param); // callback for succeed multi request
 typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);            // callback for failure and retrying
 
 //----------------------------------------------
@@ -41,9 +42,11 @@ class S3fsMultiCurl
         s3fscurllist_t clist_all;  // all of curl requests
         s3fscurllist_t clist_req;  // curl requests are sent
 
-        S3fsMultiSuccessCallback SuccessCallback;
-        S3fsMultiRetryCallback   RetryCallback;
-        void*                    pSuccessCallbackParam;
+        S3fsMultiSuccessCallback   SuccessCallback;
+        S3fsMultiNotFoundCallback  NotFoundCallback;
+        S3fsMultiRetryCallback     RetryCallback;
+        void*                      pSuccessCallbackParam;
+        void*                      pNotFoundCallbackParam;
 
         pthread_mutex_t completed_tids_lock;
         std::vector<pthread_t> completed_tids;
@@ -62,8 +65,10 @@ class S3fsMultiCurl
         int GetMaxParallelism() { return maxParallelism; }
 
         S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
+        S3fsMultiNotFoundCallback SetNotFoundCallback(S3fsMultiNotFoundCallback function);
         S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
         void* SetSuccessCallbackParam(void* param);
+        void* SetNotFoundCallbackParam(void* param);
         bool Clear() { return ClearEx(true); }
         bool SetS3fsCurlObject(S3fsCurl* s3fscurl);
         int Request();

@@ -33,7 +33,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), RetryCallback(NULL), pSuccessCallbackParam(NULL)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), NotFoundCallback(NULL), RetryCallback(NULL), pSuccessCallbackParam(NULL), pNotFoundCallbackParam(NULL)
 {
     int result;
     pthread_mutexattr_t attr;
@@ -88,7 +88,14 @@ S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(S3fsMultiSuccessCallb
     SuccessCallback = function;
     return old;
 }
-  
+
+S3fsMultiNotFoundCallback S3fsMultiCurl::SetNotFoundCallback(S3fsMultiNotFoundCallback function)
+{
+    S3fsMultiNotFoundCallback old = NotFoundCallback;
+    NotFoundCallback = function;
+    return old;
+}
+
 S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback function)
 {
     S3fsMultiRetryCallback old = RetryCallback;
@@ -102,7 +109,14 @@ void* S3fsMultiCurl::SetSuccessCallbackParam(void* param)
     pSuccessCallbackParam = param;
     return old;
 }
-  
+
+void* S3fsMultiCurl::SetNotFoundCallbackParam(void* param)
+{
+    void* old = pNotFoundCallbackParam;
+    pNotFoundCallbackParam = param;
+    return old;
+}
+
 bool S3fsMultiCurl::SetS3fsCurlObject(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
@@ -207,7 +221,7 @@ int S3fsMultiCurl::MultiRead()
             }else if(400 > responseCode){
                 // add into stat cache
                 if(SuccessCallback && !SuccessCallback(s3fscurl, pSuccessCallbackParam)){
-                    S3FS_PRN_WARN("error from callback function(%s).", s3fscurl->url.c_str());
+                    S3FS_PRN_WARN("error from success callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(400 == responseCode){
                 // as possibly in multipart
@@ -218,6 +232,10 @@ int S3fsMultiCurl::MultiRead()
                 // HEAD requests on readdir_multi_head can return 404
                 if(s3fscurl->GetOp() != "HEAD"){
                     S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
+                }
+				// Call callback function
+                if(NotFoundCallback && !NotFoundCallback(s3fscurl, pNotFoundCallbackParam)){
+                    S3FS_PRN_WARN("error from not found callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(500 == responseCode){
                 // case of all other result, do retry.(11/13/2013)

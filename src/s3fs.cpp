@@ -48,6 +48,7 @@
 #include "s3fs_util.h"
 #include "mpu_util.h"
 #include "threadpoolman.h"
+#include "autolock.h"
 
 //-------------------------------------------------------------------
 // Symbols
@@ -2719,8 +2720,35 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
             pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
         }
     }else{
-        S3FS_PRN_WARN("param(fuse_fill_dir_t filler) is NULL, then can not call filler.");
+        S3FS_PRN_WARN("param(multi_head_callback_param*) is NULL, then can not call filler.");
     }
+
+    return true;
+}
+
+struct multi_head_notfound_callback_param
+{
+    pthread_mutex_t list_lock;
+    s3obj_list_t    notfound_list;
+};
+
+static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
+{
+    if(!s3fscurl){
+        return false;
+    }
+    S3FS_PRN_INFO("HEAD returned NotFound(404) for %s object, it maybe only the path exists and the object does not exist.", s3fscurl->GetPath().c_str());
+
+    if(!param){
+        S3FS_PRN_WARN("param(multi_head_notfound_callback_param*) is NULL, then can not call filler.");
+        return false;
+    }
+
+    // set path to not found list
+    struct multi_head_notfound_callback_param* pcbparam = reinterpret_cast<struct multi_head_notfound_callback_param*>(param);
+
+    AutoLock auto_lock(&(pcbparam->list_lock));
+    pcbparam->notfound_list.push_back(s3fscurl->GetBasePath());
 
     return true;
 }
@@ -2764,7 +2792,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 {
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
     s3obj_list_t  headlist;
-    s3obj_list_t  fillerlist;
     int           result = 0;
 
     S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
@@ -2776,17 +2803,31 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     curlmulti.SetSuccessCallback(multi_head_callback);
     curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-    // Callback function parameter
-    struct multi_head_callback_param param;
-    param.buf    = buf;
-    param.filler = filler;
-    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&param));
+    // Success Callback function parameter
+    struct multi_head_callback_param success_param;
+    success_param.buf    = buf;
+    success_param.filler = filler;
+    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&success_param));
 
-    s3obj_list_t::iterator iter;
+    // Not found Callback function parameter
+    struct multi_head_notfound_callback_param notfound_param;
+    if(support_compat_dir){
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        #if S3FS_PTHREAD_ERRORCHECK
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+        #endif
 
-    fillerlist.clear();
+        if(0 != (result = pthread_mutex_init(&(notfound_param.list_lock), &attr))){
+            S3FS_PRN_CRIT("failed to init notfound_param.list_lock: %d", result);
+            abort();
+        }
+        curlmulti.SetNotFoundCallback(multi_head_notfound_callback);
+        curlmulti.SetNotFoundCallbackParam(reinterpret_cast<void*>(&notfound_param));
+    }
+
     // Make single head request(with max).
-    for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+    for(s3obj_list_t::iterator iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
         std::string disppath = path + (*iter);
         std::string etag     = head.GetETag((*iter).c_str());
         struct stat st;
@@ -2802,12 +2843,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             filler(buf, bpath.c_str(), &st, 0);
             continue;
         }
-
-        std::string fillpath = disppath;
-        if('/' == *disppath.rbegin()){
-            fillpath.erase(fillpath.length() -1);
-        }
-        fillerlist.push_back(fillpath);
 
         // First check for directory, start checking "not SSE-C".
         // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
@@ -2836,6 +2871,55 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         }else{
             S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
             return result;
+        }
+    }
+
+    // [NOTE]
+    // Objects that could not be found by HEAD request may exist only
+    // as a path, so search for objects under that path.(a case of no dir object)
+    //
+    if(support_compat_dir && !notfound_param.notfound_list.empty()){      // [NOTE] not need to lock to access this here.
+        // dummy header
+        mode_t dirmask = umask(0);      // macos does not have getumask()
+        umask(dirmask);
+
+        headers_t   dummy_header;
+        dummy_header["Content-Type"]     = std::string("application/x-directory");          // directory
+        dummy_header["x-amz-meta-uid"]   = str(is_s3fs_uid ? s3fs_uid : geteuid());
+        dummy_header["x-amz-meta-gid"]   = str(is_s3fs_gid ? s3fs_gid : getegid());
+        dummy_header["x-amz-meta-mode"]  = str(S_IFDIR | (~dirmask & (S_IRWXU | S_IRWXG | S_IRWXO)));
+        dummy_header["x-amz-meta-atime"] = str(0);
+        dummy_header["x-amz-meta-ctime"] = str(0);
+        dummy_header["x-amz-meta-mtime"] = str(0);
+
+        for(s3obj_list_t::iterator reiter = notfound_param.notfound_list.begin(); reiter != notfound_param.notfound_list.end(); ++reiter){
+            int dir_result;
+            if(0 == (dir_result = directory_empty(reiter->c_str()))){
+                // Found objects under the path, so the path is directory.
+                //
+                std::string dirpath = path + (*reiter);
+
+                // Add stat cache
+                if(StatCache::getStatCacheData()->AddStat(dirpath, dummy_header, true)){    // set forcedir=true
+                    // Get stats from stats cache(for converting from meta), and fill
+                    std::string base_path = mybasename(dirpath);
+                    if(use_wtf8){
+                        base_path = s3fs_wtf8_decode(base_path);
+                    }
+
+                    struct stat st;
+                    if(StatCache::getStatCacheData()->GetStat(dirpath, &st)){
+                        filler(buf, base_path.c_str(), &st, 0);
+                    }else{
+                        S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
+                        filler(buf, base_path.c_str(), 0, 0);
+                    }
+                }else{
+                    S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
+                }
+            }else{
+                S3FS_PRN_WARN("%s object does not have any object under it(errno=%d),", reiter->c_str(), dir_result);
+            }
         }
     }
 

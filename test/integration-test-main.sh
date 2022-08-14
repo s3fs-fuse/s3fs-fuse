@@ -1745,6 +1745,157 @@ function test_ensurespace_move_file() {
     rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"
 }
 
+function test_not_existed_dir_obj() {
+    describe "Test not existed directory object..."
+
+    local DIR_NAME; DIR_NAME=$(basename "${PWD}")
+
+    #
+    # Create files under not existed directory by aws command
+    #
+    local OBJECT_NAME_1; OBJECT_NAME_1="${DIR_NAME}/not_existed_dir_single/${TEST_TEXT_FILE}"
+    local OBJECT_NAME_2; OBJECT_NAME_2="${DIR_NAME}/not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}"
+    echo data1 | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME_1}"
+    echo data2 | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME_2}"
+
+    # shellcheck disable=SC2009
+    if ps u -p "${S3FS_PID}" | grep -q compat_dir; then
+        #
+        # with "compat_dir", found directories and files
+        #
+
+		# Top directory
+		# shellcheck disable=SC2010
+        if ! ls -1 | grep -q '^not_existed_dir_single$'; then
+            echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 | grep -q '^not_existed_dir_parent$'; then
+            echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+            return 1;
+        fi
+
+		# Single nest directory
+		# shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_single | grep -q '^not_existed_dir_single$'; then
+            echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 not_existed_dir_single | grep -q "^${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 "not_existed_dir_single/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_single/${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+            return 1;
+        fi
+
+		# Double nest directory
+		# shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_parent | grep -q '^not_existed_dir_parent'; then
+            echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 not_existed_dir_parent | grep -q '^not_existed_dir_child'; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_parent/not_existed_dir_child | grep -q '^not_existed_dir_parent/not_existed_dir_child'; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 not_existed_dir_parent/not_existed_dir_child | grep -q "^${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 "not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+            return 1;
+        fi
+
+	    rm -rf not_existed_dir_single
+	    rm -rf not_existed_dir_parent
+
+    else
+        #
+        # without "compat_dir", found directories and files
+        #
+        # [NOTE]
+        # If specify a directory path, the file under that directory will be found.
+        # And if specify a file full path, it will be found.
+        #
+
+		# Top directory
+		# shellcheck disable=SC2010
+        if ls -1 | grep -q '^not_existed_dir_single$'; then
+            echo "Expect to not find \"not_existed_dir_single\" directory, but it is found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ls -1 | grep -q '^not_existed_dir_parent$'; then
+            echo "Expect to not find \"not_existed_dir_parent\" directory, but it is found"
+            return 1;
+        fi
+
+		# Single nest directory
+		# shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_single | grep -q '^not_existed_dir_single$'; then
+            echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 not_existed_dir_single | grep -q "^${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 "not_existed_dir_single/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_single/${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+            return 1;
+        fi
+
+		# Double nest directory
+		# shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_parent | grep -q '^not_existed_dir_parent'; then
+            echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ls -1 not_existed_dir_parent | grep -q '^not_existed_dir_child'; then
+            echo "Expect to not find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -d not_existed_dir_parent/not_existed_dir_child | grep -q '^not_existed_dir_parent/not_existed_dir_child'; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 not_existed_dir_parent/not_existed_dir_child | grep -q "^${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+            return 1;
+        fi
+        # shellcheck disable=SC2010
+        if ! ls -1 "not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\$"; then
+            echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+            return 1;
+        fi
+
+	    rm -rf not_existed_dir_single
+
+        # [NOTE]
+        # This case could not remove sub directory, then below command will be failed.
+    	#rm -rf not_existed_dir_parent
+    fi
+}
+
 function test_ut_ossfs {
     describe "Testing ossfs python ut..."
 
@@ -2053,6 +2204,7 @@ function add_all_tests {
     add_tests test_truncate_cache
     add_tests test_upload_sparsefile
     add_tests test_mix_upload_entities
+    add_tests test_not_existed_dir_obj
     add_tests test_ut_ossfs
     # shellcheck disable=SC2009
     if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
