@@ -313,7 +313,7 @@ AC_COMPILE_IFELSE(
 dnl ----------------------------------------------
 dnl build date
 dnl ----------------------------------------------
-AC_SUBST([MAN_PAGE_DATE], [$(date +"%B %Y")])
+AC_SUBST([MAN_PAGE_DATE], [$(date -r doc/man/s3fs.1.in +"%B %Y")])
 
 dnl ----------------------------------------------
 dnl output files
