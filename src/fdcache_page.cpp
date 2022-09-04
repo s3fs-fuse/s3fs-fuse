@@ -39,12 +39,14 @@ static const int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;    // Buffer size in Pag
 // fdpage_list_t utility
 //------------------------------------------------
 // Inline function for repeated processing
-inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, fdpage& page, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
+inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, const fdpage& orgpage, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
 {
-    if(0 < page.bytes){
+    if(0 < orgpage.bytes){
         // [NOTE]
         // The page variable is subject to change here.
         //
+        fdpage page = orgpage;
+
         if(ignore_load){
             page.loaded   = default_load;
         }
@@ -66,75 +68,71 @@ inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, fdpage& page, 
 //       Zero size pages will be deleted. However, if the page information is the only one,
 //       it will be left behind. This is what you need to do to create a new empty file.
 //
-static fdpage_list_t raw_compress_fdpage_list(const fdpage_list_t& pages, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
+static void raw_compress_fdpage_list(const fdpage_list_t& pages, fdpage_list_t& compressed_pages, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
 {
-    fdpage_list_t compressed_pages;
-    fdpage        tmppage;
-    bool          is_first = true;
+    compressed_pages.clear();
+
+    fdpage*                 lastpage = NULL;
+    fdpage_list_t::iterator add_iter;
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
-        if(!is_first){
-            if(0 < tmppage.bytes){
-                if( (!ignore_load   && (tmppage.loaded   != iter->loaded  )) ||
-                    (!ignore_modify && (tmppage.modified != iter->modified)) )
+        if(0 == iter->bytes){
+            continue;
+        }
+        if(!lastpage){
+            // First item
+            raw_add_compress_fdpage_list(compressed_pages, (*iter), ignore_load, ignore_modify, default_load, default_modify);
+            lastpage = &(compressed_pages.back());
+        }else{
+            // check page continuity
+            if(lastpage->next() != iter->offset){
+                // Non-consecutive with last page, so add a page filled with default values
+                if( (!ignore_load   && (lastpage->loaded   != false)) ||
+                    (!ignore_modify && (lastpage->modified != false)) )
                 {
-                    // Different from the previous area, add it to list
+                    // add new page
+                    fdpage tmppage(lastpage->next(), (iter->offset - lastpage->next()), false, false);
                     raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
 
-                    // keep current area
-                    tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
+                    add_iter = compressed_pages.end();
+                    --add_iter;
+                    lastpage = &(*add_iter);
                 }else{
-                    // Same as the previous area
-                    if(tmppage.next() != iter->offset){
-                        // These are not contiguous areas, add it to list
-                        raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
-
-                        // keep current area
-                        tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
-                    }else{
-                        // These are contiguous areas
-
-                        // add current area
-                        tmppage.bytes += iter->bytes;
-                    }
+                    // Expand last area
+                    lastpage->bytes = iter->offset - lastpage->offset;
                 }
-            }else{
-                // if found empty page, skip it
-                tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
             }
-        }else{
-            // first erea
-            is_first = false;
 
-            // keep current area
-            tmppage = fdpage(iter->offset, iter->bytes, (ignore_load ? default_load : iter->loaded), (ignore_modify ? default_modify : iter->modified));
+            // add current page
+            if( (!ignore_load   && (lastpage->loaded   != iter->loaded  )) ||
+                (!ignore_modify && (lastpage->modified != iter->modified)) )
+            {
+                // Add new page
+                raw_add_compress_fdpage_list(compressed_pages, (*iter), ignore_load, ignore_modify, default_load, default_modify);
+
+                add_iter = compressed_pages.end();
+                --add_iter;
+                lastpage = &(*add_iter);
+            }else{
+                // Expand last area
+                lastpage->bytes += iter->bytes;
+            }
         }
     }
-    // add last area
-    if(!is_first){
-        // [NOTE]
-        // Zero size pages are not allowed. However, if it is the only one, allow it.
-        // This is a special process that exists only to create empty files.
-        //
-        if(compressed_pages.empty() || 0 != tmppage.bytes){
-            raw_add_compress_fdpage_list(compressed_pages, tmppage, ignore_load, ignore_modify, default_load, default_modify);
-        }
-    }
-    return compressed_pages;
 }
 
-static fdpage_list_t compress_fdpage_list_ignore_modify(const fdpage_list_t& pages, bool default_modify)
+static void compress_fdpage_list_ignore_modify(const fdpage_list_t& pages, fdpage_list_t& compressed_pages, bool default_modify)
 {
-    return raw_compress_fdpage_list(pages, /* ignore_load= */ false, /* ignore_modify= */ true, /* default_load= */false, /* default_modify= */default_modify);
+    raw_compress_fdpage_list(pages, compressed_pages, /* ignore_load= */ false, /* ignore_modify= */ true, /* default_load= */false, /* default_modify= */default_modify);
 }
 
-static fdpage_list_t compress_fdpage_list_ignore_load(const fdpage_list_t& pages, bool default_load)
+static void compress_fdpage_list_ignore_load(const fdpage_list_t& pages, fdpage_list_t& compressed_pages, bool default_load)
 {
-    return raw_compress_fdpage_list(pages, /* ignore_load= */ true, /* ignore_modify= */ false, /* default_load= */default_load, /* default_modify= */false);
+    raw_compress_fdpage_list(pages, compressed_pages, /* ignore_load= */ true, /* ignore_modify= */ false, /* default_load= */default_load, /* default_modify= */false);
 }
 
-static fdpage_list_t compress_fdpage_list(const fdpage_list_t& pages)
+static void compress_fdpage_list(const fdpage_list_t& pages, fdpage_list_t& compressed_pages)
 {
-    return raw_compress_fdpage_list(pages, /* ignore_load= */ false, /* ignore_modify= */ false, /* default_load= */false, /* default_modify= */false);
+    raw_compress_fdpage_list(pages, compressed_pages, /* ignore_load= */ false, /* ignore_modify= */ false, /* default_load= */false, /* default_modify= */false);
 }
 
 static fdpage_list_t parse_partsize_fdpage_list(const fdpage_list_t& pages, off_t max_partsize)
@@ -401,7 +399,38 @@ off_t PageList::Size() const
 
 bool PageList::Compress()
 {
-    pages = compress_fdpage_list(pages);
+    fdpage* lastpage = NULL;
+    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
+        if(!lastpage){
+            // First item
+            lastpage = &(*iter);
+            ++iter;
+        }else{
+            // check page continuity
+            if(lastpage->next() != iter->offset){
+                // Non-consecutive with last page, so add a page filled with default values
+                if(lastpage->loaded || lastpage->modified){
+                    // insert new page before current pos
+                    fdpage tmppage(lastpage->next(), (iter->offset - lastpage->next()), false, false);
+                    iter = pages.insert(iter, tmppage);
+                    lastpage = &(*iter);
+                    ++iter;
+                }else{
+                    // Expand last area
+                    lastpage->bytes = iter->offset - lastpage->offset;
+                }
+            }
+            // check current page
+            if(lastpage->loaded == iter->loaded && lastpage->modified == iter->modified){
+                // Expand last area and remove current pos
+                lastpage->bytes += iter->bytes;
+                iter = pages.erase(iter);
+            }else{
+                lastpage = &(*iter);
+                ++iter;
+            }
+        }
+    }
     return true;
 }
 
@@ -627,9 +656,11 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     }
 
     // make a list by modified flag
-    fdpage_list_t modified_pages = compress_fdpage_list_ignore_load(pages, false);
+    fdpage_list_t modified_pages;
     fdpage_list_t download_pages;         // A non-contiguous page list showing the areas that need to be downloaded
     fdpage_list_t mixupload_pages;        // A continuous page list showing only modified flags for mixupload
+    compress_fdpage_list_ignore_load(pages, modified_pages, false);
+
     fdpage        prev_page;
     for(fdpage_list_t::const_iterator iter = modified_pages.begin(); iter != modified_pages.end(); ++iter){
         if(iter->modified){
@@ -710,8 +741,8 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     }
 
     // compress
-    dlpages    = compress_fdpage_list_ignore_modify(download_pages, false);
-    mixuppages = compress_fdpage_list_ignore_load(mixupload_pages, false);
+    compress_fdpage_list_ignore_modify(download_pages, dlpages, false);
+    compress_fdpage_list_ignore_load(mixupload_pages, mixuppages, false);
 
     // parse by max pagesize
     dlpages    = parse_partsize_fdpage_list(dlpages, max_partsize);
@@ -754,7 +785,7 @@ bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size
         nodata_pages.clear();
     }else{
         // compress
-        nodata_pages = compress_fdpage_list(tmp_pagelist);
+        compress_fdpage_list(tmp_pagelist, nodata_pages);
     }
     return true;
 }
