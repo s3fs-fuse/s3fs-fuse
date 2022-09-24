@@ -182,7 +182,7 @@ struct etagpair
     std::string  etag;        // expected etag value
     int          part_num;    // part number
 
-    etagpair(const char* petag = NULL, int part = -1) : etag(petag ? petag : ""), part_num(part) {}
+    explicit etagpair(const char* petag = NULL, int part = -1) : etag(petag ? petag : ""), part_num(part) {}
 
     ~etagpair()
     {
@@ -238,7 +238,7 @@ struct filepart
     bool         is_copy;     // whether is copy multipart
     etagpair*    petag;       // use only parallel upload
 
-    filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
+    explicit filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
 
     ~filepart()
     {
@@ -290,7 +290,7 @@ struct untreatedpart
     off_t size;             // number of untreated bytes
     long  untreated_tag;    // untreated part tag
 
-    untreatedpart(off_t part_start = 0, off_t part_size = 0, long part_untreated_tag = 0) : start(part_start), size(part_size), untreated_tag(part_untreated_tag)
+    explicit untreatedpart(off_t part_start = 0, off_t part_size = 0, long part_untreated_tag = 0) : start(part_start), size(part_size), untreated_tag(part_untreated_tag)
     {
         if(part_start < 0 || part_size <= 0){
             clear();        // wrong parameter, so clear value.
@@ -348,7 +348,7 @@ struct mp_part
     off_t  size;
     int    part_num;        // Set only for information to upload
 
-    mp_part(off_t set_start = 0, off_t set_size = 0, int part = 0) : start(set_start), size(set_size), part_num(part) {}
+    explicit mp_part(off_t set_start = 0, off_t set_size = 0, int part = 0) : start(set_start), size(set_size), part_num(part) {}
 };
 
 typedef std::list<struct mp_part> mp_part_list_t;

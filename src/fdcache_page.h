@@ -49,7 +49,7 @@ struct fdpage
     bool   loaded;
     bool   modified;
 
-    fdpage(off_t start = 0, off_t  size = 0, bool is_loaded = false, bool is_modified = false) :
+    explicit fdpage(off_t start = 0, off_t  size = 0, bool is_loaded = false, bool is_modified = false) :
         offset(start), bytes(size), loaded(is_loaded), modified(is_modified) {}
 
     off_t next() const
