@@ -2450,11 +2450,16 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
     // WTF8_ENCODE(path)
     stbuf->f_bsize  = 16 * 1024 * 1024;
     stbuf->f_namemax = NAME_MAX;
-#ifdef __MSYS__
+#if defined(__MSYS__)
     // WinFsp resolves the free space from f_bfree * f_frsize, and the total space from f_blocks * f_frsize (in bytes).
     stbuf->f_frsize = stbuf->f_bsize;
     stbuf->f_blocks = INT32_MAX;
     stbuf->f_bfree = INT32_MAX;
+#elif defined(__APPLE__)
+    stbuf->f_blocks = UINT32_MAX;
+    stbuf->f_bfree  = UINT32_MAX;
+    stbuf->f_files  = UINT32_MAX;
+    stbuf->f_ffree  = UINT32_MAX;
 #else
     stbuf->f_blocks = static_cast<fsblkcnt_t>(~0) / stbuf->f_bsize;
     stbuf->f_bfree  = stbuf->f_blocks;
