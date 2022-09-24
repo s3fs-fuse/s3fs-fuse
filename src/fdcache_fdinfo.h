@@ -88,7 +88,7 @@ class PseudoFdInfo
         bool ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 
     public:
-        PseudoFdInfo(int fd = -1, int open_flags = 0);
+        explicit PseudoFdInfo(int fd = -1, int open_flags = 0);
         ~PseudoFdInfo();
 
         int GetPhysicalFd() const { return physical_fd; }
