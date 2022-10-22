@@ -123,15 +123,20 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
 static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
-static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid);
+static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue);
 static int rename_object(const char* from, const char* to, bool update_ctime);
 static int rename_object_nocopy(const char* from, const char* to, bool update_ctime);
-static int clone_directory_object(const char* from, const char* to, bool update_ctime);
+static int clone_directory_object(const char* from, const char* to, bool update_ctime, const char* pxattrvalue);
 static int rename_directory(const char* from, const char* to);
 static int remote_mountpath_exists(const char* path);
+static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
+static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
+static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
+static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue);
 static void free_xattrs(xattrs_t& xattrs);
 static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, PXATTRVAL& pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
+static std::string raw_build_xattrs(const xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
@@ -1029,6 +1034,12 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     meta["x-amz-meta-mtime"] = strnow;
     meta["x-amz-meta-ctime"] = strnow;
 
+    std::string xattrvalue;
+    if(build_inherited_xattr_value(path, xattrvalue)){
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(xattrvalue).c_str());
+        meta["x-amz-meta-xattr"] = xattrvalue;
+    }
+
     // [NOTE] set no_truncate flag
     // At this point, the file has not been created(uploaded) and
     // the data is only present in the Stats cache.
@@ -1055,7 +1066,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     return 0;
 }
 
-static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid)
+static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue)
 {
     S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%s][mtime=%s][ctime=%s][uid=%u][gid=%u]", path, mode, str(ts_atime).c_str(), str(ts_mtime).c_str(), str(ts_ctime).c_str(), (unsigned int)uid, (unsigned int)gid);
 
@@ -1076,6 +1087,11 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
     meta["x-amz-meta-atime"] = str(ts_atime);
     meta["x-amz-meta-mtime"] = str(ts_mtime);
     meta["x-amz-meta-ctime"] = str(ts_ctime);
+
+    if(pxattrvalue){
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(std::string(pxattrvalue)).c_str());
+        meta["x-amz-meta-xattr"] = std::string(pxattrvalue);
+    }
 
     S3fsCurl s3fscurl;
     return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
@@ -1104,9 +1120,17 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         return result;
     }
 
+    std::string xattrvalue;
+    const char* pxattrvalue;
+    if(get_parent_meta_xattr_value(path, xattrvalue)){
+        pxattrvalue = xattrvalue.c_str();
+    }else{
+        pxattrvalue = NULL;
+    }
+
     struct timespec now;
     s3fs_realtime(now);
-    result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid);
+    result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid, pxattrvalue);
 
     StatCache::getStatCacheData()->DelStat(path);
     S3FS_MALLOCTRIM(0);
@@ -1238,6 +1262,9 @@ static int s3fs_symlink(const char* _from, const char* _to)
     headers["x-amz-meta-uid"]   = str(pcxt->uid);
     headers["x-amz-meta-gid"]   = str(pcxt->gid);
 
+    // [NOTE]
+    // Symbolic links do not set xattrs.
+
     // open tmpfile
     std::string strFrom;
     {   // scope for AutoFdEntity
@@ -1302,6 +1329,12 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     meta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
+
+    std::string xattrvalue;
+    if(get_meta_xattr_value(from, xattrvalue)){
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(xattrvalue).c_str());
+        meta["x-amz-meta-xattr"] = xattrvalue;
+    }
 
     // [NOTE]
     // If it has a cache, open it first and leave it open until rename.
@@ -1444,7 +1477,7 @@ static int rename_large_object(const char* from, const char* to)
     return result;
 }
 
-static int clone_directory_object(const char* from, const char* to, bool update_ctime)
+static int clone_directory_object(const char* from, const char* to, bool update_ctime, const char* pxattrvalue)
 {
     int result = -1;
     struct stat stbuf;
@@ -1466,7 +1499,7 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     }else{
         set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
     }
-    result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid);
+    result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue);
 
     StatCache::getStatCacheData()->DelStat(to);
 
@@ -1565,11 +1598,19 @@ static int rename_directory(const char* from, const char* to)
     // rename directory objects.
     for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
         if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+            std::string xattrvalue;
+            const char* pxattrvalue;
+            if(get_meta_xattr_value(mn_cur->old_path, xattrvalue)){
+                pxattrvalue = xattrvalue.c_str();
+            }else{
+                pxattrvalue = NULL;
+            }
+
             // [NOTE]
             // The ctime is updated only for the top (from) directory.
             // Other than that, it will not be updated.
             //
-            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path)))){
+            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path), pxattrvalue))){
                 S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
                 free_mvnodes(mn_head);
                 return result;
@@ -1708,6 +1749,13 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     }
 
     if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -1727,7 +1775,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -1807,6 +1855,14 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
+
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -1826,7 +1882,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -1897,6 +1953,14 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     }
 
     if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
+
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -1916,7 +1980,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2003,6 +2067,14 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
+
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2022,7 +2094,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2115,6 +2187,14 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     }
 
     if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
+
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2127,7 +2207,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2239,6 +2319,14 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     }
 
     if(S_ISDIR(stbuf.st_mode)){
+        std::string xattrvalue;
+        const char* pxattrvalue;
+        if(get_meta_xattr_value(path, xattrvalue)){
+            pxattrvalue = xattrvalue.c_str();
+        }else{
+            pxattrvalue = NULL;
+        }
+
         if(IS_REPLACEDIR(nDirType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2251,7 +2339,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         StatCache::getStatCacheData()->DelStat(nowcache);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -3094,6 +3182,123 @@ static int remote_mountpath_exists(const char* path)
     return 0;
 }
 
+static bool get_meta_xattr_value(const char* path, std::string& rawvalue)
+{
+    if(!path || '\0' == path[0]){
+        S3FS_PRN_ERR("path is empty.");
+        return false;
+    }
+    S3FS_PRN_DBG("[path=%s]", path);
+
+    rawvalue.erase();
+
+    headers_t meta;
+    if(0 != get_object_attribute(path, NULL, &meta)){
+        S3FS_PRN_ERR("Failed to get object(%s) headers", path);
+        return false;
+    }
+
+    headers_t::const_iterator iter;
+    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+        return false;
+    }
+    rawvalue = iter->second;
+    return true;
+}
+
+static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue)
+{
+    if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+        // path is mount point, thus does not have parent.
+        return false;
+    }
+
+    std::string parent = mydirname(path);
+    if(parent.empty()){
+        S3FS_PRN_ERR("Could not get parent path for %s.", path);
+        return false;
+    }
+    return get_meta_xattr_value(parent.c_str(), rawvalue);
+}
+
+static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key)
+{
+    xattrvalue.erase();
+
+    std::string rawvalue;
+    if(!get_meta_xattr_value(path, rawvalue)){
+        return false;
+    }
+
+    xattrs_t xattrs;
+    if(0 == parse_xattrs(rawvalue, xattrs)){
+        return false;
+    }
+
+    std::string targetkey;
+    if(default_key){
+        targetkey = "system.posix_acl_default";
+    }else{
+        targetkey = "system.posix_acl_access";
+    }
+
+    xattrs_t::iterator iter;
+    if(xattrs.end() == (iter = xattrs.find(targetkey)) || !(iter->second)){
+        free_xattrs(xattrs);
+        return false;
+    }
+
+    // convert value by base64
+    char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
+    if(!base64val){
+        free_xattrs(xattrs);
+        return false;
+    }
+    free_xattrs(xattrs);
+
+    xattrvalue = base64val;
+    delete[] base64val;
+
+    return true;
+}
+
+// [NOTE]
+// Converts and returns the POSIX ACL default(system.posix_acl_default) value of
+// the parent directory as a POSIX ACL(system.posix_acl_access) value.
+// Returns false if the parent directory has no POSIX ACL defaults.
+//
+static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue)
+{
+    S3FS_PRN_DBG("[path=%s]", path);
+
+    xattrvalue.erase();
+
+    if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+        // path is mount point, thus does not have parent.
+        return false;
+    }
+
+    std::string parent = mydirname(path);
+    if(parent.empty()){
+        S3FS_PRN_ERR("Could not get parent path for %s.", path);
+        return false;
+    }
+
+    // get parent's "system.posix_acl_default" value(base64'd).
+    std::string parent_default_value;
+    if(!get_xattr_posix_key_value(parent.c_str(), parent_default_value, true)){
+        return false;
+    }
+
+    // build "system.posix_acl_access" from parent's default value
+    std::string raw_xattr_value;
+    raw_xattr_value  = "{\"system.posix_acl_access\":\"";
+    raw_xattr_value += parent_default_value;
+    raw_xattr_value += "\"}";
+
+    xattrvalue = urlEncode(raw_xattr_value);
+    return true;
+}
 
 static void free_xattrs(xattrs_t& xattrs)
 {
@@ -3163,16 +3368,16 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     return xattrs.size();
 }
 
-static std::string build_xattrs(const xattrs_t& xattrs)
+static std::string raw_build_xattrs(const xattrs_t& xattrs)
 {
-    std::string strxattrs("{");
-
-    bool is_set = false;
+    std::string strxattrs;
+    bool        is_set = false;
     for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
         if(is_set){
             strxattrs += ',';
         }else{
-            is_set = true;
+            is_set    = true;
+            strxattrs = "{";
         }
         strxattrs += '\"';
         strxattrs += iter->first;
@@ -3187,8 +3392,18 @@ static std::string build_xattrs(const xattrs_t& xattrs)
         }
         strxattrs += '\"';
     }
-    strxattrs += '}';
+    if(is_set){
+        strxattrs += "}";
+    }
+    return strxattrs;
+}
 
+static std::string build_xattrs(const xattrs_t& xattrs)
+{
+    std::string strxattrs = raw_build_xattrs(xattrs);
+    if(strxattrs.empty()){
+        strxattrs = "{}";
+    }
     strxattrs = urlEncode(strxattrs);
 
     return strxattrs;
@@ -3239,6 +3454,8 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
     // build new strxattrs(not encoded) and set it to headers_t
     meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
+
+    S3FS_PRN_DBG("Set xattrs(after adding %s key) = %s", name, raw_build_xattrs(xattrs).c_str());
 
     free_xattrs(xattrs);
 
@@ -3311,7 +3528,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, NULL))){
             return result;
         }
 
@@ -3421,6 +3638,8 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 
     parse_xattrs(strxattrs, xattrs);
 
+    S3FS_PRN_DBG("Get xattrs = %s", raw_build_xattrs(xattrs).c_str());
+
     // search name
     std::string strname = name;
     xattrs_t::iterator xiter = xattrs.find(strname);
@@ -3484,6 +3703,8 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     std::string strxattrs = iter->second;
 
     parse_xattrs(strxattrs, xattrs);
+
+    S3FS_PRN_DBG("Get xattrs = %s", raw_build_xattrs(xattrs).c_str());
 
     // calculate total name length
     size_t total = 0;
@@ -3582,6 +3803,8 @@ static int s3fs_removexattr(const char* path, const char* name)
     delete xiter->second;
     xattrs.erase(xiter);
 
+    S3FS_PRN_DBG("Reset xattrs(after delete %s key) = %s", name, raw_build_xattrs(xattrs).c_str());
+
     if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
         // Should rebuild directory object(except new type)
         // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -3600,7 +3823,7 @@ static int s3fs_removexattr(const char* path, const char* name)
         set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid))){
+        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, NULL))){
             free_xattrs(xattrs);
             return result;
         }
