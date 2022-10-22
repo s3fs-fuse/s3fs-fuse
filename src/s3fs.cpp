@@ -72,6 +72,7 @@ static gid_t mp_gid               = 0;    // group of mount point(only not speci
 static mode_t mp_mode             = 0;    // mode of mount point
 static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
+static bool has_mp_stat           = false;// whether the stat information file for mount point exists
 static std::string mountpoint;
 static S3fsCred* ps3fscred        = NULL; // using only in this file
 static std::string mimetype_file;
@@ -191,6 +192,14 @@ static bool IS_RMTYPEDIR(dirtype type)
     return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type;
 }
 
+static bool IS_CREATE_MP_STAT(const char* path)
+{
+    // [NOTE]
+    // "has_mp_stat" is set in get_object_attribute()
+    //
+    return (path && 0 == strcmp(path, "/") && !has_mp_stat);
+}
+
 static bool is_special_name_folder_object(const char* path)
 {
     if(!support_compat_dir){
@@ -200,6 +209,10 @@ static bool is_special_name_folder_object(const char* path)
     }
 
     if(!path || '\0' == path[0]){
+        return false;
+    }
+    if(0 == strcmp(path, "/") && mount_prefix.empty()){
+        // the path is the mount point which is the bucket root
         return false;
     }
 
@@ -337,6 +350,15 @@ static int remove_old_type_dir(const std::string& path, dirtype type)
 // 2) "dir/"
 // 3) "dir_$folder$"
 //
+// Special two case of the mount point directory:
+//  [Case 1] the mount point is the root of the bucket:
+//           1) "/"
+//
+//  [Case 2] the mount point is a directory path(ex. foo) below the bucket:
+//           1) "foo"
+//           2) "foo/"
+//           3) "foo_$folder$"
+//
 static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce, bool add_no_truncate_cache)
 {
     int          result = -1;
@@ -347,6 +369,8 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     std::string  strpath;
     S3fsCurl     s3fscurl;
     bool         forcedir = false;
+    bool         is_mountpoint = false;             // path is the mount point
+    bool         is_bucket_mountpoint = false;      // path is the mount point which is the bucket root
     std::string::size_type Pos;
 
     S3FS_PRN_DBG("[path=%s]", path);
@@ -356,12 +380,17 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }
 
     memset(pstat, 0, sizeof(struct stat));
+
+    // check mount point
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
-        pstat->st_nlink = 1; // see fuse faq
+        is_mountpoint = true;
+        if(mount_prefix.empty()){
+            is_bucket_mountpoint = true;
+        }
+        // default stat for mount point if the directory stat file is not existed.
         pstat->st_mode  = mp_mode;
         pstat->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
         pstat->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
-        return 0;
     }
 
     // Check cache.
@@ -372,7 +401,14 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         strpath.erase(Pos);
         strpath += "/";
     }
+    // [NOTE]
+    // For mount points("/"), the Stat cache key name is "/".
+    //
     if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
+        if(is_mountpoint){
+            // if mount point, we need to set this.
+            pstat->st_nlink = 1; // see fuse faq
+        }
         return 0;
     }
     if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
@@ -380,8 +416,23 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         return -ENOENT;
     }
 
-    // At first, check path
-    strpath     = path;
+    // set query(head request) path
+    if(is_bucket_mountpoint){
+        // [NOTE]
+        // This is a special process for mount point
+        // The path is "/" for mount points.
+        // If the bucket mounted at a mount point, we try to find "/" object under
+        // the bucket for mount point's stat.
+        // In this case, we will send the request "HEAD // HTTP /1.1" to S3 server.
+        //
+        // If the directory under the bucket is mounted, it will be sent
+        // "HEAD /<directories ...>/ HTTP/1.1", so we do not need to change path at
+        // here.
+        //
+        strpath = "//";         // strpath is "//"
+    }else{
+        strpath = path;
+    }
     result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
     s3fscurl.DestroyCurlHandle();
 
@@ -406,7 +457,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         (*pheader)["x-amz-meta-mode"] = str(0);
 
     }else if(0 != result){
-        if(overcheck){
+        if(overcheck && !is_bucket_mountpoint){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
             if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
                 // now path is "object", do check "object/" for over checking
@@ -431,6 +482,10 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }
         if(0 != result && std::string::npos == strpath.find("_$folder$", 0)){
             // now path is "object" or "object/", do check "no dir object" which is not object but has only children.
+            //
+            // [NOTE]
+            // If the path is mount point and there is no Stat information file for it, we need this process.
+            //
             if('/' == *strpath.rbegin()){
                 strpath.erase(strpath.length() - 1);
             }
@@ -453,9 +508,34 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }
     }
 
+    // set headers for mount point from default stat
+    if(is_mountpoint){
+        if(0 != result){
+            has_mp_stat = false;
+
+            // [NOTE]
+            // If mount point and no stat information file, create header
+            // information from the default stat.
+            //
+            (*pheader)["Content-Type"]     = S3fsCurl::LookupMimeType(strpath);
+            (*pheader)["x-amz-meta-uid"]   = str(pstat->st_uid);
+            (*pheader)["x-amz-meta-gid"]   = str(pstat->st_gid);
+            (*pheader)["x-amz-meta-mode"]  = str(pstat->st_mode);
+            (*pheader)["x-amz-meta-atime"] = str(pstat->st_atime);
+            (*pheader)["x-amz-meta-ctime"] = str(pstat->st_ctime);
+            (*pheader)["x-amz-meta-mtime"] = str(pstat->st_mtime);
+
+            result = 0;
+        }else{
+            has_mp_stat = true;
+        }
+    }
+
     // [NOTE]
     // If the file is listed but not allowed access, put it in
     // the positive cache instead of the negative cache.
+    // 
+    // When mount points, the following error does not occur.
     // 
     if(0 != result && -EPERM != result){
         // finally, "path" object did not find. Add no object cache.
@@ -464,8 +544,11 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         return result;
     }
 
-    // if path has "_$folder$", need to cut it.
-    if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
+    // set cache key
+    if(is_bucket_mountpoint){
+        strpath = "/";
+    }else if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
+        // if path has "_$folder$", need to cut it.
         strpath.erase(Pos);
         strpath += "/";
     }
@@ -498,6 +581,12 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             return -ENOENT;
         }
     }
+
+    if(is_mountpoint){
+        // if mount point, we need to set this.
+        pstat->st_nlink = 1; // see fuse faq
+    }
+
     return 0;
 }
 
@@ -735,12 +824,19 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
     int         result;
     S3fsCurl    s3fscurl(true);
     off_t       size;
+    std::string strpath;
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
+    if(0 == strcmp(path, "/") && mount_prefix.empty()){
+        strpath = "//";     // for the mount point that is bucket root, change "/" to "//".
+    }else{
+        strpath = path;
+    }
+
     // files larger than 5GB must be modified via the multipart interface
     // call use_st_size as false when the file does not exist(ex. rename object)
-    if(use_st_size){
+    if(use_st_size && '/' != *strpath.rbegin()){     // directory object("dir/") is always 0(Content-Length = 0)
         struct stat buf;
         if(0 != (result = get_object_attribute(path, &buf))){
           return result;
@@ -751,11 +847,11 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
     }
 
     if(!nocopyapi && !nomultipart && size >= multipart_threshold){
-        if(0 != (result = s3fscurl.MultipartHeadRequest(path, size, meta, is_copy))){
+        if(0 != (result = s3fscurl.MultipartHeadRequest(strpath.c_str(), size, meta, is_copy))){
             return result;
         }
     }else{
-        if(0 != (result = s3fscurl.PutHeadRequest(path, meta, is_copy))){
+        if(0 != (result = s3fscurl.PutHeadRequest(strpath.c_str(), meta, is_copy))){
             return result;
         }
     }
@@ -968,6 +1064,8 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
     std::string tpath = path;
     if('/' != *tpath.rbegin()){
         tpath += "/";
+    }else if("/" == tpath && mount_prefix.empty()){
+        tpath = "//";       // for the mount point that is bucket root, change "/" to "//".
     }
 
     headers_t meta;
@@ -1179,7 +1277,6 @@ static int s3fs_symlink(const char* _from, const char* _to)
 static int rename_object(const char* from, const char* to, bool update_ctime)
 {
     int         result;
-    std::string s3_realpath;
     headers_t   meta;
     struct stat buf;
 
@@ -1196,12 +1293,12 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     if(0 != (result = get_object_attribute(from, &buf, &meta))){
         return result;
     }
-    s3_realpath = get_realpath(from);
+    std::string strSourcePath        = (mount_prefix.empty() && 0 == strcmp("/", from)) ? "//" : from;
 
     if(update_ctime){
         meta["x-amz-meta-ctime"]     = s3fs_str_realtime();
     }
-    meta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + s3_realpath);
+    meta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -1591,10 +1688,6 @@ static int s3fs_chmod(const char* _path, mode_t mode)
 
     S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change mode for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -1613,13 +1706,15 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-        // Should rebuild directory object(except new type)
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild directory object(except new type)
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1636,10 +1731,11 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         }
     }else{
         // normal object or directory object of newer version
-        headers_t updatemeta;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        headers_t   updatemeta;
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-mode"]          = str(mode);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -1690,10 +1786,6 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 
     S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change mode for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -1714,12 +1806,14 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        // Should rebuild all directory object
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild all directory object
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1777,10 +1871,6 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 
     S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change owner for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -1805,13 +1895,15 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-        // Should rebuild directory object(except new type)
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild directory object(except new type)
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1827,11 +1919,12 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
             return result;
         }
     }else{
-        headers_t updatemeta;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        headers_t   updatemeta;
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-uid"]           = str(uid);
         updatemeta["x-amz-meta-gid"]           = str(gid);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -1882,10 +1975,6 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 
     S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change owner for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -1913,12 +2002,14 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        // Should rebuild all directory object
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild all directory object
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -1988,10 +2079,6 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 
     S3FS_PRN_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change mtime for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -2026,13 +2113,15 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-        // Should rebuild directory object(except new type)
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild directory object(except new type)
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -2041,11 +2130,12 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             return result;
         }
     }else{
-        headers_t updatemeta;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        headers_t   updatemeta;
         updatemeta["x-amz-meta-mtime"]         = str(mtime);
         updatemeta["x-amz-meta-ctime"]         = str(ctime);
         updatemeta["x-amz-meta-atime"]         = str(atime);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -2112,10 +2202,6 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 
     S3FS_PRN_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change mtime for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -2152,12 +2238,14 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        // Should rebuild all directory object
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild all directory object
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -3101,10 +3189,6 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     struct stat stbuf;
     dirtype     nDirType = DIRTYPE_UNKNOWN;
 
-    if(0 == strcmp(path, "/")){
-        S3FS_PRN_ERR("Could not change mode for mount point.");
-        return -EIO;
-    }
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
@@ -3123,13 +3207,15 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
-        // Should rebuild directory object(except new type)
-        // Need to remove old dir("dir" etc) and make new dir("dir/")
+    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+        if(IS_REPLACEDIR(nDirType)){
+            // Should rebuild directory object(except new type)
+            // Need to remove old dir("dir" etc) and make new dir("dir/")
 
-        // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
-            return result;
+            // At first, remove directory old object
+            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+                return result;
+            }
         }
         StatCache::getStatCacheData()->DelStat(nowcache);
 
@@ -3151,9 +3237,10 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     }
 
     // set xattr all object
-    headers_t updatemeta;
+    std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+    headers_t   updatemeta;
     updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
     // check opened file handle.
@@ -3440,8 +3527,9 @@ static int s3fs_removexattr(const char* path, const char* name)
     }
 
     // set xattr all object
-    headers_t updatemeta;
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strpath.c_str()));
+    std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+    headers_t   updatemeta;
+    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
     if(!xattrs.empty()){
         updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);
