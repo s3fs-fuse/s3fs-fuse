@@ -311,6 +311,11 @@ AC_COMPILE_IFELSE(
 )
 
 dnl ----------------------------------------------
+dnl dl library
+dnl ----------------------------------------------
+AC_CHECK_LIB([dl], [dlopen, dlclose, dlerror, dlsym], [], [AC_MSG_ERROR([Could not found dlopen, dlclose, dlerror and dlsym])])
+
+dnl ----------------------------------------------
 dnl build date
 dnl ----------------------------------------------
 AC_SUBST([MAN_PAGE_DATE], [$(date -r doc/man/s3fs.1.in +"%B %Y")])

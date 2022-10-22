@@ -3504,7 +3504,7 @@ static void s3fs_exit_fuseloop(int exit_status)
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-    S3FS_PRN_INIT_INFO("init v%s(commit:%s) with %s", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name());
+    S3FS_PRN_INIT_INFO("init v%s(commit:%s) with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), ps3fscred->GetCredFuncVersion(false));
 
     // cache(remove cache dirs at first)
     if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
@@ -4555,13 +4555,10 @@ int main(int argc, char* argv[])
 
     // set credential object
     //
-    // This local variable is the only credential object.
-    // It is also set in the S3fsCurl class and this object is used.
-    //
-    S3fsCred s3fscredObj;
-    ps3fscred = &s3fscredObj;
-    if(!S3fsCurl::InitCredentialObject(&s3fscredObj)){
+    ps3fscred = new S3fsCred();
+    if(!S3fsCurl::InitCredentialObject(ps3fscred)){
         S3FS_PRN_EXIT("Failed to setup credential object to s3fs curl.");
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4570,11 +4567,13 @@ int main(int argc, char* argv[])
             case 0:
                 if(strcmp(long_opts[option_index].name, "version") == 0){
                     show_version();
+                    delete ps3fscred;
                     exit(EXIT_SUCCESS);
                 }
                 break;
             case 'h':
                 show_help();
+                delete ps3fscred;
                 exit(EXIT_SUCCESS);
             case 'o':
                 break;
@@ -4588,6 +4587,7 @@ int main(int argc, char* argv[])
             case 'u':   // --incomplete-mpu-list
                 if(NO_UTILITY_MODE != utility_mode){
                     S3FS_PRN_EXIT("already utility mode option is specified.");
+                    delete ps3fscred;
                     exit(EXIT_FAILURE);
                 }
                 utility_mode = INCOMP_TYPE_LIST;
@@ -4595,6 +4595,7 @@ int main(int argc, char* argv[])
             case 'a':   // --incomplete-mpu-abort
                 if(NO_UTILITY_MODE != utility_mode){
                     S3FS_PRN_EXIT("already utility mode option is specified.");
+                    delete ps3fscred;
                     exit(EXIT_FAILURE);
                 }
                 utility_mode = INCOMP_TYPE_ABORT;
@@ -4605,12 +4606,14 @@ int main(int argc, char* argv[])
                 }else if(NULL != optarg){
                     if(!convert_unixtime_from_option_arg(optarg, incomp_abort_time)){
                         S3FS_PRN_EXIT("--incomplete-mpu-abort option argument is wrong.");
+                        delete ps3fscred;
                         exit(EXIT_FAILURE);
                     }
                 }
                 // if optarg is null, incomp_abort_time is 24H(default)
                 break;
             default:
+                delete ps3fscred;
                 exit(EXIT_FAILURE);
         }
     }
@@ -4620,12 +4623,14 @@ int main(int argc, char* argv[])
     // Load SSE environment
     if(!S3fsCurl::LoadEnvSse()){
         S3FS_PRN_EXIT("something wrong about SSE environment.");
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
     // ssl init
     if(!s3fs_init_global_ssl()){
         S3FS_PRN_EXIT("could not initialize for ssl libraries.");
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4633,6 +4638,7 @@ int main(int argc, char* argv[])
     if(!init_parser_xml_lock()){
         S3FS_PRN_EXIT("could not initialize mutex for xml parser.");
         s3fs_destroy_global_ssl();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4665,6 +4671,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4680,6 +4687,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4697,6 +4705,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::FinalCheckSse()){
@@ -4705,6 +4714,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4725,6 +4735,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4740,6 +4751,7 @@ int main(int argc, char* argv[])
             s3fs_destroy_global_ssl();
             destroy_parser_xml_lock();
             destroy_basename_lock();
+            delete ps3fscred;
             exit(EXIT_FAILURE);
         }
     }
@@ -4751,6 +4763,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4761,6 +4774,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4792,7 +4806,11 @@ int main(int argc, char* argv[])
             found = s3host.find("https:");
             if(found != std::string::npos){
                 S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
-                exit(1);
+                S3fsCurl::DestroyS3fsCurl();
+                s3fs_destroy_global_ssl();
+                destroy_parser_xml_lock();
+                delete ps3fscred;
+                exit(EXIT_FAILURE);
             }
         }
     }
@@ -4805,6 +4823,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(exitcode);
     }
 
@@ -4830,6 +4849,7 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         destroy_parser_xml_lock();
         destroy_basename_lock();
+        delete ps3fscred;
         exit(EXIT_FAILURE);
     }
 
@@ -4891,6 +4911,7 @@ int main(int argc, char* argv[])
     s3fs_destroy_global_ssl();
     destroy_parser_xml_lock();
     destroy_basename_lock();
+    delete ps3fscred;
 
     // cleanup xml2
     xmlCleanupParser();

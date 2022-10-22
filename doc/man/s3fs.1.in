@@ -284,6 +284,15 @@ This option instructs s3fs to use IBM IAM authentication. In this mode, the AWSA
 \fB\-o\fR ibm_iam_endpoint (default is https://iam.cloud.ibm.com)
 Sets the URL to use for IBM IAM authentication.
 .TP
+\fB\-o\fR credlib (default=\"\" which means disabled)
+Specifies the shared library that handles the credentials containing the authentication token.
+If this option is specified, the specified credential and token processing provided by the shared library ant will be performed instead of the built-in credential processing.
+This option cannot be specified with passwd_file, profile, use_session_token, ecs, ibm_iam_auth, ibm_iam_endpoint, imdsv1only and iam_role option.
+.TP
+\fB\-o\fR credlib_opts (default=\"\" which means disabled)
+Specifies the options to pass when the shared library specified in credlib is loaded and then initialized.
+For the string specified in this option, specify the string defined by the shared library.
+.TP
 \fB\-o\fR use_xattr (default is not handling the extended attribute)
 Enable to handle the extended attribute (xattrs).
 If you set this option, you can use the extended attribute.
