@@ -90,7 +90,7 @@ find "${STATS_CDIR}" -type f -exec stat -c "%X:%n" "{}" \; | sort | while read -
 do
     echo "Looking at ${part}"
     TMP_ATIME=$(echo "${part}" | cut -d: -f1)
-    TMP_STATS=$(echo "${part}" | cut -d: -f2)
+    TMP_STATS=$(echo "${part}" | cut -d: -f2-)
     TMP_CFILE=$(echo "${TMP_STATS}" | sed -e "s/\\.${BUCKET}\\.stat/${BUCKET}/")
 
     if [ "$(stat -c %X "${TMP_STATS}")" -eq "${TMP_ATIME}" ]; then
