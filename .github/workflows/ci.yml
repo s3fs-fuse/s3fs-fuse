@@ -80,7 +80,7 @@ jobs:
           if [ "${{ matrix.container }}" = "opensuse/leap:15" ]; then zypper install -y tar gzip; fi
 
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       # [NOTE]
       # Matters that depend on OS:VERSION are determined and executed in the following script.
@@ -123,7 +123,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Brew tap
         run: |
