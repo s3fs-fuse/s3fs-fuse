@@ -3304,8 +3304,13 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         return -EINVAL;
     }
     if(-1 != fd){
-        // TODO: is this necessary?
         // duplicate fd
+        //
+        // [NOTE]
+        // This process requires FILE*, then it is linked to fd with fdopen.
+        // After processing, the FILE* is closed with fclose, and fd is closed together.
+        // The fd should not be closed here, so call dup here to duplicate it.
+        //
         int fd2;
         if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
             S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
