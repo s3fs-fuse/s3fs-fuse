@@ -1279,29 +1279,18 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
     int            result;
     std::string    upload_id;
     struct stat    st;
-    int            fd2;
     etaglist_t     list;
     off_t          remaining_bytes;
     S3fsCurl       s3fscurl(true);
 
     S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
-    // duplicate fd
-    if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-        S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
-        if(-1 != fd2){
-            close(fd2);
-        }
-        return -errno;
-    }
-    if(-1 == fstat(fd2, &st)){
+    if(-1 == fstat(fd, &st)){
         S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
-        close(fd2);
         return -errno;
     }
 
     if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, false))){
-        close(fd2);
         return result;
     }
     s3fscurl.DestroyCurlHandle();
@@ -1317,7 +1306,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
 
         // s3fscurl sub object
         S3fsCurl* s3fscurl_para            = new S3fsCurl(true);
-        s3fscurl_para->partdata.fd         = fd2;
+        s3fscurl_para->partdata.fd         = fd;
         s3fscurl_para->partdata.startpos   = st.st_size - remaining_bytes;
         s3fscurl_para->partdata.size       = chunk;
         s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
@@ -1327,7 +1316,6 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         // initiate upload part for parallel
         if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, s3fscurl_para->partdata.get_part_number(), upload_id))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-            close(fd2);
             delete s3fscurl_para;
             return result;
         }
@@ -1335,7 +1323,6 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         // set into parallel object
         if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
             S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-            close(fd2);
             delete s3fscurl_para;
             return -EIO;
         }
@@ -1356,8 +1343,6 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         return result;
     }
 
-    close(fd2);
-
     if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
         return result;
     }
@@ -1369,28 +1354,17 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     int            result;
     std::string    upload_id;
     struct stat    st;
-    int            fd2;
     etaglist_t     list;
     S3fsCurl       s3fscurl(true);
 
     S3FS_PRN_INFO3("[tpath=%s][fd=%d]", SAFESTRPTR(tpath), fd);
 
-    // duplicate fd
-    if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-        S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
-        if(-1 != fd2){
-            close(fd2);
-        }
-        return -errno;
-    }
-    if(-1 == fstat(fd2, &st)){
+    if(-1 == fstat(fd, &st)){
         S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
-        close(fd2);
         return -errno;
     }
 
     if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, true))){
-        close(fd2);
         return result;
     }
     s3fscurl.DestroyCurlHandle();
@@ -1412,7 +1386,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             // Multipart upload
             S3fsCurl* s3fscurl_para              = new S3fsCurl(true);
 
-            s3fscurl_para->partdata.fd         = fd2;
+            s3fscurl_para->partdata.fd         = fd;
             s3fscurl_para->partdata.startpos   = iter->offset;
             s3fscurl_para->partdata.size       = iter->bytes;
             s3fscurl_para->b_partdata_startpos = s3fscurl_para->partdata.startpos;
@@ -1424,7 +1398,6 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             // initiate upload part for parallel
             if(0 != (result = s3fscurl_para->UploadMultipartPostSetup(tpath, s3fscurl_para->partdata.get_part_number(), upload_id))){
                 S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-                close(fd2);
                 delete s3fscurl_para;
                 return result;
             }
@@ -1432,7 +1405,6 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             // set into parallel object
             if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
                 S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-                close(fd2);
                 delete s3fscurl_para;
                 return -EIO;
             }
@@ -1466,7 +1438,6 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
                 // initiate upload part for parallel
                 if(0 != (result = s3fscurl_para->CopyMultipartPostSetup(tpath, tpath, s3fscurl_para->partdata.get_part_number(), upload_id, meta))){
                     S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-                    close(fd2);
                     delete s3fscurl_para;
                     return result;
                 }
@@ -1474,7 +1445,6 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
                 // set into parallel object
                 if(!curlmulti.SetS3fsCurlObject(s3fscurl_para)){
                     S3FS_PRN_ERR("Could not make curl object into multi curl(%s).", tpath);
-                    close(fd2);
                     delete s3fscurl_para;
                     return -EIO;
                 }
@@ -1492,10 +1462,8 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
         if(result2 != 0){
             S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
         }
-        close(fd2);
         return result;
     }
-    close(fd2);
 
     if(0 != (result = s3fscurl.CompleteMultipartPostRequest(tpath, upload_id, list))){
         return result;
@@ -3336,6 +3304,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         return -EINVAL;
     }
     if(-1 != fd){
+        // TODO: is this necessary?
         // duplicate fd
         int fd2;
         if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
@@ -4228,18 +4197,8 @@ int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* t
 {
     S3FS_PRN_INFO3("[upload_id=%s][tpath=%s][fd=%d][offset=%lld][size=%lld]", upload_id.c_str(), SAFESTRPTR(tpath), fd, static_cast<long long int>(offset), static_cast<long long int>(size));
 
-    // duplicate fd
-    int fd2;
-    if(-1 == (fd2 = dup(fd)) || 0 != lseek(fd2, 0, SEEK_SET)){
-        S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
-        if(-1 != fd2){
-            close(fd2);
-        }
-        return -errno;
-    }
-
     // set
-    partdata.fd         = fd2;
+    partdata.fd         = fd;
     partdata.startpos   = offset;
     partdata.size       = size;
     b_partdata_startpos = partdata.startpos;
@@ -4250,11 +4209,9 @@ int S3fsCurl::MultipartUploadRequest(const std::string& upload_id, const char* t
     int   result;
     if(0 != (result = UploadMultipartPostRequest(tpath, petagpair->part_num, upload_id))){
         S3FS_PRN_ERR("failed uploading %d part by error(%d)", petagpair->part_num, result);
-        close(fd2);
         return result;
     }
     DestroyCurlHandle();
-    close(fd2);
 
     return 0;
 }
