@@ -25,6 +25,14 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <getopt.h>
+#include <map>
+#include <thread>
+#include <mutex>
+#include <unistd.h>
+#include <list>
+#include <cstddef>
+#include <vector>
+#include <set>
 
 #include "common.h"
 #include "s3fs.h"
@@ -99,7 +107,7 @@ static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static int max_thread_count       = 5;  // default is 5
-
+static std::map<std::string,std::set<std::string>> fillerCache;
 //-------------------------------------------------------------------
 // Global functions : prototype
 //-------------------------------------------------------------------
@@ -142,7 +150,7 @@ static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
-
+static std::pair<std::string,std::string> getFilePathAndName(const char* _path);
 //-------------------------------------------------------------------
 // fuse interface functions
 //-------------------------------------------------------------------
@@ -1097,6 +1105,7 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
     return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
 }
 
+static std::mutex mkdirLock;
 static int s3fs_mkdir(const char* _path, mode_t mode)
 {
     WTF8_ENCODE(path)
@@ -1120,6 +1129,16 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         return result;
     }
 
+    mkdirLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(path);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    mkdirLock.unlock();
+
     std::string xattrvalue;
     const char* pxattrvalue;
     if(get_parent_meta_xattr_value(path, xattrvalue)){
@@ -1138,6 +1157,7 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
     return result;
 }
 
+static std::mutex unlinkLock;
 static int s3fs_unlink(const char* _path)
 {
     WTF8_ENCODE(path)
@@ -1148,6 +1168,15 @@ static int s3fs_unlink(const char* _path)
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
     }
+
+    unlinkLock.lock();
+    std::pair<std::string,std::string> filePathAndName=getFilePathAndName(path);
+    std::map<std::string,std::set<std::string>>::iterator it=fillerCache.find(filePathAndName.first);
+    if (it != fillerCache.end()){
+        it->second.erase(it->second.find(filePathAndName.second));
+    }
+    unlinkLock.unlock();
+
     S3fsCurl s3fscurl;
     result = s3fscurl.DeleteRequest(path);
     StatCache::getStatCacheData()->DelStat(path);
@@ -1173,6 +1202,7 @@ static int directory_empty(const char* path)
     return 0;
 }
 
+static std::mutex rmdirLock;
 static int s3fs_rmdir(const char* _path)
 {
     WTF8_ENCODE(path)
@@ -1190,6 +1220,11 @@ static int s3fs_rmdir(const char* _path)
     if(directory_empty(path) != 0){
         return -ENOTEMPTY;
     }
+
+    rmdirLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(path);
+    fillerCache.erase(filePathAndName.first);
+    rmdirLock.unlock();
 
     strpath = path;
     if('/' != *strpath.rbegin()){
@@ -1302,6 +1337,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     return result;
 }
 
+static std::mutex renameObjectLock;
 static int rename_object(const char* from, const char* to, bool update_ctime)
 {
     int         result;
@@ -1322,6 +1358,16 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         return result;
     }
     std::string strSourcePath        = (mount_prefix.empty() && 0 == strcmp("/", from)) ? "//" : from;
+
+    renameObjectLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(to);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    renameObjectLock.unlock();
 
     if(update_ctime){
         meta["x-amz-meta-ctime"]     = s3fs_str_realtime();
@@ -1388,6 +1434,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     return result;
 }
 
+static std::mutex renameObjectNocopyLock;
 static int rename_object_nocopy(const char* from, const char* to, bool update_ctime)
 {
     int result;
@@ -1402,6 +1449,16 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
         // not permit removing "from" object parent dir.
         return result;
     }
+
+    renameObjectNocopyLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(to);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    renameObjectNocopyLock.unlock();
 
     // open & load
     {   // scope for AutoFdEntity
@@ -1442,6 +1499,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
     return result;
 }
 
+static std::mutex renameLargeObjectLock;
 static int rename_large_object(const char* from, const char* to)
 {
     int         result;
@@ -1461,6 +1519,16 @@ static int rename_large_object(const char* from, const char* to)
     if(0 != (result = get_object_attribute(from, &buf, &meta, false))){
         return result;
     }
+
+    renameLargeObjectLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(to);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    renameLargeObjectLock.unlock();
 
     S3fsCurl s3fscurl(true);
     if(0 != (result = s3fscurl.MultipartRenameRequest(from, to, meta, buf.st_size))){
@@ -1506,6 +1574,7 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     return result;
 }
 
+static std::mutex renameDirectoryLock;
 static int rename_directory(const char* from, const char* to)
 {
     S3ObjList head;
@@ -1591,6 +1660,16 @@ static int rename_directory(const char* from, const char* to)
             return -ENOMEM;
         }
     }
+
+    renameDirectoryLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(to);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    renameDirectoryLock.unlock();
 
     //
     // rename
@@ -2588,12 +2667,35 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     return static_cast<int>(res);
 }
 
+static std::pair<std::string,std::string> getFilePathAndName(const char* _path){
+    WTF8_ENCODE(path)
+    std::string tmpPath = path;
+    std::size_t found = tmpPath.find_last_of("/\\");
+    std::string filePath = tmpPath.substr(0,found);
+    std::string fileName = tmpPath.substr(found+1);
+    if (filePath.length() == 0){
+        filePath = "/";
+    }
+    return std::make_pair(filePath,fileName);
+}
+
+static std::mutex writeLock;
 static int s3fs_write(const char* _path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
     ssize_t res;
 
     S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+
+    writeLock.lock();
+    std::pair<std::string,std::string> filePathAndName = getFilePathAndName(path);
+    std::set<std::string> fileNameSet;
+    if (fillerCache.count(filePathAndName.first)>0){
+        fileNameSet=fillerCache.find(filePathAndName.first)->second;
+    }
+    fileNameSet.insert(filePathAndName.second);
+    fillerCache[filePathAndName.first]=fileNameSet;
+    writeLock.unlock();
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -3017,7 +3119,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
-    S3ObjList head;
     int result;
 
     S3FS_PRN_INFO("[path=%s]", path);
@@ -3026,26 +3127,28 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
         return result;
     }
 
-    // get a list of all the objects
-    if((result = list_bucket(path, head, "/")) != 0){
-        S3FS_PRN_ERR("list_bucket returns error(%d).", result);
-        return result;
+    std::string strpath = path;
+    if(strcmp(path, "/") != 0){
+        strpath += "/";
     }
 
     // force to add "." and ".." name.
     filler(buf, ".", 0, 0);
     filler(buf, "..", 0, 0);
-    if(head.IsEmpty()){
-        return 0;
-    }
-
-    // Send multi head request for stats caching.
-    std::string strpath = path;
-    if(strcmp(path, "/") != 0){
-        strpath += "/";
-    }
-    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
-        S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
+    std::map<std::string,std::set<std::string>>::iterator iter;
+    iter=fillerCache.find(path);
+    if (iter != fillerCache.end()){
+        if (!iter->second.empty()){
+            std::set<std::string> setOfFile=iter->second;
+            std::vector<std::string> v(setOfFile.size());
+            std::copy(setOfFile.begin(), setOfFile.end(), v.begin());
+            for(size_t i = 0; i < v.size(); i++){
+                std::string filename = v[i].data();
+                std::string disppath = strpath + filename;
+                std::string bpath = mybasename(disppath);
+                filler(buf, bpath.c_str(), 0, 0);
+            }
+        }
     }
     S3FS_MALLOCTRIM(0);
 
