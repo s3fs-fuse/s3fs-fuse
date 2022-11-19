@@ -4179,10 +4179,8 @@ static int set_bucket(const char* arg)
                 return -1;
             }
             mount_prefix = pmount_prefix;
-            // remove trailing slash
-            if(mount_prefix[mount_prefix.size() - 1] == '/'){
-                mount_prefix.erase(mount_prefix.size() - 1);
-            }
+            // Trim the last consecutive '/'
+            mount_prefix = trim_right(mount_prefix, "/");
         }
     }else{
         if(!S3fsCred::SetBucket(arg)){
