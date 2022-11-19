@@ -49,9 +49,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 {
     pseudofdinfo_thparam*   pthparam = static_cast<pseudofdinfo_thparam*>(arg);
     if(!pthparam || !(pthparam->ppseudofdinfo)){
-        if(pthparam){
-            delete pthparam;
-        }
+        delete pthparam;
         return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
