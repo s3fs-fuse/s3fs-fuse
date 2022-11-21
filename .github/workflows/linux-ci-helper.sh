@@ -64,6 +64,12 @@ CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix
 #-----------------------------------------------------------
 # OS dependent variables
 #-----------------------------------------------------------
+#
+# Default values
+#
+PACKAGE_ENABLE_REPO_OPTIONS=""
+SHELLCHECK_DIRECT_INSTALL=0
+
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
@@ -112,17 +118,32 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
+    PACKAGE_MANAGER_BIN="dnf"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
+
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+    INSTALL_CHECKER_PKGS="cppcheck"
+    INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
+
+    # [NOTE]
+    # For RockyLinux, ShellCheck is downloaded from the github archive and installed.
+    #
+    SHELLCHECK_DIRECT_INSTALL=1
+
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
 
-    # [NOTE]
-    # Installing ShellCheck on Rocky Linux is not easy.
-    # Give up to run ShellCheck on Rocky Linux as we don't have to run ShellChek on all operating systems.
-    #
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
+
+    # [NOTE]
+    # For RockyLinux, ShellCheck is downloaded from the github archive and installed.
+    #
+    SHELLCHECK_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     PACKAGE_MANAGER_BIN="yum"
@@ -136,6 +157,15 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr curl python3 epel-release unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
+
+elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
+    PACKAGE_MANAGER_BIN="dnf"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+
+    # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip unzip"
+    INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
+    INSTALL_CHECKER_PKG_OPTIONS=""
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:36" ]; then
     PACKAGE_MANAGER_BIN="dnf"
@@ -172,10 +202,32 @@ echo "${PRGNAME} [INFO] Updates."
 # Install packages ( with cppcheck )
 #
 echo "${PRGNAME} [INFO] Install packages."
-/bin/sh -c "${PACKAGE_MANAGER_BIN} install -y ${INSTALL_PACKAGES}"
+/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} install -y ${INSTALL_PACKAGES}"
 
 echo "${PRGNAME} [INFO] Install cppcheck package."
 /bin/sh -c "${PACKAGE_MANAGER_BIN} ${INSTALL_CHECKER_PKG_OPTIONS} install -y ${INSTALL_CHECKER_PKGS}"
+
+#
+# Install ShellCheck manually
+#
+if [ "${SHELLCHECK_DIRECT_INSTALL}" -eq 1 ]; then
+    echo "${PRGNAME} [INFO] Install shellcheck package from github archive."
+
+    if ! LATEST_SHELLCHECK_DOWNLOAD_URL=$(curl -s -S https://api.github.com/repos/koalaman/shellcheck/releases/latest | grep '"browser_download_url"' | grep 'linux.x86_64' | sed -e 's|"||g' -e 's|^.*browser_download_url:[[:space:]]*||g' | tr -d '\n'); then
+        echo "Could not get shellcheck package url"
+        exit 1
+    fi
+    if ! curl -s -S -L -o /tmp/shellcheck.tar.xz "${LATEST_SHELLCHECK_DOWNLOAD_URL}"; then
+        echo "Failed to download shellcheck package from ${LATEST_SHELLCHECK_DOWNLOAD_URL}"
+        exit 1
+    fi
+    if ! tar -C /usr/bin/ -xf /tmp/shellcheck.tar.xz --no-anchored 'shellcheck' --strip=1; then
+        echo "Failed to extract and install shellcheck."
+        rm -f /tmp/shellcheck.tar.xz
+        exit 1
+    fi
+    rm -f /tmp/shellcheck.tar.xz
+fi
 
 # Check Java version
 java -version
