@@ -1317,13 +1317,23 @@ function test_posix_acl {
     #------------------------------------------------------
     local POSIX_ACL_TEST_DIR1="posix_acl_dir1"
     local POSIX_ACL_TEST_DIR2="posix_acl_dir2"
+    rm -rf "${POSIX_ACL_TEST_DIR1}"
+    rm -rf "${POSIX_ACL_TEST_DIR2}"
+
     mkdir "${POSIX_ACL_TEST_DIR1}"
+
+    # [NOTE]
+    # Let the target username be "root".
+    # On some systems the USER environment variable may be
+    # empty, so using ${USER} will not give an accurate test.
+    #
+    TARGET_ACL_USER="root"
 
     #
     # Set posix acl(not default)
     #
-    setfacl -m "u:${USER}:rwx" "${POSIX_ACL_TEST_DIR1}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^user:${USER}:rwx"; then
+    setfacl -m "u:${TARGET_ACL_USER}:rwx" "${POSIX_ACL_TEST_DIR1}"
+    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not set posix acl(not default) to ${POSIX_ACL_TEST_DIR1} directory"
        return 1
     fi
@@ -1331,8 +1341,8 @@ function test_posix_acl {
     #
     # Set posix acl(default)
     #
-    setfacl -d -m "u:${USER}:rwx" "${POSIX_ACL_TEST_DIR1}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^default:user:${USER}:rwx"; then
+    setfacl -d -m "u:${TARGET_ACL_USER}:rwx" "${POSIX_ACL_TEST_DIR1}"
+    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^default:user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not set posix acl(default) to ${POSIX_ACL_TEST_DIR1} directory"
        return 1
     fi
@@ -1341,11 +1351,11 @@ function test_posix_acl {
     # Rename
     #
     mv "${POSIX_ACL_TEST_DIR1}" "${POSIX_ACL_TEST_DIR2}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not move with posix acl(not default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
-    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not move with posix acl(default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1354,11 +1364,11 @@ function test_posix_acl {
     # Copy with permission
     #
     cp -rp "${POSIX_ACL_TEST_DIR2}" "${POSIX_ACL_TEST_DIR1}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not copy with posix acl(not default) to ${POSIX_ACL_TEST_DIR1} directory"
        return 1
     fi
-    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^default:user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_DIR1}" | grep -q "^default:user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not copy with posix acl(default) to ${POSIX_ACL_TEST_DIR1} directory"
        return 1
     fi
@@ -1366,8 +1376,8 @@ function test_posix_acl {
     #
     # Overwrite posix acl(not default)
     #
-    setfacl -m "u:${USER}:r-x" "${POSIX_ACL_TEST_DIR2}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${USER}:r-x"; then
+    setfacl -m "u:${TARGET_ACL_USER}:r-x" "${POSIX_ACL_TEST_DIR2}"
+    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not set posix acl(not default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1375,8 +1385,8 @@ function test_posix_acl {
     #
     # Overwrite posix acl(default)
     #
-    setfacl -d -m "u:${USER}:r-x" "${POSIX_ACL_TEST_DIR2}"
-    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${USER}:r-x"; then
+    setfacl -d -m "u:${TARGET_ACL_USER}:r-x" "${POSIX_ACL_TEST_DIR2}"
+    if ! getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not set posix acl(default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1385,7 +1395,7 @@ function test_posix_acl {
     # Remove posix acl(default)
     #
     setfacl -k "${POSIX_ACL_TEST_DIR2}"
-    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${TARGET_ACL_USER}"; then
        echo "Could not remove posix acl(default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1394,7 +1404,7 @@ function test_posix_acl {
     # Remove posix acl(all)
     #
     setfacl -b "${POSIX_ACL_TEST_DIR2}"
-    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${TARGET_ACL_USER}"; then
        echo "Could not remove posix acl(all) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1404,11 +1414,11 @@ function test_posix_acl {
     #
     rm -rf "${POSIX_ACL_TEST_DIR2}"
     cp -r "${POSIX_ACL_TEST_DIR1}" "${POSIX_ACL_TEST_DIR2}"
-    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^default:user:${TARGET_ACL_USER}"; then
        echo "Could not copy without posix acl(default) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
-    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_DIR2}" | grep -q "^user:${TARGET_ACL_USER}"; then
        echo "Could not copy without posix acl(all) to ${POSIX_ACL_TEST_DIR2} directory"
        return 1
     fi
@@ -1426,7 +1436,7 @@ function test_posix_acl {
     #
     # Check default inherited posix acl
     #
-    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not set posix acl(inherited default) to ${POSIX_ACL_TEST_FILE1} file"
        return 1
     fi
@@ -1434,8 +1444,8 @@ function test_posix_acl {
     #
     # Overwrite posix acl
     #
-    setfacl -m "u:${USER}:r-x" "${POSIX_ACL_TEST_FILE1}"
-    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${USER}:r-x"; then
+    setfacl -m "u:${TARGET_ACL_USER}:r-x" "${POSIX_ACL_TEST_FILE1}"
+    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not overwrite posix acl to ${POSIX_ACL_TEST_FILE1} file"
        return 1
     fi
@@ -1444,7 +1454,7 @@ function test_posix_acl {
     # Rename
     #
     mv "${POSIX_ACL_TEST_FILE1}" "${POSIX_ACL_TEST_FILE2}"
-    if ! getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^user:${USER}:r-x"; then
+    if ! getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not move with posix acl to ${POSIX_ACL_TEST_FILE2} file"
        return 1
     fi
@@ -1453,7 +1463,7 @@ function test_posix_acl {
     # Copy with permission
     #
     cp -p "${POSIX_ACL_TEST_FILE2}" "${POSIX_ACL_TEST_FILE1}"
-    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${USER}:r-x"; then
+    if ! getfacl "${POSIX_ACL_TEST_FILE1}" | grep -q "^user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not copy with posix acl to ${POSIX_ACL_TEST_FILE1} file"
        return 1
     fi
@@ -1462,7 +1472,7 @@ function test_posix_acl {
     # Remove posix acl
     #
     setfacl -b "${POSIX_ACL_TEST_FILE2}"
-    if getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^default:user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^default:user:${TARGET_ACL_USER}"; then
        echo "Could not remove posix acl to ${POSIX_ACL_TEST_FILE2} file"
        return 1
     fi
@@ -1472,7 +1482,7 @@ function test_posix_acl {
     #
     rm -f "${POSIX_ACL_TEST_FILE2}"
     cp "${POSIX_ACL_TEST_FILE1}" "${POSIX_ACL_TEST_FILE2}"
-    if ! getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^user:${USER}:rwx"; then
+    if ! getfacl "${POSIX_ACL_TEST_FILE2}" | grep -q "^user:${TARGET_ACL_USER}:rwx"; then
        echo "Could not copy without posix acl(inherited parent) to ${POSIX_ACL_TEST_FILE2} file"
        return 1
     fi
@@ -1481,7 +1491,7 @@ function test_posix_acl {
     # Copy with permission(to no-acl directory)
     #
     cp -p "${POSIX_ACL_TEST_FILE1}" "${POSIX_ACL_TEST_FILE3}"
-    if ! getfacl "${POSIX_ACL_TEST_FILE3}" | grep -q "^user:${USER}:r-x"; then
+    if ! getfacl "${POSIX_ACL_TEST_FILE3}" | grep -q "^user:${TARGET_ACL_USER}:r-x"; then
        echo "Could not copy with posix acl to ${POSIX_ACL_TEST_FILE3} file in no-acl directory"
        return 1
     fi
@@ -1490,7 +1500,7 @@ function test_posix_acl {
     # Copy without permission(to no-acl directory)
     #
     cp "${POSIX_ACL_TEST_FILE1}" "${POSIX_ACL_TEST_FILE4}"
-    if getfacl "${POSIX_ACL_TEST_FILE4}" | grep -q "^user:${USER}"; then
+    if getfacl "${POSIX_ACL_TEST_FILE4}" | grep -q "^user:${TARGET_ACL_USER}"; then
        echo "Could not copy without posix acl to ${POSIX_ACL_TEST_FILE4} file in no-acl directory"
        return 1
     fi
