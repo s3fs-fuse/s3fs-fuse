@@ -189,7 +189,7 @@ maximum number of parallel request for listing objects.
 .TP
 \fB\-o\fR parallel_count (default="5")
 number of parallel request for uploading big objects.
-s3fs uploads large object (over 20MB) by multipart post request, and sends parallel requests.
+s3fs uploads large object (over 25MB by default) by multipart post request, and sends parallel requests.
 This option limits parallel request count which s3fs requests at once.
 It is necessary to set this value depending on a CPU and a network band.
 .TP
@@ -411,7 +411,7 @@ It can be specified as year, month, day, hour, minute, second, and it is express
 For example, "1Y6M10D12h30m30s".
 .SH FUSE/MOUNT OPTIONS
 .TP
-Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync async, dirsync). Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
+Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync, async, dirsync). Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
 .SH LOCAL STORAGE CONSUMPTION
