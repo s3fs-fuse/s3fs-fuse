@@ -212,13 +212,12 @@ bool S3fsLog::LowSetLogfile(const char* pfile)
 
         // switch new log file and close old log file if it is opened
         FILE*    oldfp = S3fsLog::logfp;
-        S3fsLog::logfp = newfp;
         if(oldfp && 0 != fclose(oldfp)){
             S3FS_PRN_ERR("Could not close old log file(%s).", (S3fsLog::plogfile ? S3fsLog::plogfile->c_str() : "null"));
-            S3fsLog::logfp = oldfp;
             fclose(newfp);
             return false;
         }
+        S3fsLog::logfp = newfp;
         delete S3fsLog::plogfile;
         S3fsLog::plogfile = new std::string(pfile);
     }
