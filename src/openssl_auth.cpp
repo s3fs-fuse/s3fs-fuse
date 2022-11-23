@@ -51,7 +51,14 @@ const char* s3fs_crypt_lib_name()
 bool s3fs_init_global_ssl()
 {
     ERR_load_crypto_strings();
+
+    // [NOTE]
+    // OpenSSL 3.0 loads error strings automatically so these functions are not needed.
+    //
+    #ifndef USE_OPENSSL_30
     ERR_load_BIO_strings();
+    #endif
+
     OpenSSL_add_all_algorithms();
     return true;
 }
@@ -238,8 +245,67 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
     return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
 }
 
+#ifdef USE_OPENSSL_30
 //-------------------------------------------------------------------
-// Utility Function for MD5
+// Utility Function for MD5 (OpenSSL >= 3.0)
+//-------------------------------------------------------------------
+// [NOTE]
+// OpenSSL 3.0 deprecated the MD5_*** low-level encryption functions,
+// so we should use the high-level EVP API instead.
+//
+size_t get_md5_digest_length()
+{
+    return EVP_MD_size(EVP_md5());
+}
+
+unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
+{
+    EVP_MD_CTX*    mdctx;
+    unsigned char* md5_digest;
+    unsigned int   md5_digest_len = get_md5_digest_length();
+    off_t          bytes;
+
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            return NULL;
+        }
+        size = st.st_size;
+    }
+
+    // instead of MD5_Init
+    mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_md5(), NULL);
+
+    for(off_t total = 0; total < size; total += bytes){
+        const off_t len = 512;
+        char        buf[len];
+        bytes = len < (size - total) ? len : (size - total);
+        bytes = pread(fd, buf, bytes, start + total);
+        if(0 == bytes){
+            // end of file
+            break;
+        }else if(-1 == bytes){
+            // error
+            S3FS_PRN_ERR("file read error(%d)", errno);
+            EVP_MD_CTX_free(mdctx);
+            return NULL;
+        }
+        // instead of MD5_Update
+        EVP_DigestUpdate(mdctx, buf, bytes);
+    }
+
+    // instead of MD5_Final
+    md5_digest = new unsigned char[md5_digest_len];
+    EVP_DigestFinal_ex(mdctx, md5_digest, &md5_digest_len);
+    EVP_MD_CTX_free(mdctx);
+
+    return md5_digest;
+}
+
+#else
+//-------------------------------------------------------------------
+// Utility Function for MD5 (OpenSSL < 3.0)
 //-------------------------------------------------------------------
 size_t get_md5_digest_length()
 {
@@ -283,6 +349,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
 
     return result;
 }
+#endif
 
 //-------------------------------------------------------------------
 // Utility Function for SHA256
