@@ -23,6 +23,9 @@ AM_CPPFLAGS = $(DEPS_CFLAGS)
 if USE_GNUTLS_NETTLE
     AM_CPPFLAGS += -DUSE_GNUTLS_NETTLE
 endif
+if USE_SSL_OPENSSL_30
+    AM_CPPFLAGS += -DUSE_OPENSSL_30
+endif
 
 s3fs_SOURCES = \
     s3fs.cpp \
@@ -108,6 +111,6 @@ clang-tidy:
 # tab-width: 4
 # c-basic-offset: 4
 # End:
-# vim600: expandtab sw=4 ts= fdm=marker
-# vim<600: expandtab sw=4 ts=4
+# vim600: noexpandtab sw=4 ts=4 fdm=marker
+# vim<600: noexpandtab sw=4 ts=4
 #
