@@ -123,6 +123,9 @@ bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
 bool             S3fsCurl::requester_pays      = false;          // default
+std::string      S3fsCurl::proxy_url;
+bool             S3fsCurl::proxy_http          = false;
+std::string      S3fsCurl::proxy_userpwd;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -1053,6 +1056,134 @@ int S3fsCurl::SetMaxMultiRequest(int max)
     return old;
 }
 
+// [NOTE]
+// This proxy setting is as same as the "--proxy" option of the curl command,
+// and equivalent to the "CURLOPT_PROXY" option of the curl_easy_setopt()
+// function.
+// However, currently s3fs does not provide another option to set the schema
+// and port, so you need to specify these it in this function. (Other than
+// this function, there is no means of specifying the schema and port.)
+// Therefore, it should be specified "url" as "[<schema>://]<fqdn>[:<port>]".
+// s3fs passes this string to curl_easy_setopt() function with "CURLOPT_PROXY".
+// If no "schema" is specified, "http" will be used as default, and if no port
+// is specified, "443" will be used for "HTTPS" and "1080" otherwise.
+// (See the description of "CURLOPT_PROXY" in libcurl document.)
+//
+bool S3fsCurl::SetProxy(const char* url)
+{
+    if(!url || '\0' == url[0]){
+        return false;
+    }
+    std::string tmpurl = url;
+
+    // check schema
+    bool   is_http = true;
+    size_t pos = 0;
+    if(std::string::npos != (pos = tmpurl.find("://", pos))){
+        if(0 == pos){
+            // no schema string before "://"
+            return false;
+        }
+        pos += strlen("://");
+
+        // Check if it is other than "http://"
+        if(0 != tmpurl.find("http://", 0)){
+            is_http = false;
+        }
+    }else{
+        // not have schema string
+        pos = 0;
+    }
+    // check fqdn and port number string
+    if(std::string::npos != (pos = tmpurl.find(":", pos))){
+        // specify port
+        if(0 == pos){
+            // no fqdn(hostname) string before ":"
+            return false;
+        }
+        pos += strlen(":");
+        if(std::string::npos != tmpurl.find(":", pos)){
+            // found wrong separator
+            return false;
+        }
+    }
+
+    S3fsCurl::proxy_url  = tmpurl;
+    S3fsCurl::proxy_http = is_http;
+    return true;
+}
+
+// [NOTE]
+// This function loads proxy credentials(username and  passphrase)
+// from a file.
+// The loaded values is set to "CURLOPT_PROXYUSERPWD" in the
+// curl_easy_setopt() function. (But only used if the proxy is HTTP
+// schema.)
+//
+// The file is expected to contain only one valid line:
+//     ------------------------
+//     # comment line
+//     <username>:<passphrase>
+//     ------------------------
+// Lines starting with a '#' character are treated as comments.
+// Lines with only space characters and blank lines are ignored.
+// If the user name contains spaces, it must be url encoded(ex. %20).
+//
+bool S3fsCurl::SetProxyUserPwd(const char* file)
+{
+    if(!file || '\0' == file[0]){
+        return false;
+    }
+    if(!S3fsCurl::proxy_userpwd.empty()){
+        S3FS_PRN_WARN("Already set username and passphrase for proxy.");
+        return false;
+    }
+
+    std::ifstream credFileStream(file);
+    if(!credFileStream.good()){
+        S3FS_PRN_WARN("Could not load username and passphrase for proxy from %s.", file);
+        return false;
+    }
+
+    std::string userpwd;
+    std::string line;
+    while(getline(credFileStream, line)){
+        line = trim(line);
+        if(line.empty()){
+            continue;
+        }
+        if(line[0]=='#'){
+            continue;
+        }
+        if(!userpwd.empty()){
+            S3FS_PRN_WARN("Multiple valid username and passphrase found in %s file. Should specify only one pair.", file);
+            return false;
+        }
+        // check separator for username and passphrase
+        size_t pos = 0;
+        if(std::string::npos == (pos = line.find(':', pos))){
+            S3FS_PRN_WARN("Found string for username and passphrase in %s file does not have separator ':'.", file);
+            return false;
+        }
+        if(0 == pos || (pos + 1) == line.length()){
+            S3FS_PRN_WARN("Found string for username or passphrase in %s file is empty.", file);
+            return false;
+        }
+        if(std::string::npos != line.find(':', ++pos)){
+            S3FS_PRN_WARN("Found string for username and passphrase in %s file has multiple separator ':'.", file);
+            return false;
+        }
+        userpwd = line;
+    }
+    if(userpwd.empty()){
+        S3FS_PRN_WARN("No valid username and passphrase found in %s.", file);
+        return false;
+    }
+
+    S3fsCurl::proxy_userpwd = userpwd;
+    return true;
+}
+
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
 bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
@@ -1877,6 +2008,20 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     if(!cipher_suites.empty()) {
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_CIPHER_LIST, cipher_suites.c_str())){
             return false;
+        }
+    }
+    if(!S3fsCurl::proxy_url.empty()){
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROXY, S3fsCurl::proxy_url.c_str())){
+            return false;
+        }
+        if(S3fsCurl::proxy_http){
+            if(!S3fsCurl::proxy_userpwd.empty()){
+                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROXYUSERPWD, S3fsCurl::proxy_userpwd.c_str())){
+                    return false;
+                }
+            }
+        }else if(!S3fsCurl::proxy_userpwd.empty()){
+            S3FS_PRN_DBG("Username and passphrase are specified even though proxy is not 'http' scheme, so skip to set those.");
         }
     }
 

@@ -34,6 +34,8 @@
 # S3_ENDPOINT="us-east-1"            Specify region
 # TMPDIR="/var/tmp"                  Set to use a temporary directory different
 #                                    from /var/tmp
+# CHAOS_HTTP_PROXY=1                 Test proxy(environment) by CHAOS HTTP PROXY
+# CHAOS_HTTP_PROXY_OPT=1             Test proxy(option) by CHAOS HTTP PROXY
 #
 # Example of running against Amazon S3 using a bucket named "bucket":
 #
@@ -66,7 +68,15 @@ set -o pipefail
 S3FS=../src/s3fs
 
 # Allow these defaulted values to be overridden
-: "${S3_URL:="https://127.0.0.1:8080"}"
+#
+# [NOTE]
+# CHAOS HTTP PROXY does not support HTTPS.
+#
+if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
+    : "${S3_URL:="https://127.0.0.1:8080"}"
+else
+    : "${S3_URL:="http://127.0.0.1:8080"}"
+fi
 : "${S3_ENDPOINT:="us-east-1"}"
 : "${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}"
 : "${TEST_BUCKET_1:="s3fs-integration-test"}"
@@ -135,7 +145,11 @@ function start_s3proxy {
     if [ -n "${PUBLIC}" ]; then
         local S3PROXY_CONFIG="s3proxy-noauth.conf"
     else
-        local S3PROXY_CONFIG="s3proxy.conf"
+        if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
+            local S3PROXY_CONFIG="s3proxy.conf"
+        else
+            local S3PROXY_CONFIG="s3proxy_http.conf"
+        fi
     fi
 
     if [ -n "${S3PROXY_BINARY}" ]
@@ -147,9 +161,18 @@ function start_s3proxy {
         fi
 
         # generate self-signed SSL certificate
-        rm -f /tmp/keystore.jks /tmp/keystore.pem
-        echo -e 'password\npassword\n\n\n\n\n\n\nyes' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
-        echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file /tmp/keystore.pem
+        #
+        # [NOTE]
+        # The PROXY test is HTTP only, so do not create CA certificates.
+        #
+        if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
+            S3PROXY_CACERT_FILE="/tmp/keystore.pem"
+            rm -f /tmp/keystore.jks "${S3PROXY_CACERT_FILE}"
+            echo -e 'password\npassword\n\n\n\n\n\n\nyes' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
+            echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file "${S3PROXY_CACERT_FILE}"
+        else
+            S3PROXY_CACERT_FILE=""
+        fi
 
         "${STDBUF_BIN}" -oL -eL java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
         S3PROXY_PID=$!
@@ -158,7 +181,7 @@ function start_s3proxy {
         wait_for_port 8080
     fi
 
-    if [ -n "${CHAOS_HTTP_PROXY}" ]; then
+    if [ -n "${CHAOS_HTTP_PROXY}" ] || [ -n "${CHAOS_HTTP_PROXY_OPT}" ]; then
         if [ ! -e "${CHAOS_HTTP_PROXY_BINARY}" ]; then
             curl "https://github.com/bouncestorage/chaos-http-proxy/releases/download/chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}/chaos-http-proxy" \
                 --fail --location --silent --output "${CHAOS_HTTP_PROXY_BINARY}"
@@ -212,8 +235,16 @@ function start_s3fs {
        local DIRECT_IO_OPT=""
     fi
 
+    # Set environment variables or options for proxy.
+    # And the PROXY test is HTTP only and does not set CA certificates.
+    #
     if [ -n "${CHAOS_HTTP_PROXY}" ]; then
         export http_proxy="127.0.0.1:1080"
+        S3FS_HTTP_PROXY_OPT=""
+    elif [ -n "${CHAOS_HTTP_PROXY_OPT}" ]; then
+        S3FS_HTTP_PROXY_OPT="-o proxy=http://127.0.0.1:1080"
+    else
+        S3FS_HTTP_PROXY_OPT=""
     fi
 
     # [NOTE]
@@ -247,7 +278,7 @@ function start_s3fs {
     # shellcheck disable=SC2086
     (
         set -x 
-        CURL_CA_BUNDLE=/tmp/keystore.pem \
+        CURL_CA_BUNDLE="${S3PROXY_CACERT_FILE}" \
         ${VIA_STDBUF_CMDLINE} \
             ${VALGRIND_EXEC} \
             ${S3FS} \
@@ -260,6 +291,7 @@ function start_s3fs {
             -o enable_unsigned_payload \
             ${AUTH_OPT} \
             ${DIRECT_IO_OPT} \
+            ${S3FS_HTTP_PROXY_OPT} \
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \

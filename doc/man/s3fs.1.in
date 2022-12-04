@@ -382,6 +382,20 @@ Specify the path of the mime.types file.
 If this option is not specified, the existence of "/etc/mime.types" is checked, and that file is loaded as mime information.
 If this file does not exist on macOS, then "/etc/apache2/mime.types" is checked as well.
 .TP
+\fB\-o\fR proxy (default="")
+This option specifies a proxy to S3 server.
+Specify the proxy with '[<scheme://]hostname(fqdn)[:<port>]' formatted.
+'<schema>://' can be omitted, and 'http://' is used when omitted.
+Also, ':<port>' can also be omitted. If omitted, port 443 is used for HTTPS schema, and port 1080 is used otherwise.
+This option is the same as the curl command's '--proxy(-x)' option and libcurl's 'CURLOPT_PROXY' flag.
+This option is equivalent to and takes precedence over the environment variables 'http_proxy', 'all_proxy', etc.
+.TP
+\fB\-o\fR proxy_cred_file (default="")
+This option specifies the file that describes the username and passphrase for authentication of the proxy when the HTTP schema proxy is specified by the 'proxy' option.
+Username and passphrase are valid only for HTTP schema.
+If the HTTP proxy does not require authentication, this option is not required.
+Separate the username and passphrase with a ':' character and specify each as a URL-encoded string.
+.TP
 \fB\-o\fR logfile - specify the log output file.
 s3fs outputs the log file to syslog. Alternatively, if s3fs is started with the "-f" option specified, the log will be output to the stdout/stderr.
 You can use this option to specify the log file that s3fs outputs.
