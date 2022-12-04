@@ -4843,6 +4843,22 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             mimetype_file = strchr(arg, '=') + sizeof(char);
             return 0;
         }
+        if(is_prefix(arg, "proxy=")){
+            const char* url = &arg[strlen("proxy=")];
+            if(!S3fsCurl::SetProxy(url)){
+                S3FS_PRN_EXIT("failed to set proxy(%s).", url);
+                return -1;
+            }
+            return 0;
+        }
+        if(is_prefix(arg, "proxy_cred_file=")){
+            const char* file = &arg[strlen("proxy_cred_file=")];
+            if(!S3fsCurl::SetProxyUserPwd(file)){
+                S3FS_PRN_EXIT("failed to set proxy user and passphrase from file(%s).", file);
+                return -1;
+            }
+            return 0;
+        }
         //
         // log file option
         //

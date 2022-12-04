@@ -154,6 +154,9 @@ class S3fsCurl
         static bool             is_ua;             // User-Agent
         static bool             listobjectsv2;
         static bool             requester_pays;
+        static std::string      proxy_url;
+        static bool             proxy_http;
+        static std::string      proxy_userpwd;     // load from file(<username>:<passphrase>)
 
         // variables
         CURL*                hCurl;
@@ -332,6 +335,8 @@ class S3fsCurl
         static bool IsListObjectsV2() { return S3fsCurl::listobjectsv2; }
         static bool SetRequesterPays(bool flag) { bool old_flag = S3fsCurl::requester_pays; S3fsCurl::requester_pays = flag; return old_flag; }
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
+        static bool SetProxy(const char* url);
+        static bool SetProxyUserPwd(const char* userpwd);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
