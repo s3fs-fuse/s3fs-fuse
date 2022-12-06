@@ -71,7 +71,7 @@ Many systems provide pre-built packages:
 * macOS 10.12 and newer via [Homebrew](https://brew.sh/):
 
   ```
-  brew install --cask osxfuse
+  brew install --cask macfuse
   brew install gromgit/fuse/s3fs-mac
   ```
 
@@ -81,8 +81,6 @@ Many systems provide pre-built packages:
   pkg install fusefs-s3fs
   ```
 
-Note: Homebrew has deprecated osxfuse and s3fs may not install any more, see
-[#1618](https://github.com/s3fs-fuse/s3fs-fuse/issues/1618).
 
 Otherwise consult the [compilation instructions](COMPILATION.md).
 
