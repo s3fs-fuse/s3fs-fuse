@@ -285,7 +285,7 @@ bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
     return true;
 }
 
-bool S3fsCred::IsSetAccessKeys(AutoLock::Type type)
+bool S3fsCred::IsSetAccessKeys(AutoLock::Type type) const
 {
     AutoLock auto_lock(&token_lock, type);
 
@@ -321,14 +321,14 @@ bool S3fsCred::SetIAMRole(const char* role, AutoLock::Type type)
     return true;
 }
 
-std::string S3fsCred::GetIAMRole(AutoLock::Type type)
+std::string S3fsCred::GetIAMRole(AutoLock::Type type) const
 {
     AutoLock auto_lock(&token_lock, type);
 
     return IAM_role;
 }
 
-bool S3fsCred::IsSetIAMRole(AutoLock::Type type)
+bool S3fsCred::IsSetIAMRole(AutoLock::Type type) const
 {
     AutoLock auto_lock(&token_lock, type);
 
@@ -435,7 +435,7 @@ int S3fsCred::SetIMDSVersion(int version, AutoLock::Type type)
     return old;
 }
 
-int S3fsCred::GetIMDSVersion(AutoLock::Type type)
+int S3fsCred::GetIMDSVersion(AutoLock::Type type) const
 {
     AutoLock auto_lock(&token_lock, type);
 
@@ -455,7 +455,7 @@ bool S3fsCred::SetIAMv2APIToken(const std::string& token, AutoLock::Type type)
     return true;
 }
 
-std::string S3fsCred::GetIAMv2APIToken(AutoLock::Type type)
+std::string S3fsCred::GetIAMv2APIToken(AutoLock::Type type) const
 {
     AutoLock auto_lock(&token_lock, type);
 
@@ -596,7 +596,7 @@ bool S3fsCred::SetIAMRoleFromMetaData(const char* response, AutoLock::Type type)
 //
 // Check passwd file readable
 //
-bool S3fsCred::IsReadableS3fsPasswdFile()
+bool S3fsCred::IsReadableS3fsPasswdFile() const
 {
     if(passwd_file.empty()){
         return false;

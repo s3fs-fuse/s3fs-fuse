@@ -302,7 +302,7 @@ bool PseudoFdInfo::GetUploadId(std::string& id) const
     return true;
 }
 
-bool PseudoFdInfo::GetEtaglist(etaglist_t& list)
+bool PseudoFdInfo::GetEtaglist(etaglist_t& list) const
 {
     if(!IsUploading()){
         S3FS_PRN_ERR("Multipart Upload has not started yet.");

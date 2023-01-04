@@ -66,7 +66,7 @@ class PseudoFdInfo
         filepart_list_t         upload_list;
         petagpool               etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
         bool                    is_lock_init;
-        pthread_mutex_t         upload_list_lock;   // protects upload_id and upload_list
+        mutable pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
         Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
         volatile int            instruct_count;     // number of instructions for processing by threads
         volatile int            completed_count;    // number of completed processes by thread
@@ -103,7 +103,7 @@ class PseudoFdInfo
 
         bool IsUploading() const { return !upload_id.empty(); }
         bool GetUploadId(std::string& id) const;
-        bool GetEtaglist(etaglist_t& list);
+        bool GetEtaglist(etaglist_t& list) const;
 
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = NULL);
 

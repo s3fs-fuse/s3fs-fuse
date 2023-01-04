@@ -196,7 +196,7 @@ void FdEntity::Clear()
 // The return value is the same as the class method GetInode().
 // The caller must have exclusive control.
 //
-ino_t FdEntity::GetInode()
+ino_t FdEntity::GetInode() const
 {
     if(cachepath.empty()){
         S3FS_PRN_INFO("cache file path is empty, then return inode as 0.");
@@ -298,7 +298,7 @@ int FdEntity::OpenPseudoFd(int flags, AutoLock::Type locktype)
     return pseudo_fd;
 }
 
-int FdEntity::GetOpenCount(AutoLock::Type locktype)
+int FdEntity::GetOpenCount(AutoLock::Type locktype) const
 {
     AutoLock auto_lock(&fdent_lock, locktype);
 
@@ -362,7 +362,7 @@ int FdEntity::OpenMirrorFile()
     return mirrorfd;
 }
 
-bool FdEntity::FindPseudoFd(int fd, AutoLock::Type locktype)
+bool FdEntity::FindPseudoFd(int fd, AutoLock::Type locktype) const
 {
     AutoLock auto_lock(&fdent_lock, locktype);
 
@@ -777,7 +777,7 @@ bool FdEntity::IsModified() const
     return pagelist.IsModified();
 }
 
-bool FdEntity::GetStats(struct stat& st, AutoLock::Type locktype)
+bool FdEntity::GetStats(struct stat& st, AutoLock::Type locktype) const
 {
     AutoLock auto_lock(&fdent_lock, locktype);
     if(-1 == physical_fd){
@@ -976,7 +976,7 @@ bool FdEntity::ClearHoldingMtime(AutoLock::Type locktype)
     return true;
 }
 
-bool FdEntity::GetSize(off_t& size)
+bool FdEntity::GetSize(off_t& size) const
 {
     AutoLock auto_lock(&fdent_lock);
     if(-1 == physical_fd){
@@ -988,7 +988,7 @@ bool FdEntity::GetSize(off_t& size)
     return true;
 }
 
-bool FdEntity::GetXattr(std::string& xattr)
+bool FdEntity::GetXattr(std::string& xattr) const
 {
     AutoLock auto_lock(&fdent_lock);
 
@@ -2531,7 +2531,7 @@ bool FdEntity::AddUntreated(off_t start, off_t size)
     return result;
 }
 
-bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size)
+bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size) const
 {
     // Get last untreated area
     if(!untreated_list.GetLastUpdatePart(start, size)){

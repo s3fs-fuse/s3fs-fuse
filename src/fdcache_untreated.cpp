@@ -99,7 +99,7 @@ bool UntreatedParts::AddPart(off_t start, off_t size)
     return true;
 }
 
-bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t min_size, bool lastpart)
+bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t min_size, bool lastpart) const
 {
     if(max_size <= 0 || min_size < 0 || max_size < min_size){
         S3FS_PRN_ERR("Paramter are wrong(max_size=%lld, min_size=%lld).", static_cast<long long int>(max_size), static_cast<long long int>(min_size));
@@ -108,7 +108,7 @@ bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t
     AutoLock auto_lock(&untreated_list_lock);
 
     // Check the overlap with the existing part and add the part.
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
         if(!lastpart || iter->untreated_tag == last_tag){
             if(min_size <= iter->size){
                 if(iter->size <= max_size){
@@ -191,7 +191,7 @@ bool UntreatedParts::ClearParts(off_t start, off_t size)
 //
 // Update the last updated Untreated part
 //
-bool UntreatedParts::GetLastUpdatePart(off_t& start, off_t& size)
+bool UntreatedParts::GetLastUpdatePart(off_t& start, off_t& size) const
 {
     AutoLock auto_lock(&untreated_list_lock);
 

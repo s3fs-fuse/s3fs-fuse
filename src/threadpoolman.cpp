@@ -177,7 +177,7 @@ ThreadPoolMan::~ThreadPoolMan()
     }
 }
 
-bool ThreadPoolMan::IsExit()
+bool ThreadPoolMan::IsExit() const
 {
     AutoLock auto_lock(&thread_exit_flag_lock);
     return is_exit;
