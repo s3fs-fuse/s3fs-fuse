@@ -68,6 +68,7 @@ CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix
 # Default values
 #
 PACKAGE_ENABLE_REPO_OPTIONS=""
+PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
 SHELLCHECK_DIRECT_INSTALL=0
 
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
@@ -122,6 +123,12 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
+
+    # [NOTE]
+    # Rocky Linux 9 (or CentOS Stream 9) images may have curl installation issues that
+    # conflict with the curl-minimal package.
+    #
+    PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
     INSTALL_CHECKER_PKGS="cppcheck"
@@ -202,7 +209,7 @@ echo "${PRGNAME} [INFO] Updates."
 # Install packages ( with cppcheck )
 #
 echo "${PRGNAME} [INFO] Install packages."
-/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} install -y ${INSTALL_PACKAGES}"
+/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} install -y ${PACKAGE_INSTALL_ADDITIONAL_OPTIONS} ${INSTALL_PACKAGES}"
 
 echo "${PRGNAME} [INFO] Install cppcheck package."
 /bin/sh -c "${PACKAGE_MANAGER_BIN} ${INSTALL_CHECKER_PKG_OPTIONS} install -y ${INSTALL_CHECKER_PKGS}"
