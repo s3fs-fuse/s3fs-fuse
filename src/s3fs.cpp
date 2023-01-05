@@ -4017,6 +4017,30 @@ static bool check_endpoint_error(const char* pbody, size_t len, std::string& exp
     return true;
 }
 
+// [NOTE]
+// This checks whether access to the bucket when s3fs is started.
+//
+// The following patterns for mount point are supported by s3fs:
+// (1) Mount the bucket top
+// (2) Mount the directory(folder) under the bucket. In this case, there are
+//     the following cases:
+//     (2A) Directories created by clients other than s3fs
+//     (2B) Directory created by s3fs
+//
+// At first in this functoin, if user has access to the bucket, the checking
+// access to the bucket succeeds and this function returns success. However,
+// if user does not have access to the bucket and has permissions to the
+// directory, this first check will fail.
+// But if user specifies the directory for mount point, this function retries
+// to check with the path containing the directory. And it will be success.
+//
+// In the case of (2A), the check will succeed if the bucket allows to access,
+// but will fail if permissions are granted only to the directory, as it is not
+// a directory recognized by s3fs. This combination is not supported by s3fs,
+// so make sure user create the directory before starting s3fs.
+// In case (2B), if user does not have access to bucket, the first check(to
+// bucket) fails, but the retry check(with path) succeeds.
+//
 static int s3fs_check_service()
 {
     S3FS_PRN_INFO("check services.");
@@ -4029,9 +4053,10 @@ static int s3fs_check_service()
 
     S3fsCurl s3fscurl;
     int      res;
-    if(0 > (res = s3fscurl.CheckBucket())){
+    if(0 > (res = s3fscurl.CheckBucket("/"))){
         // get response code
-        long responseCode = s3fscurl.GetLastResponseCode();
+        long responseCode     = s3fscurl.GetLastResponseCode();
+        bool changed_endpoint = false;
 
         // check wrong endpoint, and automatically switch endpoint
         if(300 <= responseCode && responseCode < 500){
@@ -4054,7 +4079,9 @@ static int s3fs_check_service()
                 }else{
                     // current endpoint is wrong, so try to connect to expected region.
                     S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
-                    endpoint = expectregion;
+                    endpoint         = expectregion;
+                    changed_endpoint = true;
+
                     if(S3fsCurl::GetSignatureType() == V4_ONLY ||
                        S3fsCurl::GetSignatureType() == V2_OR_V4){
                         if(s3host == "http://s3.amazonaws.com"){
@@ -4063,16 +4090,25 @@ static int s3fs_check_service()
                             s3host = "https://s3-" + endpoint + ".amazonaws.com";
                         }
                     }
-
-                    // retry to check with new endpoint
-                    s3fscurl.DestroyCurlHandle();
-                    res          = s3fscurl.CheckBucket();
-                    responseCode = s3fscurl.GetLastResponseCode();
                 }
             }else if(check_endpoint_error(body->str(), body->size(), expectendpoint)){
                 S3FS_PRN_ERR("S3 service returned PermanentRedirect with endpoint: %s", expectendpoint.c_str());
                 return EXIT_FAILURE;
             }
+        }
+
+        // retry to check with new endpoint
+        if(changed_endpoint){
+            s3fscurl.DestroyCurlHandle();
+            res          = s3fscurl.CheckBucket("/");
+            responseCode = s3fscurl.GetLastResponseCode();
+        }
+
+        // retry to check with mount prefix
+        if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
+            s3fscurl.DestroyCurlHandle();
+            res          = s3fscurl.CheckBucket(get_realpath("/").c_str());
+            responseCode = s3fscurl.GetLastResponseCode();
         }
 
         // try signature v2
@@ -4083,8 +4119,15 @@ static int s3fs_check_service()
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket();
+            res          = s3fscurl.CheckBucket("/");
             responseCode = s3fscurl.GetLastResponseCode();
+
+            // retry to check with mount prefix
+            if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
+                s3fscurl.DestroyCurlHandle();
+                res          = s3fscurl.CheckBucket(get_realpath("/").c_str());
+                responseCode = s3fscurl.GetLastResponseCode();
+            }
         }
 
         // check errors(after retrying)
