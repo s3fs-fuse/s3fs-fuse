@@ -3514,10 +3514,13 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
     return result;
 }
 
-int S3fsCurl::CheckBucket()
+int S3fsCurl::CheckBucket(const char* check_path)
 {
     S3FS_PRN_INFO3("check a bucket.");
 
+    if(!check_path || 0 == strlen(check_path)){
+        return -EIO;
+    }
     if(!CreateCurlHandle()){
         return -EIO;
     }
@@ -3526,13 +3529,14 @@ int S3fsCurl::CheckBucket()
         query_string = "list-type=2";
         urlargs = "?" + query_string;
     }
+
     std::string resource;
     std::string turl;
-    MakeUrlResource("/", resource, turl);
+    MakeUrlResource(check_path, resource, turl);
 
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
-    path            = "/";  // Only check the presence of the bucket, not the entire virtual path.
+    path            = check_path;
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
