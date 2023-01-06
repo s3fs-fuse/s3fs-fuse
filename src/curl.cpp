@@ -3210,7 +3210,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     bodydata.Clear();
 
     std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
+    bool need_sse_head  = (S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE);
+    requestHeaders      = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
@@ -3224,18 +3225,28 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // Only copy mode.
-            if(is_copy && !AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
-                S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+            if(is_copy){
+                if(AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
+                    need_sse_head = false;
+                }else{
+                    S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+                }
             }
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
             // Only copy mode.
-            if(is_copy && !value.empty() && !AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
-                S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+            if(is_copy && !value.empty()){
+                if(AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
+                    need_sse_head = false;
+                }else{
+                    S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+                }
             }
         }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
             // Only copy mode.
             if(is_copy){
-                if(!AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || !AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
+                if(AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
+                    need_sse_head = false;
+                }else{
                     S3FS_PRN_WARN("Failed to insert SSE-C header.");
                 }
             }
@@ -3250,7 +3261,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
-    if(!is_copy){
+    if(need_sse_head){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
             S3FS_PRN_WARN("Failed to set SSE header, but continue...");
@@ -3650,6 +3661,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     responseHeaders.clear();
 
     std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
+    bool need_sse_head  = (S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE);
 
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
@@ -3660,18 +3672,28 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // Only copy mode.
-            if(is_copy && !AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
-                S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+            if(is_copy){
+                if(AddSseRequestHead(sse_type_t::SSE_S3, value, false, true)){
+                    need_sse_head = false;
+                }else{
+                    S3FS_PRN_WARN("Failed to insert SSE-S3 header.");
+                }
             }
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
             // Only copy mode.
-            if(is_copy && !value.empty() && !AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
-                S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+            if(is_copy && !value.empty()){
+                if(AddSseRequestHead(sse_type_t::SSE_KMS, value, false, true)){
+                    need_sse_head = false;
+                }else{
+                    S3FS_PRN_WARN("Failed to insert SSE-KMS header.");
+                }
             }
         }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
             // Only copy mode.
             if(is_copy){
-                if(!AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || !AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
+                if(AddSseRequestHead(sse_type_t::SSE_C, value, true, true) || AddSseRequestHead(sse_type_t::SSE_C, value, true, false)){
+                    need_sse_head = false;
+                }else{
                     S3FS_PRN_WARN("Failed to insert SSE-C header.");
                 }
             }
@@ -3685,7 +3707,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
     }
     // SSE
-    if(!is_copy){
+    if(need_sse_head){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false, false)){
             S3FS_PRN_WARN("Failed to set SSE header, but continue...");
