@@ -250,6 +250,7 @@ class S3fsCurl
         void insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
         void insertAuthHeaders();
+        bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_copy);
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
         int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
@@ -338,7 +339,6 @@ class S3fsCurl
 
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
-        bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_only_c, bool is_copy);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true) const;
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
