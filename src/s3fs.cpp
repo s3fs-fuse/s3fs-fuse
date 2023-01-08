@@ -1346,26 +1346,38 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         FdEntity*    ent;
         if(NULL == (ent = autoent.OpenExistFdEntity(from))){
             // no opened fd
+
+            // get mtime/ctime/atime from meta
+            struct timespec mtime = get_mtime(meta);
+            struct timespec ctime = get_ctime(meta);
+            struct timespec atime = get_atime(meta);
+            if(mtime.tv_sec < 0){
+                mtime.tv_sec = 0L;
+                mtime.tv_nsec = 0L;
+            }
+            if(ctime.tv_sec < 0){
+                ctime.tv_sec = 0L;
+                ctime.tv_nsec = 0L;
+            }
+            if(atime.tv_sec < 0){
+                atime.tv_sec = 0L;
+                atime.tv_nsec = 0L;
+            }
+
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
-                ent = autoent.Open(from, &meta, buf.st_size, S3FS_OMIT_TS, O_RDONLY, false, true, false, AutoLock::NONE);
+                //
+                // [NOTE]
+                // Do not specify "S3FS_OMIT_TS" for mctime parameter.
+                // This is because if the cache file does not exist, the pagelist for it
+                // will be recreated, but the entire file area indicated by this pagelist
+                // will be in the "modified" state.
+                // This does not affect the rename process, but the cache information in
+                // the "modified" state remains, making it impossible to read the file correctly.
+                //
+                ent = autoent.Open(from, &meta, buf.st_size, mtime, O_RDONLY, false, true, false, AutoLock::NONE);
             }
             if(ent){
-                struct timespec mtime = get_mtime(meta);
-                struct timespec ctime = get_ctime(meta);
-                struct timespec atime = get_atime(meta);
-                if(mtime.tv_sec < 0){
-                    mtime.tv_sec = 0L;
-                    mtime.tv_nsec = 0L;
-                }
-                if(ctime.tv_sec < 0){
-                    ctime.tv_sec = 0L;
-                    ctime.tv_nsec = 0L;
-                }
-                if(atime.tv_sec < 0){
-                    atime.tv_sec = 0L;
-                    atime.tv_nsec = 0L;
-                }
                 ent->SetMCtime(mtime, ctime);
                 ent->SetAtime(atime);
             }
