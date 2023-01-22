@@ -1364,7 +1364,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     if(update_ctime){
         meta["x-amz-meta-ctime"]     = s3fs_str_realtime();
     }
-    meta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+    meta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
     meta["x-amz-metadata-directive"] = "REPLACE";
 
@@ -1845,7 +1845,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         headers_t   updatemeta;
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-mode"]          = str(mode);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -2050,7 +2050,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-uid"]           = str(uid);
         updatemeta["x-amz-meta-gid"]           = str(gid);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -2285,7 +2285,7 @@ static int update_mctime_parent_directory(const char* _path)
         updatemeta["x-amz-meta-mtime"]         = str(mctime);
         updatemeta["x-amz-meta-ctime"]         = str(mctime);
         updatemeta["x-amz-meta-atime"]         = str(atime);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         merge_headers(meta, updatemeta, true);
@@ -2378,7 +2378,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         updatemeta["x-amz-meta-mtime"]         = str(mtime);
         updatemeta["x-amz-meta-ctime"]         = str(ctime);
         updatemeta["x-amz-meta-atime"]         = str(atime);
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // check opened file handle.
@@ -3268,9 +3268,9 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     s3_realpath = get_realpath(path);
     if(s3_realpath.empty() || '/' != *s3_realpath.rbegin()){
         // last word must be "/"
-        query_prefix += urlEncode(s3_realpath.substr(1) + "/");
+        query_prefix += urlEncodePath(s3_realpath.substr(1) + "/");
     }else{
-        query_prefix += urlEncode(s3_realpath.substr(1));
+        query_prefix += urlEncodePath(s3_realpath.substr(1));
     }
     if (check_content_only){
         // Just need to know if there are child objects in dir
@@ -3284,7 +3284,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         // append parameters to query in alphabetical order
         std::string each_query;
         if(!next_continuation_token.empty()){
-            each_query += "continuation-token=" + urlEncode(next_continuation_token) + "&";
+            each_query += "continuation-token=" + urlEncodePath(next_continuation_token) + "&";
             next_continuation_token = "";
         }
         each_query += query_delimiter;
@@ -3292,7 +3292,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             each_query += "list-type=2&";
         }
         if(!next_marker.empty()){
-            each_query += "marker=" + urlEncode(next_marker) + "&";
+            each_query += "marker=" + urlEncodePath(next_marker) + "&";
             next_marker = "";
         }
         each_query += query_maxkey;
@@ -3488,7 +3488,7 @@ static bool build_inherited_xattr_value(const char* path, std::string& xattrvalu
     raw_xattr_value += parent_default_value;
     raw_xattr_value += "\"}";
 
-    xattrvalue = urlEncode(raw_xattr_value);
+    xattrvalue = urlEncodePath(raw_xattr_value);
     return true;
 }
 
@@ -3596,7 +3596,7 @@ static std::string build_xattrs(const xattrs_t& xattrs)
     if(strxattrs.empty()){
         strxattrs = "{}";
     }
-    strxattrs = urlEncode(strxattrs);
+    strxattrs = urlEncodePath(strxattrs);
 
     return strxattrs;
 }
@@ -3733,7 +3733,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
     headers_t   updatemeta;
     updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+    updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
     // check opened file handle.
@@ -4028,7 +4028,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     // set xattr all object
     std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
     headers_t   updatemeta;
-    updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
+    updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
     if(!xattrs.empty()){
         updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);

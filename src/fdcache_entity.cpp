@@ -2410,7 +2410,7 @@ int FdEntity::UploadPending(int fd, AutoLock::Type type)
 
     }else if(UPDATE_META_PENDING == pending_status){
         headers_t updatemeta = orgmeta;
-        updatemeta["x-amz-copy-source"]        = urlEncode(service_path + S3fsCred::GetBucket() + get_realpath(path.c_str()));
+        updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(path.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // put headers, no need to update mtime to avoid dead lock
