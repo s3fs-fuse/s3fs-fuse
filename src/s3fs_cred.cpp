@@ -979,7 +979,7 @@ bool S3fsCred::InitialS3fsCredentials()
     }
 
     // access key loading is deferred
-    if(load_iamrole || is_ecs){
+    if(load_iamrole || IsSetExtCredLib() || is_ecs){
         return true;
     }
 
@@ -1147,12 +1147,12 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
 {
     AutoLock auto_lock(&token_lock);
 
-    if(hExtCredLib || IsSetIAMRole(AutoLock::ALREADY_LOCKED) || is_ecs || is_ibm_iam_auth){
+    if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole(AutoLock::ALREADY_LOCKED)){
         if(AWSAccessTokenExpire < (time(NULL) + S3fsCred::IAM_EXPIRE_MERGIN)){
             S3FS_PRN_INFO("IAM Access Token refreshing...");
 
             // update
-            if(!hExtCredLib){
+            if(!IsSetExtCredLib()){
                 if(!LoadIAMCredentials(AutoLock::ALREADY_LOCKED)){
                     S3FS_PRN_ERR("Access Token refresh by built-in failed");
                     return false;
@@ -1175,7 +1175,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
         *secret_access_key = AWSSecretAccessKey;
     }
     if(access_token){
-        if(IsIBMIAMAuth() || IsSetIAMRole(AutoLock::ALREADY_LOCKED) || is_ecs || is_use_session_token){
+        if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || is_use_session_token || IsSetIAMRole(AutoLock::ALREADY_LOCKED)){
             *access_token = AWSAccessToken;
         }else{
             access_token->erase();
@@ -1570,7 +1570,7 @@ bool S3fsCred::CheckAllParams()
         return false;
     }
 
-    if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs){
+    if(!S3fsCurl::IsPublicBucket() && !load_iamrole && !is_ecs && !IsSetExtCredLib()){
         if(!InitialS3fsCredentials()){
             return false;
         }
