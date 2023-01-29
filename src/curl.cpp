@@ -2885,6 +2885,9 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
         return -EIO;
     }
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0)){
+        return false;
+    }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent
         return -EIO;
     }
