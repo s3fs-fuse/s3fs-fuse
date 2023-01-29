@@ -258,6 +258,17 @@ that they did not create.
 .TP
 \fB\-o\fR nomultipart - disable multipart uploads
 .TP
+\fB\-o\fR streamupload (default is disable)
+Enable stream upload.
+If this option is enabled, a sequential upload will be performed in parallel with the write from the part that has been written during a multipart upload.
+This is expected to give better performance than other upload functions.
+Note that this option is still experimental and may change in the future.
+.TP
+\fB\-o\fR max_thread_count (default is "5")
+Specifies the number of threads waiting for stream uploads.
+Note that this option and Streamm Upload are still experimental and subject to change in the future.
+This option will be merged with "parallel_count" in the future.
+.TP
 \fB\-o\fR enable_content_md5 (default is disable)
 Allow S3 server to check data integrity of uploads via the Content-MD5 header.
 This can add CPU overhead to transfers.
@@ -414,6 +425,12 @@ For example, "1Y6M10D12h30m30s".
 Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync, async, dirsync). Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
+.SH SERVER URL/REQUEST STYLE
+Be careful when specifying the server endpoint(URL).
+.TP
+If your bucket name contains dots("."), you should use the path request style(using "use_path_request_style" option).
+.TP
+Also, if you are using a server other than Amazon S3, you need to specify the endpoint with the "url" option. At that time, depending on the server you are using, you may have to specify the path request style("use_path_request_style" option).
 .SH LOCAL STORAGE CONSUMPTION
 .TP
 s3fs requires local caching for operation. You can enable a local cache with "\-o use_cache" or s3fs uses temporary files to cache pending requests to s3.
@@ -458,14 +475,16 @@ Enable no object cache ("\-o enable_noobj_cache")
 If a bucket is used exclusively by an s3fs instance, you can enable the cache for non-existent files and directories with "\-o enable_noobj_cache". This eliminates repeated requests to check the existence of an object, saving time and possibly money.
 .RE
 .IP \[bu]
-Disable support of alternative directory names ("\-o notsup_compat_dir")
+Enable support of alternative directory names ("\-o compat_dir")
 .RS
 .TP
-s3fs supports "dir/", "dir" and "dir_$folder$" to map directory names to S3 objects and vice versa.
+s3fs recognizes "dir/" objects as directories. Clients other than s3fs may use "dir", "dir_$folder$" objects as directories, or directory objects may not exist. In order for s3fs to recognize these as directories, you can specify the "compat_dir" option.
+.RE
+.IP \[bu]
+Completion of file and directory information ("\-o complement_stat")
+.RS
 .TP
-Some applications use a different naming schema for associating directory names to S3 objects. For example, Apache Hadoop uses the  "dir_$folder$" schema to create S3 objects for directories.
-.TP
-The option "\-o notsup_compat_dir" can be set if all accessing tools use the "dir/" naming schema for directory objects and the bucket does not contain any objects with a different naming scheme. In this case, accessing directory objects saves time and possibly money because alternative schemas are not checked.
+s3fs uses the "x-amz-meta-mode header" to determine if an object is a file or a directory. For this reason, objects that do not have the "x-amz-meta-mode header" may not produce the expected results(The directory cannot be displayed, etc.). By specifying the "complement_stat" option, s3fs can automatically complete this missing attribute information, and you can get the expected results.
 .RE
 .SH NOTES
 .TP
