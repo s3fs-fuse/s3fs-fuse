@@ -1,6 +1,8 @@
-# s3fs
+# s3fs - What it is
 
 s3fs allows Linux, macOS, and FreeBSD to mount an S3 bucket via FUSE.
+FUSE (Filesystem in Userspace), is used instead of a kernel based Filesystem, as they are much easier to debug and work with.
+s3fs is the bridge between an S3 bucket and Linux, using FUSE to accomplish this.
 s3fs preserves the native object format for files, allowing use of other
 tools like [AWS CLI](https://github.com/aws/aws-cli).  
 [![s3fs-fuse CI](https://github.com/s3fs-fuse/s3fs-fuse/workflows/s3fs-fuse%20CI/badge.svg)](https://github.com/s3fs-fuse/s3fs-fuse/actions)
@@ -8,6 +10,22 @@ tools like [AWS CLI](https://github.com/aws/aws-cli).
 
 ## Features
 
+
+
+* Enables use of common commands for working with S3
+* Caches frequently used data to local device, reducing trips to S3
+* Splits large files and uploads them in parallel, reducing upload time
+* Can encrypt sensitive data before uploading
+* Integrates with other AWS services, namely EC2 and EBS
+* Version contorl of objects, meaning you can restore previous versions
+* Scalable to many concurrent users
+* Compatible with Linux, macOS, and Windows
+* Easy install
+* Retry logic for failed requests, reducing the chance of data loss
+* Compresses data before uploading
+* Integrates with exisiting tools and workflows
+* Uses S3 transfer Acceleration
+* Supports multiple S3 buckets
 * large subset of POSIX including reading/writing files, directories, symlinks, mode, uid/gid, and extended attributes
 * compatible with Amazon S3, and other [S3-based object stores](https://github.com/s3fs-fuse/s3fs-fuse/wiki/Non-Amazon-S3)
 * allows random writes and appends
@@ -22,7 +40,9 @@ tools like [AWS CLI](https://github.com/aws/aws-cli).
 
 ## Installation
 
+Simple installations mostly use Linux
 Many systems provide pre-built packages:
+
 
 * Amazon Linux via EPEL:
 
@@ -81,7 +101,7 @@ Many systems provide pre-built packages:
   pkg install fusefs-s3fs
   ```
 
-
+Windows has its own install, seening in [this link](COMPILATION.md).
 Otherwise consult the [compilation instructions](COMPILATION.md).
 
 ## Examples
@@ -169,6 +189,10 @@ Generally S3 cannot offer the same performance or semantics as a local file syst
 * [FAQ wiki page](https://github.com/s3fs-fuse/s3fs-fuse/wiki/FAQ)
 * [s3fs on Stack Overflow](https://stackoverflow.com/questions/tagged/s3fs)
 * [s3fs on Server Fault](https://serverfault.com/questions/tagged/s3fs)
+
+## Contributing
+
+* Guidelines have not been set for contributing, please follow existing push requests format to have a better understanding
 
 ## License
 
