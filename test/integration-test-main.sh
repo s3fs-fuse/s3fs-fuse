@@ -733,7 +733,7 @@ function test_special_characters {
         # shellcheck disable=SC2010
         ls 'special~' 2>&1 | grep -q 'No such file or directory'
         # shellcheck disable=SC2010
-        ls 'specialµ' 2>&1 | grep -q 'No such file or directory'
+        ls 'specialμ' 2>&1 | grep -q 'No such file or directory'
     )
 
     mkdir "TOYOTA TRUCK 8.2.2"
@@ -1290,6 +1290,272 @@ function test_update_chmod_opened_file() {
 
     # clean up
     rm_test_file "${ALT_TEST_TEXT_FILE}"
+}
+
+function test_update_parent_directory_time_sub() {
+    if [ $# -ne 1 ]; then
+        echo "Internal error: parameter is wrong."
+        return 1
+    fi
+
+    # [NOTE]
+    # Skip test for mknod/mkfifo command.
+    # If run them, ctime/mtime of the parent directory will be updated.
+    #
+    local TEST_PARENTDIR_PARENT="${1}"
+    local TEST_PARENTDIR_FILE="${TEST_PARENTDIR_PARENT}/testfile"
+    local TEST_PARENTDIR_SYMFILE_BASE="testfile2"
+    local TEST_PARENTDIR_FILE_MV="${TEST_PARENTDIR_PARENT}/${TEST_PARENTDIR_SYMFILE_BASE}"
+    local TEST_PARENTDIR_SYMFILE="${TEST_PARENTDIR_PARENT}/symfile"
+    local TEST_PARENTDIR_SYMFILE_MV="${TEST_PARENTDIR_PARENT}/symfile2"
+    local TEST_PARENTDIR_DIR="${TEST_PARENTDIR_PARENT}/testdir"
+    local TEST_PARENTDIR_DIR_MV="${TEST_PARENTDIR_PARENT}/testdir2"
+
+    #
+    # Create file -> Update parent directory's mtime/ctime
+    #
+    local base_atime; base_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local base_ctime; base_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local base_mtime; base_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    touch "${TEST_PARENTDIR_FILE}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "creating file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Update file -> Not update parent directory's atime/mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    touch "${TEST_PARENTDIR_FILE}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" != "${after_ctime}" ] || [ "${base_mtime}" != "${after_mtime}" ]; then
+        echo "updating file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} == ${after_ctime} ), mtime( ${base_mtime} == ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Rename file -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    mv "${TEST_PARENTDIR_FILE}" "${TEST_PARENTDIR_FILE_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "renaming file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Create symbolic link -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    ln -s "${TEST_PARENTDIR_SYMFILE_BASE}" "${TEST_PARENTDIR_SYMFILE}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "creating symbolic file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Update symbolic file -> Not update parent directory's atime/mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    touch "${TEST_PARENTDIR_SYMFILE}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" != "${after_ctime}" ] || [ "${base_mtime}" != "${after_mtime}" ]; then
+        echo "updating symbolic file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} == ${after_ctime} ), mtime( ${base_mtime} == ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Rename symbolic link -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    mv "${TEST_PARENTDIR_SYMFILE}" "${TEST_PARENTDIR_SYMFILE_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "renaming symbolic file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Delete symbolic link -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    rm "${TEST_PARENTDIR_SYMFILE_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "deleting symbolic file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Delete file -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    rm "${TEST_PARENTDIR_FILE_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "deleting file expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Create directory -> Update parent directory's mtime/ctime
+    #
+    local base_atime; base_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local base_ctime; base_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local base_mtime; base_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    mkdir "${TEST_PARENTDIR_DIR}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "creating directory expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Update directory -> Not update parent directory's atime/mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    touch "${TEST_PARENTDIR_DIR}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" != "${after_ctime}" ] || [ "${base_mtime}" != "${after_mtime}" ]; then
+        echo "updating directory expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} == ${after_ctime} ), mtime( ${base_mtime} == ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Rename directory -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    mv "${TEST_PARENTDIR_DIR}" "${TEST_PARENTDIR_DIR_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "renaming directory expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    #
+    # Delete directory -> Update parent directory's mtime/ctime
+    #
+    base_atime="${after_atime}"
+    base_ctime="${after_ctime}"
+    base_mtime="${after_mtime}"
+
+    rm -r "${TEST_PARENTDIR_DIR_MV}"
+
+    local after_atime; after_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
+    local after_ctime; after_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
+    local after_mtime; after_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
+
+    if [ "${base_atime}" != "${after_atime}" ] || [ "${base_ctime}" = "${after_ctime}" ] || [ "${base_mtime}" = "${after_mtime}" ]; then
+        echo "deleting directory expected updating ctime/mtime: atime( ${base_atime} == ${after_atime} ), ctime( ${base_ctime} != ${after_ctime} ), mtime( ${base_mtime} != ${after_mtime} )"
+        return 1
+    fi
+
+    return 0
+}
+
+function test_update_parent_directory_time() {
+    describe "Testing update time of parent directory..."
+
+    #
+    # Test sub directory
+    #
+    mk_test_dir
+    if ! test_update_parent_directory_time_sub "${TEST_DIR}"; then
+        echo "failed test about updating time of parent directory: ${TEST_DIR}"
+        return 1
+    fi
+    rm -rf "${TEST_DIR}"
+
+    #
+    # Test bucket top directory
+    #
+    # [NOTE]
+    # The current directory for test execution is "<mount point>/testrun-xxxx".
+    # This test checks in the directory at the top of the bucket.
+    #
+    if ! test_update_parent_directory_time_sub ".."; then
+        echo "failed test about updating time of parent directory: ${TEST_DIR}"
+        return 1
+    fi
+
+    return 0
 }
 
 function test_rm_rf_dir {
@@ -2389,7 +2655,10 @@ function add_all_tests {
     fi
     add_tests test_update_directory_time_subdir
     add_tests test_update_chmod_opened_file
-
+    # shellcheck disable=SC2009
+    if ps u -p "${S3FS_PID}" | grep -q update_parent_dir_stat; then
+        add_tests test_update_parent_directory_time
+    fi
     # shellcheck disable=SC2009
     if ! ps u -p "${S3FS_PID}" | grep -q use_xattr; then
         add_tests test_posix_acl
