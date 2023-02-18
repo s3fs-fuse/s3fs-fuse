@@ -147,23 +147,32 @@ std::string trim(const std::string &s, const char *t /* = SPACES */)
 }
 
 //
-// urlEncode a fuse path,
-// taking into special consideration "/",
-// otherwise regular urlEncode.
+// Three url encode functions
 //
-std::string urlEncode(const std::string &s)
+// urlEncodeGeneral: A general URL encoding function.
+// urlEncodePath   : A function that URL encodes by excluding the path
+//                   separator('/').
+// urlEncodeQuery  : A function that does URL encoding by excluding
+//                   some characters('=', '&' and '%').
+//                   This function can be used when the target string
+//                   contains already URL encoded strings. It also
+//                   excludes the character () used in query strings.
+//                   Therefore, it is a function to use as URL encoding
+//                   for use in query strings.
+//
+static const char* encode_general_except_chars = ".-_~";    // For general URL encode
+static const char* encode_path_except_chars    = ".-_~/";   // For fuse(included path) URL encode
+static const char* encode_query_except_chars   = ".-_~=&%"; // For query params(and encoded string)
+
+static std::string rawUrlEncode(const std::string &s, const char* except_chars)
 {
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
         unsigned char c = s[i];
-        if (c == '/' // Note- special case for fuse paths...
-            || c == '.'
-            || c == '-'
-            || c == '_'
-            || c == '~'
-            || (c >= 'a' && c <= 'z')
-            || (c >= 'A' && c <= 'Z')
-            || (c >= '0' && c <= '9'))
+        if((except_chars && NULL != strchr(except_chars, c)) ||
+           (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') )
         {
             result += c;
         }else{
@@ -174,34 +183,19 @@ std::string urlEncode(const std::string &s)
     return result;
 }
 
-//
-// urlEncode a fuse path,
-// taking into special consideration "/",
-// otherwise regular urlEncode.
-//
-std::string urlEncode2(const std::string &s)
+std::string urlEncodeGeneral(const std::string &s)
 {
-    std::string result;
-    for (size_t i = 0; i < s.length(); ++i) {
-        unsigned char c = s[i];
-        if (c == '=' // Note- special case for fuse paths...
-          || c == '&' // Note- special case for s3...
-          || c == '%'
-          || c == '.'
-          || c == '-'
-          || c == '_'
-          || c == '~'
-          || (c >= 'a' && c <= 'z')
-          || (c >= 'A' && c <= 'Z')
-          || (c >= '0' && c <= '9'))
-        {
-            result += c;
-        }else{
-            result += "%";
-            result += s3fs_hex_upper(&c, 1);
-        }
-    }
-    return result;
+    return rawUrlEncode(s, encode_general_except_chars);
+}
+
+std::string urlEncodePath(const std::string &s)
+{
+    return rawUrlEncode(s, encode_path_except_chars);
+}
+
+std::string urlEncodeQuery(const std::string &s)
+{
+    return rawUrlEncode(s, encode_query_except_chars);
 }
 
 std::string urlDecode(const std::string& s)

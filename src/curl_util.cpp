@@ -247,7 +247,7 @@ bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::strin
     if(!realpath){
         return false;
     }
-    resourcepath = urlEncode(service_path + S3fsCred::GetBucket() + realpath);
+    resourcepath = urlEncodePath(service_path + S3fsCred::GetBucket() + realpath);
     url          = s3host + resourcepath;
     return true;
 }

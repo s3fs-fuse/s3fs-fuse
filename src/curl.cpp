@@ -1219,6 +1219,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
         return NULL;
     }
+    upload_id = urlDecode(upload_id);       // decode
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
@@ -1266,6 +1267,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
         return NULL;
     }
+    upload_id = urlDecode(upload_id);       // decode
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return NULL;
     }
@@ -2789,7 +2791,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-security-token", access_token.c_str());
     }
 
-    uriencode = urlEncode(canonical_uri);
+    uriencode = urlEncodePath(canonical_uri);
     StringCQ  = method + "\n";
     if(method == "HEAD" || method == "PUT" || method == "DELETE"){
         StringCQ += uriencode + "\n";
@@ -2798,11 +2800,11 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     }else if(method == "GET" && is_prefix(uriencode.c_str(), "/")){
         StringCQ += uriencode +"\n";
     }else if(method == "GET" && !is_prefix(uriencode.c_str(), "/")){
-        StringCQ += "/\n" + urlEncode2(canonical_uri) +"\n";
+        StringCQ += "/\n" + urlEncodeQuery(canonical_uri) +"\n";
     }else if(method == "POST"){
         StringCQ += uriencode + "\n";
     }
-    StringCQ += urlEncode2(query_string) + "\n";
+    StringCQ += urlEncodeQuery(query_string) + "\n";
     StringCQ += get_canonical_headers(requestHeaders) + "\n";
     StringCQ += get_sorted_header_keys(requestHeaders) + "\n";
     StringCQ += payload_hash;
@@ -3921,7 +3923,11 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     std::string turl;
     MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
-    query_string         = "uploadId=" + upload_id;
+    // [NOTE]
+    // Encode the upload_id here.
+    // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
+    //
+    query_string         = "uploadId=" + urlEncodeGeneral(upload_id);
     turl                += "?" + query_string;
     url                  = prepare_url(turl.c_str());
     path                 = get_realpath(tpath);
@@ -4039,7 +4045,11 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
     std::string turl;
     MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
 
-    query_string    = "uploadId=" + upload_id;
+    // [NOTE]
+    // Encode the upload_id here.
+    // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
+    //
+    query_string    = "uploadId=" + urlEncodeGeneral(upload_id);
     turl           += "?" + query_string;
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
@@ -4101,7 +4111,12 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     }
 
     // make request
-    query_string        = "partNumber=" + str(part_num) + "&uploadId=" + upload_id;
+    //
+    // [NOTE]
+    // Encode the upload_id here.
+    // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
+    //
+    query_string        = "partNumber=" + str(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
     std::string resource;
     std::string turl;
@@ -4169,7 +4184,11 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     if(!from || !to){
         return -EINVAL;
     }
-    query_string = "partNumber=" + str(part_num) + "&uploadId=" + upload_id;
+    // [NOTE]
+    // Encode the upload_id here.
+    // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
+    //
+    query_string = "partNumber=" + str(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
     std::string resource;
     std::string turl;
