@@ -3365,11 +3365,20 @@ static int remote_mountpath_exists(const char* path)
     S3FS_PRN_INFO1("[path=%s]", path);
 
     // getattr will prefix the path with the remote mountpoint
-    if(0 != (result = get_object_attribute("/", &stbuf, NULL))){
+    if(0 != (result = get_object_attribute(path, &stbuf, NULL))){
         return result;
     }
-    if(!S_ISDIR(stbuf.st_mode)){
-        return -ENOTDIR;
+
+    // [NOTE]
+    // If "<bucket>/<directory>..." is specified as the mount point
+    // and the mount point(directory object) does not exist, the
+    // following judgment will result in an error.
+    // However, if there is a file object etc. under that mount
+    // point(directory), it will be allowed with filling the default
+    // stats information.
+    //
+    if(!has_mp_stat){
+        return -ENOENT;
     }
     return 0;
 }
@@ -4344,7 +4353,7 @@ static int s3fs_check_service()
 
     // make sure remote mountpath exists and is a directory
     if(!mount_prefix.empty()){
-        if(remote_mountpath_exists(mount_prefix.c_str()) != 0){
+        if(remote_mountpath_exists("/") != 0){
             S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
             return EXIT_FAILURE;
         }
