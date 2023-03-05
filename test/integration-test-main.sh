@@ -749,7 +749,7 @@ function test_hardlink {
 
     (
         set +o pipefail
-        ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q 'Operation not supported'
+        ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q -e 'Operation not supported' -e 'Not supported'
     )
 
     rm_test_file
@@ -1796,11 +1796,17 @@ function test_overwrite_existing_file_range {
     describe "Test overwrite range succeeds ..."
     dd if=<(seq 1000) of="${TEST_TEXT_FILE}"
     dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=1 count=1 bs=1024 conv=notrunc
-    cmp "${TEST_TEXT_FILE}" <(
-        seq 1000 | head -c 1024
-        dd if=/dev/zero count=1 bs=1024
-        seq 1000 | tail -c +2049
-    )
+
+    # [NOTE]
+    # In ALPINE, comparisons using redirects often fail.
+    # Therefore, create a real file for comparison and use it.
+    #
+    dd if=<(seq 1000) of=/tmp/cmp_base_file
+    dd if=/dev/zero of=/tmp/cmp_base_file seek=1 count=1 bs=1024 conv=notrunc
+
+    cmp "${TEST_TEXT_FILE}" /tmp/cmp_base_file
+
+    rm_test_file /tmp/cmp_base_file
     rm_test_file
 }
 

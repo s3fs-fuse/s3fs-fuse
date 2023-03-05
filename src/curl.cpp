@@ -1957,6 +1957,9 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0)){
         return false;
     }
+    // [NOTE]
+    // CURLOPT_PROGRESSFUNCTION should be changed to CURLOPT_XFERINFOFUNCTION,
+    // but CnetOS7's curl version is old, so it haven't been changed yet.
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress)){
         return false;
     }
@@ -3020,7 +3023,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     // Expect header is empty before the request is sent.
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Expect", "");
 
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PUT, true)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){

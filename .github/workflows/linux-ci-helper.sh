@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # s3fs - FUSE-based file system backed by Amazon S3
 #
@@ -19,9 +19,17 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
+# [NOTE]
+# Since bash is not present in some Runner containers, this script
+# runs in sh.
+# pipefail etc. are not native variables of sh. It exists in bash's
+# sh compatibility mode, but doesn't work in sh compatibility mode
+# of ash such as alpine.
+# However, it's not fatal that pipefail doesn't work for this script.
+#
 set -o errexit
 set -o nounset
-set -o pipefail
+#set -o pipefail
 
 #-----------------------------------------------------------
 # Common variables
@@ -70,10 +78,12 @@ CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix
 PACKAGE_ENABLE_REPO_OPTIONS=""
 PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
 SHELLCHECK_DIRECT_INSTALL=0
+AWSCLI_DIRECT_INSTALL=1
 
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -82,6 +92,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -90,6 +101,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -98,6 +110,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:18.04" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -106,6 +119,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:16.04" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -114,6 +128,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
@@ -122,6 +137,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
     PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
 
     # [NOTE]
@@ -142,6 +158,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
@@ -155,6 +172,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     PACKAGE_MANAGER_BIN="yum"
     PACKAGE_UPDATE_OPTIONS="update -y"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     # [NOTE]
     # ShellCheck version(0.3.8) is too low to check.
@@ -168,6 +186,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip unzip"
@@ -177,6 +196,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "fedora:36" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip unzip"
@@ -186,10 +206,22 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:36" ]; then
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
+    PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck unzip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
+
+elif [ "${CONTAINER_FULLNAME}" = "alpine:3.17" ]; then
+    PACKAGE_MANAGER_BIN="apk"
+    PACKAGE_UPDATE_OPTIONS="update --no-progress"
+    PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
+
+    INSTALL_PACKAGES="bash curl g++ make automake autoconf libtool git curl-dev fuse-dev libxml2-dev coreutils procps attr sed mailcap openjdk11 aws-cli"
+    INSTALL_CHECKER_PKGS="cppcheck shellcheck"
+    INSTALL_CHECKER_PKG_OPTIONS=""
+
+    AWSCLI_DIRECT_INSTALL=0
 
 else
     echo "No container configured for: ${CONTAINER_FULLNAME}"
@@ -209,10 +241,10 @@ echo "${PRGNAME} [INFO] Updates."
 # Install packages ( with cppcheck )
 #
 echo "${PRGNAME} [INFO] Install packages."
-/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} install -y ${PACKAGE_INSTALL_ADDITIONAL_OPTIONS} ${INSTALL_PACKAGES}"
+/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} ${PACKAGE_INSTALL_OPTIONS} ${PACKAGE_INSTALL_ADDITIONAL_OPTIONS} ${INSTALL_PACKAGES}"
 
 echo "${PRGNAME} [INFO] Install cppcheck package."
-/bin/sh -c "${PACKAGE_MANAGER_BIN} ${INSTALL_CHECKER_PKG_OPTIONS} install -y ${INSTALL_CHECKER_PKGS}"
+/bin/sh -c "${PACKAGE_MANAGER_BIN} ${INSTALL_CHECKER_PKG_OPTIONS} ${PACKAGE_INSTALL_OPTIONS} ${INSTALL_CHECKER_PKGS}"
 
 #
 # Install ShellCheck manually
@@ -242,13 +274,18 @@ java -version
 #
 # Install awscli
 #
-echo "${PRGNAME} [INFO] Install awscli2 package."
-CURRENT_DIR=$(pwd)
-cd /tmp
-curl "${AWSCLI_URI}" -o "${AWSCLI_ZIP_FILE}"
-unzip  "${AWSCLI_ZIP_FILE}"
-./aws/install
-cd "${CURRENT_DIR}"
+if [ "${AWSCLI_DIRECT_INSTALL}" -eq 1 ]; then
+    echo "${PRGNAME} [INFO] Install awscli2 package."
+
+    CURRENT_DIR=$(pwd)
+    cd /tmp || exit 1
+
+    curl "${AWSCLI_URI}" -o "${AWSCLI_ZIP_FILE}"
+    unzip  "${AWSCLI_ZIP_FILE}"
+    ./aws/install
+
+    cd "${CURRENT_DIR}" || exit 1
+fi
 
 #-----------------------------------------------------------
 # Set environment for configure
