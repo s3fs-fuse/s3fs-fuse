@@ -774,7 +774,7 @@ bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size
 
         fdpage  tmppage;
         tmppage.offset   = std::max(iter->offset, start);
-        tmppage.bytes    = (-1 != stop_pos ? iter->bytes : std::min(iter->bytes, (stop_pos - tmppage.offset)));
+        tmppage.bytes    = (-1 == stop_pos ? iter->bytes : std::min(iter->bytes, (stop_pos - tmppage.offset)));
         tmppage.loaded   = iter->loaded;
         tmppage.modified = iter->modified;
 
