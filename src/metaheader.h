@@ -46,7 +46,7 @@ struct timespec get_atime(const headers_t& meta, bool overcheck = true);
 off_t get_size(const char *s);
 off_t get_size(const headers_t& meta);
 mode_t get_mode(const char *s, int base = 0);
-mode_t get_mode(const headers_t& meta, const char* path = NULL, bool checkdir = false, bool forcedir = false);
+mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir = false, bool forcedir = false);
 uid_t get_uid(const char *s);
 uid_t get_uid(const headers_t& meta);
 gid_t get_gid(const char *s);

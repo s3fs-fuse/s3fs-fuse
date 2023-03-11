@@ -125,7 +125,7 @@ mode_t get_mode(const char *s, int base)
     return static_cast<mode_t>(cvt_strtoofft(s, base));
 }
 
-mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool forcedir)
+mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir, bool forcedir)
 {
     mode_t mode     = 0;
     bool   isS3sync = false;
@@ -141,7 +141,7 @@ mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool for
     }else{
         // If another tool creates an object without permissions, default to owner
         // read-write and group readable.
-        mode = path[strlen(path) - 1] == '/' ? 0750 : 0640;
+        mode = (!strpath.empty() && '/' == *strpath.rbegin()) ? 0750 : 0640;
     }
 
     // Checking the bitmask, if the last 3 bits are all zero then process as a regular
@@ -163,7 +163,7 @@ mode_t get_mode(const headers_t& meta, const char* path, bool checkdir, bool for
                         if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
                             // Nextcloud uses this MIME type for directory objects when mounting bucket as external Storage
                             mode |= S_IFDIR;
-                        }else if(path && 0 < strlen(path) && '/' == path[strlen(path) - 1]){
+                        }else if(!strpath.empty() && '/' == *strpath.rbegin()){
                             if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
                                 mode |= S_IFDIR;
                             }else{
