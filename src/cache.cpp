@@ -449,7 +449,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
     SetStatCacheTime(ent->cache_date);
 
     // Update only mode
-    ent->stbuf.st_mode = get_mode(meta);
+    ent->stbuf.st_mode = get_mode(meta, key);
 
     return true;
 }
