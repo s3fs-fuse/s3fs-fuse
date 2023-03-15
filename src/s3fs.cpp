@@ -49,7 +49,7 @@
 #include "mpu_util.h"
 #include "threadpoolman.h"
 #include "autolock.h"
-
+#include <set>
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
@@ -100,7 +100,7 @@ static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static int max_thread_count       = 5;  // default is 5
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
-
+static std::set<std::string> fileReading;
 //-------------------------------------------------------------------
 // Global functions : prototype
 //-------------------------------------------------------------------
@@ -1166,9 +1166,12 @@ static int s3fs_unlink(const char* _path)
     }
     S3fsCurl s3fscurl;
     result = s3fscurl.DeleteRequest(path);
-    StatCache::getStatCacheData()->DelStat(path);
-    StatCache::getStatCacheData()->DelSymlink(path);
-    FdManager::DeleteCacheFile(path);
+    // delete stat cache when it's not downloading
+    if(fileReading.find(path) == fileReading.end()){
+        StatCache::getStatCacheData()->DelStat(path);
+        StatCache::getStatCacheData()->DelSymlink(path);
+        FdManager::DeleteCacheFile(path);
+    }
 
     // update parent directory timestamp
     int update_result;
@@ -2746,7 +2749,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     if(0 > (res = ent->Read(static_cast<int>(fi->fh), buf, offset, size, false))){
         S3FS_PRN_WARN("failed to read file(%s). result=%zd", path, res);
     }
-
+    fileReading.insert(path);
     return static_cast<int>(res);
 }
 
@@ -2944,6 +2947,10 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         if(FdManager::HasOpenEntityFd(path)){
             S3FS_PRN_WARN("file(%s) is still opened(another pseudo fd is opend).", path);
         }
+    }
+    // when file download finished , remove file in set 
+    if(fileReading.find(path) != fileReading.end()){
+        fileReading.erase(path);
     }
     S3FS_MALLOCTRIM(0);
 
