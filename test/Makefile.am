@@ -32,11 +32,13 @@ testdir = test
 noinst_PROGRAMS = \
     junk_data \
     write_multiblock \
-    mknod_test
+    mknod_test \
+    truncate_read_file
 
-junk_data_SOURCES = junk_data.c
-write_multiblock_SOURCES = write_multiblock.cc
-mknod_test_SOURCES = mknod_test.c
+junk_data_SOURCES          = junk_data.c
+write_multiblock_SOURCES   = write_multiblock.cc
+mknod_test_SOURCES         = mknod_test.c
+truncate_read_file_SOURCES = truncate_read_file.c
 
 #
 # Local variables:

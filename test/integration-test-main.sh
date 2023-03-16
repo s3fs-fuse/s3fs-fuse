@@ -112,6 +112,29 @@ function test_truncate_shrink_file {
     rm_test_file "${BIG_TRUNCATE_TEST_FILE}"
 }
 
+function test_truncate_shrink_read_file {
+    describe "Testing truncate(shrink) and read file ..."
+
+    # Initiate file size is 1024, and shrink file size is 512
+    local init_size=1024
+    local shrink_size=512
+
+    # create file
+    dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs="${init_size}" count=1
+
+    # truncate(shrink) file and read it before flusing
+    ../../truncate_read_file "${TEST_TEXT_FILE}" "${shrink_size}"
+
+    # check file size
+    check_file_size "${TEST_TEXT_FILE}" "${shrink_size}"
+
+
+    # Truncate the file to 1024 length
+    local t_size=1024
+
+    rm_test_file
+}
+
 function test_mv_file {
     describe "Testing mv file function ..."
     # if the rename file exists, delete it
@@ -2610,6 +2633,7 @@ function add_all_tests {
     add_tests test_truncate_upload
     add_tests test_truncate_empty_file
     add_tests test_truncate_shrink_file
+    add_tests test_truncate_shrink_read_file
     add_tests test_mv_file
     add_tests test_mv_to_exist_file
     add_tests test_mv_empty_directory

@@ -2563,6 +2563,7 @@ static int s3fs_truncate(const char* _path, off_t size)
     // Get file information
     if(0 == (result = get_object_attribute(path, NULL, &meta))){
         // File exists
+        off_t cur_size = get_size(meta);
 
         // [NOTE]
         // If the file exists, the file has already been opened by FUSE before
@@ -2596,20 +2597,34 @@ static int s3fs_truncate(const char* _path, off_t size)
         }
         ent->UpdateCtime();
 
-#if defined(__APPLE__)
         // [NOTE]
-        // Only for macos, this truncate calls to "size=0" do not reflect size.
-        // The cause is unknown now, but it can be avoided by flushing the file.
+        // In the case of reducing the file size, the stats information on the server
+        // side must be updated.
+        // This is because truncate is called, but flush (sync) is not performed, and
+        // when reading is performed by another process etc. until that flush, the file
+        // size resets to original size and the correct(reduced) file size cannot be
+        // reflected.
         //
-        if(0 == size){
+        if(size < cur_size){
             if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(path);
-        }
-#endif
 
+#if defined(__APPLE__)
+        }else if(0 == size){
+            // [NOTE]
+            // Only for macos, this truncate calls to "size=0" do not reflect size.
+            // The cause is unknown now, but it can be avoided by flushing the file.
+            //
+            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+                S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+                return result;
+            }
+            StatCache::getStatCacheData()->DelStat(path);
+#endif
+        }
     }else{
         // Not found -> Make tmpfile(with size)
         struct fuse_context* pcxt;
