@@ -2682,19 +2682,32 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         return result;
     }
 
+    AutoFdEntity autoent;
+    FdEntity*    ent;
+    headers_t    meta;
+
     if((unsigned int)fi->flags & O_TRUNC){
         if(0 != st.st_size){
             st.st_size = 0;
             needs_flush = true;
+        }
+    }else{
+        // [NOTE]
+        // If the file has already been opened and edited, the file size in
+        // the edited state is given priority.
+        // This prevents the file size from being reset to its original size
+        // if you keep the file open, shrink its size, and then read the file
+        // from another process while it has not yet been flushed.
+        //
+        if(NULL != (ent = autoent.OpenExistFdEntity(path)) && ent->IsModified()){
+            // sets the file size being edited.
+            ent->GetSize(st.st_size);
         }
     }
     if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
         st.st_mtime = -1;
     }
 
-    AutoFdEntity autoent;
-    FdEntity*    ent;
-    headers_t    meta;
     if(0 != (result = get_object_attribute(path, NULL, &meta, true, NULL, true))){    // no truncate cache
       return result;
     }

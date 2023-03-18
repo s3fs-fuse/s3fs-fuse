@@ -245,7 +245,7 @@ gid_t get_gid(const headers_t& meta)
 
 blkcnt_t get_blocks(off_t size)
 {
-    return size / 512 + 1;
+    return (size / 512) + (0 == (size % 512) ? 0 : 1);
 }
 
 time_t cvtIAMExpireStringToTime(const char* s)

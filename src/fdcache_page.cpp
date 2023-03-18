@@ -456,7 +456,13 @@ bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
     off_t total = Size();
 
     if(0 == total){
+        // [NOTE]
+        // The is_shrink flag remains unchanged in this function.
+        //
+        bool backup_is_shrink = is_shrink;
+
         Init(size, is_loaded, is_modified);
+        is_shrink = backup_is_shrink;
 
     }else if(total < size){
         // add new area
