@@ -1518,11 +1518,14 @@ static int rename_large_object(const char* from, const char* to)
     }
     s3fscurl.DestroyCurlHandle();
 
+    // Rename cache file
+    FdManager::get()->Rename(from, to);
+
     // Remove file
     result = s3fs_unlink(from);
 
+    // Stats
     StatCache::getStatCacheData()->DelStat(to);
-    FdManager::DeleteCacheFile(to);
 
     return result;
 }
