@@ -29,6 +29,7 @@
 #include "s3fs_util.h"
 #include "s3objlist.h"
 #include "autolock.h"
+#include "string_util.h"
 
 //-------------------------------------------------------------------
 // Variables
@@ -400,15 +401,21 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
                     xmlXPathFreeObject(ETag);
                 }
             }
-            if(!head.insert(name, (!stretag.empty() ? stretag.c_str() : NULL), is_dir)){
+
+            // [NOTE]
+            // The XML data passed to this function is CR code(\r) encoded.
+            // The function below decodes that encoded CR code.
+            //
+            std::string decname = get_decoded_cr_code(name);
+            free(name);
+
+            if(!head.insert(decname.c_str(), (!stretag.empty() ? stretag.c_str() : NULL), is_dir)){
                 S3FS_PRN_ERR("insert_object returns with error.");
                 xmlXPathFreeObject(key);
                 xmlXPathFreeObject(contents_xp);
-                free(name);
                 S3FS_MALLOCTRIM(0);
                 return -1;
             }
-            free(name);
         }else{
             S3FS_PRN_DBG("name is file or subdir in dir. but continue.");
         }

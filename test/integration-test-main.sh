@@ -2398,6 +2398,15 @@ function test_ut_ossfs {
     ../../ut_test.py
 }
 
+function test_cr_filename {
+    describe "Testing filename with CR code ..."
+
+    # The following tests create a file, test it, and delete it.
+    # So this test just calls the following program.
+    #
+    ../../cr_filename "${TEST_TEXT_FILE}"
+}
+
 #
 # This test opens a file and writes multiple sets of data.
 # The file is opened only once and multiple blocks of data are written
@@ -2709,6 +2718,7 @@ function add_all_tests {
     add_tests test_mix_upload_entities
     add_tests test_not_existed_dir_obj
     add_tests test_ut_ossfs
+    add_tests test_cr_filename
     # shellcheck disable=SC2009
     if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file

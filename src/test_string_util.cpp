@@ -147,6 +147,55 @@ void test_wtf8_encoding()
     ASSERT_EQUALS(s3fs_wtf8_decode(s3fs_wtf8_encode(mixed)), mixed);
 }
 
+void test_cr_encoding()
+{
+    // bse strings
+    std::string base_no("STR");
+
+    std::string base_end_cr1("STR\r");
+    std::string base_mid_cr1("STR\rSTR");
+    std::string base_end_cr2("STR\r\r");
+    std::string base_mid_cr2("STR\r\rSTR");
+
+    std::string base_end_per1("STR%");
+    std::string base_mid_per1("STR%STR");
+    std::string base_end_per2("STR%%");
+    std::string base_mid_per2("STR%%STR");
+
+    std::string base_end_crlf1("STR\r\n");
+    std::string base_mid_crlf1("STR\r\nSTR");
+    std::string base_end_crlf2("STR\r\n\r\n");
+    std::string base_mid_crlf2("STR\r\n\r\nSTR");
+
+    std::string base_end_crper1("STR%\r");
+    std::string base_mid_crper1("STR%\rSTR");
+    std::string base_end_crper2("STR%\r%\r");
+    std::string base_mid_crper2("STR%\r%\rSTR");
+
+    // encode->decode->compare
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_no.c_str()).c_str()),         base_no);
+
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_cr1.c_str()).c_str()),    base_end_cr1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_cr1.c_str()).c_str()),    base_mid_cr1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_cr2.c_str()).c_str()),    base_end_cr2);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_cr2.c_str()).c_str()),    base_mid_cr2);
+
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_per1.c_str()).c_str()),   base_end_per1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_per1.c_str()).c_str()),   base_mid_per1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_per2.c_str()).c_str()),   base_end_per2);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_per2.c_str()).c_str()),   base_mid_per2);
+
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_crlf1.c_str()).c_str()),  base_end_crlf1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crlf1.c_str()).c_str()),  base_mid_crlf1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_crlf2.c_str()).c_str()),  base_end_crlf2);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crlf2.c_str()).c_str()),  base_mid_crlf2);
+
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_crper1.c_str()).c_str()), base_end_crper1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crper1.c_str()).c_str()), base_mid_crper1);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_end_crper2.c_str()).c_str()), base_end_crper2);
+    ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crper2.c_str()).c_str()), base_mid_crper2);
+}
+
 int main(int argc, char *argv[])
 {
     S3fsLog singletonLog;
@@ -155,6 +204,7 @@ int main(int argc, char *argv[])
     test_base64();
     test_strtoofft();
     test_wtf8_encoding();
+    test_cr_encoding();
 
     return 0;
 }

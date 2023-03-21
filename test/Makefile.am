@@ -33,12 +33,14 @@ noinst_PROGRAMS = \
     junk_data \
     write_multiblock \
     mknod_test \
-    truncate_read_file
+    truncate_read_file \
+    cr_filename
 
 junk_data_SOURCES          = junk_data.c
 write_multiblock_SOURCES   = write_multiblock.cc
 mknod_test_SOURCES         = mknod_test.c
 truncate_read_file_SOURCES = truncate_read_file.c
+cr_filename_SOURCES        = cr_filename.c
 
 #
 # Local variables:

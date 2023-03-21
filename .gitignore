@@ -88,6 +88,7 @@ test/s3proxy-*
 test/write_multiblock
 test/mknod_test
 test/truncate_read_file
+test/cr_filename
 
 #
 # Windows ports
