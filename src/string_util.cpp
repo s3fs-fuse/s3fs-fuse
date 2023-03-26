@@ -601,6 +601,89 @@ std::string s3fs_wtf8_decode(const std::string &s)
     return result;
 }
 
+//
+// Encode only CR('\r'=0x0D) and it also encodes the '%' character accordingly.
+//
+// The xmlReadMemory() function in libxml2 replaces CR code with LF code('\n'=0x0A)
+// due to the XML specification.
+// s3fs uses libxml2 to parse the S3 response, and this automatic substitution
+// of libxml2 may change the object name(file/dir name). Therefore, before passing
+// the response to the xmlReadMemory() function, we need the string encoded by
+// this function.
+//
+// [NOTE]
+// Normally the quotes included in the XML content data are HTML encoded("&quot;").
+// Encoding for CR can also be HTML encoded as binary code (ex, "&#13;"), but
+// if the same string content(as file name) as this encoded string exists, the
+// original string cannot be distinguished whichever encoded or not encoded.
+// Therefore, CR is encoded in the same manner as URL encoding("%0A").
+// And it is assumed that there is no CR code in the S3 response tag etc.(actually
+// it shouldn't exist)
+//
+std::string get_encoded_cr_code(const char* pbase)
+{
+    std::string result;
+    if(!pbase){
+        return result;
+    }
+    std::string strbase(pbase);
+    size_t      baselength = strbase.length();
+    size_t      startpos   = 0;
+    size_t      foundpos;
+    while(startpos < baselength && std::string::npos != (foundpos = strbase.find_first_of("%\r", startpos))){
+        if(0 < (foundpos - startpos)){
+            result += strbase.substr(startpos, foundpos - startpos);
+        }
+        if('%' == strbase[foundpos]){
+            result += "%45";
+        }else if('\r' == strbase[foundpos]){
+            result += "%0D";
+        }
+        startpos = foundpos + 1;
+    }
+    if(startpos < baselength){
+        result += strbase.substr(startpos);
+    }
+    return result;
+}
+
+//
+// Decode a string encoded with get_encoded_cr_code().
+//
+std::string get_decoded_cr_code(const char* pencode)
+{
+    std::string result;
+    if(!pencode){
+        return result;
+    }
+    std::string strencode(pencode);
+    size_t      encodelength = strencode.length();
+    size_t      startpos     = 0;
+    size_t      foundpos;
+    while(startpos < encodelength && std::string::npos != (foundpos = strencode.find('%', startpos))){
+        if(0 < (foundpos - startpos)){
+            result += strencode.substr(startpos, foundpos - startpos);
+        }
+        if((foundpos + 2) < encodelength && 0 == strencode.compare(foundpos, 3, "%45")){
+            result += '%';
+            startpos = foundpos + 3;
+        }else if((foundpos + 2) < encodelength && 0 == strencode.compare(foundpos, 3, "%0D")){
+            result += '\r';
+            startpos = foundpos + 3;
+        }else if((foundpos + 1) < encodelength && 0 == strencode.compare(foundpos, 2, "%%")){
+            result += '%';
+            startpos = foundpos + 2;
+        }else{
+            result += '%';
+            startpos = foundpos + 1;
+        }
+    }
+    if(startpos < encodelength){
+        result += strencode.substr(startpos);
+    }
+    return result;
+}
+
 /*
 * Local variables:
 * tab-width: 4

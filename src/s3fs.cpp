@@ -3322,8 +3322,15 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         }
         const BodyData* body = s3fscurl.GetBodyData();
 
+        // [NOTE]
+        // CR code(\r) is replaced with LF(\n) by xmlReadMemory() function.
+        // To prevent that, only CR code is encoded by following function.
+        // The encoded CR code is decoded with append_objects_from_xml(_ex).
+        //
+        std::string encbody = get_encoded_cr_code(body->str());
+
         // xmlDocPtr
-        if(NULL == (doc = xmlReadMemory(body->str(), static_cast<int>(body->size()), "", NULL, 0))){
+        if(NULL == (doc = xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", NULL, 0))){
             S3FS_PRN_ERR("xmlReadMemory returns with error.");
             return -EIO;
         }

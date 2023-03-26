@@ -118,6 +118,12 @@ std::string s3fs_wtf8_encode(const std::string &s);
 bool s3fs_wtf8_decode(const char *s, std::string *result);
 std::string s3fs_wtf8_decode(const std::string &s);
 
+//
+// For CR in XML
+//
+std::string get_encoded_cr_code(const char* pbase);
+std::string get_decoded_cr_code(const char* pencode);
+
 #endif // S3FS_STRING_UTIL_H_
 
 /*
