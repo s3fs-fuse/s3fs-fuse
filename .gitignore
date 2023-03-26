@@ -42,6 +42,7 @@ config.status
 config.sub
 configure
 configure.scan
+configure.ac~
 depcomp
 install-sh
 libtool
@@ -86,6 +87,7 @@ test/junk_data
 test/s3proxy-*
 test/write_multiblock
 test/mknod_test
+test/truncate_read_file
 
 #
 # Windows ports
