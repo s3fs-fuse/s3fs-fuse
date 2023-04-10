@@ -209,6 +209,19 @@ Flush dirty data to S3 after a certain number of MB written.
 The minimum value is 50 MB. -1 value means disable.
 Cannot be used with nomixupload.
 .TP
+\fB\-o\fR bucket_size (default=maximum long unsigned integer value)
+The size of the bucket with which the corresponding
+elements of the statvfs structure will be filled. The option
+argument is an integer optionally followed by a
+multiplicative suffix (GB, GiB, TB, TiB, PB, PiB,
+EB, EiB) (no spaces in between). If no suffix is supplied,
+bytes are assumed; eg: 20000000, 30GB, 45TiB. Note that
+s3fs does not compute the actual volume size (too
+expensive): by default it will assume the maximum possible
+size; however, since this may confuse other software which
+uses s3fs, the advertised bucket size can be set with this
+option.
+.TP
 \fB\-o\fR ensure_diskfree (default 0)
 sets MB to ensure disk free space. This option means the threshold of free space size on disk which is used for the cache file by s3fs.
 s3fs makes file for downloading, uploading and caching files.

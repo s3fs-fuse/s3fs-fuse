@@ -100,6 +100,7 @@ static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static int max_thread_count       = 5;  // default is 5
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
+static fsblkcnt_t bucket_size;       // advertised size of the bucket
 
 //-------------------------------------------------------------------
 // Global functions : prototype
@@ -144,6 +145,7 @@ static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
+static fsblkcnt_t parse_bucket_size(char* value);
 
 //-------------------------------------------------------------------
 // fuse interface functions
@@ -2808,15 +2810,15 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 #if defined(__MSYS__)
     // WinFsp resolves the free space from f_bfree * f_frsize, and the total space from f_blocks * f_frsize (in bytes).
     stbuf->f_frsize = stbuf->f_bsize;
-    stbuf->f_blocks = INT32_MAX;
-    stbuf->f_bfree = INT32_MAX;
+    stbuf->f_blocks = bucket_size;
+    stbuf->f_bfree = stbuf->f_blocks;
 #elif defined(__APPLE__)
-    stbuf->f_blocks = UINT32_MAX;
-    stbuf->f_bfree  = UINT32_MAX;
-    stbuf->f_files  = UINT32_MAX;
-    stbuf->f_ffree  = UINT32_MAX;
+    stbuf->f_blocks = bucket_size;
+    stbuf->f_bfree  = stbuf->f_blocks;
+    stbuf->f_bfree  = stbuf->f_blocks;
+    stbuf->f_bfree  = stbuf->f_blocks;
 #else
-    stbuf->f_blocks = static_cast<fsblkcnt_t>(~0) / stbuf->f_bsize;
+    stbuf->f_blocks = bucket_size / stbuf->f_bsize;
     stbuf->f_bfree  = stbuf->f_blocks;
 #endif
     stbuf->f_bavail = stbuf->f_blocks;
@@ -4456,6 +4458,68 @@ static int set_bucket(const char* arg)
     return 0;
 }
 
+// parse --bucket_size option
+// max_size: a string like 20000000, 20MB, 30GiB etc
+// return: the integer of type fsblkcnt_t corresponding to max_size,
+//         or 0 when errors
+static fsblkcnt_t parse_bucket_size(char* max_size)
+{
+    char *ptr;
+    fsblkcnt_t scale=1;
+    fsblkcnt_t n_bytes=0;
+    fsblkcnt_t ten00=(fsblkcnt_t)1000L;
+    fsblkcnt_t ten24=(fsblkcnt_t)1024L;
+
+    if ((ptr=strstr(max_size,"GB"))!=NULL) {
+        scale=ten00*ten00*ten00;
+        if(strlen(ptr)>2)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"GiB"))!=NULL) {
+        scale=ten24*ten24*ten24;
+        if(strlen(ptr)>3)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"TB"))!=NULL) {
+        scale=ten00*ten00*ten00*ten00;
+        if(strlen(ptr)>2)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"TiB"))!=NULL) {
+        scale=ten24*ten24*ten24*ten24;
+        if(strlen(ptr)>3)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"PB"))!=NULL) {
+        scale=ten00*ten00*ten00*ten00*ten00;
+        if(strlen(ptr)>2)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"PiB"))!=NULL) {
+        scale=ten24*ten24*ten24*ten24*ten24;
+        if(strlen(ptr)>3)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"EB"))!=NULL) {
+        scale=ten00*ten00*ten00*ten00*ten00*ten00;
+        if(strlen(ptr)>2)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    else if ((ptr=strstr(max_size,"EiB"))!=NULL) {
+        scale=ten24*ten24*ten24*ten24*ten24*ten24;
+        if(strlen(ptr)>3)return 0; // no trailing garbage
+        *ptr='\0';
+        }
+    // extra check
+    for(ptr=max_size;*ptr!='\0';++ptr) if( ! isdigit(*ptr) ) return 0;
+    n_bytes=(fsblkcnt_t)strtoul(max_size,0,10);
+    n_bytes*=scale;
+    if(n_bytes<=0)return 0;
+            
+    return n_bytes;
+}
+
+
 // This is repeatedly called by the fuse option parser
 // if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
@@ -4547,6 +4611,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             is_s3fs_gid = true;
             return 1; // continue for fuse option
+        }
+        if(is_prefix(arg, "bucket_size=")){
+            bucket_size = parse_bucket_size((char *) strchr(arg, '=') + sizeof(char));
+            if(0 == bucket_size){
+                S3FS_PRN_EXIT("invalid bucket_size option.");
+                return -1;
+            }
+            return 0;
         }
         if(is_prefix(arg, "umask=")){
             off_t s3fs_umask_tmp = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 8);
@@ -5215,6 +5287,16 @@ int main(int argc, char* argv[])
         {"incomplete-mpu-abort", optional_argument, NULL, 'a'}, // 'a' is only identifier and is not option.
         {NULL, 0, NULL, 0}
     };
+
+// init bucket_size
+#if defined(__MSYS__)
+    bucket_size=(fsblkcnt_t)INT32_MAX;
+#elif defined(__APPLE__)
+    bucket_size=(fsblkcnt_t)UINT32_MAX;
+#else
+    bucket_size=(fsblkcnt_t)(~0);
+#endif
+
 
     // init xml2
     xmlInitParser();
