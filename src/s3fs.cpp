@@ -518,7 +518,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
     // set headers for mount point from default stat
     if(is_mountpoint){
-        if(0 != result){
+        if(0 != result || pheader->empty()){
             has_mp_stat = false;
 
             // [NOTE]
