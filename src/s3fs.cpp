@@ -2911,21 +2911,6 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     WTF8_ENCODE(path)
     S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
-    // [NOTE]
-    // All opened file's stats is cached with no truncate flag.
-    // Thus we unset it here.
-    StatCache::getStatCacheData()->ChangeNoTruncateFlag(std::string(path), false);
-
-    // [NOTICE]
-    // At first, we remove stats cache.
-    // Because fuse does not wait for response from "release" function. :-(
-    // And fuse runs next command before this function returns.
-    // Thus we call deleting stats function ASAP.
-    //
-    if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
-        StatCache::getStatCacheData()->DelStat(path);
-    }
-
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
 
@@ -2939,11 +2924,39 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
             return -EIO;
         }
 
+        // [NOTE]
+        // There are cases when s3fs_flush is not called and s3fs_release is called.
+        // (There have been reported cases where it is not called when exported as NFS.)
+        // Therefore, Flush() is called here to try to upload the data.
+        // Flush() will only perform an upload if the file has been updated.
+        //
+        int result;
+        if(ent->IsModified()){
+            if(0 != (result = ent->Flush(static_cast<int>(fi->fh), AutoLock::NONE, false))){
+                S3FS_PRN_ERR("failed to upload file contentsfor pseudo_fd(%llu) / path(%s) by result(%d)", (unsigned long long)(fi->fh), path, result);
+                return result;
+            }
+        }
+
+        // [NOTE]
+        // All opened file's stats is cached with no truncate flag.
+        // Thus we unset it here.
+        StatCache::getStatCacheData()->ChangeNoTruncateFlag(std::string(path), false);
+
+        // [NOTICE]
+        // At first, we remove stats cache.
+        // Because fuse does not wait for response from "release" function. :-(
+        // And fuse runs next command before this function returns.
+        // Thus we call deleting stats function ASAP.
+        //
+        if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)){
+            StatCache::getStatCacheData()->DelStat(path);
+        }
+
         bool is_new_file = ent->IsDirtyNewFile();
 
         // TODO: correct locks held?
-        int result = ent->UploadPending(static_cast<int>(fi->fh), AutoLock::NONE);
-        if(0 != result){
+        if(0 != (result = ent->UploadPending(static_cast<int>(fi->fh), AutoLock::NONE))){
             S3FS_PRN_ERR("could not upload pending data(meta, etc) for pseudo_fd(%llu) / path(%s)", (unsigned long long)(fi->fh), path);
             return result;
         }
@@ -2960,7 +2973,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     // check - for debug
     if(S3fsLog::IsS3fsLogDbg()){
         if(FdManager::HasOpenEntityFd(path)){
-            S3FS_PRN_WARN("file(%s) is still opened(another pseudo fd is opend).", path);
+            S3FS_PRN_DBG("file(%s) is still opened(another pseudo fd is opend).", path);
         }
     }
     S3FS_MALLOCTRIM(0);
