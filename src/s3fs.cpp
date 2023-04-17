@@ -2815,8 +2815,8 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 #elif defined(__APPLE__)
     stbuf->f_blocks = bucket_size;
     stbuf->f_bfree  = stbuf->f_blocks;
-    stbuf->f_bfree  = stbuf->f_blocks;
-    stbuf->f_bfree  = stbuf->f_blocks;
+    stbuf->f_files  = UINT32_MAX;
+    stbuf->f_ffree  = UINT32_MAX;
 #else
     stbuf->f_blocks = bucket_size / stbuf->f_bsize;
     stbuf->f_bfree  = stbuf->f_blocks;
@@ -4459,7 +4459,7 @@ static int set_bucket(const char* arg)
 }
 
 // parse --bucket_size option
-// max_size: a string like 20000000, 20MB, 30GiB etc
+// max_size: a string like 20000000, 30GiB, 20TB etc
 // return: the integer of type fsblkcnt_t corresponding to max_size,
 //         or 0 when errors
 static fsblkcnt_t parse_bucket_size(char* max_size)
