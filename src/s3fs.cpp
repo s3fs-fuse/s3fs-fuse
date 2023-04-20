@@ -4467,8 +4467,8 @@ static fsblkcnt_t parse_bucket_size(char* max_size)
     char *ptr;
     fsblkcnt_t scale=1;
     fsblkcnt_t n_bytes=0;
-    fsblkcnt_t ten00=(fsblkcnt_t)1000L;
-    fsblkcnt_t ten24=(fsblkcnt_t)1024L;
+    fsblkcnt_t ten00=static_cast<fsblkcnt_t>(1000L);
+    fsblkcnt_t ten24=static_cast<fsblkcnt_t>(1024L);
 
     if ((ptr=strstr(max_size,"GB"))!=NULL) {
         scale=ten00*ten00*ten00;
@@ -4512,7 +4512,7 @@ static fsblkcnt_t parse_bucket_size(char* max_size)
         }
     // extra check
     for(ptr=max_size;*ptr!='\0';++ptr) if( ! isdigit(*ptr) ) return 0;
-    n_bytes=(fsblkcnt_t)strtoul(max_size,0,10);
+    n_bytes=static_cast<fsblkcnt_t>(strtoul(max_size,0,10));
     n_bytes*=scale;
     if(n_bytes<=0)return 0;
             
@@ -4613,7 +4613,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 1; // continue for fuse option
         }
         if(is_prefix(arg, "bucket_size=")){
-            bucket_size = parse_bucket_size((char *) strchr(arg, '=') + sizeof(char));
+            bucket_size = parse_bucket_size(const_cast<char *>(strchr(arg, '=')) + sizeof(char));
             if(0 == bucket_size){
                 S3FS_PRN_EXIT("invalid bucket_size option.");
                 return -1;
@@ -5290,11 +5290,11 @@ int main(int argc, char* argv[])
 
 // init bucket_size
 #if defined(__MSYS__)
-    bucket_size=(fsblkcnt_t)INT32_MAX;
+    bucket_size=static_cast<fsblkcnt_t>(INT32_MAX);
 #elif defined(__APPLE__)
-    bucket_size=(fsblkcnt_t)UINT32_MAX;
+    bucket_size=static_cast<fsblkcnt_t>(INT32_MAX);
 #else
-    bucket_size=(fsblkcnt_t)(~0);
+    bucket_size=static_cast<fsblkcnt_t>(~0);
 #endif
 
 
