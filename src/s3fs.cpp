@@ -131,7 +131,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
 static int clone_directory_object(const char* from, const char* to, bool update_ctime, const char* pxattrvalue);
 static int rename_directory(const char* from, const char* to);
 static int update_mctime_parent_directory(const char* _path);
-static int remote_mountpath_exists(const char* path);
+static int remote_mountpath_exists(const char* path, bool compat_dir);
 static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
@@ -3395,7 +3395,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     return 0;
 }
 
-static int remote_mountpath_exists(const char* path)
+static int remote_mountpath_exists(const char* path, bool compat_dir)
 {
     struct stat stbuf;
     int result;
@@ -3408,14 +3408,16 @@ static int remote_mountpath_exists(const char* path)
     }
 
     // [NOTE]
-    // If "<bucket>/<directory>..." is specified as the mount point
-    // and the mount point(directory object) does not exist, the
-    // following judgment will result in an error.
-    // However, if there is a file object etc. under that mount
-    // point(directory), it will be allowed with filling the default
-    // stats information.
+    // If there is no mount point(directory object) that s3fs can recognize,
+    // an error will occur.
+    // A mount point with a directory path(ex. "<bucket>/<directory>...")
+    // requires that directory object.
+    // If the directory or object is created by a client other than s3fs,
+    // s3fs may not be able to recognize it. If you specify such a directory
+    // as a mount point, you can avoid the error by starting with "compat_dir"
+    // specified.
     //
-    if(!has_mp_stat){
+    if(!has_mp_stat && !compat_dir){
         return -ENOENT;
     }
     return 0;
@@ -4257,28 +4259,31 @@ static bool check_endpoint_error(const char* pbody, size_t len, std::string& exp
 }
 
 // [NOTE]
-// This checks whether access to the bucket when s3fs is started.
+// This function checks if the bucket is accessible when s3fs starts.
 //
-// The following patterns for mount point are supported by s3fs:
+// The following patterns for mount points are supported by s3fs:
 // (1) Mount the bucket top
-// (2) Mount the directory(folder) under the bucket. In this case, there are
-//     the following cases:
+// (2) Mount to a directory(folder) under the bucket. In this case:
 //     (2A) Directories created by clients other than s3fs
 //     (2B) Directory created by s3fs
 //
-// At first in this functoin, if user has access to the bucket, the checking
-// access to the bucket succeeds and this function returns success. However,
-// if user does not have access to the bucket and has permissions to the
-// directory, this first check will fail.
-// But if user specifies the directory for mount point, this function retries
-// to check with the path containing the directory. And it will be success.
+// At first this function checks for access to the bucket and returns success
+// if the user has access to the bucket.
+// This first check will fail if the user does not have access to the bucket.
+// However, if a directory as mount point is specified, after this error it
+// will retry the check with a path containing the directory. And the recheck
+// succeeds if user has access to the directory.
 //
-// In the case of (2A), the check will succeed if the bucket allows to access,
-// but will fail if permissions are granted only to the directory, as it is not
-// a directory recognized by s3fs. This combination is not supported by s3fs,
-// so make sure user create the directory before starting s3fs.
-// In case (2B), if user does not have access to bucket, the first check(to
-// bucket) fails, but the retry check(with path) succeeds.
+// For (2A), the first check succeeds if the bucket allows access. But if the
+// bucket has no permissions and only the directory has permissions, this
+// directory(object) is not supported by s3fs and the check fails.
+// However, if s3fs is started with the "compat_dir" option, this error will
+// be avoided and the function will return success.
+// If you do not give the "compat_dir" option, create a directory object as a
+// mount point and then start s3fs.
+//
+// In case (2B), if the user does not have access to the bucket, the first
+// check (to bucket) will fail, but the retry check (using path) will succeed.
 //
 static int s3fs_check_service()
 {
@@ -4292,7 +4297,7 @@ static int s3fs_check_service()
 
     S3fsCurl s3fscurl;
     int      res;
-    if(0 > (res = s3fscurl.CheckBucket("/"))){
+    if(0 > (res = s3fscurl.CheckBucket("/", support_compat_dir))){
         // get response code
         long responseCode     = s3fscurl.GetLastResponseCode();
         bool changed_endpoint = false;
@@ -4339,14 +4344,14 @@ static int s3fs_check_service()
         // retry to check with new endpoint
         if(changed_endpoint){
             s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket("/");
+            res          = s3fscurl.CheckBucket("/", support_compat_dir);
             responseCode = s3fscurl.GetLastResponseCode();
         }
 
         // retry to check with mount prefix
         if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
             s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket(get_realpath("/").c_str());
+            res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
             responseCode = s3fscurl.GetLastResponseCode();
         }
 
@@ -4358,13 +4363,13 @@ static int s3fs_check_service()
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket("/");
+            res          = s3fscurl.CheckBucket("/", support_compat_dir);
             responseCode = s3fscurl.GetLastResponseCode();
 
             // retry to check with mount prefix
             if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
                 s3fscurl.DestroyCurlHandle();
-                res          = s3fscurl.CheckBucket(get_realpath("/").c_str());
+                res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
                 responseCode = s3fscurl.GetLastResponseCode();
             }
         }
@@ -4391,7 +4396,7 @@ static int s3fs_check_service()
 
     // make sure remote mountpath exists and is a directory
     if(!mount_prefix.empty()){
-        if(remote_mountpath_exists("/") != 0){
+        if(remote_mountpath_exists("/", support_compat_dir) != 0){
             S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
             return EXIT_FAILURE;
         }
@@ -5040,7 +5045,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(0 == strcmp(arg, "notsup_compat_dir")){
             S3FS_PRN_WARN("notsup_compat_dir is enabled by default and a future version will remove this option.");
-
             support_compat_dir = false;
             return 0;
         }

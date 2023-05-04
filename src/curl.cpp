@@ -3667,9 +3667,9 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
     return result;
 }
 
-int S3fsCurl::CheckBucket(const char* check_path)
+int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
 {
-    S3FS_PRN_INFO3("check a bucket.");
+    S3FS_PRN_INFO3("check a bucket path(%s)%s.", (check_path && 0 < strlen(check_path)) ? check_path : "", compat_dir ? " containing compatible directory paths" : "");
 
     if(!check_path || 0 == strlen(check_path)){
         return -EIO;
@@ -3677,19 +3677,41 @@ int S3fsCurl::CheckBucket(const char* check_path)
     if(!CreateCurlHandle()){
         return -EIO;
     }
+
+    std::string strCheckPath;
     std::string urlargs;
     if(S3fsCurl::IsListObjectsV2()){
         query_string = "list-type=2";
+    }else{
+        query_string.clear();
+    }
+    if(!compat_dir){
+        // do not check compatibility directories
+        strCheckPath = check_path;
+
+    }else{
+        // check path including compatibility directory
+        strCheckPath = "/";
+
+        if(1 < strlen(check_path)){         // for directory path ("/...") not root path("/")
+            if(!query_string.empty()){
+                query_string += '&';
+            }
+            query_string += "prefix=";
+            query_string += &check_path[1]; // skip first '/' charactor
+        }
+    }
+    if(!query_string.empty()){
         urlargs = "?" + query_string;
     }
 
     std::string resource;
     std::string turl;
-    MakeUrlResource(check_path, resource, turl);
+    MakeUrlResource(strCheckPath.c_str(), resource, turl);
 
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
-    path            = check_path;
+    path            = strCheckPath;
     requestHeaders  = NULL;
     responseHeaders.clear();
     bodydata.Clear();
