@@ -372,6 +372,8 @@ s3fs supports two different naming schemas "dir/" and "dir" to map directory nam
 S3fs uses only the first schema "dir/" to create S3 objects for directories.
 .TP
 The support for these different naming schemas causes an increased communication effort.
+.TP
+If you do not have access permissions to the bucket and specify a directory path created by a client other than s3fs for the mount point, you cannot start because the mount point directory cannot be found by s3fs. But by specifying this option, you can avoid this error.
 .RE
 .TP
 \fB\-o\fR use_wtf8 - support arbitrary file system encoding.
