@@ -115,13 +115,17 @@ jobs:
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   # [NOTE]
-  # A case of "runs-on: macos-11.0" does not work,
-  # because load_osxfuse returns exit code = 1.
-  # Maybe it needs to reboot. Apple said 
-  # "Installing a new kernel extension requires signing in as an Admin user. You must also restart your Mac to load the extension".
-  # Then we do not use macos 11 on GitHub Actions now.
+  # This Job does not work for macOS 11 and later because load_osxfuse returns exit code = 1.
+  # Apple states "You must be signed in as an administrator user to install new kernel
+  # extensions, and your Mac must be rebooted for the extensions to load.", so it needs
+  # to reboot OS.
+  # As of May 2023, GitHub Actions are no longer able to launch macos 10.15 as runner,
+  # so we can not run this Job.
+  # In the future, if it is found a solution, we will resume this Job execution.
   #
   macos10:
+    if: false
+
     runs-on: macos-10.15
 
     steps:
