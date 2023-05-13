@@ -73,7 +73,6 @@ static gid_t mp_gid               = 0;    // group of mount point(only not speci
 static mode_t mp_mode             = 0;    // mode of mount point
 static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
-static bool has_mp_stat           = false;// whether the stat information file for mount point exists
 static std::string mountpoint;
 static S3fsCred* ps3fscred        = NULL; // using only in this file
 static std::string mimetype_file;
@@ -190,6 +189,74 @@ static int s3fs_listxattr(const char* path, char* list, size_t size);
 static int s3fs_removexattr(const char* path, const char* name);
 
 //-------------------------------------------------------------------
+// Classes
+//-------------------------------------------------------------------
+//
+// A flag class indicating whether the mount point has a stat
+//
+// [NOTE]
+// The flag is accessed from child threads, so This class is used for exclusive control of flags.
+// This class will be reviewed when we organize the code in the future.
+//
+class MpStatFlag
+{
+    private:
+        mutable pthread_mutex_t flag_lock;
+        bool                    is_lock_init;
+        bool                    has_mp_stat;
+    public:
+        MpStatFlag();
+        ~MpStatFlag();
+        bool Get();
+        bool Set(bool flag);
+};
+
+MpStatFlag::MpStatFlag() : is_lock_init(false), has_mp_stat(false)
+{
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+
+    int result;
+    if(0 != (result = pthread_mutex_init(&flag_lock, &attr))){
+        S3FS_PRN_CRIT("failed to init flag_lock: %d", result);
+        abort();
+    }
+    is_lock_init = true;
+}
+
+MpStatFlag::~MpStatFlag()
+{
+    if(is_lock_init){
+        int result;
+        if(0 != (result = pthread_mutex_destroy(&flag_lock))){
+            S3FS_PRN_CRIT("failed to destroy flag_lock: %d", result);
+            abort();
+        }
+        is_lock_init = false;
+    }
+}
+
+bool MpStatFlag::Get()
+{
+    AutoLock auto_lock(&flag_lock);
+    return has_mp_stat;
+}
+
+bool MpStatFlag::Set(bool flag)
+{
+    AutoLock auto_lock(&flag_lock);
+    bool old    = has_mp_stat;
+    has_mp_stat = flag;
+    return old;
+}
+
+// whether the stat information file for mount point exists
+static MpStatFlag* pHasMpStat     = NULL;
+
+//-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
 static bool IS_REPLACEDIR(dirtype type)
@@ -205,9 +272,9 @@ static bool IS_RMTYPEDIR(dirtype type)
 static bool IS_CREATE_MP_STAT(const char* path)
 {
     // [NOTE]
-    // "has_mp_stat" is set in get_object_attribute()
+    // pHasMpStat->Get() is set in get_object_attribute()
     //
-    return (path && 0 == strcmp(path, "/") && !has_mp_stat);
+    return (path && 0 == strcmp(path, "/") && !pHasMpStat->Get());
 }
 
 static bool is_special_name_folder_object(const char* path)
@@ -521,7 +588,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // set headers for mount point from default stat
     if(is_mountpoint){
         if(0 != result || pheader->empty()){
-            has_mp_stat = false;
+            pHasMpStat->Set(false);
 
             // [NOTE]
             // If mount point and no stat information file, create header
@@ -537,7 +604,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
             result = 0;
         }else{
-            has_mp_stat = true;
+            pHasMpStat->Set(true);
         }
     }
 
@@ -3417,7 +3484,7 @@ static int remote_mountpath_exists(const char* path, bool compat_dir)
     // as a mount point, you can avoid the error by starting with "compat_dir"
     // specified.
     //
-    if(!has_mp_stat && !compat_dir){
+    if(!compat_dir && !pHasMpStat->Get()){
         return -ENOENT;
     }
     return 0;
@@ -5617,6 +5684,10 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // set mp stat flag object
+    //
+    pHasMpStat = new MpStatFlag();
+
     s3fs_oper.getattr     = s3fs_getattr;
     s3fs_oper.readlink    = s3fs_readlink;
     s3fs_oper.mknod       = s3fs_mknod;
@@ -5676,6 +5747,7 @@ int main(int argc, char* argv[])
     destroy_parser_xml_lock();
     destroy_basename_lock();
     delete ps3fscred;
+    delete pHasMpStat;
 
     // cleanup xml2
     xmlCleanupParser();
