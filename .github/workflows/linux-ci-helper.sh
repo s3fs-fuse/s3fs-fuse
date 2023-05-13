@@ -183,7 +183,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:38" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
@@ -193,7 +193,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:36" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"

@@ -58,8 +58,8 @@ jobs:
           - rockylinux:9
           - rockylinux:8
           - centos:centos7
+          - fedora:38
           - fedora:37
-          - fedora:36
           - opensuse/leap:15
           - alpine:3.17
 
