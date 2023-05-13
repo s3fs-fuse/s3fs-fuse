@@ -5300,7 +5300,7 @@ int main(int argc, char* argv[])
 #elif defined(__APPLE__)
     bucket_size=static_cast<fsblkcnt_t>(INT32_MAX);
 #else
-    bucket_size=static_cast<fsblkcnt_t>(~0);
+    bucket_size=~0U;
 #endif
 
 
