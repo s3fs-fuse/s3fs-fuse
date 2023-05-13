@@ -4267,23 +4267,13 @@ static bool check_endpoint_error(const char* pbody, size_t len, std::string& exp
 //     (2A) Directories created by clients other than s3fs
 //     (2B) Directory created by s3fs
 //
-// At first this function checks for access to the bucket and returns success
-// if the user has access to the bucket.
-// This first check will fail if the user does not have access to the bucket.
-// However, if a directory as mount point is specified, after this error it
-// will retry the check with a path containing the directory. And the recheck
-// succeeds if user has access to the directory.
-//
-// For (2A), the first check succeeds if the bucket allows access. But if the
-// bucket has no permissions and only the directory has permissions, this
-// directory(object) is not supported by s3fs and the check fails.
-// However, if s3fs is started with the "compat_dir" option, this error will
-// be avoided and the function will return success.
-// If you do not give the "compat_dir" option, create a directory object as a
-// mount point and then start s3fs.
-//
-// In case (2B), if the user does not have access to the bucket, the first
-// check (to bucket) will fail, but the retry check (using path) will succeed.
+// Both case of (1) and (2) check access permissions to the mount point
+// path(directory).
+// In the case of (2A), if the directory(object) for the mount point does
+// not exist, the check fails. However, launching s3fs with the "compat_dir"
+// option avoids this error and the check succeeds. If you do not specify
+// the "compat_dir" option in case (2A), please create a directory(object)
+// for the mount point before launching s3fs.
 //
 static int s3fs_check_service()
 {
@@ -4297,10 +4287,9 @@ static int s3fs_check_service()
 
     S3fsCurl s3fscurl;
     int      res;
-    if(0 > (res = s3fscurl.CheckBucket("/", support_compat_dir))){
+    if(0 > (res = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir))){
         // get response code
-        long responseCode     = s3fscurl.GetLastResponseCode();
-        bool changed_endpoint = false;
+        long responseCode = s3fscurl.GetLastResponseCode();
 
         // check wrong endpoint, and automatically switch endpoint
         if(300 <= responseCode && responseCode < 500){
@@ -4316,78 +4305,78 @@ static int s3fs_check_service()
                 // will retry the check on the expected region.
                 // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
                 //
-                if(is_specified_endpoint){
-                    const char* tmp_expect_ep = expectregion.c_str();
-                    S3FS_PRN_CRIT("The bucket region is not '%s', it is correctly '%s'. You should specify 'endpoint=%s' option.", endpoint.c_str(), tmp_expect_ep, tmp_expect_ep);
+                if(s3host != "http://s3.amazonaws.com" && s3host != "https://s3.amazonaws.com"){
+                    // specified endpoint for specified url is wrong.
+                    if(is_specified_endpoint){
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(specified) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                    }else{
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(default) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                    }
+
+                }else if(is_specified_endpoint){
+                    // specified endpoint is wrong.
+                    S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+
+                }else if(S3fsCurl::GetSignatureType() == V4_ONLY || S3fsCurl::GetSignatureType() == V2_OR_V4){
+                    // current endpoint and url are default value, so try to connect to expected region.
+                    S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+
+                    // change endpoint
+                    endpoint = expectregion;
+
+                    // change url
+                    if(s3host == "http://s3.amazonaws.com"){
+                        s3host = "http://s3-" + endpoint + ".amazonaws.com";
+                    }else if(s3host == "https://s3.amazonaws.com"){
+                        s3host = "https://s3-" + endpoint + ".amazonaws.com";
+                    }
+
+                    // retry to check
+                    s3fscurl.DestroyCurlHandle();
+                    res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
+                    responseCode = s3fscurl.GetLastResponseCode();
 
                 }else{
-                    // current endpoint is wrong, so try to connect to expected region.
-                    S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s'.", endpoint.c_str(), expectregion.c_str());
-                    endpoint         = expectregion;
-                    changed_endpoint = true;
-
-                    if(S3fsCurl::GetSignatureType() == V4_ONLY ||
-                       S3fsCurl::GetSignatureType() == V2_OR_V4){
-                        if(s3host == "http://s3.amazonaws.com"){
-                            s3host = "http://s3-" + endpoint + ".amazonaws.com";
-                        }else if(s3host == "https://s3.amazonaws.com"){
-                            s3host = "https://s3-" + endpoint + ".amazonaws.com";
-                        }
-                    }
+                    S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
                 }
+
             }else if(check_endpoint_error(body->str(), body->size(), expectendpoint)){
-                S3FS_PRN_ERR("S3 service returned PermanentRedirect with endpoint: %s", expectendpoint.c_str());
+                // redirect error
+                if(pathrequeststyle){
+                    S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
+                }else{
+                    S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and endpoint(%s)). You need to specify correct endpoint option.", expectendpoint.c_str(), s3host.c_str(), endpoint.c_str());
+                }
                 return EXIT_FAILURE;
             }
         }
 
-        // retry to check with new endpoint
-        if(changed_endpoint){
-            s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket("/", support_compat_dir);
-            responseCode = s3fscurl.GetLastResponseCode();
-        }
+        // retry signature v2
+        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
+            // switch sigv2
+            S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
+            S3fsCurl::SetSignatureType(V2_ONLY);
 
-        // retry to check with mount prefix
-        if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
+            // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
             res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
             responseCode = s3fscurl.GetLastResponseCode();
         }
 
-        // try signature v2
-        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
-            // switch sigv2
-            S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2.");
-            S3fsCurl::SetSignatureType(V2_ONLY);
-
-            // retry to check with sigv2
-            s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket("/", support_compat_dir);
-            responseCode = s3fscurl.GetLastResponseCode();
-
-            // retry to check with mount prefix
-            if(300 <= responseCode && responseCode < 500 && !mount_prefix.empty()){
-                s3fscurl.DestroyCurlHandle();
-                res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
-                responseCode = s3fscurl.GetLastResponseCode();
-            }
-        }
-
         // check errors(after retrying)
         if(0 > res && responseCode != 200 && responseCode != 301){
             if(responseCode == 400){
-                S3FS_PRN_CRIT("Bad Request(host=%s) - result of checking service.", s3host.c_str());
-
+                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s)", s3host.c_str());
             }else if(responseCode == 403){
-                S3FS_PRN_CRIT("invalid credentials(host=%s) - result of checking service.", s3host.c_str());
-
+                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Invalid Credentials(host=%s)", s3host.c_str());
             }else if(responseCode == 404){
-                S3FS_PRN_CRIT("bucket or key not found(host=%s) - result of checking service.", s3host.c_str());
-
+                if(mount_prefix.empty()){
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory not found(host=%s)", s3host.c_str());
+                }else{
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory(%s) not found(host=%s) - You may need to specify the compat_dir option.", mount_prefix.c_str(), s3host.c_str());
+                }
             }else{
-                // another error
-                S3FS_PRN_CRIT("unable to connect(host=%s) - result of checking service.", s3host.c_str());
+                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Unable to connect(host=%s)", s3host.c_str());
             }
             return EXIT_FAILURE;
         }
@@ -4397,7 +4386,7 @@ static int s3fs_check_service()
     // make sure remote mountpath exists and is a directory
     if(!mount_prefix.empty()){
         if(remote_mountpath_exists("/", support_compat_dir) != 0){
-            S3FS_PRN_CRIT("remote mountpath %s not found.", mount_prefix.c_str());
+            S3FS_PRN_CRIT("Remote mountpath %s not found, this may be resolved with the compat_dir option.", mount_prefix.c_str());
             return EXIT_FAILURE;
         }
     }
