@@ -1095,14 +1095,14 @@ bool S3fsCurl::SetProxy(const char* url)
         pos = 0;
     }
     // check fqdn and port number string
-    if(std::string::npos != (pos = tmpurl.find(":", pos))){
+    if(std::string::npos != (pos = tmpurl.find(':', pos))){
         // specify port
         if(0 == pos){
             // no fqdn(hostname) string before ":"
             return false;
         }
         pos += strlen(":");
-        if(std::string::npos != tmpurl.find(":", pos)){
+        if(std::string::npos != tmpurl.find(':', pos)){
             // found wrong separator
             return false;
         }
