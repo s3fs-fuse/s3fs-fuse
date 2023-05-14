@@ -320,7 +320,7 @@ bool FdManager::HaveLseekHole()
         }
         FdManager::checked_lseek   = true;
         FdManager::have_lseek_hole = false;
-        return FdManager::have_lseek_hole;
+        return false;
     }
 
     // check SEEK_DATA/SEEK_HOLE options
