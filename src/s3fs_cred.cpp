@@ -947,8 +947,6 @@ int S3fsCred::CheckSsoCacheKey(std::string& sso_cache_key){
             std::size_t found = line.find(profile_prefix);
             if (found != std::string::npos){
                 line.replace(found, profile_prefix.size(), filter_line);
-            }else{
-                filter_line = line;
             }
             profile = line.substr(1, line.size() - 2);
             sso_start_url.clear();
