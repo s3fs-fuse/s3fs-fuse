@@ -198,8 +198,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    dnf config-manager --add-repo https://terra.fyralabs.com/terra.repo
-
     # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
     INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip unzip json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
