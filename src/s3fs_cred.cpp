@@ -942,10 +942,9 @@ int S3fsCred::CheckSsoCacheKey(std::string& sso_cache_key){
                 S3FS_PRN_INFO("Use the profile %s to connect in s3", profile.c_str());
                 break;
             }
-            // Remove 'profile '
-            std::string filter_line;
             std::size_t found = line.find(profile_prefix);
             if (found != std::string::npos){
+                std::string filter_line;
                 line.replace(found, profile_prefix.size(), filter_line);
             }
             profile = line.substr(1, line.size() - 2);
