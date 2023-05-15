@@ -142,7 +142,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
 
     INSTALL_PACKAGES="autoconf autotools-dev curl-devel fuse fuse-devel procps gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel attr diffutils curl python3 python3-pip procps zip unzip xz nlohmann-json3-dev/stretch-backports https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
     INSTALL_CHECKER_PKGS="cppcheck"
-    INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
+    INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=crb"
 
     echo 'deb http://deb.debian.org/debian stretch-backports main' > /etc/apt/sources.list.d/stretch-backports.list
 
@@ -193,12 +193,24 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:38" ]; then
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
+elif [ "${CONTAINER_FULLNAME}" = "fedora:37" ]; then
+    PACKAGE_MANAGER_BIN="dnf"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
+
+    dnf config-manager --add-repo https://terra.fyralabs.com/terra.repo
+
+    # TODO: Cannot use java-latest-openjdk (17) due to modules issue in S3Proxy/jclouds/Guice
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl-devel curl attr diffutils procps python3-pip unzip json-devel zip"
+    INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
+    INSTALL_CHECKER_PKG_OPTIONS=""
+
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck unzip nlohmann_json zip"
+    INSTALL_PACKAGES="automake curl-devel fuse fuse-devel gcc-c++ java-11-openjdk-headless libxml2-devel make openssl-devel python3-pip curl attr ShellCheck unzip nlohmann_json-devel zip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
