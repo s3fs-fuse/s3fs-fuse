@@ -1,6 +1,19 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.92 -- 21 May, 2023 (major changes only)
+#1802 - #2104 - New option: streamupload
+#1922 - Enable noobj_cache by default
+#1927 - #2101 - New option: credlib and credlib_ops
+#1957 - Fixed a bug that regular files could not be created by mknod
+#1964 - Added stat information to the mount point
+#1970 - #1986 - Enable notsup_compat_dir by default
+#2000 - #2001 - Set mtime/ctime/atime of all objects as nanosecond
+#2065 - Compatible with OpenSSL 3.0
+#2075 - Added proxy and proxy_cred_file option
+#2135 - Changed to rename cache files when renaming large files
+#2148 - New option: bucket_size
+
 Version 1.91 -- 07 Mar, 2022 (major changes only)
 #1753 - Fix RowFlush can not upload last part smaller than 5MB using NoCacheMultipartPost
 #1760 - Fix IAM role retrieval from IMDSv2
