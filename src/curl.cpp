@@ -703,12 +703,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     }
     pCurl->partdata.startpos += totalwrite;
     pCurl->partdata.size     -= totalwrite;
-    
-    // flush the file and clean the page cache
-    if (pCurl->partdata.size == 0){
-        fdatasync(pCurl->partdata.fd);
-    }
-	
+
     return totalwrite;
 }
 
