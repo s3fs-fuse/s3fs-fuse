@@ -411,6 +411,10 @@ Username and passphrase are valid only for HTTP schema.
 If the HTTP proxy does not require authentication, this option is not required.
 Separate the username and passphrase with a ':' character and specify each as a URL-encoded string.
 .TP
+\fB\-o\fR need_datasync - for flushing download data
+Flushes write data on writes to local files during object download(call fdatasync).
+There are cases where caching of write data causes memory usage to rise, but this option avoids it.
+.TP
 \fB\-o\fR logfile - specify the log output file.
 s3fs outputs the log file to syslog. Alternatively, if s3fs is started with the "-f" option specified, the log will be output to the stdout/stderr.
 You can use this option to specify the log file that s3fs outputs.

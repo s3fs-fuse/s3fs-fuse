@@ -126,6 +126,7 @@ bool             S3fsCurl::requester_pays      = false;          // default
 std::string      S3fsCurl::proxy_url;
 bool             S3fsCurl::proxy_http          = false;
 std::string      S3fsCurl::proxy_userpwd;
+bool             S3fsCurl::need_datasync       = false;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -705,10 +706,10 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     pCurl->partdata.size     -= totalwrite;
     
     // flush the file and clean the page cache
-    if (pCurl->partdata.size == 0){
+    if(S3fsCurl::need_datasync && pCurl->partdata.size == 0){
         fdatasync(pCurl->partdata.fd);
     }
-	
+
     return totalwrite;
 }
 
@@ -1187,6 +1188,13 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
 
     S3fsCurl::proxy_userpwd = userpwd;
     return true;
+}
+
+bool S3fsCurl::SetDataync(bool flag)
+{
+    bool old = S3fsCurl::need_datasync;
+    S3fsCurl::need_datasync = flag;
+    return old;
 }
 
 // cppcheck-suppress unmatchedSuppression

@@ -5216,6 +5216,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
+        if(0 == strcmp(arg, "need_datasync")){
+            S3fsCurl::SetDataync(true);
+            return 0;
+        }
         //
         // log file option
         //

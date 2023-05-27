@@ -157,6 +157,7 @@ class S3fsCurl
         static std::string      proxy_url;
         static bool             proxy_http;
         static std::string      proxy_userpwd;     // load from file(<username>:<passphrase>)
+        static bool             need_datasync;     // call fdatasync in download cb
 
         // variables
         CURL*                hCurl;
@@ -337,6 +338,7 @@ class S3fsCurl
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
         static bool SetProxy(const char* url);
         static bool SetProxyUserPwd(const char* userpwd);
+        static bool SetDataync(bool flag);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
