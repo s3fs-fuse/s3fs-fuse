@@ -178,6 +178,91 @@ jobs:
           if [ -f /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs ]; then /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; elif [ -f /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse ]; then /Library/Filesystems/osxfuse.fs/Contents/Resources/load_osxfuse; else exit 1; fi
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
+  MemoryTest:
+    runs-on: ubuntu-latest
+
+    #
+    # build matrix for containers
+    #
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      #
+      # matrix for type of checking
+      #
+      # [NOTE]
+      # Currently following test is not supported:
+      #    - sanitize_memory   : Future support planned
+      #    - sanitize_thread   : Add after finishing some code fixes
+      #    - valgrind          : Requires more than an hour of testing time
+      #
+      matrix:
+        checktype:
+          - glibc_debug
+          - sanitize_address
+          - sanitize_others
+
+    container:
+      image: fedora:38
+
+      options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install packages
+        run: |
+          .github/workflows/linux-ci-helper.sh fedora:38
+
+      - name: Install clang
+        run: |
+          dnf install -y clang
+          if [ "${{ matrix.checktype }}" = "valgrind" ]; then
+              dnf install -y valgrind
+          fi
+
+      #
+      # Set CXX/CXXFLAGS and Variables for test
+      #
+      - name: Set variables
+        run: |
+          COMMON_CXXFLAGS='-g -Wno-cpp -DS3FS_PTHREAD_ERRORCHECK=1'
+          if [ "${{ matrix.checktype }}" = "glibc_debug" ]; then
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -D_GLIBCXX_DEBUG"  >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_address" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=address -fsanitize-address-use-after-scope" >> $GITHUB_ENV
+              echo 'ASAN_OPTIONS=detect_leaks=1,detect_stack_use_after_return=1'                           >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_memory" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=memory" >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_thread" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread" >> $GITHUB_ENV
+              echo 'TSAN_OPTIONS=halt_on_error=1'                      >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
+              echo 'CXX=clang++'                                       >> $GITHUB_ENV
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow" >> $GITHUB_ENV
+          elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
+              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"                   >> $GITHUB_ENV
+              echo 'VALGRIND=--leak-check=full'                        >> $GITHUB_ENV
+              echo 'RETRIES=100'                                       >> $GITHUB_ENV
+          fi
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" ./configure --prefix=/usr --with-openssl"
+          make
+
+      - name: Test suite
+        run: |
+          /bin/sh -c "ALL_TESTS=1 ASAN_OPTIONS=${ASAN_OPTIONS} TSAN_OPTIONS=${TSAN_OPTIONS} VALGRIND=${VALGRIND} RETRIES=${RETRIES} make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)"
+
 #
 # Local variables:
 # tab-width: 4
