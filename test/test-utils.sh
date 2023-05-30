@@ -137,22 +137,6 @@ function mk_test_file {
         echo "Could not create file ${TEST_TEXT_FILE}, it does not exist"
         exit 1
     fi
-
-    # wait & check
-    local BASE_TEXT_LENGTH; BASE_TEXT_LENGTH=$(echo "${TEXT}" | wc -c | awk '{print $1}')
-    local TRY_COUNT=10
-    while true; do
-        local MK_TEXT_LENGTH
-        MK_TEXT_LENGTH=$(wc -c "${TEST_TEXT_FILE}" | awk '{print $1}')
-        if [ "${BASE_TEXT_LENGTH}" -eq "${MK_TEXT_LENGTH}" ]; then
-            break
-        fi
-        local TRY_COUNT=$((TRY_COUNT - 1))
-        if [ "${TRY_COUNT}" -le 0 ]; then
-            echo "Could not create file ${TEST_TEXT_FILE}, that file size is something wrong"
-        fi
-        sleep 1
-    done
 }
 
 function rm_test_file {
