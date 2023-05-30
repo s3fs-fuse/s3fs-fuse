@@ -485,6 +485,8 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         bool  need_save_csf = false;  // need to save(reset) cache stat file
         bool  is_truncate   = false;  // need to truncate
 
+        CacheFileStat* pcfstat = NULL;
+
         if(!cachepath.empty()){
             // using cache
             struct stat st;
@@ -498,12 +500,12 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             }
 
             // open cache and cache stat file, load page info.
-            CacheFileStat cfstat(path.c_str());
+            pcfstat = new CacheFileStat(path.c_str());
 
             // try to open cache file
             if( -1 != (physical_fd = open(cachepath.c_str(), O_RDWR)) &&
                 0 != (inode = FdEntity::GetInode(physical_fd))        &&
-                pagelist.Serialize(cfstat, false, inode)          )
+                pagelist.Serialize(*pcfstat, false, inode)            )
             {
                 // succeed to open cache file and to load stats data
                 memset(&st, 0, sizeof(struct stat));
@@ -631,11 +633,13 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         }
 
         // reset cache stat file
-        if(need_save_csf){
-            CacheFileStat cfstat(path.c_str());
-            if(!pagelist.Serialize(cfstat, true, inode)){
+        if(need_save_csf && pcfstat){
+            if(!pagelist.Serialize(*pcfstat, true, inode)){
                 S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
             }
+        }
+        if(pcfstat){
+            delete pcfstat;
         }
 
         // set original headers and size in it.
