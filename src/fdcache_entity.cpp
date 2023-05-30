@@ -519,13 +519,18 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
                 if(-1 == size){
                     if(st.st_size != pagelist.Size()){
                         pagelist.Resize(st.st_size, false, true); // Areas with increased size are modified
-                        need_save_csf = true;     // need to update page info
+                        need_save_csf = true;                     // need to update page info
                     }
                     size = st.st_size;
                 }else{
+                    // First if the current cache file size and pagelist do not match, fix pagelist.
+                    if(st.st_size != pagelist.Size()){
+                        pagelist.Resize(st.st_size, false, true); // Areas with increased size are modified
+                        need_save_csf = true;                     // need to update page info
+                    }
                     if(size != pagelist.Size()){
                         pagelist.Resize(size, false, true);       // Areas with increased size are modified
-                        need_save_csf = true;     // need to update page info
+                        need_save_csf = true;                     // need to update page info
                     }
                     if(size != st.st_size){
                         is_truncate = true;
