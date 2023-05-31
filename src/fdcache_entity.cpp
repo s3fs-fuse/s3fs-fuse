@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <memory>
 
 #include "common.h"
 #include "fdcache_entity.h"
@@ -485,7 +486,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         bool  need_save_csf = false;  // need to save(reset) cache stat file
         bool  is_truncate   = false;  // need to truncate
 
-        CacheFileStat* pcfstat = NULL;
+        std::auto_ptr<CacheFileStat> pcfstat;
 
         if(!cachepath.empty()){
             // using cache
@@ -500,7 +501,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             }
 
             // open cache and cache stat file, load page info.
-            pcfstat = new CacheFileStat(path.c_str());
+            pcfstat.reset(new CacheFileStat(path.c_str()));
 
             // try to open cache file
             if( -1 != (physical_fd = open(cachepath.c_str(), O_RDWR)) &&
@@ -638,13 +639,10 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         }
 
         // reset cache stat file
-        if(need_save_csf && pcfstat){
+        if(need_save_csf && pcfstat.get()){
             if(!pagelist.Serialize(*pcfstat, true, inode)){
                 S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
             }
-        }
-        if(pcfstat){
-            delete pcfstat;
         }
 
         // set original headers and size in it.
