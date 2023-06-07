@@ -57,8 +57,6 @@ const char* VersionS3fsCredential(bool detail)
 		"s3fs-fuse built-in Credential I/F Function\n"
 		"Copyright(C) 2007 s3fs-fuse\n";
 
-    S3FS_PRN_CRIT("Check why built-in function was called, the external credential library must have VersionS3fsCredential function.");
-
     if(detail){
         return detail_version;
     }else{
