@@ -168,7 +168,7 @@ function start_s3proxy {
         if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
             S3PROXY_CACERT_FILE="/tmp/keystore.pem"
             rm -f /tmp/keystore.jks "${S3PROXY_CACERT_FILE}"
-            echo -e 'password\npassword\n\n\n\n\n\n\nyes' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
+            printf 'password\npassword\n\n\n\n\n\n\ny' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
             echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file "${S3PROXY_CACERT_FILE}"
         else
             S3PROXY_CACERT_FILE=""
@@ -258,6 +258,16 @@ function start_s3fs {
         local VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
     fi
 
+    # [NOTE]
+    # On macOS we may get a VERIFY error for the self-signed certificate used by s3proxy.
+    # We can specify NO_CHECK_CERT=1 to avoid this.
+    #
+    if [ -n "${NO_CHECK_CERT}" ] && [ "${NO_CHECK_CERT}" -eq 1 ]; then
+        local NO_CHECK_CERT_OPT="-o no_check_certificate"
+    else
+        local NO_CHECK_CERT_OPT=""
+    fi
+
     # Common s3fs options:
     #
     # TODO: Allow all these options to be overridden with env variables
@@ -292,6 +302,7 @@ function start_s3fs {
             ${AUTH_OPT} \
             ${DIRECT_IO_OPT} \
             ${S3FS_HTTP_PROXY_OPT} \
+            ${NO_CHECK_CERT_OPT} \
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \
