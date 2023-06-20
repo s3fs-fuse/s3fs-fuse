@@ -34,7 +34,7 @@ release : dist ../utils/release.sh
 cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
-            --std=c++03 \
+            --std=c++11 \
             --xml \
             -D HAVE_ATTR_XATTR_H \
             -D HAVE_SYS_EXTATTR_H \
@@ -81,6 +81,6 @@ shellcheck:
 # tab-width: 4
 # c-basic-offset: 4
 # End:
-# vim600: expandtab sw=4 ts= fdm=marker
+# vim600: expandtab sw=4 ts=4 fdm=marker
 # vim<600: expandtab sw=4 ts=4
 #

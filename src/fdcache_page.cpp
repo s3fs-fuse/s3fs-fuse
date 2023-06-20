@@ -959,11 +959,18 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
                 is_modified = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
             }
             // add new area
-            PageList::page_status pstatus = 
-              ( is_loaded && is_modified  ? PageList::PAGE_LOAD_MODIFIED : 
-                !is_loaded && is_modified ? PageList::PAGE_MODIFIED      : 
-                is_loaded && !is_modified ? PageList::PAGE_LOADED        : PageList::PAGE_NOT_LOAD_MODIFIED );
-
+            PageList::page_status pstatus = PageList::PAGE_NOT_LOAD_MODIFIED;
+            if(is_loaded){
+                if(is_modified){
+                    pstatus = PageList::PAGE_LOAD_MODIFIED;
+                }else{
+                    pstatus = PageList::PAGE_LOADED;
+                }
+            }else{
+                if(is_modified){
+                    pstatus = PageList::PAGE_MODIFIED;
+                }
+            }
             SetPageLoadedStatus(offset, size, pstatus);
         }
         delete[] ptmp;
