@@ -415,7 +415,7 @@ int FdManager::GetOpenFdCount(const char* path)
 {
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-	return FdManager::singleton.GetPseudoFdCount(path);
+    return FdManager::singleton.GetPseudoFdCount(path);
 }
 
 //------------------------------------------------

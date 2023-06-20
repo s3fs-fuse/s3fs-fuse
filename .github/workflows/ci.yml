@@ -102,7 +102,7 @@ jobs:
       - name: Cppcheck
         run: |
           # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086 || ($2 * 1000 + $3) >= 2010) { exit(1) } }'; then
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if ($2 * 1000 + $3) <= 1086) { exit(1) } }'; then
             make cppcheck
           fi
 
@@ -160,13 +160,13 @@ jobs:
       - name: Build
         run: |
           ./autogen.sh
-          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
+          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1'
           make --jobs=$(sysctl -n hw.ncpu)
 
       - name: Cppcheck
         run: |
           # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086 || ($2 * 1000 + $3) >= 2010) { exit(1) } }'; then
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if ($2 * 1000 + $3) <= 1086) { exit(1) } }'; then
             make cppcheck
           fi
 

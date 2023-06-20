@@ -410,7 +410,7 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
     if(MT.good()){
         S3FS_PRN_DBG("The old mime types are cleared to load new mime types.");
         S3fsCurl::mimeTypes.clear();
-	    std::string line;
+        std::string line;
 
         while(getline(MT, line)){
             if(line.empty()){
