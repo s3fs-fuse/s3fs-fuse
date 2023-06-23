@@ -78,7 +78,6 @@ bool AdditionalHeader::Load(const char* file)
 
     // read file
     std::string line;
-    ADDHEAD *paddhead;
     while(getline(AH, line)){
         if(line.empty()){
             continue;
@@ -111,44 +110,41 @@ bool AdditionalHeader::Load(const char* file)
             return false;
         }
 
-        paddhead = new ADDHEAD;
+        std::unique_ptr<ADDHEAD> paddhead(new ADDHEAD);
         if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
             // regex
             if(key.size() <= strlen(ADD_HEAD_REGEX)){
                 S3FS_PRN_ERR("file format error: %s key(suffix) does not have key std::string.", key.c_str());
-                delete paddhead;
                 continue;
             }
             key.erase(0, strlen(ADD_HEAD_REGEX));
 
           // compile
-          regex_t*  preg = new regex_t;
+          std::unique_ptr<regex_t> preg(new regex_t);
           int       result;
-          if(0 != (result = regcomp(preg, key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
+          if(0 != (result = regcomp(preg.get(), key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
               char    errbuf[256];
-              regerror(result, preg, errbuf, sizeof(errbuf));
+              regerror(result, preg.get(), errbuf, sizeof(errbuf));
               S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
-              delete preg;
-              delete paddhead;
               continue;
           }
 
           // set
-          paddhead->pregex     = preg;
+          paddhead->pregex = std::move(preg);
           paddhead->basestring = key;
           paddhead->headkey    = head;
           paddhead->headvalue  = value;
 
         }else{
             // not regex, directly comparing
-            paddhead->pregex     = NULL;
+            paddhead->pregex.reset(nullptr);
             paddhead->basestring = key;
             paddhead->headkey    = head;
             paddhead->headvalue  = value;
         }
 
         // add list
-        addheadlist.push_back(paddhead);
+        addheadlist.push_back(std::move(paddhead));
 
         // set flag
         is_enable = true;
@@ -160,16 +156,6 @@ void AdditionalHeader::Unload()
 {
     is_enable = false;
 
-    for(addheadlist_t::iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-        ADDHEAD *paddhead = *iter;
-        if(paddhead){
-            if(paddhead->pregex){
-                regfree(paddhead->pregex);
-                delete paddhead->pregex;
-            }
-            delete paddhead;
-        }
-    }
     addheadlist.clear();
 }
 
@@ -191,7 +177,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
     // Because to allow duplicate key, and then scanning the entire table.
     //
     for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-        const ADDHEAD *paddhead = *iter;
+        const ADDHEAD *paddhead = iter->get();
         if(!paddhead){
             continue;
         }
@@ -199,7 +185,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
         if(paddhead->pregex){
             // regex
             regmatch_t match;         // not use
-            if(0 == regexec(paddhead->pregex, path, 1, &match, 0)){
+            if(0 == regexec(paddhead->pregex.get(), path, 1, &match, 0)){
                 // match -> adding header
                 meta[paddhead->headkey] = paddhead->headvalue;
             }
@@ -244,7 +230,7 @@ bool AdditionalHeader::Dump() const
     ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << std::endl;
 
     for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
-      const ADDHEAD *paddhead = *iter;
+      const ADDHEAD *paddhead = iter->get();
 
       ssdbg << "    [" << cnt << "] = {" << std::endl;
 

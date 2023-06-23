@@ -200,7 +200,7 @@ typedef std::list<etagpair> etaglist_t;
 
 struct petagpool
 {
-    std::list<etagpair*> petaglist;
+    std::list<etagpair> petaglist;
 
     ~petagpool()
     {
@@ -209,19 +209,13 @@ struct petagpool
 
     void clear()
     {
-        for(std::list<etagpair*>::iterator it = petaglist.begin(); petaglist.end() != it; ++it){
-            if(*it){
-                delete (*it);
-            }
-        }
         petaglist.clear();
     }
 
     etagpair* add(const etagpair& etag_entity)
     {
-        etagpair* petag = new etagpair(etag_entity);
-        petaglist.push_back(petag);
-        return petag;
+        petaglist.push_back(etag_entity);
+        return &petaglist.back();
     }
 };
 

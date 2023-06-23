@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <memory>
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -152,10 +153,6 @@ void FdEntity::Clear()
     AutoLock auto_lock(&fdent_lock);
     AutoLock auto_data_lock(&fdent_data_lock);
 
-    for(fdinfo_map_t::iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
-        PseudoFdInfo* ppseudofdinfo = iter->second;
-        delete ppseudofdinfo;
-    }
     pseudo_fd_map.clear();
 
     if(-1 != physical_fd){
@@ -221,9 +218,7 @@ void FdEntity::Close(int fd)
     // search pseudo fd and close it.
     fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
     if(pseudo_fd_map.end() != iter){
-        PseudoFdInfo* ppseudoinfo = iter->second;
         pseudo_fd_map.erase(iter);
-        delete ppseudoinfo;
     }else{
         S3FS_PRN_WARN("Not found pseudo_fd(%d) in entity object(%s)", fd, path.c_str());
     }
@@ -275,10 +270,10 @@ int FdEntity::Dup(int fd, AutoLock::Type locktype)
         S3FS_PRN_ERR("Not found pseudo_fd(%d) in entity object(%s) for physical_fd(%d)", fd, path.c_str(), physical_fd);
         return -1;
     }
-    const PseudoFdInfo* org_pseudoinfo = iter->second;
-    PseudoFdInfo*       ppseudoinfo    = new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
-    int                 pseudo_fd      = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]           = ppseudoinfo;
+    const PseudoFdInfo* org_pseudoinfo = iter->second.get();
+    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0)));
+    int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
+    pseudo_fd_map[pseudo_fd]       = std::move(ppseudoinfo);
 
     return pseudo_fd;
 }
@@ -292,9 +287,9 @@ int FdEntity::OpenPseudoFd(int flags, AutoLock::Type locktype)
     if(-1 == physical_fd){
         return -1;
     }
-    PseudoFdInfo*   ppseudoinfo = new PseudoFdInfo(physical_fd, flags);
+    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, flags));
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]    = ppseudoinfo;
+    pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
 
     return pseudo_fd;
 }
@@ -396,7 +391,7 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type
             return NULL;
         }
     }
-    return iter->second;
+    return iter->second.get();
 }
 
 bool FdEntity::IsUploading(AutoLock::Type locktype)
@@ -404,7 +399,7 @@ bool FdEntity::IsUploading(AutoLock::Type locktype)
     AutoLock auto_lock(&fdent_lock, locktype);
 
     for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
-        const PseudoFdInfo* ppseudoinfo = iter->second;
+        const PseudoFdInfo* ppseudoinfo = iter->second.get();
         if(ppseudoinfo && ppseudoinfo->IsUploading()){
             return true;
         }
@@ -486,7 +481,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         bool  need_save_csf = false;  // need to save(reset) cache stat file
         bool  is_truncate   = false;  // need to truncate
 
-        std::auto_ptr<CacheFileStat> pcfstat;
+        std::unique_ptr<CacheFileStat> pcfstat;
 
         if(!cachepath.empty()){
             // using cache
@@ -674,9 +669,9 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
     }
 
     // create new pseudo fd, and set it to map
-    PseudoFdInfo*   ppseudoinfo = new PseudoFdInfo(physical_fd, flags);
+    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, flags));
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]    = ppseudoinfo;
+    pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
 
     // if there is untreated area, set it to pseudo object.
     if(0 < truncated_size){
@@ -686,7 +681,6 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
                 fclose(pfile);
                 pfile = NULL;
             }
-            delete ppseudoinfo;
         }
     }
 
@@ -1425,7 +1419,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool forc
         // If the entity is opened read-only, it will end normally without updating.
         return 0;
     }
-    PseudoFdInfo* pseudo_obj = miter->second;
+    PseudoFdInfo* pseudo_obj = miter->second.get();
 
     AutoLock auto_lock2(&fdent_data_lock);
 
