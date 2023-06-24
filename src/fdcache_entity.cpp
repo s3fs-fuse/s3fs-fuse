@@ -2491,10 +2491,11 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
+    AutoLock auto_lock(&fdent_data_lock);
+
     if(-1 == physical_fd){
         return false;
     }
-    AutoLock auto_lock(&fdent_data_lock);
 
     // get page list that have no data
     fdpage_list_t   nodata_pages;
@@ -2532,8 +2533,17 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 //
 void FdEntity::MarkDirtyNewFile()
 {
+    AutoLock auto_lock(&fdent_data_lock);
+
     pagelist.Init(0, false, true);
     pending_status = CREATE_FILE_PENDING;
+}
+
+bool FdEntity::IsDirtyNewFile() const
+{
+    AutoLock auto_lock(&fdent_data_lock);
+
+    return (CREATE_FILE_PENDING == pending_status);
 }
 
 bool FdEntity::AddUntreated(off_t start, off_t size)
