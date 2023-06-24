@@ -1410,13 +1410,13 @@ off_t FdEntity::BytesModified()
 //
 int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync)
 {
+    AutoLock auto_lock(&fdent_lock, type);
+
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd, physical_fd);
 
     if(-1 == physical_fd){
         return -EBADF;
     }
-
-    AutoLock auto_lock(&fdent_lock, type);
 
     // check pseudo fd and its flag
     fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
