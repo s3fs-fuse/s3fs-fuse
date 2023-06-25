@@ -1410,13 +1410,13 @@ off_t FdEntity::BytesModified()
 //
 int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync)
 {
+    AutoLock auto_lock(&fdent_lock, type);
+
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd, physical_fd);
 
     if(-1 == physical_fd){
         return -EBADF;
     }
-
-    AutoLock auto_lock(&fdent_lock, type);
 
     // check pseudo fd and its flag
     fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
@@ -2491,10 +2491,11 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
+    AutoLock auto_lock(&fdent_data_lock);
+
     if(-1 == physical_fd){
         return false;
     }
-    AutoLock auto_lock(&fdent_data_lock);
 
     // get page list that have no data
     fdpage_list_t   nodata_pages;
@@ -2532,8 +2533,17 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 //
 void FdEntity::MarkDirtyNewFile()
 {
+    AutoLock auto_lock(&fdent_data_lock);
+
     pagelist.Init(0, false, true);
     pending_status = CREATE_FILE_PENDING;
+}
+
+bool FdEntity::IsDirtyNewFile() const
+{
+    AutoLock auto_lock(&fdent_data_lock);
+
+    return (CREATE_FILE_PENDING == pending_status);
 }
 
 bool FdEntity::AddUntreated(off_t start, off_t size)
