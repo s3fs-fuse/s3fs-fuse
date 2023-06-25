@@ -196,7 +196,6 @@ jobs:
       # [NOTE]
       # Currently following test is not supported:
       #    - sanitize_memory   : Future support planned
-      #    - sanitize_thread   : Add after finishing some code fixes
       #    - valgrind          : Requires more than an hour of testing time
       #
       matrix:
@@ -204,6 +203,7 @@ jobs:
           - glibc_debug
           - sanitize_address
           - sanitize_others
+          - sanitize_thread
 
     container:
       image: fedora:38
