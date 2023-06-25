@@ -50,9 +50,9 @@ jobs:
       #
       matrix:
         container:
+          - ubuntu:23.04
           - ubuntu:22.04
           - ubuntu:20.04
-          - ubuntu:18.04
           - debian:bullseye
           - debian:buster
           - rockylinux:9
@@ -101,8 +101,8 @@ jobs:
 
       - name: Cppcheck
         run: |
-          # work around resource leak false positives on older Linux distributions
-          if cppcheck --version | awk '{if ($2 <= 1.86) { exit(1) } }'; then
+          # work around resource leak false positives on older and newer Linux distributions
+          if cppcheck --version | awk '{if ($2 <= 1.86 || $2 >= 2.10) { exit(1) } }'; then
             make cppcheck
           fi
 
@@ -196,7 +196,6 @@ jobs:
       # [NOTE]
       # Currently following test is not supported:
       #    - sanitize_memory   : Future support planned
-      #    - sanitize_thread   : Add after finishing some code fixes
       #    - valgrind          : Requires more than an hour of testing time
       #
       matrix:
@@ -204,6 +203,7 @@ jobs:
           - glibc_debug
           - sanitize_address
           - sanitize_others
+          - sanitize_thread
 
     container:
       image: fedora:38

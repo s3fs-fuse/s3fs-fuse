@@ -149,7 +149,7 @@ class FdEntity
         bool PunchHole(off_t start = 0, size_t size = 0);
 
         void MarkDirtyNewFile();
-        bool IsDirtyNewFile() { return (CREATE_FILE_PENDING == pending_status); }
+        bool IsDirtyNewFile() const;
 
         bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const;
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);

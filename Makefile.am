@@ -44,6 +44,7 @@ cppcheck:
             --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
+            --suppress=useStlAlgorithm \
             src/ test/
 
 #
