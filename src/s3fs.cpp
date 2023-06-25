@@ -3297,7 +3297,7 @@ static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
 
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
-    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
+    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest(), true);      // [NOTE] run all requests to completion even if some requests fail.
     s3obj_list_t  headlist;
     int           result = 0;
 

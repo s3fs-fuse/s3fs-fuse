@@ -39,7 +39,6 @@ CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=3 -std=
 dnl ----------------------------------------------
 dnl For macOS
 dnl ----------------------------------------------
-found_fuse_t=no
 case "$target" in
    *-cygwin* )
       # Do something specific for windows using winfsp
@@ -58,10 +57,17 @@ case "$target" in
       ;;
 esac
 
+dnl ----------------------------------------------
+dnl Checking the FUSE library
+dnl ----------------------------------------------
+dnl Distinguish between Linux (libfuse) and macOS (FUSE-T).
+dnl
+found_fuse_t=no
 PKG_CHECK_MODULES([FUSE_T], [fuse-t >= ${min_fuse_t_version}], [found_fuse_t=yes], [found_fuse_t=no])
 
-AS_IF([test "x$found_fuse_t" = "xyes"],
-  [PKG_CHECK_MODULES([common_lib_checking], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 ])])
+AS_IF([test "$found_fuse_t" = "yes"],
+  [PKG_CHECK_MODULES([fuse_library_checking], [fuse-t >= ${min_fuse_t_version}])],
+  [PKG_CHECK_MODULES([fuse_library_checking], [fuse >= ${min_fuse_version}])])
 
 dnl ----------------------------------------------
 dnl Choice SSL library
@@ -188,17 +194,13 @@ AS_IF(
 
 dnl
 dnl For PKG_CONFIG before checking nss/gnutls.
-dnl this is redundant checking, but we need checking before following.
 dnl
-AS_IF([test "x$found_fuse_t" = "xyes"],
-  [PKG_CHECK_MODULES([common_lib_checking], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 ])],
-  [PKG_CHECK_MODULES([common_lib_checking], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 ])])
 
 AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
-  AS_IF([test "x$found_fuse_t" = "xyes"],
+  AS_IF([test "$found_fuse_t" = "yes"],
     [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])],
     [PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])])
 
@@ -218,7 +220,7 @@ gnutls)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
   AS_IF([test $gnutls_nettle = 0],
     [
-      AS_IF([test "x$found_fuse_t" = "xyes"],
+      AS_IF([test "$found_fuse_t" = "yes"],
         [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])],
         [PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])])
       LIBS="-lgnutls -lgcrypt $LIBS"
@@ -234,7 +236,7 @@ nettle)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
   AS_IF([test $gnutls_nettle = 1],
     [
-      AS_IF([test "x$found_fuse_t" = "xyes"],
+      AS_IF([test "$found_fuse_t" = "yes"],
         [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])],
         [PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])])
       LIBS="-lgnutls -lnettle $LIBS"
@@ -245,7 +247,7 @@ nettle)
   ;;
 nss)
   AC_MSG_RESULT(NSS)
-  AS_IF([test "x$found_fuse_t" = "xyes"],
+  AS_IF([test "$found_fuse_t" = "yes"],
         [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])],
         [PKG_CHECK_MODULES([DEPS], [fuse >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])])
   ;;
