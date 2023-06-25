@@ -151,9 +151,7 @@ bool AdditionalHeader::Load(const char* file)
         addheadlist.push_back(paddhead);
 
         // set flag
-        if(!is_enable){
-            is_enable = true;
-        }
+        is_enable = true;
     }
     return true;
 }
