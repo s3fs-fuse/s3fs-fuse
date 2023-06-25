@@ -229,8 +229,16 @@ function start_s3fs {
     fi
 
     # On OSX only, we need to specify the direct_io and auto_cache flag.
+    #
+    # And Turn off creation and reference of spotlight index.
+    # (Leaving spotlight ON will result in a lot of wasted requests,
+    # which will affect test execution time)
+    #
     if [ "$(uname)" = "Darwin" ]; then
        local DIRECT_IO_OPT="-o direct_io -o auto_cache"
+
+       # disable spotlight
+       sudo mdutil -a -i off
     else
        local DIRECT_IO_OPT=""
     fi
@@ -248,14 +256,13 @@ function start_s3fs {
     fi
 
     # [NOTE]
-    # On macos, running s3fs via stdbuf will result in no response.
-    # Therefore, when it is macos, it is not executed via stdbuf.
-    # This patch may be temporary, but no other method has been found at this time.
+    # For macos fuse-t, we need to specify the "noattrcache" option to
+    # disable NFS caching.
     #
     if [ "$(uname)" = "Darwin" ]; then
-        local VIA_STDBUF_CMDLINE=""
+        local FUSE_T_ATTRCACHE_OPT="-o noattrcache"
     else
-        local VIA_STDBUF_CMDLINE="${STDBUF_BIN} -oL -eL"
+        local FUSE_T_ATTRCACHE_OPT=""
     fi
 
     # [NOTE]
@@ -289,7 +296,7 @@ function start_s3fs {
     (
         set -x 
         CURL_CA_BUNDLE="${S3PROXY_CACERT_FILE}" \
-        ${VIA_STDBUF_CMDLINE} \
+        ${STDBUF_BIN} -oL -eL \
             ${VALGRIND_EXEC} \
             ${S3FS} \
             ${TEST_BUCKET_1} \
@@ -303,6 +310,7 @@ function start_s3fs {
             ${DIRECT_IO_OPT} \
             ${S3FS_HTTP_PROXY_OPT} \
             ${NO_CHECK_CERT_OPT} \
+            ${FUSE_T_ATTRCACHE_OPT} \
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \
@@ -320,15 +328,15 @@ function start_s3fs {
     if [ "$(uname)" = "Darwin" ]; then
          local TRYCOUNT=0
          while [ "${TRYCOUNT}" -le "${RETRIES:=20}" ]; do
-             df | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"
-             rc=$?
-             if [ "${rc}" -eq 0 ]; then
+             _DF_RESULT=$(df 2>/dev/null)
+             if echo "${_DF_RESULT}" | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
                  break;
              fi
              sleep 1
              TRYCOUNT=$((TRYCOUNT + 1))
          done
-         if [ "${rc}" -ne 0 ]; then
+         if [ "${TRYCOUNT}" -gt "${RETRIES}" ]; then
+             echo "Waited ${TRYCOUNT} seconds, but it could not be mounted."
              exit 1
          fi
     else
