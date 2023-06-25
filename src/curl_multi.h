@@ -44,6 +44,7 @@ class S3fsMultiCurl
 
         s3fscurllist_t clist_all;  // all of curl requests
         s3fscurllist_t clist_req;  // curl requests are sent
+        bool           not_abort;  // complete all requests without aborting on errors
 
         S3fsMultiSuccessCallback   SuccessCallback;
         S3fsMultiNotFoundCallback  NotFoundCallback;
@@ -62,7 +63,7 @@ class S3fsMultiCurl
         static void* RequestPerformWrapper(void* arg);
 
     public:
-        explicit S3fsMultiCurl(int maxParallelism);
+        explicit S3fsMultiCurl(int maxParallelism, bool not_abort = false);
         ~S3fsMultiCurl();
 
         int GetMaxParallelism() const { return maxParallelism; }

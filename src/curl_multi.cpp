@@ -33,7 +33,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr), pSuccessCallbackParam(nullptr), pNotFoundCallbackParam(nullptr)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism, bool not_abort) : maxParallelism(maxParallelism), not_abort(not_abort), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr), pSuccessCallbackParam(nullptr), pNotFoundCallbackParam(nullptr)
 {
     int result;
     pthread_mutexattr_t attr;
@@ -276,7 +276,7 @@ int S3fsMultiCurl::MultiRead()
             clist_req.push_back(std::move(s3fscurl));    // Re-evaluate at the end
             iter = clist_req.begin();
         }else{
-            if(!isRetry || 0 != result){
+            if(!isRetry || (!not_abort && 0 != result)){
                 // If an EIO error has already occurred, it will be terminated
                 // immediately even if retry processing is required. 
                 s3fscurl->DestroyCurlHandle();
@@ -308,7 +308,7 @@ int S3fsMultiCurl::MultiRead()
     }
     clist_req.clear();
 
-    if(0 != result){
+    if(!not_abort && 0 != result){
         // If an EIO error has already occurred, clear all retry objects.
         for(s3fscurllist_t::iterator iter = clist_all.begin(); iter != clist_all.end(); ++iter){
             S3fsCurl* s3fscurl = iter->get();
