@@ -63,6 +63,12 @@ All s3fs options must given in the form where "opt" is:
 \fB\-o\fR bucket
 if it is not specified bucket name (and path) in command line, must specify this option after \-o option for bucket name.
 .TP
+.TP
+\fB\-o\fR aws_home_path
+specify the aws path to use in the case of SSO authentication (only avaialble for sso authentication).
+${HOME}/.aws is used by default.
+It must specify this option after \-o option for bucket name.
+.TP
 \fB\-o\fR default_acl (default="private")
 the default canned acl to apply to all written s3 objects, e.g., "private", "public-read".
 see https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl for the full list of canned ACLs.

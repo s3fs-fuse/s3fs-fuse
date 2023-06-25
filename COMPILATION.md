@@ -15,6 +15,7 @@ Keep in mind using the pre-built packages when available.
 * libcurl
 * libxml2
 * openssl
+* nlohmann-json3-dev
 * mime.types (the package providing depends on the OS)
 	* s3fs tries to detect `/etc/mime.types` as default regardless of the OS
 	* Else s3fs tries to detect `/etc/apache2/mime.types` if OS is macOS

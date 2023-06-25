@@ -144,7 +144,7 @@ jobs:
 
       - name: Install brew other packages
         run: |
-          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck';
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck nlohmann-json';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
 
       - name: Install awscli2
@@ -160,7 +160,7 @@ jobs:
       - name: Build
         run: |
           ./autogen.sh
-          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1'
+          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1'
           make --jobs=$(sysctl -n hw.ncpu)
 
       - name: Cppcheck

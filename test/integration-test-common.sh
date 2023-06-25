@@ -36,6 +36,7 @@
 #                                    from /var/tmp
 # CHAOS_HTTP_PROXY=1                 Test proxy(environment) by CHAOS HTTP PROXY
 # CHAOS_HTTP_PROXY_OPT=1             Test proxy(option) by CHAOS HTTP PROXY
+# Think to add the root certficate of AWS in the file /tmp/keystore.pem to execute aws_cli command
 #
 # Example of running against Amazon S3 using a bucket named "bucket":
 #
