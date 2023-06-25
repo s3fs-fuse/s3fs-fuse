@@ -3778,7 +3778,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 {
     S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
 
-    if((value && 0 == size) || (!value && 0 < size)){
+    if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
     }
