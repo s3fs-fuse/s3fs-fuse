@@ -107,6 +107,15 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
+elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ]; then
+    PACKAGE_MANAGER_BIN="apt-get"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
+
+    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
+    INSTALL_CHECKER_PKGS="cppcheck shellcheck"
+    INSTALL_CHECKER_PKG_OPTIONS=""
+
 elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
