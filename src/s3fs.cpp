@@ -4241,6 +4241,11 @@ static void* s3fs_init(struct fuse_conn_info* conn)
          conn->want |= FUSE_CAP_BIG_WRITES;
     }
 
+    if(!ThreadPoolMan::Initialize(max_thread_count)){
+        S3FS_PRN_CRIT("Could not create thread pool(%d)", max_thread_count);
+        s3fs_exit_fuseloop(EXIT_FAILURE);
+    }
+
     // Signal object
     if(!S3fsSignals::Initialize()){
         S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
@@ -4257,6 +4262,8 @@ static void s3fs_destroy(void*)
     if(!S3fsSignals::Destroy()){
         S3FS_PRN_WARN("Failed to clean up signal object.");
     }
+
+    ThreadPoolMan::Destroy();
 
     // cache(remove at last)
     if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
@@ -5664,15 +5671,6 @@ int main(int argc, char* argv[])
         max_dirty_data = -1;
     }
 
-    if(!ThreadPoolMan::Initialize(max_thread_count)){
-        S3FS_PRN_EXIT("Could not create thread pool(%d)", max_thread_count);
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
-        exit(EXIT_FAILURE);
-    }
-
     // check free disk space
     if(!FdManager::IsSafeDiskSpace(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
         S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
@@ -5735,9 +5733,6 @@ int main(int argc, char* argv[])
         fuse_res = s3fs_init_deferred_exit_status;
     }
     fuse_opt_free_args(&custom_args);
-
-    // Destroy thread pool
-    ThreadPoolMan::Destroy();
 
     // Destroy curl
     if(!S3fsCurl::DestroyS3fsCurl()){
