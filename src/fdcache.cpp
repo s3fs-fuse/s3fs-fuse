@@ -577,7 +577,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         }
 
         // (re)open
-        if(-1 == (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
+        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
             S3FS_PRN_ERR("failed to (re)open and create new pseudo fd for path(%s).", path);
             return NULL;
         }
@@ -593,7 +593,8 @@ FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t siz
         ent = new FdEntity(path, cache_path.c_str());
 
         // open
-        if(-1 == (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
+        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
+            S3FS_PRN_ERR("failed to open and create new pseudo fd for path(%s).", path);
             delete ent;
             return NULL;
         }
