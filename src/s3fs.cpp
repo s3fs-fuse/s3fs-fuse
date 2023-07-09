@@ -3022,7 +3022,6 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 
         bool is_new_file = ent->IsDirtyNewFile();
 
-        // TODO: correct locks held?
         if(0 != (result = ent->UploadPending(static_cast<int>(fi->fh), AutoLock::NONE))){
             S3FS_PRN_ERR("could not upload pending data(meta, etc) for pseudo_fd(%llu) / path(%s)", (unsigned long long)(fi->fh), path);
             return result;
