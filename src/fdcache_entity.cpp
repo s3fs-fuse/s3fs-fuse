@@ -2533,7 +2533,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 //
 void FdEntity::MarkDirtyNewFile()
 {
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
 
     pagelist.Init(0, false, true);
     pending_status = CREATE_FILE_PENDING;
@@ -2541,7 +2541,7 @@ void FdEntity::MarkDirtyNewFile()
 
 bool FdEntity::IsDirtyNewFile() const
 {
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
 
     return (CREATE_FILE_PENDING == pending_status);
 }

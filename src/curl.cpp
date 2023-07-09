@@ -2078,13 +2078,13 @@ bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, Au
         type = REQTYPE_UNSET;
     }
 
+    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
+
     if(clear_internal_data){
         ClearInternalData();
     }
 
     if(hCurl){
-        AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
-  
         S3fsCurl::curl_times.erase(hCurl);
         S3fsCurl::curl_progress.erase(hCurl);
         sCurlPool->ReturnHandler(hCurl, restore_pool);
