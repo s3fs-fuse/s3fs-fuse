@@ -45,6 +45,7 @@ class CurlHandlerPool
 
         CURL* GetHandler(bool only_pool);
         void ReturnHandler(CURL* hCurl, bool restore_pool);
+        void ResetHandler(CURL* hCurl);
 
     private:
         int             mMaxHandlers;

@@ -1944,7 +1944,8 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
         curl_warnings_once = true;
     }
 
-    curl_easy_reset(hCurl);
+    sCurlPool->ResetHandler(hCurl);
+
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1)){
         return false;
     }
