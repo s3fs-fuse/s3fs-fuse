@@ -53,11 +53,15 @@ bool CurlHandlerPool::Init()
 
 bool CurlHandlerPool::Destroy()
 {
-    while(!mPool.empty()){
-        CURL* hCurl = mPool.back();
-        mPool.pop_back();
-        if(hCurl){
-            curl_easy_cleanup(hCurl);
+    {
+        AutoLock lock(&mLock);
+
+        while(!mPool.empty()){
+            CURL* hCurl = mPool.back();
+            mPool.pop_back();
+            if(hCurl){
+                curl_easy_cleanup(hCurl);
+            }
         }
     }
     if (0 != pthread_mutex_destroy(&mLock)) {
@@ -69,15 +73,14 @@ bool CurlHandlerPool::Destroy()
 
 CURL* CurlHandlerPool::GetHandler(bool only_pool)
 {
+    AutoLock lock(&mLock);
+
     CURL* hCurl = NULL;
-    {
-        AutoLock lock(&mLock);
-  
-        if(!mPool.empty()){
-            hCurl = mPool.back();
-            mPool.pop_back();
-            S3FS_PRN_DBG("Get handler from pool: rest = %d", static_cast<int>(mPool.size()));
-        }
+
+    if(!mPool.empty()){
+        hCurl = mPool.back();
+        mPool.pop_back();
+        S3FS_PRN_DBG("Get handler from pool: rest = %d", static_cast<int>(mPool.size()));
     }
     if(only_pool){
         return hCurl;
@@ -94,10 +97,9 @@ void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
     if(!hCurl){
       return;
     }
+    AutoLock lock(&mLock);
 
     if(restore_pool){
-        AutoLock lock(&mLock);
-
         S3FS_PRN_DBG("Return handler to pool");
         mPool.push_back(hCurl);
 
@@ -113,6 +115,16 @@ void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
         S3FS_PRN_INFO("Pool full: destroy the handler");
         curl_easy_cleanup(hCurl);
     }
+}
+
+void CurlHandlerPool::ResetHandler(CURL* hCurl)
+{
+    if(!hCurl){
+      return;
+    }
+    AutoLock lock(&mLock);
+
+    curl_easy_reset(hCurl);
 }
 
 /*
