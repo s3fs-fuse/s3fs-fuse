@@ -33,7 +33,7 @@ class S3ObjList;
 // Functions
 //-------------------------------------------------------------------
 bool is_truncated(xmlDocPtr doc);
-int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head);
+int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head, bool prefix);
 int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
 xmlChar* get_next_continuation_token(xmlDocPtr doc);
 xmlChar* get_next_marker(xmlDocPtr doc);

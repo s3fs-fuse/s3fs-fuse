@@ -341,7 +341,7 @@ bool is_truncated(xmlDocPtr doc)
     return result;
 }
 
-int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head)
+int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head, bool prefix)
 {
     xmlXPathObjectPtr contents_xp;
     xmlNodeSetPtr content_nodes;
@@ -409,6 +409,9 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             std::string decname = get_decoded_cr_code(name);
             free(name);
 
+            if(prefix){
+                head.common_prefixes.push_back(decname);
+            }
             if(!head.insert(decname.c_str(), (!stretag.empty() ? stretag.c_str() : NULL), is_dir)){
                 S3FS_PRN_ERR("insert_object returns with error.");
                 xmlXPathFreeObject(key);
@@ -462,8 +465,8 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
     ex_prefix  += "Prefix";
     ex_etag    += "ETag";
 
-    if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), 0, head) ||
-       -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), NULL, 1, head) )
+    if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), 0, head, /*prefix=*/ false) ||
+       -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx, ex_cprefix.c_str(), ex_prefix.c_str(), NULL, 1, head, /*prefix=*/ true) )
     {
         S3FS_PRN_ERR("append_objects_from_xml_ex returns with error.");
         S3FS_XMLXPATHFREECONTEXT(ctx);

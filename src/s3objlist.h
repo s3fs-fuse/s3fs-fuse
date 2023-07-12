@@ -24,6 +24,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <vector>
 
 //-------------------------------------------------------------------
 // Structure / Typedef
@@ -47,6 +48,8 @@ class S3ObjList
 {
     private:
         s3obj_t objects;
+    public:
+        std::vector<std::string> common_prefixes;
 
     private:
         bool insert_normalized(const char* name, const char* normalized, bool is_dir);
