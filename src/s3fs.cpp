@@ -257,6 +257,88 @@ bool MpStatFlag::Set(bool flag)
 // whether the stat information file for mount point exists
 static MpStatFlag* pHasMpStat     = NULL;
 
+//
+// A synchronous class that calls the fuse_fill_dir_t function that processes the readdir data
+//
+class SyncFiller
+{
+    private:
+        mutable pthread_mutex_t filler_lock;
+        bool                    is_lock_init;
+        void*                   filler_buff;
+        fuse_fill_dir_t         filler_func;
+        std::set<std::string>   filled;
+
+    public:
+        explicit SyncFiller(void* buff = NULL, fuse_fill_dir_t filler = NULL);
+        ~SyncFiller();
+
+        int Fill(const char *name, const struct stat *stbuf, off_t off);
+        int SufficiencyFill(const std::vector<std::string>& pathlist);
+};
+
+SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : is_lock_init(false), filler_buff(buff), filler_func(filler)
+{
+    if(!filler_buff || !filler_func){
+        S3FS_PRN_CRIT("Internal error: SyncFiller constructor parameter is critical value.");
+        abort();
+    }
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#if S3FS_PTHREAD_ERRORCHECK
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+
+    int result;
+    if(0 != (result = pthread_mutex_init(&filler_lock, &attr))){
+        S3FS_PRN_CRIT("failed to init filler_lock: %d", result);
+        abort();
+    }
+    is_lock_init = true;
+}
+
+SyncFiller::~SyncFiller()
+{
+    if(is_lock_init){
+        int result;
+        if(0 != (result = pthread_mutex_destroy(&filler_lock))){
+            S3FS_PRN_CRIT("failed to destroy filler_lock: %d", result);
+            abort();
+        }
+        is_lock_init = false;
+    }
+}
+
+//
+// See. prototype fuse_fill_dir_t in fuse.h
+//
+int SyncFiller::Fill(const char *name, const struct stat *stbuf, off_t off)
+{
+    AutoLock auto_lock(&filler_lock);
+
+    int result = 0;
+    if(filled.insert(std::string(name)).second){
+        result = filler_func(filler_buff, name, stbuf, off);
+    }
+    return result;
+}
+
+int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
+{
+    AutoLock auto_lock(&filler_lock);
+
+    int result = 0;
+    for(std::vector<std::string>::const_iterator it = pathlist.begin(); it != pathlist.end(); ++it) {
+        if(filled.insert(*it).second){
+            if(0 != filler_func(filler_buff, it->c_str(), 0, 0)){
+                result = 1;
+            }
+        }
+    }
+    return result;
+}
+
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
@@ -3064,13 +3146,6 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
-struct multi_head_callback_param
-{
-    void*           buf;
-    fuse_fill_dir_t filler;
-    std::set<std::string> *filled;
-};
-
 static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl){
@@ -3090,17 +3165,13 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
         bpath = s3fs_wtf8_decode(bpath);
     }
     if(param){
-        struct multi_head_callback_param* pcbparam = reinterpret_cast<struct multi_head_callback_param*>(param);
+        SyncFiller* pcbparam = reinterpret_cast<SyncFiller*>(param);
         struct stat st;
         if(StatCache::getStatCacheData()->GetStat(saved_path, &st)){
-            if(pcbparam->filled->insert(bpath).second){
-                pcbparam->filler(pcbparam->buf, bpath.c_str(), &st, 0);
-            }
+            pcbparam->Fill(bpath.c_str(), &st, 0);
         }else{
             S3FS_PRN_INFO2("Could not find %s file in stat cache.", saved_path.c_str());
-            if(pcbparam->filled->insert(bpath).second){
-                pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
-            }
+            pcbparam->Fill(bpath.c_str(), 0, 0);
         }
     }else{
         S3FS_PRN_WARN("param(multi_head_callback_param*) is NULL, then can not call filler.");
@@ -3176,7 +3247,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
     s3obj_list_t  headlist;
     int           result = 0;
-    std::set<std::string> filled;
 
     S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
 
@@ -3187,12 +3257,9 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     curlmulti.SetSuccessCallback(multi_head_callback);
     curlmulti.SetRetryCallback(multi_head_retry_callback);
 
-    // Success Callback function parameter
-    struct multi_head_callback_param success_param;
-    success_param.buf    = buf;
-    success_param.filler = filler;
-    success_param.filled = &filled;
-    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&success_param));
+    // Success Callback function parameter(SyncFiller object)
+    SyncFiller syncfiller(buf, filler);
+    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&syncfiller));
 
     // Not found Callback function parameter
     struct multi_head_notfound_callback_param notfound_param;
@@ -3225,9 +3292,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             if(use_wtf8){
                 bpath = s3fs_wtf8_decode(bpath);
             }
-            if(filled.insert(bpath).second){
-                filler(buf, bpath.c_str(), &st, 0);
-            }
+            syncfiller.Fill(bpath.c_str(), &st, 0);
             continue;
         }
 
@@ -3266,11 +3331,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     // as a path, so search for objects under that path.(a case of no dir object)
     //
     if(!support_compat_dir){
-        for(std::vector<std::string>::const_iterator it = head.common_prefixes.begin(); it != head.common_prefixes.end(); ++it) {
-            if(filled.insert(*it).second){
-                filler(buf, it->c_str(), 0, 0);
-            }
-        }
+        syncfiller.SufficiencyFill(head.common_prefixes);
     }
     if(support_compat_dir && !notfound_param.notfound_list.empty()){      // [NOTE] not need to lock to access this here.
         // dummy header
@@ -3303,14 +3364,10 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
                     struct stat st;
                     if(StatCache::getStatCacheData()->GetStat(dirpath, &st)){
-                        if(filled.insert(base_path).second){
-                            filler(buf, base_path.c_str(), &st, 0);
-                        }
+                        syncfiller.Fill(base_path.c_str(), &st, 0);
                     }else{
                         S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
-                        if(filled.insert(base_path).second){
-                            filler(buf, base_path.c_str(), 0, 0);
-                        }
+                        syncfiller.Fill(base_path.c_str(), 0, 0);
                     }
                 }else{
                     S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
