@@ -3093,12 +3093,15 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
         struct multi_head_callback_param* pcbparam = reinterpret_cast<struct multi_head_callback_param*>(param);
         struct stat st;
         if(StatCache::getStatCacheData()->GetStat(saved_path, &st)){
-            pcbparam->filler(pcbparam->buf, bpath.c_str(), &st, 0);
+            if(pcbparam->filled->insert(bpath).second){
+                pcbparam->filler(pcbparam->buf, bpath.c_str(), &st, 0);
+            }
         }else{
             S3FS_PRN_INFO2("Could not find %s file in stat cache.", saved_path.c_str());
-            pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
+            if(pcbparam->filled->insert(bpath).second){
+                pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
+            }
         }
-        pcbparam->filled->insert(bpath);
     }else{
         S3FS_PRN_WARN("param(multi_head_callback_param*) is NULL, then can not call filler.");
     }
@@ -3222,8 +3225,9 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             if(use_wtf8){
                 bpath = s3fs_wtf8_decode(bpath);
             }
-            filler(buf, bpath.c_str(), &st, 0);
-            filled.insert(bpath);
+            if(filled.insert(bpath).second){
+                filler(buf, bpath.c_str(), &st, 0);
+            }
             continue;
         }
 
@@ -3263,9 +3267,8 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     //
     if(!support_compat_dir){
         for(std::vector<std::string>::const_iterator it = head.common_prefixes.begin(); it != head.common_prefixes.end(); ++it) {
-            if(filled.find(*it) == filled.end()){
+            if(filled.insert(*it).second){
                 filler(buf, it->c_str(), 0, 0);
-                filled.insert(*it);
             }
         }
     }
@@ -3300,12 +3303,15 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
                     struct stat st;
                     if(StatCache::getStatCacheData()->GetStat(dirpath, &st)){
-                        filler(buf, base_path.c_str(), &st, 0);
+                        if(filled.insert(base_path).second){
+                            filler(buf, base_path.c_str(), &st, 0);
+                        }
                     }else{
                         S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
-                        filler(buf, base_path.c_str(), 0, 0);
+                        if(filled.insert(base_path).second){
+                            filler(buf, base_path.c_str(), 0, 0);
+                        }
                     }
-                    filled.insert(base_path);
                 }else{
                     S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
                 }
