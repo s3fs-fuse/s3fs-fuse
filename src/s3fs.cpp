@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
+#include <set>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
@@ -3067,6 +3068,7 @@ struct multi_head_callback_param
 {
     void*           buf;
     fuse_fill_dir_t filler;
+    std::set<std::string> *filled;
 };
 
 static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
@@ -3096,6 +3098,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
             S3FS_PRN_INFO2("Could not find %s file in stat cache.", saved_path.c_str());
             pcbparam->filler(pcbparam->buf, bpath.c_str(), 0, 0);
         }
+        pcbparam->filled->insert(bpath);
     }else{
         S3FS_PRN_WARN("param(multi_head_callback_param*) is NULL, then can not call filler.");
     }
@@ -3170,6 +3173,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
     s3obj_list_t  headlist;
     int           result = 0;
+    std::set<std::string> filled;
 
     S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
 
@@ -3184,6 +3188,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     struct multi_head_callback_param success_param;
     success_param.buf    = buf;
     success_param.filler = filler;
+    success_param.filled = &filled;
     curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&success_param));
 
     // Not found Callback function parameter
@@ -3218,6 +3223,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
                 bpath = s3fs_wtf8_decode(bpath);
             }
             filler(buf, bpath.c_str(), &st, 0);
+            filled.insert(bpath);
             continue;
         }
 
@@ -3255,6 +3261,14 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     // Objects that could not be found by HEAD request may exist only
     // as a path, so search for objects under that path.(a case of no dir object)
     //
+    if(!support_compat_dir){
+        for(std::vector<std::string>::const_iterator it = head.common_prefixes.begin(); it != head.common_prefixes.end(); ++it) {
+            if(filled.find(*it) == filled.end()){
+                filler(buf, it->c_str(), 0, 0);
+                filled.insert(*it);
+            }
+        }
+    }
     if(support_compat_dir && !notfound_param.notfound_list.empty()){      // [NOTE] not need to lock to access this here.
         // dummy header
         mode_t dirmask = umask(0);      // macos does not have getumask()
@@ -3291,6 +3305,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
                         S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
                         filler(buf, base_path.c_str(), 0, 0);
                     }
+                    filled.insert(base_path);
                 }else{
                     S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
                 }
