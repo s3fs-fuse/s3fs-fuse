@@ -48,7 +48,8 @@ export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
 if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
-        "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat"
+        # TODO: -o update_parent_dir_stat fails due to XMinioInvalidObjectName
+        #"use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat"
         enable_content_md5
         disable_noobj_cache
         "max_stat_cache_size=100"
@@ -57,8 +58,8 @@ if [ -n "${ALL_TESTS}" ]; then
         sigv2
         sigv4
         "singlepart_copy_limit=10"  # limit size to exercise multipart code paths
-        #use_sse  # TODO: S3Proxy does not support SSE
-        #use_sse=custom:/tmp/ssekey  # TODO: S3Proxy does not support SSE
+        #"use_sse"  # TODO: minio needs additional configuration: https://min.io/docs/minio/linux/administration/server-side-encryption/server-side-encryption-sse-kms.html
+        "use_sse=custom:/tmp/ssekey"
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o streamupload"
     )
 else
@@ -68,6 +69,10 @@ else
 fi
 
 start_s3proxy
+
+# minio puts its objects in .trash until the scanner runs.  Try to make it run faster.
+./mc alias set myminio https://127.0.0.1:8080 local-identity local-credential --insecure
+./mc admin config set myminio scanner speed=fastest --insecure
 
 if ! aws_cli s3api head-bucket --bucket "${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"; then
     aws_cli s3 mb "s3://${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"
