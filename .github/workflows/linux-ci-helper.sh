@@ -67,7 +67,7 @@ AWSCLI_ZIP_FILE="awscliv2.zip"
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
 # shellcheck disable=SC2089
-CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
+CONFIGURE_OPTIONS="CXXFLAGS='-O -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
 
 #-----------------------------------------------------------
 # OS dependent variables
