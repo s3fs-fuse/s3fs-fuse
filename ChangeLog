@@ -1,6 +1,11 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.93 -- 19 Jul, 2023 (major changes only)
+#2212 - Allow listing implicit directories
+#2194 - #2209 - #2211 - #2214 - #2215 - Fix thread safety issues
+#2191 - #2201 - Add support for FUSE-T on macOS
+
 Version 1.92 -- 21 May, 2023 (major changes only)
 #1802 - #2104 - New option: streamupload
 #1922 - Enable noobj_cache by default
