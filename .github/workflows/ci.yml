@@ -101,8 +101,8 @@ jobs:
 
       - name: Cppcheck
         run: |
-          # work around resource leak false positives on older and newer Linux distributions
-          if cppcheck --version | awk '{if ($2 <= 1.86 || $2 >= 2.10) { exit(1) } }'; then
+          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086 || ($2 * 1000 + $3) >= 2010) { exit(1) } }'; then
             make cppcheck
           fi
 
@@ -165,7 +165,10 @@ jobs:
 
       - name: Cppcheck
         run: |
-          make cppcheck
+          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086 || ($2 * 1000 + $3) >= 2010) { exit(1) } }'; then
+            make cppcheck
+          fi
 
       - name: Shellcheck
         run: |
