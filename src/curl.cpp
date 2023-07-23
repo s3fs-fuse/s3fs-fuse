@@ -3839,12 +3839,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
             // skip this header, because this header is specified after logic.
         }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
-            // Only copy mode.
-            if(is_copy){
-                if(!AddSseRequestHead(sse_type_t::SSE_C, value, true)){
-                    S3FS_PRN_WARN("Failed to insert SSE-C header.");
-                }
-            }
+            // skip this header, because this header is specified after logic.
         }
     }
     // "x-amz-acl", storage class, sse
@@ -3964,6 +3959,13 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
+
+    if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
+        std::string ssevalue;
+        if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
+            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+        }
+    }
 
     op = "POST";
     type = REQTYPE_COMPLETEMULTIPOST;
