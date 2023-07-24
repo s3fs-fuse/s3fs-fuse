@@ -38,6 +38,12 @@ source test-utils.sh
 FAKE_FREE_DISK_SIZE=200
 ENSURE_DISKFREE_SIZE=10
 
+# set up client-side encryption keys
+head -c 32 < /dev/urandom > /tmp/ssekey.bin
+base64 < /tmp/ssekey.bin > /tmp/ssekey
+openssl md5 -binary < /tmp/ssekey.bin | base64 > /tmp/ssekeymd5
+chmod 600 /tmp/ssekey /tmp/ssekey.bin /tmp/ssekeymd5
+
 export CACHE_DIR
 export ENSURE_DISKFREE_SIZE 
 if [ -n "${ALL_TESTS}" ]; then
@@ -52,6 +58,7 @@ if [ -n "${ALL_TESTS}" ]; then
         sigv4
         "singlepart_copy_limit=10"  # limit size to exercise multipart code paths
         #use_sse  # TODO: S3Proxy does not support SSE
+        #use_sse=custom:/tmp/ssekey  # TODO: S3Proxy does not support SSE
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o streamupload"
     )
 else

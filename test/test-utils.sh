@@ -334,6 +334,19 @@ function aws_cli() {
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"
     fi
+
+    if [ "$1" = "s3" ] && [ "$2" != "ls" ] && [ "$2" != "mb" ]; then
+        # shellcheck disable=SC2009
+        if ps u -p "${S3FS_PID}" | grep -q use_sse=custom; then
+            FLAGS="${FLAGS} --sse-c AES256 --sse-c-key fileb:///tmp/ssekey.bin"
+        fi
+    elif [ "$1" = "s3api" ] && [ "$2" != "head-bucket" ]; then
+        # shellcheck disable=SC2009
+        if ps u -p "${S3FS_PID}" | grep -q use_sse=custom; then
+            FLAGS="${FLAGS} --sse-customer-algorithm AES256 --sse-customer-key $(cat /tmp/ssekey) --sse-customer-key-md5 $(cat /tmp/ssekeymd5)"
+        fi
+    fi
+
     # [NOTE]
     # AWS_EC2_METADATA_DISABLED for preventing the metadata service(to 169.254.169.254).
     # shellcheck disable=SC2086,SC2068
