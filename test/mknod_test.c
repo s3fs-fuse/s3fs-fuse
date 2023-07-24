@@ -28,7 +28,10 @@
 #include <string.h>
 #include <errno.h>
 #ifndef __APPLE__
+#elif
+#ifndef __FreeBSD__
 #include <sys/sysmacros.h>
+#endif
 #endif
 
 //---------------------------------------------------------
