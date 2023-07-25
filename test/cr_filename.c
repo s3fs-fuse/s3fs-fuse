@@ -31,7 +31,7 @@
 // This program truncates the file and reads the file in another process
 // between truncate and flush(close file).
 //
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     if(argc != 2){
         fprintf(stderr, "[ERROR] Wrong paraemters\n");

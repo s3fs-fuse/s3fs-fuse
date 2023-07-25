@@ -87,7 +87,7 @@ class FdManager
 
       // Return FdEntity associated with path, returning NULL on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true, AutoLock::Type locktype = AutoLock::NONE);
-      FdEntity* Open(int& fd, const char* path, headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);
+      FdEntity* Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
       FdEntity* OpenExistFdEntity(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);

@@ -532,7 +532,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
     return NULL;
 }
 
-FdEntity* FdManager::Open(int& fd, const char* path, headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
+FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
 {
     S3FS_PRN_DBG("[path=%s][size=%lld][ts_mctime=%s][flags=0x%x][force_tmpfile=%s][create=%s][ignore_modify=%s]", SAFESTRPTR(path), static_cast<long long>(size), str(ts_mctime).c_str(), flags, (force_tmpfile ? "yes" : "no"), (is_create ? "yes" : "no"), (ignore_modify ? "yes" : "no"));
 

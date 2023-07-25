@@ -948,7 +948,7 @@ bool S3fsCurl::LoadEnvSseCKeys()
 
 bool S3fsCurl::LoadEnvSseKmsid()
 {
-    char* envkmsid = getenv("AWSSSEKMSID");
+    const char* envkmsid = getenv("AWSSSEKMSID");
     if(NULL == envkmsid){
         // nothing to do
         return true;
@@ -1186,6 +1186,7 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
 
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
+// cppcheck-suppress constParameterCallback
 bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl || param){     // this callback does not need a parameter
@@ -1197,6 +1198,7 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
+// cppcheck-suppress constParameterCallback
 bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl || param){     // this callback does not need a parameter
@@ -1698,13 +1700,13 @@ bool S3fsCurl::UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl)
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_UPLOAD, true)){              // HTTP PUT
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, (void*)(&s3fscurl->bodydata))){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&s3fscurl->bodydata))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, (void*)&(s3fscurl->responseHeaders))){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&s3fscurl->responseHeaders))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback)){
@@ -1741,13 +1743,13 @@ bool S3fsCurl::CopyMultipartPostSetCurlOpts(S3fsCurl* s3fscurl)
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_UPLOAD, true)){                // HTTP PUT
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, (void*)(&s3fscurl->bodydata))){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&s3fscurl->bodydata))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, (void*)(&s3fscurl->headdata))){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&s3fscurl->headdata))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback)){
@@ -1808,7 +1810,7 @@ bool S3fsCurl::PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl)
     }
 
     // responseHeaders
-    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, (void*)&(s3fscurl->responseHeaders))){
+    if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&s3fscurl->responseHeaders))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(s3fscurl->hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback)){
@@ -2219,7 +2221,7 @@ bool S3fsCurl::RemakeHandle()
                 return false;
             }
             // responseHeaders
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&responseHeaders))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback)){
@@ -2234,7 +2236,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2252,7 +2254,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2288,7 +2290,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2300,7 +2302,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2315,7 +2317,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2333,7 +2335,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2357,13 +2359,13 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&responseHeaders)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&responseHeaders))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, HeaderCallback)){
@@ -2387,13 +2389,13 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, (void*)&headdata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERDATA, reinterpret_cast<void*>(&headdata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HEADERFUNCTION, WriteMemoryCallback)){
@@ -2408,7 +2410,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2420,7 +2422,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -2455,7 +2457,7 @@ bool S3fsCurl::RemakeHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
-            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
                 return false;
             }
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3030,7 +3032,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3118,7 +3120,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3176,7 +3178,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3419,7 +3421,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){                // HTTP PUT
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3552,7 +3554,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UPLOAD, true)){                // HTTP PUT
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3724,7 +3726,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3776,7 +3778,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3874,7 +3876,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){              // POST
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -3977,7 +3979,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){              // POST
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -4038,7 +4040,7 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, (void*)&bodydata)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
@@ -4298,12 +4300,15 @@ bool S3fsCurl::UploadMultipartPostComplete()
 
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
+// cppcheck-suppress constParameterCallback
 bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl || param){     // this callback does not need a parameter
         return false;
     }
 
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     return s3fscurl->CopyMultipartPostComplete();
 }
 

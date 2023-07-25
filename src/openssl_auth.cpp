@@ -161,6 +161,9 @@ bool s3fs_init_crypt_mutex()
 {
     if(s3fs_crypt_mutex){
         S3FS_PRN_DBG("s3fs_crypt_mutex is not NULL, destroy it.");
+
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(!s3fs_destroy_crypt_mutex()){
             S3FS_PRN_ERR("Failed to s3fs_crypt_mutex");
             return false;

@@ -83,11 +83,11 @@ class FdEntity
         int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
         int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj);
-        int RowFlushNoMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
+        int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath);
         int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
         int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
         int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
-        ssize_t WriteNoMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
+        ssize_t WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);

@@ -236,6 +236,8 @@ bool ThreadPoolMan::StartThreads(int count)
     }
 
     // stop all thread if they are running.
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(!StopThreads()){
         S3FS_PRN_ERR("Failed to stop existed threads.");
         return false;
