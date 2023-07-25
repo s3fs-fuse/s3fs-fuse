@@ -564,7 +564,7 @@ struct timespec* s3fs_realtime(struct timespec& ts)
 std::string s3fs_str_realtime()
 {
     struct timespec ts;
-    return str(*(s3fs_realtime(ts)));
+    return str(*s3fs_realtime(ts));
 }
 
 /*

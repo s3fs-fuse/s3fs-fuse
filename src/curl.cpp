@@ -3007,7 +3007,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     responseHeaders.clear();
     bodydata.Clear();
 
-    std::string ttlstr = str(token_ttl);
+    std::string ttlstr = std::to_string(token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, token_ttl_hdr, ttlstr.c_str());
 
     // Curl appends an "Expect: 100-continue" header to the token request, 
@@ -3595,9 +3595,9 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
 
     if(0 < size){
         std::string range = "bytes=";
-        range       += str(start);
+        range       += std::to_string(start);
         range       += "-";
-        range       += str(start + size - 1);
+        range       += std::to_string(start + size - 1);
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Range", range.c_str());
     }
     // SSE-C
@@ -3914,7 +3914,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
             return -EIO;
         }
         postContent += "<Part>\n";
-        postContent += "  <PartNumber>" + str(it->part_num) + "</PartNumber>\n";
+        postContent += "  <PartNumber>" + std::to_string(it->part_num) + "</PartNumber>\n";
         postContent += "  <ETag>" + it->etag + "</ETag>\n";
         postContent += "</Part>\n";
     }
@@ -4135,7 +4135,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     // Encode the upload_id here.
     // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
     //
-    query_string        = "partNumber=" + str(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
+    query_string        = "partNumber=" + std::to_string(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
     std::string resource;
     std::string turl;
@@ -4207,7 +4207,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     // Encode the upload_id here.
     // In compatible S3 servers(Cloudflare, etc), there are cases where characters that require URL encoding are included.
     //
-    query_string = "partNumber=" + str(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
+    query_string = "partNumber=" + std::to_string(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
     std::string resource;
     std::string turl;

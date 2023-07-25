@@ -1010,21 +1010,21 @@ bool FdEntity::SetXattr(const std::string& xattr)
 bool FdEntity::SetMode(mode_t mode)
 {
     AutoLock auto_lock(&fdent_lock);
-    orgmeta["x-amz-meta-mode"] = str(mode);
+    orgmeta["x-amz-meta-mode"] = std::to_string(mode);
     return true;
 }
 
 bool FdEntity::SetUId(uid_t uid)
 {
     AutoLock auto_lock(&fdent_lock);
-    orgmeta["x-amz-meta-uid"] = str(uid);
+    orgmeta["x-amz-meta-uid"] = std::to_string(uid);
     return true;
 }
 
 bool FdEntity::SetGId(gid_t gid)
 {
     AutoLock auto_lock(&fdent_lock);
-    orgmeta["x-amz-meta-gid"] = str(gid);
+    orgmeta["x-amz-meta-gid"] = std::to_string(gid);
     return true;
 }
 
