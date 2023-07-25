@@ -275,10 +275,10 @@ int FdEntity::Dup(int fd, AutoLock::Type locktype)
         S3FS_PRN_ERR("Not found pseudo_fd(%d) in entity object(%s) for physical_fd(%d)", fd, path.c_str(), physical_fd);
         return -1;
     }
-    PseudoFdInfo*   org_pseudoinfo = iter->second;
-    PseudoFdInfo*   ppseudoinfo    = new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
-    int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]       = ppseudoinfo;
+    const PseudoFdInfo* org_pseudoinfo = iter->second;
+    PseudoFdInfo*       ppseudoinfo    = new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
+    int                 pseudo_fd      = ppseudoinfo->GetPseudoFd();
+    pseudo_fd_map[pseudo_fd]           = ppseudoinfo;
 
     return pseudo_fd;
 }
@@ -404,7 +404,7 @@ bool FdEntity::IsUploading(AutoLock::Type locktype)
     AutoLock auto_lock(&fdent_lock, locktype);
 
     for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
-        PseudoFdInfo* ppseudoinfo = iter->second;
+        const PseudoFdInfo* ppseudoinfo = iter->second;
         if(ppseudoinfo && ppseudoinfo->IsUploading()){
             return true;
         }
@@ -1467,7 +1467,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool forc
 // [NOTE]
 // Both fdent_lock and fdent_data_lock must be locked before calling.
 //
-int FdEntity::RowFlushNoMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
+int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd);
 
@@ -2088,7 +2088,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 // [NOTE]
 // Both fdent_lock and fdent_data_lock must be locked before calling.
 //
-ssize_t FdEntity::WriteNoMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
+ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, static_cast<long long int>(start), size);
 

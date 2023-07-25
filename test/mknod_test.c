@@ -134,7 +134,7 @@ bool TestMknod(const char* basepath, mode_t mode)
 //---------------------------------------------------------
 // Main
 //---------------------------------------------------------
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     // Parse parameters
     if(2 != argc){

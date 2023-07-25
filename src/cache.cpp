@@ -315,7 +315,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     }
 
     if(iter != stat_cache.end() && (*iter).second) {
-        stat_cache_entry* ent = (*iter).second;
+        const stat_cache_entry* ent = (*iter).second;
         if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
             if((*iter).second->noobjcache){
                 // noobjcache = true means no object.
@@ -353,6 +353,8 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
         DelStat(key.c_str());
     }else{
         if(do_truncate){
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
             if(!TruncateCache()){
                 return false;
             }
@@ -476,6 +478,8 @@ bool StatCache::AddNoObjectCache(const std::string& key)
         DelStat(key.c_str());
     }else{
         if(do_truncate){
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
             if(!TruncateCache()){
                 return false;
             }
@@ -559,7 +563,7 @@ bool StatCache::TruncateCache()
     statiterlist_t    erase_iters;
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
         // check no truncate
-        stat_cache_entry* ent = iter->second;
+        const stat_cache_entry* ent = iter->second;
         if(ent && 0L < ent->notruncate){
             // skip for no truncate entry and keep extra counts for this entity.
             if(0 < erase_count){
@@ -674,6 +678,8 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
         DelSymlink(key.c_str());
     }else{
         if(do_truncate){
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
             if(!TruncateSymlink()){
                 return false;
             }

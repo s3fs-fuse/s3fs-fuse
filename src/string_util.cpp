@@ -310,7 +310,7 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
     }
 
     struct tm tm;
-    char*     prest = strptime(pdate, "%Y-%m-%dT%T", &tm);
+    const char* prest = strptime(pdate, "%Y-%m-%dT%T", &tm);
     if(prest == pdate){
         // wrong format
         return false;

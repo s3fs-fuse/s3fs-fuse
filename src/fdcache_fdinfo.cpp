@@ -143,6 +143,8 @@ PseudoFdInfo::~PseudoFdInfo()
 
 bool PseudoFdInfo::Clear()
 {
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(!CancelAllThreads() || !ResetUploadInfo(AutoLock::NONE)){
         return false;
     }
@@ -232,6 +234,8 @@ bool PseudoFdInfo::Readable() const
 bool PseudoFdInfo::ClearUploadInfo(bool is_cancel_mp)
 {
     if(is_cancel_mp){
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(!CancelAllThreads()){
             return false;
         }
@@ -260,10 +264,14 @@ bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp
     }
 
     if(is_cancel_mp){
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(!ClearUploadInfo(is_cancel_mp)){
             return false;
         }
     }else{
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(!ResetUploadInfo(type)){
             return false;
         }

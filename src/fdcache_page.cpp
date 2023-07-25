@@ -657,9 +657,7 @@ size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off
 bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize)
 {
     // compress before this processing
-    if(!Compress()){
-        return false;
-    }
+    Compress();         // always true
 
     // make a list by modified flag
     fdpage_list_t modified_pages;
@@ -760,9 +758,7 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
 bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size_t size)
 {
     // compress before this processing
-    if(!Compress()){
-        return false;
-    }
+    Compress();         // always true
 
     // extract areas without data
     fdpage_list_t tmp_pagelist;

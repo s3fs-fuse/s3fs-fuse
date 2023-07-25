@@ -45,6 +45,7 @@ cppcheck:
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
             --suppress=useStlAlgorithm \
+            --suppress=checkLevelNormal \
             src/ test/
 
 #

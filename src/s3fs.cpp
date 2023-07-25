@@ -3146,6 +3146,8 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
+// cppcheck-suppress unmatchedSuppression
+// cppcheck-suppress constParameterCallback
 static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl){
@@ -3949,6 +3951,8 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             // This requires the key to be present in order to add xattr.
             ent->SetXattr(strxattr);
         }
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(0 != (result = set_xattrs_to_header(updatemeta, name, value, size, flags))){
             return result;
         }
@@ -3965,6 +3969,8 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     }
     if(need_put_header){
         // not found opened file.
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         if(0 != (result = set_xattrs_to_header(meta, name, value, size, flags))){
             return result;
         }
@@ -4684,6 +4690,7 @@ static fsblkcnt_t parse_bucket_size(char* max_size)
 //
 // if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
 //  or the mountpoint. The bucket name will always come before the mountpoint
+//
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
 {
     int ret;
