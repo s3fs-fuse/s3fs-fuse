@@ -63,7 +63,7 @@ class S3ObjList
         ~S3ObjList() {}
 
         bool IsEmpty() const { return objects.empty(); }
-        bool insert(const char* name, const char* etag = NULL, bool is_dir = false);
+        bool insert(const char* name, const char* etag = nullptr, bool is_dir = false);
         std::string GetOrgName(const char* name) const;
         std::string GetNormalizedName(const char* name) const;
         std::string GetETag(const char* name) const;

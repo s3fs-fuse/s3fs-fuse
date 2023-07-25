@@ -59,7 +59,7 @@ typedef struct xattr_value
     unsigned char* pvalue;
     size_t         length;
 
-    explicit xattr_value(unsigned char* pval = NULL, size_t len = 0) : pvalue(pval), length(len) {}
+    explicit xattr_value(unsigned char* pval = nullptr, size_t len = 0) : pvalue(pval), length(len) {}
     ~xattr_value()
     {
         delete[] pvalue;
@@ -110,7 +110,7 @@ class acl_t{
                 case LOG_DELIVERY_WRITE:
                     return "log-delivery-write";
                 case UNKNOWN:
-                    return NULL;
+                    return nullptr;
             }
             abort();
         }
@@ -182,7 +182,7 @@ struct etagpair
     std::string  etag;        // expected etag value
     int          part_num;    // part number
 
-    explicit etagpair(const char* petag = NULL, int part = -1) : etag(petag ? petag : ""), part_num(part) {}
+    explicit etagpair(const char* petag = nullptr, int part = -1) : etag(petag ? petag : ""), part_num(part) {}
 
     ~etagpair()
     {
@@ -232,7 +232,7 @@ struct filepart
     bool         is_copy;     // whether is copy multipart
     etagpair*    petag;       // use only parallel upload
 
-    explicit filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = NULL) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
+    explicit filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = nullptr) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
 
     ~filepart()
     {
@@ -247,7 +247,7 @@ struct filepart
         startpos = 0;
         size     = -1;
         is_copy  = false;
-        petag    = NULL;
+        petag    = nullptr;
     }
 
     void add_etag_list(etaglist_t& list, int partnum = -1)
@@ -255,7 +255,7 @@ struct filepart
         if(-1 == partnum){
             partnum = static_cast<int>(list.size()) + 1;
         }
-        list.push_back(etagpair(NULL, partnum));
+        list.push_back(etagpair(nullptr, partnum));
         petag = &list.back();
     }
 

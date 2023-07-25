@@ -25,7 +25,6 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
-#include <memory>
 
 #include "common.h"
 #include "fdcache_entity.h"
@@ -108,7 +107,7 @@ ino_t FdEntity::GetInode(int fd)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), path(SAFESTRPTR(tpath)),
-    physical_fd(-1), pfile(NULL), inode(0), size_orgmeta(0),
+    physical_fd(-1), pfile(nullptr), inode(0), size_orgmeta(0),
     cachepath(SAFESTRPTR(cpath)), pending_status(NO_UPDATE_PENDING)
 {
     holding_mtime.tv_sec = -1;
@@ -172,7 +171,7 @@ void FdEntity::Clear()
         }
         if(pfile){
             fclose(pfile);
-            pfile = NULL;
+            pfile = nullptr;
         }
         physical_fd = -1;
         inode       = 0;
@@ -242,7 +241,7 @@ void FdEntity::Close(int fd)
         }
         if(pfile){
             fclose(pfile);
-            pfile = NULL;
+            pfile = nullptr;
         }
         physical_fd = -1;
         inode       = 0;
@@ -313,13 +312,13 @@ int FdEntity::OpenMirrorFile()
 
     // make temporary directory
     std::string bupdir;
-    if(!FdManager::MakeCachePath(NULL, bupdir, true, true)){
+    if(!FdManager::MakeCachePath(nullptr, bupdir, true, true)){
         S3FS_PRN_ERR("could not make bup cache directory path or create it.");
         return -EIO;
     }
 
     // create seed generating mirror file name
-    unsigned int seed = static_cast<unsigned int>(time(NULL));
+    unsigned int seed = static_cast<unsigned int>(time(nullptr));
     int urandom_fd;
     if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
         unsigned int rand_data;
@@ -376,19 +375,19 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type
     AutoLock auto_lock(&fdent_lock, locktype);
 
     if(-1 == fd){
-        return NULL;
+        return nullptr;
     }
     fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() == iter || NULL == iter->second){
-        return NULL;
+    if(pseudo_fd_map.end() == iter || nullptr == iter->second){
+        return nullptr;
     }
     if(writable){
         if(!iter->second->Writable()){
-            return NULL;
+            return nullptr;
         }
     }else{
         if(!iter->second->Readable()){
-            return NULL;
+            return nullptr;
         }
     }
     return iter->second.get();
@@ -582,7 +581,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             physical_fd = mirrorfd;
 
             // make file pointer(for being same tmpfile)
-            if(NULL == (pfile = fdopen(physical_fd, "wb"))){
+            if(nullptr == (pfile = fdopen(physical_fd, "wb"))){
                 S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
                 close(physical_fd);
                 physical_fd = -1;
@@ -595,11 +594,11 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             inode = 0;
 
             // open temporary file
-            if(NULL == (pfile = FdManager::MakeTempFile()) || -1 ==(physical_fd = fileno(pfile))){
+            if(nullptr == (pfile = FdManager::MakeTempFile()) || -1 ==(physical_fd = fileno(pfile))){
                 S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
                 if(pfile){
                     fclose(pfile);
-                    pfile = NULL;
+                    pfile = nullptr;
                 }
                 return (0 == errno ? -EIO : -errno);
             }
@@ -626,7 +625,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             if(0 != ftruncate(physical_fd, size) || 0 != fsync(physical_fd)){
                 S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
                 fclose(pfile);
-                pfile       = NULL;
+                pfile       = nullptr;
                 physical_fd = -1;
                 inode       = 0;
                 return (0 == errno ? -EIO : -errno);
@@ -660,7 +659,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             if(0 != SetMCtime(ts_mctime, ts_mctime, AutoLock::ALREADY_LOCKED)){
                 S3FS_PRN_ERR("failed to set mtime/ctime. errno(%d)", errno);
                 fclose(pfile);
-                pfile       = NULL;
+                pfile       = nullptr;
                 physical_fd = -1;
                 inode       = 0;
                 return (0 == errno ? -EIO : -errno);
@@ -679,7 +678,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             pseudo_fd_map.erase(pseudo_fd);
             if(pfile){
                 fclose(pfile);
-                pfile = NULL;
+                pfile = nullptr;
             }
         }
     }
@@ -1132,7 +1131,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
     if(!pseudo_obj){
-        S3FS_PRN_ERR("Pseudo object is NULL.");
+        S3FS_PRN_ERR("Pseudo object is nullptr.");
         return -EIO;
     }
 
@@ -1157,7 +1156,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     // open temporary file
     FILE* ptmpfp;
     int   tmpfd;
-    if(NULL == (ptmpfp = FdManager::MakeTempFile()) || -1 ==(tmpfd = fileno(ptmpfp))){
+    if(nullptr == (ptmpfp = FdManager::MakeTempFile()) || -1 ==(tmpfd = fileno(ptmpfp))){
         S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
         if(ptmpfp){
             fclose(ptmpfp);
@@ -1339,7 +1338,7 @@ int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t sta
     }
 
     // append new part and get it's etag string pointer
-    etagpair* petagpair = NULL;
+    etagpair* petagpair = nullptr;
     if(!pseudo_obj->AppendUploadPart(start, size, false, &petagpair)){
         return -EIO;
     }
@@ -1412,7 +1411,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool forc
 
     // check pseudo fd and its flag
     fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() == miter || NULL == miter->second){
+    if(pseudo_fd_map.end() == miter || nullptr == miter->second){
         return -EBADF;
     }
     if(!miter->second->Writable() && !(miter->second->GetFlags() & O_CREAT)){
@@ -1968,7 +1967,7 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    if(-1 == physical_fd || NULL == CheckPseudoFdFlags(fd, false)){
+    if(-1 == physical_fd || nullptr == CheckPseudoFdFlags(fd, false)){
         S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not readable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
@@ -2031,14 +2030,14 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    PseudoFdInfo* pseudo_obj = NULL;
-    if(-1 == physical_fd || NULL == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
+    PseudoFdInfo* pseudo_obj = nullptr;
+    if(-1 == physical_fd || nullptr == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
         S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
 
     // check if not enough disk space left BEFORE locking fd
-    if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(NULL, size)){
+    if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(nullptr, size)){
         FdManager::get()->CleanupCacheDir();
     }
     AutoLock auto_lock(&fdent_lock);

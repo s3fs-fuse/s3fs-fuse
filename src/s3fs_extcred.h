@@ -55,11 +55,11 @@ extern const char* VersionS3fsCredential(bool detail) S3FS_FUNCATTR_WEAK;
 // implemented, it will not be called.
 //
 // const char* popts : String passed with the credlib_opts option. If the
-//                     credlib_opts option is not specified, NULL will be
+//                     credlib_opts option is not specified, nullptr will be
 //                     passed.
 // char** pperrstr   : pperrstr is used to pass the error message to the
 //                     caller when an error occurs.
-//                     If this pointer is not NULL, you can allocate memory
+//                     If this pointer is not nullptr, you can allocate memory
 //                     and set an error message to it. The allocated memory
 //                     area is freed by the caller.
 //
@@ -75,7 +75,7 @@ extern bool InitS3fsCredential(const char* popts, char** pperrstr) S3FS_FUNCATTR
 //
 // char** pperrstr : pperrstr is used to pass the error message to the
 //                   caller when an error occurs.
-//                   If this pointer is not NULL, you can allocate memory
+//                   If this pointer is not nullptr, you can allocate memory
 //                   and set an error message to it. The allocated memory
 //                   area is freed by the caller.
 //

@@ -65,7 +65,7 @@ AdditionalHeader::~AdditionalHeader()
 bool AdditionalHeader::Load(const char* file)
 {
     if(!file){
-        S3FS_PRN_WARN("file is NULL.");
+        S3FS_PRN_WARN("file is nullptr.");
         return false;
     }
     Unload();
@@ -165,7 +165,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
         return true;
     }
     if(!path){
-        S3FS_PRN_WARN("path is NULL.");
+        S3FS_PRN_WARN("path is nullptr.");
         return false;
     }
 

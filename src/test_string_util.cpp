@@ -64,13 +64,13 @@ void test_base64()
     unsigned char *buf;
     size_t len;
 
-    ASSERT_STREQUALS(s3fs_base64(NULL, 0), NULL);
-    buf = s3fs_decode64(NULL, 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
+    ASSERT_STREQUALS(s3fs_base64(nullptr, 0), nullptr);
+    buf = s3fs_decode64(nullptr, 0, &len);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, nullptr, 0);
 
-    ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), NULL);
+    ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), nullptr);
     buf = s3fs_decode64("", 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, NULL, 0);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf), len, nullptr, 0);
 
     ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), "MQ==");
     buf = s3fs_decode64("MQ==", 4, &len);

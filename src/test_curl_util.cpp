@@ -56,7 +56,7 @@ const std::string& S3fsCred::GetBucket()
 
 void assert_is_sorted(struct curl_slist* list, const char *file, int line)
 {
-    for(; list != NULL; list = list->next){
+    for(; list != nullptr; list = list->next){
         std::string key1 = list->data;
         key1.erase(key1.find(':'));
         std::string key2 = list->data;
@@ -74,7 +74,7 @@ void assert_is_sorted(struct curl_slist* list, const char *file, int line)
 size_t curl_slist_length(const struct curl_slist* list)
 {
     size_t len = 0;
-    for(; list != NULL; list = list->next){
+    for(; list != nullptr; list = list->next){
         ++len;
     }
     return len;
@@ -82,7 +82,7 @@ size_t curl_slist_length(const struct curl_slist* list)
 
 void test_sort_insert()
 {
-    struct curl_slist* list = NULL;
+    struct curl_slist* list = nullptr;
     ASSERT_IS_SORTED(list);
     // add to head
     list = curl_slist_sort_insert(list, "2", "val");
@@ -107,7 +107,7 @@ void test_sort_insert()
 
 void test_slist_remove()
 {
-    struct curl_slist* list = NULL;
+    struct curl_slist* list = nullptr;
 
     // remove no elements
     ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
@@ -115,14 +115,14 @@ void test_slist_remove()
     ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
 
     // remove only element
-    list = NULL;
+    list = nullptr;
     list = curl_slist_sort_insert(list, "1", "val");
     ASSERT_EQUALS(static_cast<size_t>(1), curl_slist_length(list));
     list = curl_slist_remove(list, "1");
     ASSERT_EQUALS(static_cast<size_t>(0), curl_slist_length(list));
 
     // remove head element
-    list = NULL;
+    list = nullptr;
     list = curl_slist_sort_insert(list, "1", "val");
     list = curl_slist_sort_insert(list, "2", "val");
     ASSERT_EQUALS(static_cast<size_t>(2), curl_slist_length(list));
@@ -131,7 +131,7 @@ void test_slist_remove()
     curl_slist_free_all(list);
 
     // remove tail element
-    list = NULL;
+    list = nullptr;
     list = curl_slist_sort_insert(list, "1", "val");
     list = curl_slist_sort_insert(list, "2", "val");
     ASSERT_EQUALS(static_cast<size_t>(2), curl_slist_length(list));
@@ -140,7 +140,7 @@ void test_slist_remove()
     curl_slist_free_all(list);
 
     // remove middle element
-    list = NULL;
+    list = nullptr;
     list = curl_slist_sort_insert(list, "1", "val");
     list = curl_slist_sort_insert(list, "2", "val");
     list = curl_slist_sort_insert(list, "3", "val");

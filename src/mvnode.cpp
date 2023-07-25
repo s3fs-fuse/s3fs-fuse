@@ -34,17 +34,17 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
     char *p_old_path;
     char *p_new_path;
 
-    if(NULL == (p_old_path = strdup(old_path))){
+    if(nullptr == (p_old_path = strdup(old_path))){
         printf("create_mvnode: could not allocation memory for p_old_path\n");
         S3FS_FUSE_EXIT();
-        return NULL;
+        return nullptr;
     }
 
-    if(NULL == (p_new_path = strdup(new_path))){
+    if(nullptr == (p_new_path = strdup(new_path))){
         free(p_old_path);
         printf("create_mvnode: could not allocation memory for p_new_path\n");
         S3FS_FUSE_EXIT();
-        return NULL;
+        return nullptr;
     }
 
     p = new MVNODE();
@@ -52,8 +52,8 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
     p->new_path   = p_new_path;
     p->is_dir     = is_dir;
     p->is_normdir = normdir;
-    p->prev = NULL;
-    p->next = NULL;
+    p->prev = nullptr;
+    p->next = nullptr;
     return p;
 }
 
@@ -63,7 +63,7 @@ MVNODE *create_mvnode(const char *old_path, const char *new_path, bool is_dir, b
 MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const char *new_path, bool is_dir, bool normdir)
 {
     if(!head || !tail){
-        return NULL;
+        return nullptr;
     }
 
     MVNODE* cur;
@@ -85,8 +85,8 @@ MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const cha
                 // Add into before cur-pos.
                 // ex: cur("abc"), mvnew("ab")
                 // ex: cur("abc"), mvnew("abb")
-                if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
-                    return NULL;
+                if(nullptr == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
+                    return nullptr;
                 }
                 if(cur->prev){
                     (cur->prev)->next = mvnew;
@@ -102,8 +102,8 @@ MVNODE *add_mvnode(MVNODE** head, MVNODE** tail, const char *old_path, const cha
         }
     }
     // Add into tail.
-    if(NULL == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
-        return NULL;
+    if(nullptr == (mvnew = create_mvnode(old_path, new_path, is_dir, normdir))){
+        return nullptr;
     }
     mvnew->prev = (*tail);
     if(*tail){
@@ -121,7 +121,7 @@ void free_mvnodes(MVNODE *head)
     MVNODE *my_head;
     MVNODE *next;
 
-    for(my_head = head, next = NULL; my_head; my_head = next){
+    for(my_head = head, next = nullptr; my_head; my_head = next){
         next = my_head->next;
         free(my_head->old_path);
         free(my_head->new_path);

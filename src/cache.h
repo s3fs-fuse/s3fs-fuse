@@ -133,29 +133,29 @@ class StatCache
         }
 
         // Get stat cache
-        bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = NULL)
+        bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck = true, bool* pisforce = nullptr)
         {
-            return GetStat(key, pst, meta, overcheck, NULL, pisforce);
+            return GetStat(key, pst, meta, overcheck, nullptr, pisforce);
         }
         bool GetStat(const std::string& key, struct stat* pst, bool overcheck = true)
         {
-            return GetStat(key, pst, NULL, overcheck, NULL, NULL);
+            return GetStat(key, pst, nullptr, overcheck, nullptr, nullptr);
         }
         bool GetStat(const std::string& key, headers_t* meta, bool overcheck = true)
         {
-            return GetStat(key, NULL, meta, overcheck, NULL, NULL);
+            return GetStat(key, nullptr, meta, overcheck, nullptr, nullptr);
         }
         bool HasStat(const std::string& key, bool overcheck = true)
         {
-            return GetStat(key, NULL, NULL, overcheck, NULL, NULL);
+            return GetStat(key, nullptr, nullptr, overcheck, nullptr, nullptr);
         }
         bool HasStat(const std::string& key, const char* etag, bool overcheck = true)
         {
-            return GetStat(key, NULL, NULL, overcheck, etag, NULL);
+            return GetStat(key, nullptr, nullptr, overcheck, etag, nullptr);
         }
         bool HasStat(const std::string& key, struct stat* pst, const char* etag)
         {
-            return GetStat(key, pst, NULL, true, etag, NULL);
+            return GetStat(key, pst, nullptr, true, etag, nullptr);
         }
 
         // Cache For no object

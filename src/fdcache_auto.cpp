@@ -27,7 +27,7 @@
 //------------------------------------------------
 // AutoFdEntity methods
 //------------------------------------------------
-AutoFdEntity::AutoFdEntity() : pFdEntity(NULL), pseudo_fd(-1)
+AutoFdEntity::AutoFdEntity() : pFdEntity(nullptr), pseudo_fd(-1)
 {
 }
 
@@ -36,7 +36,7 @@ AutoFdEntity::AutoFdEntity() : pFdEntity(NULL), pseudo_fd(-1)
 // Even if it is called, the consistency of the number of
 // references can be maintained, but this case is not assumed.
 //
-AutoFdEntity::AutoFdEntity(AutoFdEntity& other) : pFdEntity(NULL), pseudo_fd(-1)
+AutoFdEntity::AutoFdEntity(AutoFdEntity& other) : pFdEntity(nullptr), pseudo_fd(-1)
 {
     S3FS_PRN_WARN("This method should not be called. Please check the caller.");
 
@@ -61,7 +61,7 @@ bool AutoFdEntity::Close()
             S3FS_PRN_ERR("Failed to close fdentity.");
             return false;
         }
-        pFdEntity = NULL;
+        pFdEntity = nullptr;
         pseudo_fd = -1;
     }
     return true;
@@ -79,7 +79,7 @@ int AutoFdEntity::Detach()
     }
     int fd    = pseudo_fd;
     pseudo_fd = -1;
-    pFdEntity = NULL;
+    pFdEntity = nullptr;
 
     return fd;
 }
@@ -88,9 +88,9 @@ FdEntity* AutoFdEntity::Attach(const char* path, int existfd)
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, false))){
+    if(nullptr == (pFdEntity = FdManager::get()->GetFdEntity(path, existfd, false))){
         S3FS_PRN_DBG("Could not find fd entity object(file=%s, pseudo_fd=%d)", path, existfd);
-        return NULL;
+        return nullptr;
     }
     pseudo_fd = existfd;
     return pFdEntity;
@@ -100,9 +100,9 @@ FdEntity* AutoFdEntity::Open(const char* path, const headers_t* pmeta, off_t siz
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->Open(pseudo_fd, path, pmeta, size, ts_mctime, flags, force_tmpfile, is_create, ignore_modify, type))){
+    if(nullptr == (pFdEntity = FdManager::get()->Open(pseudo_fd, path, pmeta, size, ts_mctime, flags, force_tmpfile, is_create, ignore_modify, type))){
         pseudo_fd = -1;
-        return NULL;
+        return nullptr;
     }
     return pFdEntity;
 }
@@ -115,8 +115,8 @@ FdEntity* AutoFdEntity::GetExistFdEntity(const char* path, int existfd)
     Close();
 
     FdEntity* ent;
-    if(NULL == (ent = FdManager::get()->GetExistFdEntity(path, existfd))){
-        return NULL;
+    if(nullptr == (ent = FdManager::get()->GetExistFdEntity(path, existfd))){
+        return nullptr;
     }
     return ent;
 }
@@ -125,8 +125,8 @@ FdEntity* AutoFdEntity::OpenExistFdEntity(const char* path, int flags)
 {
     Close();
 
-    if(NULL == (pFdEntity = FdManager::get()->OpenExistFdEntity(path, pseudo_fd, flags))){
-        return NULL;
+    if(nullptr == (pFdEntity = FdManager::get()->OpenExistFdEntity(path, pseudo_fd, flags))){
+        return nullptr;
     }
     return pFdEntity;
 }

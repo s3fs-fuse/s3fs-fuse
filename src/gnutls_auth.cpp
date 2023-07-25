@@ -75,7 +75,7 @@ bool s3fs_init_global_ssl()
         return false;
     }
 #ifndef USE_GNUTLS_NETTLE
-    if(NULL == gcry_check_version(NULL)){
+    if(nullptr == gcry_check_version(nullptr)){
         return false;
     }
 #endif // USE_GNUTLS_NETTLE
@@ -154,7 +154,7 @@ bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t
     *digest = new unsigned char[*digestlen + 1];
     if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, *digest)){
         delete[] *digest;
-        *digest = NULL;
+        *digest = nullptr;
         return false;
     }
     return true;
@@ -172,7 +172,7 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
     *digest = new unsigned char[*digestlen + 1];
     if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, *digest)){
         delete[] *digest;
-        *digest = NULL;
+        *digest = nullptr;
         return false;
     }
     return true;
@@ -198,7 +198,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
@@ -216,7 +216,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
         }else if(-1 == bytes){
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
-            return NULL;
+            return nullptr;
         }
         md5_update(&ctx_md5, bytes, buf);
     }
@@ -238,14 +238,14 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
 
     if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_md5, GCRY_MD_MD5, 0))){
         S3FS_PRN_ERR("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
-        return NULL;
+        return nullptr;
     }
 
     for(off_t total = 0; total < size; total += bytes){
@@ -260,7 +260,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
             gcry_md_close(ctx_md5);
-            return NULL;
+            return nullptr;
         }
         gcry_md_write(ctx_md5, buf, bytes);
     }
@@ -314,7 +314,7 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
         }else if(-1 == bytes){
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
-            return NULL;
+            return nullptr;
         }
         sha256_update(&ctx_sha256, bytes, buf);
     }
@@ -355,14 +355,14 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
 
     if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_sha256, GCRY_MD_SHA256, 0))){
         S3FS_PRN_ERR("SHA256 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
-        return NULL;
+        return nullptr;
     }
 
     for(off_t total = 0; total < size; total += bytes){
@@ -377,7 +377,7 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
             gcry_md_close(ctx_sha256);
-            return NULL;
+            return nullptr;
         }
         gcry_md_write(ctx_sha256, buf, bytes);
     }

@@ -41,7 +41,7 @@ class BodyData
         bool Resize(size_t addbytes);
 
     public:
-        BodyData() : text(NULL), lastpos(0), bufsize(0) {}
+        BodyData() : text(nullptr), lastpos(0), bufsize(0) {}
         ~BodyData()
         {
             Clear();

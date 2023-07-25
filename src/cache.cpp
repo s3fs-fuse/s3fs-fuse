@@ -264,13 +264,13 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
                 S3FS_PRN_DBG("stat cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
                     strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
 
-                if(pst!= NULL){
+                if(pst!= nullptr){
                     *pst= ent->stbuf;
                 }
-                if(meta != NULL){
+                if(meta != nullptr){
                     *meta = ent->meta;
                 }
-                if(pisforce != NULL){
+                if(pisforce != nullptr){
                     (*pisforce) = ent->isforce;
                 }
                 ent->hit_count++;

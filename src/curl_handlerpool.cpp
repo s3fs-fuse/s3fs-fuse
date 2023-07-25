@@ -75,7 +75,7 @@ CURL* CurlHandlerPool::GetHandler(bool only_pool)
 {
     AutoLock lock(&mLock);
 
-    CURL* hCurl = NULL;
+    CURL* hCurl = nullptr;
 
     if(!mPool.empty()){
         hCurl = mPool.back();

@@ -48,7 +48,7 @@ struct pseudofdinfo_thparam
     int           part_num;
     etagpair*     petag;
 
-    pseudofdinfo_thparam() : ppseudofdinfo(NULL), path(""), upload_id(""), upload_fd(-1), start(0), size(0), is_copy(false), part_num(-1), petag(NULL) {}
+    pseudofdinfo_thparam() : ppseudofdinfo(nullptr), path(""), upload_id(""), upload_fd(-1), start(0), size(0), is_copy(false), part_num(-1), petag(nullptr) {}
 };
 
 //------------------------------------------------
@@ -107,7 +107,7 @@ class PseudoFdInfo
         bool GetUploadId(std::string& id) const;
         bool GetEtaglist(etaglist_t& list) const;
 
-        bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = NULL);
+        bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = nullptr);
 
         bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& upload_list, const mp_part_list_t& copy_list, int& result);
 
