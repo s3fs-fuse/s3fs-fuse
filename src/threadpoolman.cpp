@@ -198,7 +198,7 @@ bool ThreadPoolMan::StopThreads()
 
     // all threads to exit
     SetExitFlag(true);
-    for(uint waitcnt = thread_list.size(); 0 < waitcnt; --waitcnt){
+    for(size_t waitcnt = thread_list.size(); 0 < waitcnt; --waitcnt){
         thpoolman_sem.post();
     }
 

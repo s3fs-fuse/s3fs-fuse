@@ -744,7 +744,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, o
     // Add upload area to the list
     //
     while(max_mp_size <= aligned_size){
-        int part_num = (aligned_start / max_mp_size) + 1;
+        int part_num = static_cast<int>((aligned_start / max_mp_size) + 1);
         to_upload_list.push_back(mp_part(aligned_start, max_mp_size, part_num));
 
         aligned_start += max_mp_size;
@@ -892,7 +892,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
         //
         // Create upload/download/cancel/copy list for this current area
         //
-        int part_num = (cur_start / max_mp_size) + 1;
+        int part_num = static_cast<int>((cur_start / max_mp_size) + 1);
         if(cur_untreated_list.empty()){
             //
             // No untreated area was detected in this current area

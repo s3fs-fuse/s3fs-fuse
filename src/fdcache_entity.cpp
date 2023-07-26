@@ -2355,7 +2355,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
     //
     headers_t tmporgmeta  = orgmeta;
     bool      isuploading = pseudo_obj->IsUploading();
-    int       result;
+    ssize_t   result;
     if(0 != (result = pseudo_obj->UploadBoundaryLastUntreatedArea(path.c_str(), tmporgmeta, this))){
         S3FS_PRN_ERR("Failed to upload the last untreated parts(area) : result=%d", result);
         return result;

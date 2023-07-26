@@ -265,7 +265,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
 {
     EVP_MD_CTX*    mdctx;
     unsigned char* md5_digest;
-    unsigned int   md5_digest_len = get_md5_digest_length();
+    unsigned int   md5_digest_len = static_cast<unsigned int>(get_md5_digest_length());
     off_t          bytes;
 
     if(-1 == size){
