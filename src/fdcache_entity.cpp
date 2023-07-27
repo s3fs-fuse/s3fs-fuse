@@ -2378,7 +2378,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     // this is special cases, we remove the key which has empty values.
     for(headers_t::iterator hiter = orgmeta.begin(); hiter != orgmeta.end(); ){
         if(hiter->second.empty()){
-            orgmeta.erase(hiter++);
+            hiter = orgmeta.erase(hiter);
         }else{
             ++hiter;
         }

@@ -730,12 +730,12 @@ bool FdManager::Close(FdEntity* ent, int fd)
             ent->Close(fd);
             if(!ent->IsOpen()){
                 // remove found entity from map.
-                fent.erase(iter++);
+                iter = fent.erase(iter);
 
                 // check another key name for entity value to be on the safe side
                 for(; iter != fent.end(); ){
                     if(iter->second == ent){
-                        fent.erase(iter++);
+                        iter = fent.erase(iter);
                     }else{
                         ++iter;
                     }
@@ -754,7 +754,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
         if(iter->second == ent){
-            fent.erase(iter++);
+            iter = fent.erase(iter);
 
             std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
