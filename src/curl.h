@@ -24,6 +24,7 @@
 #include <curl/curl.h>
 #include <list>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "autolock.h"
@@ -268,7 +269,7 @@ class S3fsCurl
         static bool InitCredentialObject(S3fsCred* pcredobj);
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
-        static S3fsCurl* CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result);
+        static std::unique_ptr<S3fsCurl> CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result);
         static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
         static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size);

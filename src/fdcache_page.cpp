@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cerrno>
+#include <memory>
 #include <unistd.h>
 #include <sstream>
 #include <sys/stat.h>
@@ -232,7 +233,7 @@ bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& spars
 //
 bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
 {
-    char* readbuff = new char[CHECK_CACHEFILE_PART_SIZE];
+    std::unique_ptr<char[]> readbuff(new char[CHECK_CACHEFILE_PART_SIZE]);
 
     for(size_t comp_bytes = 0, check_bytes = 0; comp_bytes < bytes; comp_bytes += check_bytes){
         if(CHECK_CACHEFILE_PART_SIZE < (bytes - comp_bytes)){
@@ -242,7 +243,7 @@ bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
         }
         bool    found_bad_data = false;
         ssize_t read_bytes;
-        if(-1 == (read_bytes = pread(fd, readbuff, check_bytes, (start + comp_bytes)))){
+        if(-1 == (read_bytes = pread(fd, readbuff.get(), check_bytes, (start + comp_bytes)))){
             S3FS_PRN_ERR("Something error is occurred in reading %zu bytes at %lld from file(physical_fd=%d).", check_bytes, static_cast<long long int>(start + comp_bytes), fd);
             found_bad_data = true;
         }else{
@@ -256,11 +257,9 @@ bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
             }
         }
         if(found_bad_data){
-            delete[] readbuff;
             return false;
         }
     }
-    delete[] readbuff;
     return true;
 }
 
@@ -869,17 +868,16 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             Init(0, false, false);
             return true;
         }
-        char* ptmp = new char[st.st_size + 1];
+        std::unique_ptr<char[]> ptmp(new char[st.st_size + 1]);
         ssize_t result;
         // read from file
-        if(0 >= (result = pread(file.GetFd(), ptmp, st.st_size, 0))){
+        if(0 >= (result = pread(file.GetFd(), ptmp.get(), st.st_size, 0))){
             S3FS_PRN_ERR("failed to read stats(%d)", errno);
-            delete[] ptmp;
             return false;
         }
         ptmp[result] = '\0';
         std::string        oneline;
-        std::istringstream ssall(ptmp);
+        std::istringstream ssall(ptmp.get());
     
         // loaded
         Clear();
@@ -889,7 +887,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         ino_t cache_inode;                  // if this value is 0, it means old format.
         if(!getline(ssall, oneline, '\n')){
             S3FS_PRN_ERR("failed to parse stats.");
-            delete[] ptmp;
             return false;
         }else{
             std::istringstream sshead(oneline);
@@ -899,7 +896,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             // get first part in head line.
             if(!getline(sshead, strhead1, ':')){
                 S3FS_PRN_ERR("failed to parse stats.");
-                delete[] ptmp;
                 return false;
             }
             // get second part in head line.
@@ -913,7 +909,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
                 cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead1.c_str(), /* base= */10));
                 if(0 == cache_inode){
                     S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
-                    delete[] ptmp;
                     return false;
                 }
             }
@@ -921,7 +916,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         // check inode number
         if(0 != cache_inode && cache_inode != inode){
             S3FS_PRN_ERR("differ inode and inode number in parsed cache stats.");
-            delete[] ptmp;
             return false;
         }
     
@@ -969,7 +963,6 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
             }
             SetPageLoadedStatus(offset, size, pstatus);
         }
-        delete[] ptmp;
         if(is_err){
             S3FS_PRN_ERR("failed to parse stats.");
             Clear();

@@ -20,6 +20,7 @@
 
 #include <cstdlib>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -264,21 +265,19 @@ void s3fs_low_logprn(S3fsLog::s3fs_log_level level, const char* file, const char
         size_t len = vsnprintf(NULL, 0, fmt, va) + 1;
         va_end(va);
 
-        char *message = new char[len];
+        std::unique_ptr<char[]> message(new char[len]);
         va_start(va, fmt);
-        vsnprintf(message, len, fmt, va);
+        vsnprintf(message.get(), len, fmt, va);
         va_end(va);
 
         if(foreground || S3fsLog::IsSetLogFile()){
             S3fsLog::SeekEnd();
-            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message);
+            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message.get());
             S3fsLog::Flush();
         }else{
             // TODO: why does this differ from s3fs_low_logprn2?
-            syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): %s", instance_name.c_str(), file, func, line, message);
+            syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): %s", instance_name.c_str(), file, func, line, message.get());
         }
-
-        delete[] message;
     }
 }
 
@@ -290,20 +289,18 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
         size_t len = vsnprintf(NULL, 0, fmt, va) + 1;
         va_end(va);
 
-        char *message = new char[len];
+        std::unique_ptr<char[]> message(new char[len]);
         va_start(va, fmt);
-        vsnprintf(message, len, fmt, va);
+        vsnprintf(message.get(), len, fmt, va);
         va_end(va);
 
         if(foreground || S3fsLog::IsSetLogFile()){
             S3fsLog::SeekEnd();
-            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message);
+            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
             S3fsLog::Flush();
         }else{
-            syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message);
+            syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message.get());
         }
-
-        delete[] message;
     }
 }
 

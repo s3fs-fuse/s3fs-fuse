@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <grp.h>
+#include <memory>
 #include <pwd.h>
 #include <libgen.h>
 #include <dirent.h>
@@ -94,32 +95,27 @@ std::string get_username(uid_t uid)
 {
     size_t maxlen = max_password_size;
     int result;
-    char* pbuf;
     struct passwd pwinfo;
     struct passwd* ppwinfo = NULL;
 
     // make buffer
-    pbuf = new char[maxlen];
+    std::unique_ptr<char[]> pbuf(new char[maxlen]);
     // get pw information
-    while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf, maxlen, &ppwinfo))){
-        delete[] pbuf;
+    while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf.get(), maxlen, &ppwinfo))){
         maxlen *= 2;
-        pbuf = new char[maxlen];
+        pbuf.reset(new char[maxlen]);
     }
 
     if(0 != result){
         S3FS_PRN_ERR("could not get pw information(%d).", result);
-        delete[] pbuf;
         return std::string("");
     }
 
     // check pw
     if(NULL == ppwinfo){
-        delete[] pbuf;
         return std::string("");
     }
     std::string name = SAFESTRPTR(ppwinfo->pw_name);
-    delete[] pbuf;
     return name;
 }
 
@@ -127,29 +123,25 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 {
     size_t maxlen = max_group_name_length;
     int result;
-    char* pbuf;
     struct group ginfo;
     struct group* pginfo = NULL;
 
     // make buffer
-    pbuf = new char[maxlen];
+    std::unique_ptr<char[]> pbuf(new char[maxlen]);
     // get group information
-    while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf, maxlen, &pginfo))){
-        delete[] pbuf;
+    while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf.get(), maxlen, &pginfo))){
         maxlen *= 2;
-        pbuf = new char[maxlen];
+        pbuf.reset(new char[maxlen]);
     }
 
     if(0 != result){
         S3FS_PRN_ERR("could not get group information(%d).", result);
-        delete[] pbuf;
         return -result;
     }
 
     // check group
     if(NULL == pginfo){
         // there is not gid in group.
-        delete[] pbuf;
         return -EINVAL;
     }
 
@@ -159,11 +151,9 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     for(ppgr_mem = pginfo->gr_mem; ppgr_mem && *ppgr_mem; ppgr_mem++){
         if(username == *ppgr_mem){
             // Found username in group.
-            delete[] pbuf;
             return 1;
         }
     }
-    delete[] pbuf;
     return 0;
 }
 

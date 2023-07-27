@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
+#include <memory>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -47,15 +48,13 @@ int PseudoFdInfo::opt_max_threads = -1;
 //
 void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 {
-    pseudofdinfo_thparam*   pthparam = static_cast<pseudofdinfo_thparam*>(arg);
+    std::unique_ptr<pseudofdinfo_thparam> pthparam(static_cast<pseudofdinfo_thparam*>(arg));
     if(!pthparam || !(pthparam->ppseudofdinfo)){
-        delete pthparam;
         return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
     int       result;
-    S3fsCurl* s3fscurl;
     {
         AutoLock auto_lock(&(pthparam->ppseudofdinfo->upload_list_lock));
 
@@ -65,20 +64,19 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
             if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::ALREADY_LOCKED)){    // result will be overwritten with the same value.
                 result = -EIO;
             }
-            delete pthparam;
             return reinterpret_cast<void*>(result);
         }
     }
 
     // setup and make curl object
-    if(NULL == (s3fscurl = S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result))){
+    std::unique_ptr<S3fsCurl> s3fscurl(S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result));
+    if(NULL == s3fscurl.get()){
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
         if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
             result = -EIO;
         }
-        delete pthparam;
         return reinterpret_cast<void*>(result);
     }
 
@@ -93,13 +91,11 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
         S3FS_PRN_ERR("failed uploading with error(%d) [path=%s][start=%lld][size=%lld][part=%d]", result, pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
     }
     s3fscurl->DestroyCurlHandle(true, false);
-    delete s3fscurl;
 
     // set result
     if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
         S3FS_PRN_WARN("This thread worker is about to end, so it doesn't return an EIO here and runs to the end.");
     }
-    delete pthparam;
 
     return reinterpret_cast<void*>(result);
 }
