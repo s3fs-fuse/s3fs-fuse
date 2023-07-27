@@ -546,7 +546,7 @@ bool StatCache::TruncateCache()
             stat_cache_entry* entry = iter->second;
             if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
                 delete entry;
-                stat_cache.erase(iter++);
+                iter = stat_cache.erase(iter);
             }else{
                 ++iter;
             }
@@ -718,7 +718,7 @@ bool StatCache::TruncateSymlink()
             symlink_cache_entry* entry = iter->second;
             if(!entry || IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
                 delete entry;
-                symlink_cache.erase(iter++);
+                iter = symlink_cache.erase(iter);
             }else{
                 ++iter;
             }
