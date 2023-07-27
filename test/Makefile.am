@@ -36,11 +36,20 @@ noinst_PROGRAMS = \
     truncate_read_file \
     cr_filename
 
-junk_data_SOURCES          = junk_data.c
+junk_data_SOURCES          = junk_data.cc
 write_multiblock_SOURCES   = write_multiblock.cc
-mknod_test_SOURCES         = mknod_test.c
-truncate_read_file_SOURCES = truncate_read_file.c
-cr_filename_SOURCES        = cr_filename.c
+mknod_test_SOURCES         = mknod_test.cc
+truncate_read_file_SOURCES = truncate_read_file.cc
+cr_filename_SOURCES        = cr_filename.cc
+
+clang-tidy:
+	clang-tidy \
+    $(junk_data_SOURCES) \
+    $(write_multiblock_SOURCES) \
+    $(mknod_test_SOURCES) \
+    $(truncate_read_file_SOURCES) \
+    $(cr_filename_SOURCES) \
+    -- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #
 # Local variables:
