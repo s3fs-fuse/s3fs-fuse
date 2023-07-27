@@ -95,7 +95,7 @@ bool UntreatedParts::AddPart(off_t start, off_t size)
         }
     }
     // There are no overlapping parts in the untreated_list, then add the part at end of list
-    untreated_list.push_back(untreatedpart(start, size, last_tag));
+    untreated_list.emplace_back(start, size, last_tag);
     return true;
 }
 
