@@ -53,8 +53,8 @@ const char str_ext_sock[]  = "sock";
 // issues using on Linux and we also must support for macos, this simple
 // test program defines a fixed value for simplicity.
 //
-#define S3FS_TEST_PATH_MAX   255
-int max_base_path_length   = S3FS_TEST_PATH_MAX - 5;
+static const size_t S3FS_TEST_PATH_MAX = 255;
+static const size_t MAX_BASE_PATH_LENGTH = S3FS_TEST_PATH_MAX - 5;
 
 //---------------------------------------------------------
 // Test function
@@ -146,8 +146,8 @@ int main(int argc, const char *argv[])
         fprintf(stdout, "%s\n", usage_string);
         exit(EXIT_SUCCESS);
     }
-    if(max_base_path_length < strlen(argv[1])){
-        fprintf(stderr, "[ERROR] Base file path is too long, it must be less than %d\n", max_base_path_length);
+    if(MAX_BASE_PATH_LENGTH < strlen(argv[1])){
+        fprintf(stderr, "[ERROR] Base file path is too long, it must be less than %zu\n", MAX_BASE_PATH_LENGTH);
         exit(EXIT_FAILURE);
     }
 

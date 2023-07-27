@@ -70,7 +70,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 
     // setup and make curl object
     std::unique_ptr<S3fsCurl> s3fscurl(S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result));
-    if(nullptr == s3fscurl.get()){
+    if(nullptr == s3fscurl){
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
