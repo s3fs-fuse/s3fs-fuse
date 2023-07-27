@@ -132,10 +132,10 @@ const s3obj_entry* S3ObjList::GetS3Obj(const char* name) const
     s3obj_t::const_iterator iter;
 
     if(!name || '\0' == name[0]){
-        return NULL;
+        return nullptr;
     }
     if(objects.end() == (iter = objects.find(name))){
-        return NULL;
+        return nullptr;
     }
     return &((*iter).second);
 }
@@ -147,7 +147,7 @@ std::string S3ObjList::GetOrgName(const char* name) const
     if(!name || '\0' == name[0]){
         return std::string("");
     }
-    if(NULL == (ps3obj = GetS3Obj(name))){
+    if(nullptr == (ps3obj = GetS3Obj(name))){
         return std::string("");
     }
     return ps3obj->orgname;
@@ -160,7 +160,7 @@ std::string S3ObjList::GetNormalizedName(const char* name) const
     if(!name || '\0' == name[0]){
         return std::string("");
     }
-    if(NULL == (ps3obj = GetS3Obj(name))){
+    if(nullptr == (ps3obj = GetS3Obj(name))){
         return std::string("");
     }
     if(ps3obj->normalname.empty()){
@@ -176,7 +176,7 @@ std::string S3ObjList::GetETag(const char* name) const
     if(!name || '\0' == name[0]){
         return std::string("");
     }
-    if(NULL == (ps3obj = GetS3Obj(name))){
+    if(nullptr == (ps3obj = GetS3Obj(name))){
         return std::string("");
     }
     return ps3obj->etag;
@@ -186,7 +186,7 @@ bool S3ObjList::IsDir(const char* name) const
 {
     const s3obj_entry* ps3obj;
 
-    if(NULL == (ps3obj = GetS3Obj(name))){
+    if(nullptr == (ps3obj = GetS3Obj(name))){
         return false;
     }
     return ps3obj->is_dir;

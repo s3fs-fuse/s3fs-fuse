@@ -84,9 +84,9 @@ pthread_mutex_t  S3fsCurl::curl_warnings_lock;
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
-CurlHandlerPool* S3fsCurl::sCurlPool           = NULL;
+CurlHandlerPool* S3fsCurl::sCurlPool           = nullptr;
 int              S3fsCurl::sCurlPoolSize       = 32;
-CURLSH*          S3fsCurl::hCurlShare          = NULL;
+CURLSH*          S3fsCurl::hCurlShare          = nullptr;
 bool             S3fsCurl::is_cert_check       = true; // default
 bool             S3fsCurl::is_dns_cache        = true; // default
 bool             S3fsCurl::is_ssl_session_cache= true; // default
@@ -102,7 +102,7 @@ sse_type_t       S3fsCurl::ssetype             = sse_type_t::SSE_DISABLE;
 bool             S3fsCurl::is_content_md5      = false;
 bool             S3fsCurl::is_verbose          = false;
 bool             S3fsCurl::is_dump_body        = false;
-S3fsCred*        S3fsCurl::ps3fscred           = NULL;
+S3fsCred*        S3fsCurl::ps3fscred           = nullptr;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
 
 // protected by curl_warnings_lock
@@ -183,7 +183,7 @@ bool S3fsCurl::DestroyS3fsCurl()
         result = false;
     }
     delete sCurlPool;
-    sCurlPool = NULL;
+    sCurlPool = nullptr;
     if(!S3fsCurl::DestroyShareCurl()){
         result = false;
     }
@@ -240,7 +240,7 @@ bool S3fsCurl::InitShareCurl()
         S3FS_PRN_WARN("already initiated.");
         return false;
     }
-    if(NULL == (S3fsCurl::hCurlShare = curl_share_init())){
+    if(nullptr == (S3fsCurl::hCurlShare = curl_share_init())){
         S3FS_PRN_ERR("curl_share_init failed");
         return false;
     }
@@ -289,7 +289,7 @@ bool S3fsCurl::DestroyShareCurl()
     if(CURLSHE_OK != curl_share_cleanup(S3fsCurl::hCurlShare)){
         return false;
     }
-    S3fsCurl::hCurlShare = NULL;
+    S3fsCurl::hCurlShare = nullptr;
     return true;
 }
 
@@ -347,7 +347,7 @@ bool S3fsCurl::DestroyCryptMutex()
 int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
 {
     CURL*      curl = static_cast<CURL*>(clientp);
-    time_t     now = time(0);
+    time_t     now = time(nullptr);
     progress_t p(dlnow, ulnow);
 
     AutoLock   lock(&S3fsCurl::curl_handles_lock);
@@ -519,7 +519,7 @@ bool S3fsCurl::LocateBundle()
     // curl_ca_bundle variable to it
     if(S3fsCurl::curl_ca_bundle.empty()){
         char* CURL_CA_BUNDLE = getenv("CURL_CA_BUNDLE");
-        if(CURL_CA_BUNDLE != NULL)  {
+        if(CURL_CA_BUNDLE != nullptr)  {
             // check for existence and readability of the file
             std::ifstream BF(CURL_CA_BUNDLE);
             if(!BF.good()){
@@ -800,7 +800,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
         char* p_key;
         size_t keylength;
 
-        if(NULL != (p_key = reinterpret_cast<char*>(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength)))) {
+        if(nullptr != (p_key = reinterpret_cast<char*>(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength)))) {
             raw_key = std::string(p_key, keylength);
             base64_key = onekey;
             delete[] p_key;
@@ -811,7 +811,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     } else {
         char* pbase64_key;
 
-        if(NULL != (pbase64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length()))) {
+        if(nullptr != (pbase64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length()))) {
             raw_key = onekey;
             base64_key = pbase64_key;
             delete[] pbase64_key;
@@ -926,7 +926,7 @@ bool S3fsCurl::FinalCheckSse()
 bool S3fsCurl::LoadEnvSseCKeys()
 {
     char* envkeys = getenv("AWSSSECKEYS");
-    if(NULL == envkeys){
+    if(nullptr == envkeys){
         // nothing to do
         return true;
     }
@@ -950,7 +950,7 @@ bool S3fsCurl::LoadEnvSseCKeys()
 bool S3fsCurl::LoadEnvSseKmsid()
 {
     const char* envkmsid = getenv("AWSSSEKMSID");
-    if(NULL == envkmsid){
+    if(nullptr == envkmsid){
         // nothing to do
         return true;
     }
@@ -1212,7 +1212,7 @@ bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
-        return NULL;
+        return nullptr;
     }
     // parse and get part_num, upload_id.
     std::string upload_id;
@@ -1220,20 +1220,20 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     int part_num;
     off_t  tmp_part_num = 0;
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
-        return NULL;
+        return nullptr;
     }
     upload_id = urlDecode(upload_id);       // decode
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
-        return NULL;
+        return nullptr;
     }
     if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
-        return NULL;
+        return nullptr;
     }
     part_num = static_cast<int>(tmp_part_num);
 
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
-        return NULL;
+        return nullptr;
     }
 
     // duplicate request
@@ -1252,7 +1252,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
         delete newcurl;
-        return NULL;
+        return nullptr;
     }
     return newcurl;
 }
@@ -1260,7 +1260,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
-        return NULL;
+        return nullptr;
     }
     // parse and get part_num, upload_id.
     std::string upload_id;
@@ -1268,20 +1268,20 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     int part_num;
     off_t  tmp_part_num = 0;
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
-        return NULL;
+        return nullptr;
     }
     upload_id = urlDecode(upload_id);       // decode
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
-        return NULL;
+        return nullptr;
     }
     if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
-        return NULL;
+        return nullptr;
     }
     part_num = static_cast<int>(tmp_part_num);
 
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);
-        return NULL;
+        return nullptr;
     }
 
     // duplicate request
@@ -1297,7 +1297,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     if(0 != newcurl->CopyMultipartPostSetup(s3fscurl->b_from.c_str(), s3fscurl->path.c_str(), part_num, upload_id, s3fscurl->b_meta)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
         delete newcurl;
-        return NULL;
+        return nullptr;
     }
     return newcurl;
 }
@@ -1305,7 +1305,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 S3fsCurl* S3fsCurl::MixMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
-        return NULL;
+        return nullptr;
     }
 
     S3fsCurl* pcurl;
@@ -1337,7 +1337,7 @@ int S3fsCurl::MapPutErrorResponse(int result)
     const char* pstrbody = bodydata.str();
     std::string code;
     if(!pstrbody || simple_parse_xml(pstrbody, bodydata.size(), "Code", code)){
-        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or NULL). The request failed during copying the object in S3.  Code: %s", code.c_str());
+        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or nullptr). The request failed during copying the object in S3.  Code: %s", code.c_str());
         // TODO: parse more specific error from <Code>
         result = -EIO;
     }
@@ -1354,7 +1354,7 @@ std::unique_ptr<S3fsCurl> S3fsCurl::CreateParallelS3fsCurl(const char* tpath, in
     if(!tpath || -1 == fd || start < 0 || size <= 0 || !petag){
         S3FS_PRN_ERR("Parameters are wrong: tpath(%s), fd(%d), start(%lld), size(%lld), petag(%s)", SAFESTRPTR(tpath), fd, static_cast<long long int>(start), static_cast<long long int>(size), (petag ? "not null" : "null"));
         result = -EIO;
-        return NULL;
+        return nullptr;
     }
     result = 0;
 
@@ -1373,7 +1373,7 @@ std::unique_ptr<S3fsCurl> S3fsCurl::CreateParallelS3fsCurl(const char* tpath, in
 
         if(0 != (result = s3fscurl->UploadMultipartPostSetup(tpath, part_num, upload_id))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-            return NULL;
+            return nullptr;
         }
     }else{
         headers_t   meta;
@@ -1394,7 +1394,7 @@ std::unique_ptr<S3fsCurl> S3fsCurl::CreateParallelS3fsCurl(const char* tpath, in
 
         if(0 != (result = s3fscurl->CopyMultipartPostSetup(tpath, tpath, part_num, upload_id, meta))){
             S3FS_PRN_ERR("failed uploading part setup(%d)", result);
-            return NULL;
+            return nullptr;
         }
     }
 
@@ -1402,7 +1402,7 @@ std::unique_ptr<S3fsCurl> S3fsCurl::CreateParallelS3fsCurl(const char* tpath, in
     if(!s3fscurl->fpLazySetup || !s3fscurl->fpLazySetup(s3fscurl.get())){
         S3FS_PRN_ERR("failed lazy function setup for uploading part");
         result = -EIO;
-        return NULL;
+        return nullptr;
     }
     return s3fscurl;
 }
@@ -1602,11 +1602,11 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
     int result;
 
     if(!s3fscurl){
-        return NULL;
+        return nullptr;
     }
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s).", s3fscurl->retry_count, s3fscurl->path.c_str());
-        return NULL;
+        return nullptr;
     }
 
     // duplicate request(setup new curl object)
@@ -1615,7 +1615,7 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
     if(0 != (result = newcurl->PreGetObjectRequest(s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size, s3fscurl->b_ssetype, s3fscurl->b_ssevalue))){
         S3FS_PRN_ERR("failed downloading part setup(%d)", result);
         delete newcurl;
-        return NULL;;
+        return nullptr;;
     }
     newcurl->retry_count = s3fscurl->retry_count + 1;
 
@@ -1641,7 +1641,7 @@ int S3fsCurl::ParallelGetObjectRequest(const char* tpath, int fd, off_t start, o
         off_t         chunk;
 
         // Initialize S3fsMultiCurl
-        //curlmulti.SetSuccessCallback(NULL);   // not need to set success callback
+        //curlmulti.SetSuccessCallback(nullptr);   // not need to set success callback
         curlmulti.SetRetryCallback(S3fsCurl::ParallelGetObjectRetryCallback);
 
         // Loop for setup parallel upload(multipart) request.
@@ -1878,7 +1878,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
             do {
                 char* eol = reinterpret_cast<char*>(memchr(p, '\n', remaining));
                 int newline = 0;
-                if (eol == NULL) {
+                if (eol == nullptr) {
                     eol = reinterpret_cast<char*>(memchr(p, '\r', remaining));
                 } else {
                     if (eol > p && *(eol - 1) == '\r') {
@@ -1891,7 +1891,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
                 S3FS_PRN_CURL("%s %.*s", getCurlDebugHead(type), (int)length - newline, p);
                 remaining -= length;
                 p = eol;
-            } while (p != NULL && remaining > 0);
+            } while (p != nullptr && remaining > 0);
             break;
 
         case CURLINFO_SSL_DATA_IN:
@@ -1909,11 +1909,11 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(NULL), type(REQTYPE_UNSET), requestHeaders(NULL),
-    LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(NULL), postdata_remaining(0), is_use_ahbe(ahbe),
-    retry_count(0), b_infile(NULL), b_postdata(NULL), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
+    hCurl(nullptr), type(REQTYPE_UNSET), requestHeaders(nullptr),
+    LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
+    retry_count(0), b_infile(nullptr), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
-    sem(NULL), completed_tids_lock(NULL), completed_tids(NULL), fpLazySetup(NULL), curlCode(CURLE_OK)
+    sem(nullptr), completed_tids_lock(nullptr), completed_tids(nullptr), fpLazySetup(nullptr), curlCode(CURLE_OK)
 {
     if(!S3fsCurl::ps3fscred){
         S3FS_PRN_CRIT("The object of S3fs Credential class is not initialized.");
@@ -2023,7 +2023,7 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     }
 
     AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
-    S3fsCurl::curl_times[hCurl]    = time(0);
+    S3fsCurl::curl_times[hCurl]    = time(nullptr);
     S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
     return true;
@@ -2042,7 +2042,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
     }
 
     if(!hCurl){
-        if(NULL == (hCurl = sCurlPool->GetHandler(only_pool))){
+        if(nullptr == (hCurl = sCurlPool->GetHandler(only_pool))){
             if(!only_pool){
                 S3FS_PRN_ERR("Failed to create handle.");
                 return false;
@@ -2080,7 +2080,7 @@ bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, Au
         S3fsCurl::curl_times.erase(hCurl);
         S3fsCurl::curl_progress.erase(hCurl);
         sCurlPool->ReturnHandler(hCurl, restore_pool);
-        hCurl = NULL;
+        hCurl = nullptr;
     }else{
         return false;
     }
@@ -2100,23 +2100,23 @@ bool S3fsCurl::ClearInternalData()
     query_string= "";
     if(requestHeaders){
         curl_slist_free_all(requestHeaders);
-        requestHeaders = NULL;
+        requestHeaders = nullptr;
     }
     responseHeaders.clear();
     bodydata.Clear();
     headdata.Clear();
     LastResponseCode     = S3FSCURL_RESPONSECODE_NOTSET;
-    postdata             = NULL;
+    postdata             = nullptr;
     postdata_remaining   = 0;
     retry_count          = 0;
-    b_infile             = NULL;
-    b_postdata           = NULL;
+    b_infile             = nullptr;
+    b_postdata           = nullptr;
     b_postdata_remaining = 0;
     b_partdata_startpos  = 0;
     b_partdata_size      = 0;
     partdata.clear();
 
-    fpLazySetup          = NULL;
+    fpLazySetup          = nullptr;
 
     S3FS_MALLOCTRIM(0);
 
@@ -2471,7 +2471,7 @@ bool S3fsCurl::RemakeHandle()
 int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
     if(S3fsLog::IsS3fsLogDbg()){
-        char* ptr_url = NULL;
+        char* ptr_url = nullptr;
         curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
         S3FS_PRN_DBG("connecting to URL %s", SAFESTRPTR(ptr_url));
     }
@@ -2622,7 +2622,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 sleep(4);
                 {
                     AutoLock lock(&S3fsCurl::curl_handles_lock);
-                    S3fsCurl::curl_times[hCurl] = time(0);
+                    S3fsCurl::curl_times[hCurl] = time(nullptr);
                 }
                 break; 
 
@@ -2759,13 +2759,13 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
     size_t key_len             = secret_access_key.size();
     const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
     size_t sdata_len           = StringToSign.size();
-    unsigned char* md          = NULL;
+    unsigned char* md          = nullptr;
     unsigned int md_len        = 0;;
 
     s3fs_HMAC(key, key_len, sdata, sdata_len, &md, &md_len);
 
     char* base64;
-    if(NULL == (base64 = s3fs_base64(md, md_len))){
+    if(nullptr == (base64 = s3fs_base64(md, md_len))){
         delete[] md;
         return std::string("");  // ENOMEM
     }
@@ -2805,7 +2805,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringCQ += payload_hash;
 
     std::string   kSecret = "AWS4" + secret_access_key;
-    unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = NULL;
+    unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = nullptr;
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len = 0;
 
     s3fs_HMAC256(kSecret.c_str(), kSecret.size(), reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate, &kDate_len);
@@ -2828,7 +2828,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
     size_t               cscope_len = StringToSign.size();
-    unsigned char*       md         = NULL;
+    unsigned char*       md         = nullptr;
     unsigned int         md_len     = 0;
 
     s3fs_HMAC256(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
@@ -2849,14 +2849,14 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
             if(GetUnsignedPayload()){
                 payload_hash = "UNSIGNED-PAYLOAD";
             }else{
-                payload_hash = s3fs_sha256_hex_fd(b_infile == NULL ? -1 : fileno(b_infile), 0, -1);
+                payload_hash = s3fs_sha256_hex_fd(b_infile == nullptr ? -1 : fileno(b_infile), 0, -1);
             }
             break;
 
         case REQTYPE_COMPLETEMULTIPOST:
             {
                 size_t          cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
-                unsigned char*  sRequest     = NULL;
+                unsigned char*  sRequest     = nullptr;
                 unsigned int    sRequest_len = 0;
                 s3fs_sha256(b_postdata, cRequest_len, &sRequest, &sRequest_len);
                 payload_hash = s3fs_hex_lower(sRequest, sRequest_len);
@@ -2875,7 +2875,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
             break;
     }
 
-    if(b_infile != NULL && payload_hash.empty()){
+    if(b_infile != nullptr && payload_hash.empty()){
         S3FS_PRN_ERR("Failed to make SHA256.");
         // TODO: propagate error
     }
@@ -2917,7 +2917,7 @@ void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::stri
     std::string date = get_date_rfc850();
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Date", date.c_str());
     if(op != "PUT" && op != "POST"){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", NULL);
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", nullptr);
     }
 
     if(!S3fsCurl::IsPublicBucket()){
@@ -2973,7 +2973,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
 
     op = "DELETE";
@@ -3003,7 +3003,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3069,7 +3069,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     if(!CreateCurlHandle()){
         return false;
     }
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
     std::string postContent;
@@ -3156,7 +3156,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     if(!CreateCurlHandle()){
         return false;
     }
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3261,7 +3261,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
     path            = get_realpath(tpath);
     base_path       = SAFESTRPTR(bpath);
     saved_path      = SAFESTRPTR(savedpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
 
     // requestHeaders(SSE-C)
@@ -3296,7 +3296,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
             if(!DestroyCurlHandle()){
                 break;
             }
-            if(!PreHeadRequest(tpath, NULL, NULL, pos)){
+            if(!PreHeadRequest(tpath, nullptr, nullptr, pos)){
                 break;
             }
             if(!fpLazySetup || !fpLazySetup(this)){
@@ -3350,7 +3350,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3435,7 +3435,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 {
     struct stat st;
-    FILE*       file = NULL;
+    FILE*       file = nullptr;
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3451,7 +3451,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         // The fd should not be closed here, so call dup here to duplicate it.
         //
         int fd2;
-        if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || NULL == (file = fdopen(fd2, "rb"))){
+        if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || nullptr == (file = fdopen(fd2, "rb"))){
             S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
             if(-1 != fd2){
                 close(fd2);
@@ -3476,7 +3476,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3590,7 +3590,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
 
     if(0 < size){
@@ -3704,7 +3704,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
     path            = strCheckPath;
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3756,7 +3756,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
@@ -3812,7 +3812,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     turl          += "?" + query_string;
     url            = prepare_url(turl.c_str());
     path           = get_realpath(tpath);
-    requestHeaders = NULL;
+    requestHeaders = nullptr;
     bodydata.Clear();
     responseHeaders.clear();
 
@@ -3852,7 +3852,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
         requestHeaders = AdditionalHeader::get()->AddHeader(requestHeaders, tpath);
     }
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     op = "POST";
@@ -3927,8 +3927,8 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     b_postdata_remaining = postdata_remaining;
 
     if(!CreateCurlHandle()){
-        postdata   = NULL;
-        b_postdata = NULL;
+        postdata   = nullptr;
+        b_postdata = nullptr;
         return -EIO;
     }
     std::string resource;
@@ -3943,12 +3943,12 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     turl                += "?" + query_string;
     url                  = prepare_url(turl.c_str());
     path                 = get_realpath(tpath);
-    requestHeaders       = NULL;
+    requestHeaders       = nullptr;
     bodydata.Clear();
     responseHeaders.clear();
     std::string contype  = "application/xml";
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
@@ -3995,8 +3995,8 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // request
     int result = RequestPerform();
     bodydata.Clear();
-    postdata   = NULL;
-    b_postdata = NULL;
+    postdata   = nullptr;
+    b_postdata = nullptr;
 
     return result;
 }
@@ -4016,11 +4016,11 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     query_string    = "uploads";
     turl           += "?" + query_string;
     url             = prepare_url(turl.c_str());
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
 
     op = "GET";
     type = REQTYPE_MULTILIST;
@@ -4072,7 +4072,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
     turl           += "?" + query_string;
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
 
     op = "DELETE";
@@ -4113,12 +4113,12 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
         return -EINVAL;
     }
 
-    requestHeaders = NULL;
+    requestHeaders = nullptr;
 
     // make md5 and file pointer
     if(S3fsCurl::is_content_md5){
         unsigned char *md5raw = s3fs_md5_fd(partdata.fd, partdata.startpos, partdata.size);
-        if(md5raw == NULL){
+        if(md5raw == nullptr){
             S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
             return -EIO;
         }
@@ -4156,7 +4156,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
         }
     }
 
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", NULL);
+    requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
 
     op = "PUT";
     type = REQTYPE_UPLOADMULTIPOST;
@@ -4216,7 +4216,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
     path            = get_realpath(to);
-    requestHeaders  = NULL;
+    requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.Clear();
     headdata.Clear();

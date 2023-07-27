@@ -33,10 +33,10 @@ std::string s3fs_get_content_md5(int fd)
     char* base64;
     std::string Signature;
 
-    if(NULL == (md5 = s3fs_md5_fd(fd, 0, -1))){
+    if(nullptr == (md5 = s3fs_md5_fd(fd, 0, -1))){
         return std::string("");
     }
-    if(NULL == (base64 = s3fs_base64(md5, get_md5_digest_length()))){
+    if(nullptr == (base64 = s3fs_base64(md5, get_md5_digest_length()))){
         delete[] md5;
         return std::string("");  // ENOMEM
     }
@@ -53,7 +53,7 @@ std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)
     size_t digestlen = get_sha256_digest_length();
     unsigned char* sha256;
 
-    if(NULL == (sha256 = s3fs_sha256_fd(fd, start, size))){
+    if(nullptr == (sha256 = s3fs_sha256_fd(fd, start, size))){
         return std::string("");
     }
 

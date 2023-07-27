@@ -100,14 +100,14 @@ class FdEntity
         static bool GetStreamUpload() { return streamupload; }
         static bool SetStreamUpload(bool isstream);
 
-        explicit FdEntity(const char* tpath = NULL, const char* cpath = NULL);
+        explicit FdEntity(const char* tpath = nullptr, const char* cpath = nullptr);
         ~FdEntity();
 
         void Close(int fd);
         bool IsOpen() const { return (-1 != physical_fd); }
         bool FindPseudoFd(int fd, AutoLock::Type locktype = AutoLock::NONE) const;
         int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type);
-        bool LoadAll(int fd, headers_t* pmeta = NULL, off_t* size = NULL, bool force_load = false);
+        bool LoadAll(int fd, headers_t* pmeta = nullptr, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd, AutoLock::Type locktype = AutoLock::NONE);
         int OpenPseudoFd(int flags = O_RDONLY, AutoLock::Type locktype = AutoLock::NONE);
         int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE) const;
@@ -140,7 +140,7 @@ class FdEntity
 
         off_t BytesModified();
         int RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync = false);
-        int Flush(int fd, AutoLock::Type type, bool force_sync = false) { return RowFlush(fd, NULL, type, force_sync); }
+        int Flush(int fd, AutoLock::Type type, bool force_sync = false) { return RowFlush(fd, nullptr, type, force_sync); }
 
         ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
         ssize_t Write(int fd, const char* bytes, off_t start, size_t size);

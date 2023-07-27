@@ -67,10 +67,10 @@ template <> void assert_nequals(const std::string &x, const std::string &y, cons
 
 void assert_strequals(const char *x, const char *y, const char *file, int line)
 {
-  if(x == NULL && y == NULL){
+  if(x == nullptr && y == nullptr){
       return;
   // cppcheck-suppress nullPointerRedundantCheck
-  } else if(x == NULL || y == NULL || strcmp(x, y) != 0){
+  } else if(x == nullptr || y == nullptr || strcmp(x, y) != 0){
       std::cerr << (x ? x : "null") << " != " << (y ? y : "null") << " at " << file << ":" << line << std::endl;
       std::exit(1);
   }
@@ -78,10 +78,10 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
 
 void assert_bufequals(const char *x, size_t len1, const char *y, size_t len2, const char *file, int line)
 {
-    if(x == NULL && y == NULL){
+    if(x == nullptr && y == nullptr){
         return;
     // cppcheck-suppress nullPointerRedundantCheck
-    } else if(x == NULL || y == NULL || len1 != len2 || memcmp(x, y, len1) != 0){
+    } else if(x == nullptr || y == nullptr || len1 != len2 || memcmp(x, y, len1) != 0){
         std::cerr << (x ? std::string(x, len1) : "null") << " != " << (y ? std::string(y, len2) : "null") << " at " << file << ":" << line << std::endl;
         std::exit(1);
     }

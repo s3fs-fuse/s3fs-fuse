@@ -65,7 +65,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     std::string strval = value ? trim(std::string(value)) : "";
     std::string strnew = key + std::string(": ") + strval;
     char* data;
-    if(NULL == (data = strdup(strnew.c_str()))){
+    if(nullptr == (data = strdup(strnew.c_str()))){
         return list;
     }
 
@@ -88,7 +88,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
 
     struct curl_slist* new_item;
-    if(NULL == (new_item = static_cast<struct curl_slist*>(malloc(sizeof(*new_item))))){
+    if(nullptr == (new_item = static_cast<struct curl_slist*>(malloc(sizeof(*new_item))))){
         free(data);
         return list;
     }
@@ -303,7 +303,7 @@ bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5)
         return false;
     }
     FILE* fp;
-    if(NULL == (fp = tmpfile())){
+    if(nullptr == (fp = tmpfile())){
         S3FS_PRN_ERR("Could not make tmpfile.");
         return false;
     }

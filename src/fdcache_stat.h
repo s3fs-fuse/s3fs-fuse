@@ -44,7 +44,7 @@ class CacheFileStat
         static bool DeleteCacheFileStatDirectory();
         static bool RenameCacheFileStat(const char* oldpath, const char* newpath);
 
-        explicit CacheFileStat(const char* tpath = NULL);
+        explicit CacheFileStat(const char* tpath = nullptr);
         ~CacheFileStat();
 
         bool Open();

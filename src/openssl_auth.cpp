@@ -79,7 +79,7 @@ struct CRYPTO_dynlock_value
     pthread_mutex_t dyn_mutex;
 };
 
-static pthread_mutex_t* s3fs_crypt_mutex = NULL;
+static pthread_mutex_t* s3fs_crypt_mutex = nullptr;
 
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused));
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
@@ -120,7 +120,7 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
     int result;
     if(0 != (result = pthread_mutex_init(&(dyndata->dyn_mutex), &attr))){
         S3FS_PRN_CRIT("pthread_mutex_init returned: %d", result);
-        return NULL;
+        return nullptr;
     }
     return dyndata;
 }
@@ -160,7 +160,7 @@ static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, c
 bool s3fs_init_crypt_mutex()
 {
     if(s3fs_crypt_mutex){
-        S3FS_PRN_DBG("s3fs_crypt_mutex is not NULL, destroy it.");
+        S3FS_PRN_DBG("s3fs_crypt_mutex is not nullptr, destroy it.");
 
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
@@ -199,11 +199,11 @@ bool s3fs_destroy_crypt_mutex()
         return true;
     }
 
-    CRYPTO_set_dynlock_destroy_callback(NULL);
-    CRYPTO_set_dynlock_lock_callback(NULL);
-    CRYPTO_set_dynlock_create_callback(NULL);
-    CRYPTO_set_id_callback(NULL);
-    CRYPTO_set_locking_callback(NULL);
+    CRYPTO_set_dynlock_destroy_callback(nullptr);
+    CRYPTO_set_dynlock_lock_callback(nullptr);
+    CRYPTO_set_dynlock_create_callback(nullptr);
+    CRYPTO_set_id_callback(nullptr);
+    CRYPTO_set_locking_callback(nullptr);
 
     for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
         int result = pthread_mutex_destroy(&s3fs_crypt_mutex[cnt]);
@@ -214,7 +214,7 @@ bool s3fs_destroy_crypt_mutex()
     }
     CRYPTO_cleanup_all_ex_data();
     delete[] s3fs_crypt_mutex;
-    s3fs_crypt_mutex = NULL;
+    s3fs_crypt_mutex = nullptr;
 
     return true;
 }
@@ -271,14 +271,14 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
 
     // instead of MD5_Init
     mdctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(mdctx, EVP_md5(), NULL);
+    EVP_DigestInit_ex(mdctx, EVP_md5(), nullptr);
 
     for(off_t total = 0; total < size; total += bytes){
         const off_t len = 512;
@@ -292,7 +292,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
             EVP_MD_CTX_free(mdctx);
-            return NULL;
+            return nullptr;
         }
         // instead of MD5_Update
         EVP_DigestUpdate(mdctx, buf, bytes);
@@ -324,7 +324,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
@@ -342,7 +342,7 @@ unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size)
         }else if(-1 == bytes){
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
-            return NULL;
+            return nullptr;
         }
         MD5_Update(&md5ctx, buf, bytes);
     }
@@ -369,7 +369,7 @@ bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** dige
 
     const EVP_MD* md    = EVP_get_digestbyname("sha256");
     EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestInit_ex(mdctx, md, nullptr);
     EVP_DigestUpdate(mdctx, data, datalen);
     EVP_DigestFinal_ex(mdctx, *digest, digestlen);
     EVP_MD_CTX_destroy(mdctx);
@@ -385,19 +385,19 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
     unsigned char* result;
 
     if(-1 == fd){
-        return NULL;
+        return nullptr;
     }
     if(-1 == size){
         struct stat st;
         if(-1 == fstat(fd, &st)){
             S3FS_PRN_ERR("fstat error(%d)", errno);
-            return NULL;
+            return nullptr;
         }
         size = st.st_size;
     }
 
     sha256ctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(sha256ctx, md, NULL);
+    EVP_DigestInit_ex(sha256ctx, md, nullptr);
 
     for(off_t total = 0; total < size; total += bytes){
         const off_t len = 512;
@@ -411,12 +411,12 @@ unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size)
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
             EVP_MD_CTX_destroy(sha256ctx);
-            return NULL;
+            return nullptr;
         }
         EVP_DigestUpdate(sha256ctx, buf, bytes);
     }
     result = new unsigned char[get_sha256_digest_length()];
-    EVP_DigestFinal_ex(sha256ctx, result, NULL);
+    EVP_DigestFinal_ex(sha256ctx, result, nullptr);
     EVP_MD_CTX_destroy(sha256ctx);
 
     return result;

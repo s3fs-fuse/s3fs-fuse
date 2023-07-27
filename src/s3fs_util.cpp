@@ -96,7 +96,7 @@ std::string get_username(uid_t uid)
     size_t maxlen = max_password_size;
     int result;
     struct passwd pwinfo;
-    struct passwd* ppwinfo = NULL;
+    struct passwd* ppwinfo = nullptr;
 
     // make buffer
     std::unique_ptr<char[]> pbuf(new char[maxlen]);
@@ -112,7 +112,7 @@ std::string get_username(uid_t uid)
     }
 
     // check pw
-    if(NULL == ppwinfo){
+    if(nullptr == ppwinfo){
         return std::string("");
     }
     std::string name = SAFESTRPTR(ppwinfo->pw_name);
@@ -124,7 +124,7 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     size_t maxlen = max_group_name_length;
     int result;
     struct group ginfo;
-    struct group* pginfo = NULL;
+    struct group* pginfo = nullptr;
 
     // make buffer
     std::unique_ptr<char[]> pbuf(new char[maxlen]);
@@ -140,7 +140,7 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     }
 
     // check group
-    if(NULL == pginfo){
+    if(nullptr == pginfo){
         // there is not gid in group.
         return -EINVAL;
     }
@@ -167,7 +167,7 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 // conflicts.
 // To avoid this, exclusive control is performed by mutex.
 //
-static pthread_mutex_t* pbasename_lock = NULL;
+static pthread_mutex_t* pbasename_lock = nullptr;
 
 bool init_basename_lock()
 {
@@ -187,7 +187,7 @@ bool init_basename_lock()
     if(0 != (result = pthread_mutex_init(pbasename_lock, &attr))){
         S3FS_PRN_ERR("failed to init pbasename_lock: %d.", result);
         delete pbasename_lock;
-        pbasename_lock = NULL;
+        pbasename_lock = nullptr;
         return false;
     }
     return true;
@@ -205,7 +205,7 @@ bool destroy_basename_lock()
         return false;
     }
     delete pbasename_lock;
-    pbasename_lock = NULL;
+    pbasename_lock = nullptr;
 
     return true;
 }
@@ -349,7 +349,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
     DIR*           dp;
     struct dirent* dent;
 
-    if(NULL == (dp = opendir(dir))){
+    if(nullptr == (dp = opendir(dir))){
         S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);
         return false;
     }
@@ -400,7 +400,7 @@ bool compare_sysname(const char* target)
     // The buffer size of sysname member in struct utsname is
     // OS dependent, but 512 bytes is sufficient for now.
     //
-    static char* psysname = NULL;
+    static char* psysname = nullptr;
     static char  sysname[512];
     if(!psysname){
         struct utsname sysinfo;
@@ -555,7 +555,7 @@ struct timespec* s3fs_realtime(struct timespec& ts)
 {
     if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_REALTIME), &ts)){
         S3FS_PRN_WARN("failed to clock_gettime by errno(%d)", errno);
-        ts.tv_sec  = time(NULL);
+        ts.tv_sec  = time(nullptr);
         ts.tv_nsec = 0;
     }
     return &ts;

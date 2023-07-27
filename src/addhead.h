@@ -36,7 +36,7 @@ typedef struct add_header{
         }
     }
 
-    std::unique_ptr<regex_t> pregex;         // not NULL means using regex, NULL means comparing suffix directly.
+    std::unique_ptr<regex_t> pregex;         // not nullptr means using regex, nullptr means comparing suffix directly.
     std::string   basestring;
     std::string   headkey;
     std::string   headvalue;

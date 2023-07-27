@@ -87,7 +87,7 @@ char* strptime(const char* s, const char* f, struct tm* tm)
 
 bool s3fs_strtoofft(off_t* value, const char* str, int base)
 {
-    if(value == NULL || str == NULL){
+    if(value == nullptr || str == nullptr){
         return false;
     }
     errno = 0;
@@ -169,7 +169,7 @@ static std::string rawUrlEncode(const std::string &s, const char* except_chars)
     std::string result;
     for (size_t i = 0; i < s.length(); ++i) {
         unsigned char c = s[i];
-        if((except_chars && NULL != strchr(except_chars, c)) ||
+        if((except_chars && nullptr != strchr(except_chars, c)) ||
            (c >= 'a' && c <= 'z') ||
            (c >= 'A' && c <= 'Z') ||
            (c >= '0' && c <= '9') )
@@ -274,7 +274,7 @@ bool get_keyword_value(const std::string& target, const char* keyword, std::stri
 std::string get_date_rfc850()
 {
     char buf[100];
-    time_t t = time(NULL);
+    time_t t = time(nullptr);
     struct tm res;
     strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime_r(&t, &res));
     return buf;
@@ -282,7 +282,7 @@ std::string get_date_rfc850()
 
 void get_date_sigv3(std::string& date, std::string& date8601)
 {
-    time_t tm = time(NULL);
+    time_t tm = time(nullptr);
     date     = get_date_string(tm);
     date8601 = get_date_iso8601(tm);
 }
@@ -398,7 +398,7 @@ char* s3fs_base64(const unsigned char* input, size_t length)
     char* result;
 
     if(!input || 0 == length){
-        return NULL;
+        return nullptr;
     }
     result = new char[((length + 3 - 1) / 3) * 4 + 1];
 
@@ -446,7 +446,7 @@ unsigned char* s3fs_decode64(const char* input, size_t input_len, size_t* plengt
 {
     unsigned char* result;
     if(!input || 0 == input_len || !plength){
-        return NULL;
+        return nullptr;
     }
     result = new unsigned char[input_len / 4 * 3];
 

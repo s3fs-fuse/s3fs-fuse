@@ -98,13 +98,13 @@ bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, ch
     }
 
     if(ppaccess_key_id){
-        *ppaccess_key_id = NULL;
+        *ppaccess_key_id = nullptr;
     }
     if(ppserect_access_key){
-        *ppserect_access_key = NULL;
+        *ppserect_access_key = nullptr;
     }
     if(ppaccess_token){
-        *ppaccess_token = NULL;
+        *ppaccess_token = nullptr;
     }
     return false;   // always false
 }
@@ -183,7 +183,7 @@ S3fsCred::S3fsCred() :
     IAM_token_field("Token"),
     IAM_expiry_field("Expiration"),
     set_builtin_cred_opts(false),
-    hExtCredLib(NULL),
+    hExtCredLib(nullptr),
     pFuncCredVersion(VersionS3fsCredential),
     pFuncCredInit(InitS3fsCredential),
     pFuncCredFree(FreeS3fsCredential),
@@ -374,7 +374,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role, AutoL
 
     if(is_ecs){
         const char *env = std::getenv(S3fsCred::ECS_IAM_ENV_VAR);
-        if(env == NULL){
+        if(env == nullptr){
             S3FS_PRN_ERR("%s is not set.", S3fsCred::ECS_IAM_ENV_VAR);
             return false;
         }
@@ -479,14 +479,14 @@ bool S3fsCred::LoadIAMCredentials(AutoLock::Type type)
         return false;
     }
 
-    const char* iam_v2_token = NULL;
+    const char* iam_v2_token = nullptr;
     std::string str_iam_v2_token;
     if(GetIMDSVersion(AutoLock::ALREADY_LOCKED) > 1){
         str_iam_v2_token = GetIAMv2APIToken(AutoLock::ALREADY_LOCKED);
         iam_v2_token     = str_iam_v2_token.c_str();
     }
 
-    const char* ibm_secret_access_key = NULL;
+    const char* ibm_secret_access_key = nullptr;
     std::string str_ibm_secret_access_key;
     if(IsIBMIAMAuth()){
         str_ibm_secret_access_key = AWSSecretAccessKey;
@@ -521,7 +521,7 @@ bool S3fsCred::LoadIAMRoleFromMetaData()
             return false;
         }
 
-        const char* iam_v2_token = NULL;
+        const char* iam_v2_token = nullptr;
         std::string str_iam_v2_token;
         if(GetIMDSVersion(AutoLock::ALREADY_LOCKED) > 1){
             str_iam_v2_token = GetIAMv2APIToken(AutoLock::ALREADY_LOCKED);
@@ -999,14 +999,14 @@ bool S3fsCred::InitialS3fsCredentials()
     const char* AWSSECRETACCESSKEY = getenv("AWS_SECRET_ACCESS_KEY") ? getenv("AWS_SECRET_ACCESS_KEY") : getenv("AWSSECRETACCESSKEY");
     const char* AWSSESSIONTOKEN    = getenv("AWS_SESSION_TOKEN") ?     getenv("AWS_SESSION_TOKEN") :     getenv("AWSSESSIONTOKEN");
 
-    if(AWSACCESSKEYID != NULL || AWSSECRETACCESSKEY != NULL){
-        if( (AWSACCESSKEYID == NULL && AWSSECRETACCESSKEY != NULL) ||
-            (AWSACCESSKEYID != NULL && AWSSECRETACCESSKEY == NULL) ){
+    if(AWSACCESSKEYID != nullptr || AWSSECRETACCESSKEY != nullptr){
+        if( (AWSACCESSKEYID == nullptr && AWSSECRETACCESSKEY != nullptr) ||
+            (AWSACCESSKEYID != nullptr && AWSSECRETACCESSKEY == nullptr) ){
             S3FS_PRN_EXIT("both environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set together.");
             return false;
         }
         S3FS_PRN_INFO2("access key from env variables");
-        if(AWSSESSIONTOKEN != NULL){
+        if(AWSSESSIONTOKEN != nullptr){
             S3FS_PRN_INFO2("session token is available");
             if(!SetAccessKeyWithSessionToken(AWSACCESSKEYID, AWSSECRETACCESSKEY, AWSSESSIONTOKEN, AutoLock::NONE)){
                  S3FS_PRN_EXIT("session token is invalid.");
@@ -1028,7 +1028,7 @@ bool S3fsCred::InitialS3fsCredentials()
 
     // 3a - from the AWS_CREDENTIAL_FILE environment variable
     char* AWS_CREDENTIAL_FILE = getenv("AWS_CREDENTIAL_FILE");
-    if(AWS_CREDENTIAL_FILE != NULL){
+    if(AWS_CREDENTIAL_FILE != nullptr){
         passwd_file = AWS_CREDENTIAL_FILE;
         if(IsSetPasswdFile()){
             if(!IsReadableS3fsPasswdFile()){
@@ -1053,7 +1053,7 @@ bool S3fsCred::InitialS3fsCredentials()
 
     // 4 - from the default location in the users home directory
     char* HOME = getenv("HOME");
-    if(HOME != NULL){
+    if(HOME != nullptr){
         passwd_file = HOME;
         passwd_file += "/.passwd-s3fs";
         if(IsReadableS3fsPasswdFile()){
@@ -1146,7 +1146,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
     AutoLock auto_lock(&token_lock);
 
     if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole(AutoLock::ALREADY_LOCKED)){
-        if(AWSAccessTokenExpire < (time(NULL) + S3fsCred::IAM_EXPIRE_MERGIN)){
+        if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGIN)){
             S3FS_PRN_INFO("IAM Access Token refreshing...");
 
             // update
@@ -1233,13 +1233,13 @@ bool S3fsCred::InitExtCredLib()
     }
     // Initialize library
     if(!pFuncCredInit){
-        S3FS_PRN_CRIT("\"InitS3fsCredential\" function pointer is NULL, why?");
+        S3FS_PRN_CRIT("\"InitS3fsCredential\" function pointer is nullptr, why?");
         UnloadExtCredLib();
         return false;
     }
 
-    const char* popts   = credlib_opts.empty() ? NULL : credlib_opts.c_str();
-    char*       perrstr = NULL;
+    const char* popts   = credlib_opts.empty() ? nullptr : credlib_opts.c_str();
+    char*       perrstr = nullptr;
     if(!(*pFuncCredInit)(popts, &perrstr)){
         S3FS_PRN_ERR("Could not initialize %s(external credential library) by \"InitS3fsCredential\" function : %s", credlib.c_str(), perrstr ? perrstr : "unknown");
         // cppcheck-suppress unmatchedSuppression
@@ -1272,28 +1272,28 @@ bool S3fsCred::LoadExtCredLib()
     //
     // Search Library: (RPATH ->) LD_LIBRARY_PATH -> (RUNPATH ->) /etc/ld.so.cache -> /lib -> /usr/lib
     //
-    if(NULL == (hExtCredLib = dlopen(credlib.c_str(), RTLD_LAZY))){
+    if(nullptr == (hExtCredLib = dlopen(credlib.c_str(), RTLD_LAZY))){
         const char* preason = dlerror();
         S3FS_PRN_ERR("Could not load %s(external credential library) by error : %s", credlib.c_str(), preason ? preason : "unknown");
         return false;
     }
 
     // Set function pointers
-    if(NULL == (pFuncCredVersion = reinterpret_cast<fp_VersionS3fsCredential>(dlsym(hExtCredLib, "VersionS3fsCredential")))){
+    if(nullptr == (pFuncCredVersion = reinterpret_cast<fp_VersionS3fsCredential>(dlsym(hExtCredLib, "VersionS3fsCredential")))){
         S3FS_PRN_ERR("%s(external credential library) does not have \"VersionS3fsCredential\" function which is required.", credlib.c_str());
         UnloadExtCredLib();
         return false;
     }
-    if(NULL == (pFuncCredUpdate = reinterpret_cast<fp_UpdateS3fsCredential>(dlsym(hExtCredLib, "UpdateS3fsCredential")))){
+    if(nullptr == (pFuncCredUpdate = reinterpret_cast<fp_UpdateS3fsCredential>(dlsym(hExtCredLib, "UpdateS3fsCredential")))){
         S3FS_PRN_ERR("%s(external credential library) does not have \"UpdateS3fsCredential\" function which is required.", credlib.c_str());
         UnloadExtCredLib();
         return false;
     }
-    if(NULL == (pFuncCredInit = reinterpret_cast<fp_InitS3fsCredential>(dlsym(hExtCredLib, "InitS3fsCredential")))){
+    if(nullptr == (pFuncCredInit = reinterpret_cast<fp_InitS3fsCredential>(dlsym(hExtCredLib, "InitS3fsCredential")))){
         S3FS_PRN_INFO("%s(external credential library) does not have \"InitS3fsCredential\" function which is optional.", credlib.c_str());
         pFuncCredInit = InitS3fsCredential;     // set built-in function
     }
-    if(NULL == (pFuncCredFree = reinterpret_cast<fp_FreeS3fsCredential>(dlsym(hExtCredLib, "FreeS3fsCredential")))){
+    if(nullptr == (pFuncCredFree = reinterpret_cast<fp_FreeS3fsCredential>(dlsym(hExtCredLib, "FreeS3fsCredential")))){
         S3FS_PRN_INFO("%s(external credential library) does not have \"FreeS3fsCredential\" function which is optional.", credlib.c_str());
         pFuncCredFree = FreeS3fsCredential;     // set built-in function
     }
@@ -1309,9 +1309,9 @@ bool S3fsCred::UnloadExtCredLib()
 
         // Uninitialize library
         if(!pFuncCredFree){
-            S3FS_PRN_CRIT("\"FreeS3fsCredential\" function pointer is NULL, why?");
+            S3FS_PRN_CRIT("\"FreeS3fsCredential\" function pointer is nullptr, why?");
         }else{
-            char* perrstr = NULL;
+            char* perrstr = nullptr;
             if(!(*pFuncCredFree)(&perrstr)){
                 S3FS_PRN_ERR("Could not uninitialize by \"FreeS3fsCredential\" function : %s", perrstr ? perrstr : "unknown");
             }
@@ -1330,7 +1330,7 @@ bool S3fsCred::UnloadExtCredLib()
 
         // close
         dlclose(hExtCredLib);
-        hExtCredLib = NULL;
+        hExtCredLib = nullptr;
     }
     return true;
 }
@@ -1344,10 +1344,10 @@ bool S3fsCred::UpdateExtCredentials(AutoLock::Type type)
 
     AutoLock auto_lock(&token_lock, type);
 
-    char* paccess_key_id     = NULL;
-    char* pserect_access_key = NULL;
-    char* paccess_token      = NULL;
-    char* perrstr            = NULL;
+    char* paccess_key_id     = nullptr;
+    char* pserect_access_key = nullptr;
+    char* paccess_token      = nullptr;
+    char* perrstr            = nullptr;
     long long token_expire   = 0;
 
     bool result = (*pFuncCredUpdate)(&paccess_key_id, &pserect_access_key, &paccess_token, &token_expire, &perrstr);

@@ -70,7 +70,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 
     // setup and make curl object
     std::unique_ptr<S3fsCurl> s3fscurl(S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result));
-    if(NULL == s3fscurl.get()){
+    if(nullptr == s3fscurl.get()){
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
@@ -355,7 +355,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
     int partnumber = static_cast<int>(upload_list.size()) + 1;
 
     // add new part
-    etagpair*   petag_entity = etag_entities.add(etagpair(NULL, partnumber));              // [NOTE] Create the etag entity and register it in the list.
+    etagpair*   petag_entity = etag_entities.add(etagpair(nullptr, partnumber));              // [NOTE] Create the etag entity and register it in the list.
     filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
     upload_list.push_back(newpart);
 
@@ -391,7 +391,7 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
     AutoLock auto_lock(&upload_list_lock, type);
 
     // insert new part
-    etagpair*   petag_entity = etag_entities.add(etagpair(NULL, part_num));
+    etagpair*   petag_entity = etag_entities.add(etagpair(nullptr, part_num));
     filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
     upload_list.push_back(newpart);
 
@@ -424,7 +424,7 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
 
     for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
         // Insert upload part
-        etagpair* petag = NULL;
+        etagpair* petag = nullptr;
         if(!InsertUploadPart(iter->start, iter->size, iter->part_num, is_copy, &petag, AutoLock::ALREADY_LOCKED)){
             S3FS_PRN_ERR("Failed to insert insert upload part(path=%s, start=%lld, size=%lld, part=%d, copy=%s) to mplist", SAFESTRPTR(path), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
             return false;
@@ -503,7 +503,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(path), pseudo_fd, physical_fd);
 
     if(!path || -1 == physical_fd || -1 == pseudo_fd || !pfdent){
-        S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable, or pfdent is NULL.", pseudo_fd, physical_fd, path);
+        S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable, or pfdent is nullptr.", pseudo_fd, physical_fd, path);
         return -EBADF;
     }
     AutoLock auto_lock(&upload_list_lock);

@@ -33,7 +33,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(NULL), NotFoundCallback(NULL), RetryCallback(NULL), pSuccessCallbackParam(NULL), pNotFoundCallbackParam(NULL)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism) : maxParallelism(maxParallelism), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr), pSuccessCallbackParam(nullptr), pNotFoundCallbackParam(nullptr)
 {
     int result;
     pthread_mutexattr_t attr;
@@ -166,7 +166,7 @@ int S3fsMultiCurl::MultiPerform()
 
         isMultiHead |= s3fscurl->GetOp() == "HEAD";
 
-        rc = pthread_create(&thread, NULL, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(s3fscurl));
+        rc = pthread_create(&thread, nullptr, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(s3fscurl));
         if (rc != 0) {
             success = false;
             S3FS_PRN_ERR("failed pthread_create - rc(%d)", rc);
@@ -289,7 +289,7 @@ int S3fsMultiCurl::MultiRead()
                 if(RetryCallback){
                     retry_ptr = RetryCallback(s3fscurl.get());
                     retrycurl.reset(retry_ptr);
-                    if(NULL != retry_ptr){
+                    if(nullptr != retry_ptr){
                         clist_all.push_back(std::move(retrycurl));
                     }else{
                         // set EIO and wait for other parts.
@@ -358,7 +358,7 @@ int S3fsMultiCurl::Request()
 void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
 {
     S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
-    void*     result  = NULL;
+    void*     result  = nullptr;
     if(!s3fscurl){
         return reinterpret_cast<void*>(static_cast<intptr_t>(-EIO));
     }

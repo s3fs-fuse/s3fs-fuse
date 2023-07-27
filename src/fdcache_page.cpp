@@ -73,7 +73,7 @@ static void raw_compress_fdpage_list(const fdpage_list_t& pages, fdpage_list_t& 
 {
     compressed_pages.clear();
 
-    fdpage*                 lastpage = NULL;
+    fdpage*                 lastpage = nullptr;
     fdpage_list_t::iterator add_iter;
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
         if(0 == iter->bytes){
@@ -398,7 +398,7 @@ off_t PageList::Size() const
 
 bool PageList::Compress()
 {
-    fdpage* lastpage = NULL;
+    fdpage* lastpage = nullptr;
     for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
         if(!lastpage){
             // First item

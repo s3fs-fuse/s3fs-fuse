@@ -105,7 +105,7 @@ class S3fsLog
 
         static bool IsSetLogFile()
         {
-            return (NULL != logfp);
+            return (nullptr != logfp);
         }
 
         static FILE* GetOutputLogFile()

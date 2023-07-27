@@ -29,7 +29,7 @@
 //-------------------------------------------------------------------
 // Class S3fsSignals
 //-------------------------------------------------------------------
-S3fsSignals* S3fsSignals::pSingleton = NULL;
+S3fsSignals* S3fsSignals::pSingleton = nullptr;
 bool S3fsSignals::enableUsr1         = false;
 
 //-------------------------------------------------------------------
@@ -46,7 +46,7 @@ bool S3fsSignals::Initialize()
 bool S3fsSignals::Destroy()
 {
     delete S3fsSignals::pSingleton;
-    S3fsSignals::pSingleton = NULL;
+    S3fsSignals::pSingleton = nullptr;
     return true;
 }
 
@@ -91,10 +91,10 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
 {
     Semaphore* pSem   = static_cast<Semaphore*>(arg);
     if(!pSem){
-        pthread_exit(NULL);
+        pthread_exit(nullptr);
     }
     if(!S3fsSignals::enableUsr1){
-        pthread_exit(NULL);
+        pthread_exit(nullptr);
     }
 
     // wait and loop
@@ -118,7 +118,7 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
             pSem->wait();
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 void S3fsSignals::HandlerUSR2(int sig)
@@ -137,7 +137,7 @@ bool S3fsSignals::InitUsr2Handler()
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = S3fsSignals::HandlerUSR2;
     sa.sa_flags   = SA_RESTART;
-    if(0 != sigaction(SIGUSR2, &sa, NULL)){
+    if(0 != sigaction(SIGUSR2, &sa, nullptr)){
         return false;
     }
     return true;
@@ -159,7 +159,7 @@ bool S3fsSignals::InitHupHandler()
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = S3fsSignals::HandlerHUP;
     sa.sa_flags   = SA_RESTART;
-    if(0 != sigaction(SIGHUP, &sa, NULL)){
+    if(0 != sigaction(SIGHUP, &sa, nullptr)){
         return false;
     }
     return true;
@@ -168,7 +168,7 @@ bool S3fsSignals::InitHupHandler()
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
-S3fsSignals::S3fsSignals() : pThreadUsr1(NULL), pSemUsr1(NULL)
+S3fsSignals::S3fsSignals() : pThreadUsr1(nullptr), pSemUsr1(nullptr)
 {
     if(S3fsSignals::enableUsr1){
         if(!InitUsr1Handler()){
@@ -203,12 +203,12 @@ bool S3fsSignals::InitUsr1Handler()
     int result;
     pSemUsr1    = new Semaphore(0);
     pThreadUsr1 = new pthread_t;
-    if(0 != (result = pthread_create(pThreadUsr1, NULL, S3fsSignals::CheckCacheWorker, static_cast<void*>(pSemUsr1)))){
+    if(0 != (result = pthread_create(pThreadUsr1, nullptr, S3fsSignals::CheckCacheWorker, static_cast<void*>(pSemUsr1)))){
         S3FS_PRN_ERR("Could not create thread for SIGUSR1 by %d", result);
         delete pSemUsr1;
         delete pThreadUsr1;
-        pSemUsr1    = NULL;
-        pThreadUsr1 = NULL;
+        pSemUsr1    = nullptr;
+        pThreadUsr1 = nullptr;
         return false;
     }
 
@@ -217,7 +217,7 @@ bool S3fsSignals::InitUsr1Handler()
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_handler = S3fsSignals::HandlerUSR1;
     sa.sa_flags   = SA_RESTART;
-    if(0 != sigaction(SIGUSR1, &sa, NULL)){
+    if(0 != sigaction(SIGUSR1, &sa, nullptr)){
         S3FS_PRN_ERR("Could not set signal handler for SIGUSR1");
         DestroyUsr1Handler();
         return false;
@@ -238,7 +238,7 @@ bool S3fsSignals::DestroyUsr1Handler()
     pSemUsr1->post();
 
     // wait for thread exiting
-    void* retval = NULL;
+    void* retval = nullptr;
     int   result;
     if(0 != (result = pthread_join(*pThreadUsr1, &retval))){
         S3FS_PRN_ERR("Could not stop thread for SIGUSR1 by %d", result);
@@ -246,8 +246,8 @@ bool S3fsSignals::DestroyUsr1Handler()
     }
     delete pSemUsr1;
     delete pThreadUsr1;
-    pSemUsr1    = NULL;
-    pThreadUsr1 = NULL;
+    pSemUsr1    = nullptr;
+    pThreadUsr1 = nullptr;
 
     return true;
 }
