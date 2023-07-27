@@ -34,7 +34,7 @@ int main(int argc, const char *argv[])
     for (i = 0; i < count; i += sizeof(buf)) {
         long long j;
         for (j = 0; j < sizeof(buf) / sizeof(i); ++j) {
-            *((long long *)buf + j) = i / sizeof(i) + j;
+            *(reinterpret_cast<long long *>(buf) + j) = i / sizeof(i) + j;
         }
         fwrite(buf, 1, sizeof(buf) > count - i ? count - i : sizeof(buf), stdout);
     }
