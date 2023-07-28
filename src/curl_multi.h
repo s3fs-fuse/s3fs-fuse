@@ -32,7 +32,7 @@ class S3fsCurl;
 typedef std::vector<std::unique_ptr<S3fsCurl>> s3fscurllist_t;
 typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, void* param);  // callback for succeed multi request
 typedef bool (*S3fsMultiNotFoundCallback)(S3fsCurl* s3fscurl, void* param); // callback for succeed multi request
-typedef S3fsCurl* (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);            // callback for failure and retrying
+typedef std::unique_ptr<S3fsCurl> (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);  // callback for failure and retrying
 
 //----------------------------------------------
 // class S3fsMultiCurl

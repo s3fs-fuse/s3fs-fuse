@@ -120,7 +120,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
 static bool multi_head_callback(S3fsCurl* s3fscurl, void* param);
-static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl);
+static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
@@ -3219,7 +3219,7 @@ static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
     return true;
 }
 
-static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
+static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
         return nullptr;
@@ -3239,14 +3239,13 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
         retry_count++;
     }
 
-    S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
+    std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
     std::string path       = s3fscurl->GetPath();
     std::string base_path  = s3fscurl->GetBasePath();
     std::string saved_path = s3fscurl->GetSpecialSavedPath();
 
     if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
-        delete newcurl;
         return nullptr;
     }
     newcurl->SetMultipartRetryCount(retry_count);

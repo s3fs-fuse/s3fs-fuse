@@ -102,7 +102,7 @@ jobs:
       - name: Cppcheck
         run: |
           # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086) { exit(1) } }'; then
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
             make cppcheck
           fi
 
@@ -167,7 +167,7 @@ jobs:
       - name: Cppcheck
         run: |
           # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 1086) { exit(1) } }'; then
+          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
             make cppcheck
           fi
 

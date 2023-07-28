@@ -1201,7 +1201,7 @@ bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
     return s3fscurl->MixMultipartPostComplete();
 }
 
-S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
+std::unique_ptr<S3fsCurl> S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
         return nullptr;
@@ -1229,7 +1229,7 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     }
 
     // duplicate request
-    S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
+    std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
     newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->partdata.fd         = s3fscurl->partdata.fd;
     newcurl->partdata.startpos   = s3fscurl->b_partdata_startpos;
@@ -1243,13 +1243,12 @@ S3fsCurl* S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     // setup new curl object
     if(0 != newcurl->UploadMultipartPostSetup(s3fscurl->path.c_str(), part_num, upload_id)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
-        delete newcurl;
         return nullptr;
     }
     return newcurl;
 }
 
-S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
+std::unique_ptr<S3fsCurl> S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
         return nullptr;
@@ -1277,7 +1276,7 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     }
 
     // duplicate request
-    S3fsCurl* newcurl            = new S3fsCurl(s3fscurl->IsUseAhbe());
+    std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
     newcurl->partdata.petag      = s3fscurl->partdata.petag;
     newcurl->b_from              = s3fscurl->b_from;
     newcurl->b_meta              = s3fscurl->b_meta;
@@ -1288,25 +1287,22 @@ S3fsCurl* S3fsCurl::CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl)
     // setup new curl object
     if(0 != newcurl->CopyMultipartPostSetup(s3fscurl->b_from.c_str(), s3fscurl->path.c_str(), part_num, upload_id, s3fscurl->b_meta)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s:%d).", s3fscurl->path.c_str(), part_num);
-        delete newcurl;
         return nullptr;
     }
     return newcurl;
 }
 
-S3fsCurl* S3fsCurl::MixMultipartPostRetryCallback(S3fsCurl* s3fscurl)
+std::unique_ptr<S3fsCurl> S3fsCurl::MixMultipartPostRetryCallback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
         return nullptr;
     }
 
-    S3fsCurl* pcurl;
     if(-1 == s3fscurl->partdata.fd){
-        pcurl = S3fsCurl::CopyMultipartPostRetryCallback(s3fscurl);
+        return S3fsCurl::CopyMultipartPostRetryCallback(s3fscurl);
     }else{
-        pcurl = S3fsCurl::UploadMultipartPostRetryCallback(s3fscurl);
+        return S3fsCurl::UploadMultipartPostRetryCallback(s3fscurl);
     }
-    return pcurl;
 }
 
 int S3fsCurl::MapPutErrorResponse(int result)
@@ -1589,7 +1585,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     return 0;
 }
 
-S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
+std::unique_ptr<S3fsCurl> S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
 {
     int result;
 
@@ -1602,12 +1598,11 @@ S3fsCurl* S3fsCurl::ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl)
     }
 
     // duplicate request(setup new curl object)
-    S3fsCurl* newcurl = new S3fsCurl(s3fscurl->IsUseAhbe());
+    std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
     
     if(0 != (result = newcurl->PreGetObjectRequest(s3fscurl->path.c_str(), s3fscurl->partdata.fd, s3fscurl->partdata.startpos, s3fscurl->partdata.size, s3fscurl->b_ssetype, s3fscurl->b_ssevalue))){
         S3FS_PRN_ERR("failed downloading part setup(%d)", result);
-        delete newcurl;
-        return nullptr;;
+        return nullptr;
     }
     newcurl->retry_count = s3fscurl->retry_count + 1;
 
