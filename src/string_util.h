@@ -38,11 +38,6 @@ static inline int is_prefix(const char *str, const char *prefix) { return strncm
 static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
-// Templates
-//-------------------------------------------------------------------
-template <class T> std::string str(T value);
-
-//-------------------------------------------------------------------
 // Macros(WTF8)
 //-------------------------------------------------------------------
 #define WTF8_ENCODE(ARG)  \
@@ -56,6 +51,9 @@ template <class T> std::string str(T value);
 //-------------------------------------------------------------------
 // Utilities
 //-------------------------------------------------------------------
+// TODO: rename to to_string?
+std::string str(const struct timespec value);
+
 #ifdef __MSYS__
 //
 // Polyfill for strptime function.

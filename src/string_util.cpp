@@ -35,25 +35,10 @@
 const char SPACES[] = " \t\r\n";
 
 //-------------------------------------------------------------------
-// Templates
+// Functions
 //-------------------------------------------------------------------
-template <class T> std::string str(T value)
-{
-    std::ostringstream s;
-    s << value;
-    return s.str();
-}
 
-template std::string str(short value);
-template std::string str(unsigned short value);
-template std::string str(int value);
-template std::string str(unsigned int value);
-template std::string str(long value);
-template std::string str(unsigned long value);
-template std::string str(long long value);
-template std::string str(unsigned long long value);
-
-template<> std::string str(const struct timespec value)
+std::string str(const struct timespec value)
 {
     std::ostringstream s;
     s << value.tv_sec;
@@ -62,10 +47,6 @@ template<> std::string str(const struct timespec value)
     }
     return s.str();
 }
-
-//-------------------------------------------------------------------
-// Functions
-//-------------------------------------------------------------------
 
 #ifdef __MSYS__
 /*
