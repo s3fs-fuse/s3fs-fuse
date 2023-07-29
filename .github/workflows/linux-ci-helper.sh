@@ -137,7 +137,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
@@ -151,7 +151,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 unzip"
+    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
 
@@ -241,7 +241,7 @@ echo "${PRGNAME} [INFO] Install cppcheck package."
 if [ "${SHELLCHECK_DIRECT_INSTALL}" -eq 1 ]; then
     echo "${PRGNAME} [INFO] Install shellcheck package from github archive."
 
-    if ! LATEST_SHELLCHECK_DOWNLOAD_URL=$(curl -s -S https://api.github.com/repos/koalaman/shellcheck/releases/latest | grep '"browser_download_url"' | grep 'linux.x86_64' | sed -e 's|"||g' -e 's|^.*browser_download_url:[[:space:]]*||g' | tr -d '\n'); then
+    if ! LATEST_SHELLCHECK_DOWNLOAD_URL=$(curl --silent --show-error https://api.github.com/repos/koalaman/shellcheck/releases/latest | jq -r '.assets[].browser_download_url | select(contains("linux.x86_64"))'); then
         echo "Could not get shellcheck package url"
         exit 1
     fi
