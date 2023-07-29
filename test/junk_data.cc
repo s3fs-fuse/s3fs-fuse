@@ -28,12 +28,10 @@ int main(int argc, const char *argv[])
     if (argc != 2) {
         return 1;
     }
-    long long count = strtoull(argv[1], NULL, 10);
+    unsigned long long count = strtoull(argv[1], nullptr, 10);
     char buf[128 * 1024];
-    long long i;
-    for (i = 0; i < count; i += sizeof(buf)) {
-        long long j;
-        for (j = 0; j < sizeof(buf) / sizeof(i); ++j) {
+    for (size_t i = 0; i < count; i += sizeof(buf)) {
+        for (size_t j = 0; j < sizeof(buf) / sizeof(i); ++j) {
             *(reinterpret_cast<long long *>(buf) + j) = i / sizeof(i) + j;
         }
         fwrite(buf, 1, sizeof(buf) > count - i ? count - i : sizeof(buf), stdout);

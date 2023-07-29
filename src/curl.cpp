@@ -74,6 +74,12 @@ static const char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.types";
 #define CURLSHE_NOT_BUILT_IN                        5
 #endif
 
+#if LIBCURL_VERSION_NUM >= 0x073100
+#define S3FS_CURLOPT_XFERINFOFUNCTION   CURLOPT_XFERINFOFUNCTION
+#else
+#define S3FS_CURLOPT_XFERINFOFUNCTION   CURLOPT_PROGRESSFUNCTION
+#endif
+
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
@@ -1949,10 +1955,7 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0)){
         return false;
     }
-    // [NOTE]
-    // CURLOPT_PROGRESSFUNCTION should be changed to CURLOPT_XFERINFOFUNCTION,
-    // but CnetOS7's curl version is old, so it haven't been changed yet.
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSFUNCTION, S3fsCurl::CurlProgress)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_XFERINFOFUNCTION, S3fsCurl::CurlProgress)){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl)){
