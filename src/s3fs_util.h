@@ -59,10 +59,10 @@ void print_launch_message(int argc, char** argv);
 //
 // Utility for nanosecond time(timespec)
 //
-enum stat_time_type{
-    ST_TYPE_ATIME,
-    ST_TYPE_MTIME,
-    ST_TYPE_CTIME
+enum class stat_time_type{
+    ATIME,
+    MTIME,
+    CTIME
 };
 extern const struct timespec S3FS_OMIT_TS;
 

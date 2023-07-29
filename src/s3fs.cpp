@@ -59,12 +59,12 @@
 #define ENOATTR                   ENODATA
 #endif
 
-enum dirtype {
-    DIRTYPE_UNKNOWN = -1,
-    DIRTYPE_NEW = 0,
-    DIRTYPE_OLD = 1,
-    DIRTYPE_FOLDER = 2,
-    DIRTYPE_NOOBJ = 3,
+enum class dirtype {
+    UNKNOWN = -1,
+    NEW = 0,
+    OLD = 1,
+    FOLDER = 2,
+    NOOBJ = 3,
 };
 
 //-------------------------------------------------------------------
@@ -345,12 +345,12 @@ int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
 //-------------------------------------------------------------------
 static bool IS_REPLACEDIR(dirtype type)
 {
-    return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type || DIRTYPE_NOOBJ == type;
+    return dirtype::OLD == type || dirtype::FOLDER == type || dirtype::NOOBJ == type;
 }
 
 static bool IS_RMTYPEDIR(dirtype type)
 {
-    return DIRTYPE_OLD == type || DIRTYPE_FOLDER == type;
+    return dirtype::OLD == type || dirtype::FOLDER == type;
 }
 
 static bool IS_CREATE_MP_STAT(const char* path)
@@ -409,7 +409,7 @@ static bool is_special_name_folder_object(const char* path)
 //
 static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta, dirtype* pDirType)
 {
-    dirtype TypeTmp = DIRTYPE_UNKNOWN;
+    dirtype TypeTmp = dirtype::UNKNOWN;
     int  result  = -1;
     bool isforce = false;
     dirtype* pType = pDirType ? pDirType : &TypeTmp;
@@ -430,21 +430,21 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
         nowcache = newpath;
         if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
             // "_$folder$" type.
-            (*pType) = DIRTYPE_FOLDER;
+            (*pType) = dirtype::FOLDER;
             nowpath.erase(newpath.length() - 1);
             nowpath += "_$folder$"; // cut and add
         }else if(isforce){
             // "no dir object" type.
-            (*pType) = DIRTYPE_NOOBJ;
+            (*pType) = dirtype::NOOBJ;
             nowpath  = "";
         }else{
             nowpath = newpath;
             if(!nowpath.empty() && '/' == *nowpath.rbegin()){
                 // "dir/" type
-                (*pType) = DIRTYPE_NEW;
+                (*pType) = dirtype::NEW;
             }else{
                 // "dir" type
-                (*pType) = DIRTYPE_OLD;
+                (*pType) = dirtype::OLD;
             }
         }
     }else if(support_compat_dir){
@@ -456,10 +456,10 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
             // (But "no dir object" is checked here.)
             nowcache = nowpath;
             if(isforce){
-                (*pType) = DIRTYPE_NOOBJ;
+                (*pType) = dirtype::NOOBJ;
                 nowpath  = "";
             }else{
-                (*pType) = DIRTYPE_OLD;
+                (*pType) = dirtype::OLD;
             }
         }else{
             // Not found cache --> check for "_$folder$" and "no dir object".
@@ -468,16 +468,16 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
             nowpath += "_$folder$";
             if(is_special_name_folder_object(nowpath.c_str())){
                 // "_$folder$" type.
-                (*pType) = DIRTYPE_FOLDER;
+                (*pType) = dirtype::FOLDER;
                 result   = 0;             // result is OK.
             }else if(-ENOTEMPTY == directory_empty(newpath.c_str())){
                 // "no dir object" type.
-                (*pType) = DIRTYPE_NOOBJ;
+                (*pType) = dirtype::NOOBJ;
                 nowpath  = "";            // now path.
                 result   = 0;             // result is OK.
             }else{
                 // Error: Unknown type.
-                (*pType) = DIRTYPE_UNKNOWN;
+                (*pType) = dirtype::UNKNOWN;
                 newpath = "";
                 nowpath = "";
             }
@@ -958,7 +958,7 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     if(!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)){
         st_mctime = S3FS_OMIT_TS;
     }else{
-        set_stat_to_timespec(stobj, ST_TYPE_MTIME, st_mctime);
+        set_stat_to_timespec(stobj, stat_time_type::MTIME, st_mctime);
     }
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
@@ -1698,12 +1698,12 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     struct timespec ts_atime;
     struct timespec ts_mtime;
     struct timespec ts_ctime;
-    set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-    set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+    set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+    set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
     if(update_ctime){
         s3fs_realtime(ts_ctime);
     }else{
-        set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
+        set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
     }
     result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue);
 
@@ -1736,8 +1736,8 @@ static int rename_directory(const char* from, const char* to)
     // Initiate and Add base directory into MVNODE struct.
     //
     strto += "/";
-    if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, nullptr, &DirType) && DIRTYPE_UNKNOWN != DirType){
-        if(DIRTYPE_NOOBJ != DirType){
+    if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, nullptr, &DirType) && dirtype::UNKNOWN != DirType){
+        if(dirtype::NOOBJ != DirType){
             normdir = false;
         }else{
             normdir = true;
@@ -1777,11 +1777,11 @@ static int rename_directory(const char* from, const char* to)
         }
         if(S_ISDIR(stbuf.st_mode)){
             is_dir = true;
-            if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, nullptr, &DirType) || DIRTYPE_UNKNOWN == DirType){
+            if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, nullptr, &DirType) || dirtype::UNKNOWN == DirType){
                 S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
                 continue;
             }
-            if(DIRTYPE_NOOBJ != DirType){
+            if(dirtype::NOOBJ != DirType){
                 normdir = false;
             }else{
                 normdir = true;
@@ -1943,7 +1943,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     std::string nowcache;
     headers_t meta;
     struct stat stbuf;
-    dirtype nDirType = DIRTYPE_UNKNOWN;
+    dirtype nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
 
@@ -1988,8 +1988,8 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
@@ -2048,7 +2048,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     std::string newpath;
     std::string nowcache;
     struct stat stbuf;
-    dirtype     nDirType = DIRTYPE_UNKNOWN;
+    dirtype     nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
 
@@ -2095,8 +2095,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
@@ -2141,7 +2141,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     std::string nowcache;
     headers_t meta;
     struct stat stbuf;
-    dirtype nDirType = DIRTYPE_UNKNOWN;
+    dirtype nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -2193,8 +2193,8 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
@@ -2253,7 +2253,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     std::string newpath;
     std::string nowcache;
     struct stat stbuf;
-    dirtype     nDirType = DIRTYPE_UNKNOWN;
+    dirtype     nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -2307,8 +2307,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
@@ -2374,7 +2374,7 @@ static int update_mctime_parent_directory(const char* _path)
     struct stat     stbuf;
     struct timespec mctime;
     struct timespec atime;
-    dirtype         nDirType = DIRTYPE_UNKNOWN;
+    dirtype         nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
@@ -2404,7 +2404,7 @@ static int update_mctime_parent_directory(const char* _path)
 
     // make atime/mtime/ctime for updating
     s3fs_realtime(mctime);
-    set_stat_to_timespec(stbuf, ST_TYPE_ATIME, atime);
+    set_stat_to_timespec(stbuf, stat_time_type::ATIME, atime);
 
     if(0 == atime.tv_sec && 0 == atime.tv_nsec){
         atime = mctime;
@@ -2466,7 +2466,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     std::string nowcache;
     headers_t meta;
     struct stat stbuf;
-    dirtype nDirType = DIRTYPE_UNKNOWN;
+    dirtype nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
@@ -2485,9 +2485,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     struct timespec ts_mtime;
 
     s3fs_realtime(now);
-    set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-    set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
-    set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+    set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+    set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
+    set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
 
     struct timespec atime = handle_utimens_special_values(ts[0], now, ts_atime);
     struct timespec ctime = handle_utimens_special_values(ts[0], now, ts_ctime);
@@ -2597,7 +2597,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     std::string newpath;
     std::string nowcache;
     struct stat stbuf;
-    dirtype     nDirType = DIRTYPE_UNKNOWN;
+    dirtype     nDirType = dirtype::UNKNOWN;
 
     S3FS_PRN_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
@@ -2616,9 +2616,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     struct timespec ts_mtime;
 
     s3fs_realtime(now);
-    set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-    set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
-    set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
+    set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+    set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
+    set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
 
     struct timespec atime = handle_utimens_special_values(ts[0], now, ts_atime);
     struct timespec ctime = handle_utimens_special_values(ts[0], now, ts_ctime);
@@ -2866,7 +2866,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     }
 
     struct timespec st_mctime;
-    set_stat_to_timespec(st, ST_TYPE_MTIME, st_mctime);
+    set_stat_to_timespec(st, stat_time_type::MTIME, st_mctime);
 
     if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, st_mctime, fi->flags, false, true, false, AutoLock::NONE))){
         StatCache::getStatCacheData()->DelStat(path);
@@ -3874,7 +3874,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     std::string nowcache;
     headers_t   meta;
     struct stat stbuf;
-    dirtype     nDirType = DIRTYPE_UNKNOWN;
+    dirtype     nDirType = dirtype::UNKNOWN;
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -3910,9 +3910,9 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
-        set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
             return result;
@@ -4147,7 +4147,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     headers_t   meta;
     xattrs_t    xattrs;
     struct stat stbuf;
-    dirtype     nDirType = DIRTYPE_UNKNOWN;
+    dirtype     nDirType = dirtype::UNKNOWN;
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mode for mount point.");
@@ -4209,9 +4209,9 @@ static int s3fs_removexattr(const char* path, const char* name)
         struct timespec ts_atime;
         struct timespec ts_mtime;
         struct timespec ts_ctime;
-        set_stat_to_timespec(stbuf, ST_TYPE_ATIME, ts_atime);
-        set_stat_to_timespec(stbuf, ST_TYPE_MTIME, ts_mtime);
-        set_stat_to_timespec(stbuf, ST_TYPE_CTIME, ts_ctime);
+        set_stat_to_timespec(stbuf, stat_time_type::ATIME, ts_atime);
+        set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
+        set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
             free_xattrs(xattrs);
@@ -4473,7 +4473,7 @@ static int s3fs_check_service()
                     // specified endpoint is wrong.
                     S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
 
-                }else if(S3fsCurl::GetSignatureType() == V4_ONLY || S3fsCurl::GetSignatureType() == V2_OR_V4){
+                }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY || S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
                     // current endpoint and url are default value, so try to connect to expected region.
                     S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
 
@@ -4508,10 +4508,10 @@ static int s3fs_check_service()
         }
 
         // retry signature v2
-        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == V2_OR_V4){
+        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
             // switch sigv2
             S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
-            S3fsCurl::SetSignatureType(V2_ONLY);
+            S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
@@ -4705,7 +4705,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
 
         // the second NONOPT option is the mountpoint(not utility mode)
-        if(mountpoint.empty() && NO_UTILITY_MODE == utility_mode){
+        if(mountpoint.empty() && utility_incomp_type::NO_UTILITY_MODE == utility_mode){
             // save the mountpoint and do some basic error checking
             mountpoint = arg;
             struct stat stbuf;
@@ -4750,7 +4750,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
 
         // Unknown option
-        if(NO_UTILITY_MODE == utility_mode){
+        if(utility_incomp_type::NO_UTILITY_MODE == utility_mode){
             S3FS_PRN_EXIT("specified unknown third option(%s).", arg);
         }else{
             S3FS_PRN_EXIT("specified unknown second option(%s). you don't need to specify second option(mountpoint) for utility mode(-u).", arg);
@@ -4802,7 +4802,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(is_prefix(arg, "default_acl=")){
             const char* acl_string = strchr(arg, '=') + sizeof(char);
-            acl_t acl = acl_t::from_str(acl_string);
+            acl_t acl = to_acl(acl_string);
             if(acl == acl_t::UNKNOWN){
                 S3FS_PRN_EXIT("unknown value for default_acl: %s", acl_string);
                 return -1;
@@ -5238,11 +5238,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         if(0 == strcmp(arg, "sigv2")){
-            S3fsCurl::SetSignatureType(V2_ONLY);
+            S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
             return 0;
         }
         if(0 == strcmp(arg, "sigv4")){
-            S3fsCurl::SetSignatureType(V4_ONLY);
+            S3fsCurl::SetSignatureType(signature_type_t::V4_ONLY);
             return 0;
         }
         if(is_prefix(arg, "endpoint=")){
@@ -5506,20 +5506,20 @@ int main(int argc, char* argv[])
             case 's':
                 break;
             case 'u':   // --incomplete-mpu-list
-                if(NO_UTILITY_MODE != utility_mode){
+                if(utility_incomp_type::NO_UTILITY_MODE != utility_mode){
                     S3FS_PRN_EXIT("already utility mode option is specified.");
                     delete ps3fscred;
                     exit(EXIT_FAILURE);
                 }
-                utility_mode = INCOMP_TYPE_LIST;
+                utility_mode = utility_incomp_type::INCOMP_TYPE_LIST;
                 break;
             case 'a':   // --incomplete-mpu-abort
-                if(NO_UTILITY_MODE != utility_mode){
+                if(utility_incomp_type::NO_UTILITY_MODE != utility_mode){
                     S3FS_PRN_EXIT("already utility mode option is specified.");
                     delete ps3fscred;
                     exit(EXIT_FAILURE);
                 }
-                utility_mode = INCOMP_TYPE_ABORT;
+                utility_mode = utility_incomp_type::INCOMP_TYPE_ABORT;
 
                 // check expire argument
                 if(nullptr != optarg && 0 == strcasecmp(optarg, "all")){ // all is 0s
@@ -5639,7 +5639,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    if(S3fsCurl::GetSignatureType() == V2_ONLY && S3fsCurl::GetUnsignedPayload()){
+    if(S3fsCurl::GetSignatureType() == signature_type_t::V2_ONLY && S3fsCurl::GetUnsignedPayload()){
         S3FS_PRN_WARN("Ignoring enable_unsigned_payload with sigv2");
     }
 
@@ -5664,7 +5664,7 @@ int main(int argc, char* argv[])
     // if the option was given, we all ready checked for a
     // readable, non-empty directory, this checks determines
     // if the mountpoint option was ever supplied
-    if(NO_UTILITY_MODE == utility_mode){
+    if(utility_incomp_type::NO_UTILITY_MODE == utility_mode){
         if(mountpoint.empty()){
             S3FS_PRN_EXIT("missing MOUNTPOINT argument.");
             show_usage();
@@ -5737,7 +5737,7 @@ int main(int argc, char* argv[])
     }
     */
 
-    if(NO_UTILITY_MODE != utility_mode){
+    if(utility_incomp_type::NO_UTILITY_MODE != utility_mode){
         int exitcode = s3fs_utility_processing(incomp_abort_time);
 
         S3fsCurl::DestroyS3fsCurl();

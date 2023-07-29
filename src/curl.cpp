@@ -125,7 +125,7 @@ int              S3fsCurl::max_parallel_cnt    = 5;              // default
 int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
-signature_type_t S3fsCurl::signature_type      = V2_OR_V4;       // default
+signature_type_t S3fsCurl::signature_type      = signature_type_t::V2_OR_V4;       // default
 bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
@@ -918,7 +918,7 @@ bool S3fsCurl::FinalCheckSse()
                 S3FS_PRN_ERR("sse type is SSE-KMS, but there is no specified kms id.");
                 return false;
             }
-            if(S3fsCurl::GetSignatureType() == V2_ONLY){
+            if(S3fsCurl::GetSignatureType() == signature_type_t::V2_ONLY){
                 S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
                 return false;
             }
@@ -1915,7 +1915,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(nullptr), type(REQTYPE_UNSET), requestHeaders(nullptr),
+    hCurl(nullptr), type(REQTYPE::UNSET), requestHeaders(nullptr),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(nullptr), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
@@ -1972,8 +1972,8 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
         S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
     }
 
-    if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
-        // REQTYPE_IAMCRED and REQTYPE_IAMROLE are always HTTP
+    if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
+        // REQTYPE::IAMCRED and REQTYPE::IAMROLE are always HTTP
         if(0 == S3fsCurl::ssl_verify_hostname){
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0)){
                 return false;
@@ -2065,12 +2065,12 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
 bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, AutoLock::Type locktype)
 {
     // [NOTE]
-    // If type is REQTYPE_IAMCRED or REQTYPE_IAMROLE, do not clear type.
+    // If type is REQTYPE::IAMCRED or REQTYPE::IAMROLE, do not clear type.
     // Because that type only uses HTTP protocol, then the special
     // logic in ResetHandle function.
     //
-    if(type != REQTYPE_IAMCRED && type != REQTYPE_IAMROLE){
-        type = REQTYPE_UNSET;
+    if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
+        type = REQTYPE::UNSET;
     }
 
     AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
@@ -2094,7 +2094,7 @@ bool S3fsCurl::ClearInternalData()
 {
     // Always clear internal data
     //
-    type        = REQTYPE_UNSET;
+    type        = REQTYPE::UNSET;
     path        = "";
     base_path   = "";
     saved_path  = "";
@@ -2158,7 +2158,7 @@ bool S3fsCurl::RemakeHandle()
 {
     S3FS_PRN_INFO3("Retry request. [type=%d][url=%s][path=%s]", type, url.c_str(), path.c_str());
 
-    if(REQTYPE_UNSET == type){
+    if(REQTYPE::UNSET == type){
         return false;
     }
 
@@ -2193,7 +2193,7 @@ bool S3fsCurl::RemakeHandle()
 
     // set options
     switch(type){
-        case REQTYPE_DELETE:
+        case REQTYPE::DELETE:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2202,7 +2202,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_HEAD:
+        case REQTYPE::HEAD:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2221,7 +2221,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_PUTHEAD:
+        case REQTYPE::PUTHEAD:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2239,7 +2239,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_PUT:
+        case REQTYPE::PUT:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2266,7 +2266,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_GET:
+        case REQTYPE::GET:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2278,7 +2278,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_CHKBUCKET:
+        case REQTYPE::CHKBUCKET:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2290,7 +2290,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_LISTBUCKET:
+        case REQTYPE::LISTBUCKET:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2302,7 +2302,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_PREMULTIPOST:
+        case REQTYPE::PREMULTIPOST:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2320,7 +2320,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_COMPLETEMULTIPOST:
+        case REQTYPE::COMPLETEMULTIPOST:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2344,7 +2344,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_UPLOADMULTIPOST:
+        case REQTYPE::UPLOADMULTIPOST:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2374,7 +2374,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_COPYMULTIPOST:
+        case REQTYPE::COPYMULTIPOST:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2398,7 +2398,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_MULTILIST:
+        case REQTYPE::MULTILIST:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2410,7 +2410,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_IAMCRED:
+        case REQTYPE::IAMCRED:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2436,7 +2436,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_ABORTMULTIUPLOAD:
+        case REQTYPE::ABORTMULTIUPLOAD:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2445,7 +2445,7 @@ bool S3fsCurl::RemakeHandle()
             }
             break;
 
-        case REQTYPE_IAMROLE:
+        case REQTYPE::IAMROLE:
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
                 return false;
             }
@@ -2845,10 +2845,10 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
 void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
 {
-    std::string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;
+    std::string server_path = type == REQTYPE::LISTBUCKET ? "/" : path;
     std::string payload_hash;
     switch (type) {
-        case REQTYPE_PUT:
+        case REQTYPE::PUT:
             if(GetUnsignedPayload()){
                 payload_hash = "UNSIGNED-PAYLOAD";
             }else{
@@ -2856,7 +2856,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
             }
             break;
 
-        case REQTYPE_COMPLETEMULTIPOST:
+        case REQTYPE::COMPLETEMULTIPOST:
             {
                 size_t          cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
                 unsigned char*  sRequest     = nullptr;
@@ -2867,7 +2867,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
                 break;
             }
 
-        case REQTYPE_UPLOADMULTIPOST:
+        case REQTYPE::UPLOADMULTIPOST:
             if(GetUnsignedPayload()){
                 payload_hash = "UNSIGNED-PAYLOAD";
             }else{
@@ -2901,7 +2901,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
     }
 
     if(!S3fsCurl::IsPublicBucket()){
-        std::string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE_PREMULTIPOST || type == REQTYPE_MULTILIST ? "=" : ""), strdate, contentSHA256, date8601, secret_access_key, access_token);
+        std::string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE::PREMULTIPOST || type == REQTYPE::MULTILIST ? "=" : ""), strdate, contentSHA256, date8601, secret_access_key, access_token);
         std::string auth = "AWS4-HMAC-SHA256 Credential=" + access_key_id + "/" + strdate + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
     }
@@ -2911,9 +2911,9 @@ void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::stri
 {
     std::string resource;
     std::string turl;
-    std::string server_path = type == REQTYPE_LISTBUCKET ? "/" : path;
+    std::string server_path = type == REQTYPE::LISTBUCKET ? "/" : path;
     MakeUrlResource(server_path.c_str(), resource, turl);
-    if(!query_string.empty() && type != REQTYPE_CHKBUCKET && type != REQTYPE_LISTBUCKET){
+    if(!query_string.empty() && type != REQTYPE::CHKBUCKET && type != REQTYPE::LISTBUCKET){
         resource += "?" + query_string;
     }
 
@@ -2953,7 +2953,7 @@ void S3fsCurl::insertAuthHeaders()
 
     if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
         insertIBMIAMHeaders(access_key_id, access_token);
-    }else if(S3fsCurl::signature_type == V2_ONLY){
+    }else if(S3fsCurl::signature_type == signature_type_t::V2_ONLY){
         insertV2Headers(access_key_id, secret_access_key, access_token);
     }else{
         insertV4Headers(access_key_id, secret_access_key, access_token);
@@ -2980,7 +2980,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
     responseHeaders.clear();
 
     op = "DELETE";
-    type = REQTYPE_DELETE;
+    type = REQTYPE::DELETE;
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
@@ -3067,7 +3067,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     response.erase();
 
     // at first set type for handle
-    type = REQTYPE_IAMCRED;
+    type = REQTYPE::IAMCRED;
 
     if(!CreateCurlHandle()){
         return false;
@@ -3154,7 +3154,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     S3FS_PRN_INFO3("Get IAM Role name");
 
     // at first set type for handle
-    type = REQTYPE_IAMROLE;
+    type = REQTYPE::IAMROLE;
 
     if(!CreateCurlHandle()){
         return false;
@@ -3278,7 +3278,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
     b_ssekey_pos = ssekey_pos;
 
     op = "HEAD";
-    type = REQTYPE_HEAD;
+    type = REQTYPE::HEAD;
 
     // set lazy function
     fpLazySetup = PreHeadRequestSetCurlOpts;
@@ -3386,7 +3386,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 
     // "x-amz-acl", storage class, sse
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", str(S3fsCurl::default_acl));
     }
     if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
@@ -3404,7 +3404,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     }
 
     op = "PUT";
-    type = REQTYPE_PUTHEAD;
+    type = REQTYPE::PUTHEAD;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3518,7 +3518,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
     // "x-amz-acl", storage class, sse
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", str(S3fsCurl::default_acl));
     }
     if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
@@ -3537,7 +3537,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     }
 
     op = "PUT";
-    type = REQTYPE_PUT;
+    type = REQTYPE::PUT;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3611,7 +3611,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
     }
 
     op = "GET";
-    type = REQTYPE_GET;
+    type = REQTYPE::GET;
 
     // set lazy function
     fpLazySetup = PreGetObjectRequestSetCurlOpts;
@@ -3712,7 +3712,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
     bodydata.Clear();
 
     op = "GET";
-    type = REQTYPE_CHKBUCKET;
+    type = REQTYPE::CHKBUCKET;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3764,7 +3764,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     bodydata.Clear();
 
     op = "GET";
-    type = REQTYPE_LISTBUCKET;
+    type = REQTYPE::LISTBUCKET;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3838,7 +3838,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     }
     // "x-amz-acl", storage class, sse
     if(S3fsCurl::default_acl != acl_t::PRIVATE){
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", S3fsCurl::default_acl.str());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-acl", str(S3fsCurl::default_acl));
     }
     if(strcasecmp(GetStorageClass().c_str(), "STANDARD") != 0){
         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-storage-class", GetStorageClass().c_str());
@@ -3859,7 +3859,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     op = "POST";
-    type = REQTYPE_PREMULTIPOST;
+    type = REQTYPE::PREMULTIPOST;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3962,7 +3962,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     }
 
     op = "POST";
-    type = REQTYPE_COMPLETEMULTIPOST;
+    type = REQTYPE::COMPLETEMULTIPOST;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -4026,7 +4026,7 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
 
     op = "GET";
-    type = REQTYPE_MULTILIST;
+    type = REQTYPE::MULTILIST;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -4079,7 +4079,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
     responseHeaders.clear();
 
     op = "DELETE";
-    type = REQTYPE_ABORTMULTIUPLOAD;
+    type = REQTYPE::ABORTMULTIUPLOAD;
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
@@ -4162,7 +4162,7 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
 
     op = "PUT";
-    type = REQTYPE_UPLOADMULTIPOST;
+    type = REQTYPE::UPLOADMULTIPOST;
 
     // set lazy function
     fpLazySetup = UploadMultipartPostSetCurlOpts;
@@ -4254,7 +4254,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     }
 
     op = "PUT";
-    type = REQTYPE_COPYMULTIPOST;
+    type = REQTYPE::COPYMULTIPOST;
 
     // set lazy function
     fpLazySetup = CopyMultipartPostSetCurlOpts;

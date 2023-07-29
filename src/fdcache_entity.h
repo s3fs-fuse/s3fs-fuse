@@ -40,7 +40,7 @@ class FdEntity
         // because the processing(request) at these updates is different.
         // Therefore, the pending state is expressed by this enum type.
         //
-        enum pending_status_t {
+        enum class pending_status_t {
             NO_UPDATE_PENDING = 0,
             UPDATE_META_PENDING,        // pending meta header
             CREATE_FILE_PENDING         // pending file creation and meta header

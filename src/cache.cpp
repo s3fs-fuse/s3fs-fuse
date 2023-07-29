@@ -801,7 +801,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
             mtime.tv_sec  = 0;
             mtime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, ST_TYPE_MTIME, mtime);
+        set_timespec_to_stat(*pst, stat_time_type::MTIME, mtime);
     }
 
     // ctime
@@ -813,7 +813,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
             ctime.tv_sec  = 0;
             ctime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, ST_TYPE_CTIME, ctime);
+        set_timespec_to_stat(*pst, stat_time_type::CTIME, ctime);
     }
 
     // atime
@@ -825,7 +825,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
             atime.tv_sec  = 0;
             atime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, ST_TYPE_ATIME, atime);
+        set_timespec_to_stat(*pst, stat_time_type::ATIME, atime);
     }
 
     // size

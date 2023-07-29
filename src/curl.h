@@ -93,23 +93,23 @@ class S3fsCurl
     friend class S3fsMultiCurl;
 
     private:
-        enum REQTYPE {
-            REQTYPE_UNSET  = -1,
-            REQTYPE_DELETE = 0,
-            REQTYPE_HEAD,
-            REQTYPE_PUTHEAD,
-            REQTYPE_PUT,
-            REQTYPE_GET,
-            REQTYPE_CHKBUCKET,
-            REQTYPE_LISTBUCKET,
-            REQTYPE_PREMULTIPOST,
-            REQTYPE_COMPLETEMULTIPOST,
-            REQTYPE_UPLOADMULTIPOST,
-            REQTYPE_COPYMULTIPOST,
-            REQTYPE_MULTILIST,
-            REQTYPE_IAMCRED,
-            REQTYPE_ABORTMULTIUPLOAD,
-            REQTYPE_IAMROLE
+        enum class REQTYPE {
+            UNSET  = -1,
+            DELETE = 0,
+            HEAD,
+            PUTHEAD,
+            PUT,
+            GET,
+            CHKBUCKET,
+            LISTBUCKET,
+            PREMULTIPOST,
+            COMPLETEMULTIPOST,
+            UPLOADMULTIPOST,
+            COPYMULTIPOST,
+            MULTILIST,
+            IAMCRED,
+            ABORTMULTIUPLOAD,
+            IAMROLE
         };
 
         // class variables
