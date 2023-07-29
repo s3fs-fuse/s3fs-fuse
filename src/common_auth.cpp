@@ -29,18 +29,16 @@
 //-------------------------------------------------------------------
 std::string s3fs_get_content_md5(int fd)
 {
-    unsigned char* md5;
+    md5_t md5;
     char* base64;
     std::string Signature;
 
-    if(nullptr == (md5 = s3fs_md5_fd(fd, 0, -1))){
+    if(!s3fs_md5_fd(fd, 0, -1, &md5)){
         return std::string("");
     }
-    if(nullptr == (base64 = s3fs_base64(md5, get_md5_digest_length()))){
-        delete[] md5;
+    if(nullptr == (base64 = s3fs_base64(md5.data(), md5.size()))){
         return std::string("");  // ENOMEM
     }
-    delete[] md5;
 
     Signature = base64;
     delete[] base64;
@@ -50,15 +48,13 @@ std::string s3fs_get_content_md5(int fd)
 
 std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)
 {
-    size_t digestlen = get_sha256_digest_length();
-    unsigned char* sha256;
+    sha256_t sha256;
 
-    if(nullptr == (sha256 = s3fs_sha256_fd(fd, start, size))){
+    if(!s3fs_sha256_fd(fd, start, size, &sha256)){
         return std::string("");
     }
 
-    std::string sha256hex = s3fs_hex_lower(sha256, digestlen);
-    delete[] sha256;
+    std::string sha256hex = s3fs_hex_lower(sha256.data(), sha256.size());
 
     return sha256hex;
 }
