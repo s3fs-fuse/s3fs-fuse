@@ -146,6 +146,19 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 //-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* result)
+{
+    PK11Context*   md5ctx;
+    unsigned int   md5outlen;
+    md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
+
+    PK11_DigestOp(md5ctx, data, datalen);
+    PK11_DigestFinal(md5ctx, result->data(), &md5outlen, result->size());
+    PK11_DestroyContext(md5ctx, PR_TRUE);
+
+    return true;
+}
+
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
     PK11Context*   md5ctx;

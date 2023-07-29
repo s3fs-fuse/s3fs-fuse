@@ -292,40 +292,18 @@ std::string prepare_url(const char* url)
     return url_str;
 }
 
-// [TODO]
-// This function uses temporary file, but should not use it.
-// For not using it, we implement function in each auth file(openssl, nss. gnutls).
-//
 bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5)
 {
     if(!pstr || '\0' == pstr[0]){
         S3FS_PRN_ERR("Parameter is wrong.");
         return false;
     }
-    FILE* fp;
-    if(nullptr == (fp = tmpfile())){
-        S3FS_PRN_ERR("Could not make tmpfile.");
+    md5_t binary;
+    if(!s3fs_md5(reinterpret_cast<const unsigned char*>(pstr), length, &binary)){
         return false;
     }
-    if(length != fwrite(pstr, sizeof(char), length, fp)){
-        S3FS_PRN_ERR("Failed to write tmpfile.");
-        fclose(fp);
-        return false;
-    }
-    int fd;
-    if(0 != fflush(fp) || 0 != fseek(fp, 0L, SEEK_SET) || -1 == (fd = fileno(fp))){
-        S3FS_PRN_ERR("Failed to make MD5.");
-        fclose(fp);
-        return false;
-    }
-    // base64 md5
-    md5 = s3fs_get_content_md5(fd);
-    if(md5.empty()){
-        S3FS_PRN_ERR("Failed to make MD5.");
-        fclose(fp);
-        return false;
-    }
-    fclose(fp);
+
+    md5 = s3fs_base64(binary.data(), binary.size());
     return true;
 }
 

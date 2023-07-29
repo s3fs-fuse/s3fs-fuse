@@ -184,6 +184,16 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 // Utility Function for MD5
 //-------------------------------------------------------------------
 #ifdef USE_GNUTLS_NETTLE
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* result)
+{
+    struct md5_ctx ctx_md5;
+    md5_init(&ctx_md5);
+    md5_update(&ctx_md5, datalen, data);
+    md5_digest(&ctx_md5, result->size(), result->data());
+
+    return true;
+}
+
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
     struct md5_ctx ctx_md5;
@@ -220,6 +230,20 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 }
 
 #else // USE_GNUTLS_NETTLE
+
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
+{
+    gcry_md_hd_t   ctx_md5;
+    gcry_error_t   err;
+    if(GPG_ERR_NO_ERROR != (err = gcry_md_open(&ctx_md5, GCRY_MD_MD5, 0))){
+        S3FS_PRN_ERR("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
+        return false;
+    }
+    gcry_md_write(ctx_md5, digest->data(), digest->size());
+    gcry_md_close(ctx_md5);
+
+    return true;
+}
 
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
