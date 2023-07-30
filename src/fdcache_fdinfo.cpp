@@ -356,8 +356,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
 
     // add new part
     etagpair*   petag_entity = etag_entities.add(etagpair(nullptr, partnumber));              // [NOTE] Create the etag entity and register it in the list.
-    filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
-    upload_list.push_back(newpart);
+    upload_list.emplace_back(false, physical_fd, start, size, is_copy, petag_entity);
 
     // set etag pointer
     if(ppetag){
@@ -392,8 +391,7 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
 
     // insert new part
     etagpair*   petag_entity = etag_entities.add(etagpair(nullptr, part_num));
-    filepart    newpart(false, physical_fd, start, size, is_copy, petag_entity);
-    upload_list.push_back(newpart);
+    upload_list.emplace_back(false, physical_fd, start, size, is_copy, petag_entity);
 
     // sort by part number
     upload_list.sort(filepart_partnum_compare);
@@ -741,7 +739,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, o
     //
     while(max_mp_size <= aligned_size){
         int part_num = static_cast<int>((aligned_start / max_mp_size) + 1);
-        to_upload_list.push_back(mp_part(aligned_start, max_mp_size, part_num));
+        to_upload_list.emplace_back(aligned_start, max_mp_size, part_num);
 
         aligned_start += max_mp_size;
         aligned_size  -= max_mp_size;
@@ -829,7 +827,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                     // - Add this untreated area to cur_untreated_list
                     // - Delete this from dup_untreated_list
                     //
-                    cur_untreated_list.push_back(untreatedpart(tmp_untreated_start, tmp_untreated_size));
+                    cur_untreated_list.emplace_back(tmp_untreated_start, tmp_untreated_size);
                     dup_untreated_iter = dup_untreated_list.erase(dup_untreated_iter);
                 }else{
                     //
@@ -840,7 +838,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                     tmp_untreated_size  = (cur_start + cur_size) - tmp_untreated_start;
 
                     // Add ajusted untreated area to cur_untreated_list
-                    cur_untreated_list.push_back(untreatedpart(tmp_untreated_start, tmp_untreated_size));
+                    cur_untreated_list.emplace_back(tmp_untreated_start, tmp_untreated_size);
 
                     // Remove this ajusted untreated area from the area pointed
                     // to by dup_untreated_iter.
@@ -909,14 +907,14 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                     // Copy multipart upload available
                     //
                     S3FS_PRN_DBG("To copy: start=%lld, size=%lld", static_cast<long long int>(cur_start), static_cast<long long int>(cur_size));
-                    to_copy_list.push_back(mp_part(cur_start, cur_size, part_num));
+                    to_copy_list.emplace_back(cur_start, cur_size, part_num);
                 }else{
                     //
                     // This current area needs to be downloaded and uploaded
                     //
                     S3FS_PRN_DBG("To download and upload: start=%lld, size=%lld", static_cast<long long int>(cur_start), static_cast<long long int>(cur_size));
-                    to_download_list.push_back(mp_part(cur_start, cur_size));
-                    to_upload_list.push_back(mp_part(cur_start, cur_size, part_num));
+                    to_download_list.emplace_back(cur_start, cur_size);
+                    to_upload_list.emplace_back(cur_start, cur_size, part_num);
                 }
             }
         }else{
@@ -937,7 +935,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                 uploaded_iter = upload_list.erase(overlap_uploaded_iter);           // remove it from upload_list
 
                 S3FS_PRN_DBG("To upload: start=%lld, size=%lld", static_cast<long long int>(cur_start), static_cast<long long int>(cur_size));
-                to_upload_list.push_back(mp_part(cur_start, cur_size, part_num));   // add new uploading area to list
+                to_upload_list.emplace_back(cur_start, cur_size, part_num);   // add new uploading area to list
 
             }else{
                 //
@@ -998,7 +996,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                             // If this area is not unified, need to download this area
                             //
                             S3FS_PRN_DBG("To download: start=%lld, size=%lld", static_cast<long long int>(tmp_cur_start), static_cast<long long int>(tmp_cur_untreated_iter->start - tmp_cur_start));
-                            to_download_list.push_back(mp_part(tmp_cur_start, tmp_cur_untreated_iter->start - tmp_cur_start));
+                            to_download_list.emplace_back(tmp_cur_start, tmp_cur_untreated_iter->start - tmp_cur_start);
                         }
                     }
                     //
@@ -1013,14 +1011,14 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                 //
                 if(0 < tmp_cur_size){
                     S3FS_PRN_DBG("To download: start=%lld, size=%lld", static_cast<long long int>(tmp_cur_start), static_cast<long long int>(tmp_cur_size));
-                    to_download_list.push_back(mp_part(tmp_cur_start, tmp_cur_size));
+                    to_download_list.emplace_back(tmp_cur_start, tmp_cur_size);
                 }
 
                 //
                 // Set upload area(whole of area) to list
                 //
                 S3FS_PRN_DBG("To upload: start=%lld, size=%lld", static_cast<long long int>(changed_start), static_cast<long long int>(changed_size));
-                to_upload_list.push_back(mp_part(changed_start, changed_size, part_num));
+                to_upload_list.emplace_back(changed_start, changed_size, part_num);
             }
         }
     }
