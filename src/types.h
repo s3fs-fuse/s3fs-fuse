@@ -71,101 +71,77 @@ typedef std::map<std::string, PXATTRVAL> xattrs_t;
 //-------------------------------------------------------------------
 // acl_t
 //-------------------------------------------------------------------
-class acl_t{
-    public:
-        enum Value{
-            PRIVATE,
-            PUBLIC_READ,
-            PUBLIC_READ_WRITE,
-            AWS_EXEC_READ,
-            AUTHENTICATED_READ,
-            BUCKET_OWNER_READ,
-            BUCKET_OWNER_FULL_CONTROL,
-            LOG_DELIVERY_WRITE,
-            UNKNOWN
-        };
-
-        // cppcheck-suppress noExplicitConstructor
-        acl_t(Value value) : value_(value) {}
-
-        operator Value() const { return value_; }
-
-        const char* str() const
-        {
-            switch(value_){
-                case PRIVATE:
-                    return "private";
-                case PUBLIC_READ:
-                    return "public-read";
-                case PUBLIC_READ_WRITE:
-                    return "public-read-write";
-                case AWS_EXEC_READ:
-                    return "aws-exec-read";
-                case AUTHENTICATED_READ:
-                    return "authenticated-read";
-                case BUCKET_OWNER_READ:
-                    return "bucket-owner-read";
-                case BUCKET_OWNER_FULL_CONTROL:
-                    return "bucket-owner-full-control";
-                case LOG_DELIVERY_WRITE:
-                    return "log-delivery-write";
-                case UNKNOWN:
-                    return nullptr;
-            }
-            abort();
-        }
-
-        static acl_t from_str(const char *acl)
-        {
-            if(0 == strcmp(acl, "private")){
-                return PRIVATE;
-            }else if(0 == strcmp(acl, "public-read")){
-                return PUBLIC_READ;
-            }else if(0 == strcmp(acl, "public-read-write")){
-                return PUBLIC_READ_WRITE;
-            }else if(0 == strcmp(acl, "aws-exec-read")){
-                return AWS_EXEC_READ;
-            }else if(0 == strcmp(acl, "authenticated-read")){
-                return AUTHENTICATED_READ;
-            }else if(0 == strcmp(acl, "bucket-owner-read")){
-                return BUCKET_OWNER_READ;
-            }else if(0 == strcmp(acl, "bucket-owner-full-control")){
-                return BUCKET_OWNER_FULL_CONTROL;
-            }else if(0 == strcmp(acl, "log-delivery-write")){
-                return LOG_DELIVERY_WRITE;
-            }else{
-                return UNKNOWN;
-            }
-        }
-
-    private:
-        OPERATOR_EXPLICIT operator bool();
-        Value value_;
+enum class acl_t{
+    PRIVATE,
+    PUBLIC_READ,
+    PUBLIC_READ_WRITE,
+    AWS_EXEC_READ,
+    AUTHENTICATED_READ,
+    BUCKET_OWNER_READ,
+    BUCKET_OWNER_FULL_CONTROL,
+    LOG_DELIVERY_WRITE,
+    UNKNOWN
 };
+
+inline const char* str(acl_t value)
+{
+    switch(value){
+    case acl_t::PRIVATE:
+        return "private";
+    case acl_t::PUBLIC_READ:
+        return "public-read";
+    case acl_t::PUBLIC_READ_WRITE:
+        return "public-read-write";
+    case acl_t::AWS_EXEC_READ:
+        return "aws-exec-read";
+    case acl_t::AUTHENTICATED_READ:
+        return "authenticated-read";
+    case acl_t::BUCKET_OWNER_READ:
+        return "bucket-owner-read";
+    case acl_t::BUCKET_OWNER_FULL_CONTROL:
+        return "bucket-owner-full-control";
+    case acl_t::LOG_DELIVERY_WRITE:
+        return "log-delivery-write";
+    case acl_t::UNKNOWN:
+        return nullptr;
+    }
+    abort();
+}
+
+inline acl_t to_acl(const char *acl)
+{
+    if(0 == strcmp(acl, "private")){
+        return acl_t::PRIVATE;
+    }else if(0 == strcmp(acl, "public-read")){
+        return acl_t::PUBLIC_READ;
+    }else if(0 == strcmp(acl, "public-read-write")){
+        return acl_t::PUBLIC_READ_WRITE;
+    }else if(0 == strcmp(acl, "aws-exec-read")){
+        return acl_t::AWS_EXEC_READ;
+    }else if(0 == strcmp(acl, "authenticated-read")){
+        return acl_t::AUTHENTICATED_READ;
+    }else if(0 == strcmp(acl, "bucket-owner-read")){
+        return acl_t::BUCKET_OWNER_READ;
+    }else if(0 == strcmp(acl, "bucket-owner-full-control")){
+        return acl_t::BUCKET_OWNER_FULL_CONTROL;
+    }else if(0 == strcmp(acl, "log-delivery-write")){
+        return acl_t::LOG_DELIVERY_WRITE;
+    }else{
+        return acl_t::UNKNOWN;
+    }
+}
 
 //-------------------------------------------------------------------
 // sse_type_t
 //-------------------------------------------------------------------
-class sse_type_t{
-    public:
-        enum Value{
-            SSE_DISABLE = 0,      // not use server side encrypting
-            SSE_S3,               // server side encrypting by S3 key
-            SSE_C,                // server side encrypting by custom key
-            SSE_KMS               // server side encrypting by kms id
-        };
-
-        // cppcheck-suppress noExplicitConstructor
-        sse_type_t(Value value) : value_(value) {}
-
-        operator Value() const { return value_; }
-
-    private:
-        //OPERATOR_EXPLICIT operator bool();
-        Value value_;
+enum class sse_type_t{
+    SSE_DISABLE = 0,      // not use server side encrypting
+    SSE_S3,               // server side encrypting by S3 key
+    SSE_C,                // server side encrypting by custom key
+    SSE_KMS               // server side encrypting by kms id
 };
 
-enum signature_type_t {
+enum class signature_type_t {
     V2_ONLY,
     V4_ONLY,
     V2_OR_V4

@@ -108,7 +108,7 @@ ino_t FdEntity::GetInode(int fd)
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     is_lock_init(false), path(SAFESTRPTR(tpath)),
     physical_fd(-1), pfile(nullptr), inode(0), size_orgmeta(0),
-    cachepath(SAFESTRPTR(cpath)), pending_status(NO_UPDATE_PENDING)
+    cachepath(SAFESTRPTR(cpath)), pending_status(pending_status_t::NO_UPDATE_PENDING)
 {
     holding_mtime.tv_sec = -1;
     holding_mtime.tv_nsec = 0;
@@ -486,7 +486,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             // using cache
             struct stat st;
             if(stat(cachepath.c_str(), &st) == 0){
-                if(0 > compare_timespec(st, ST_TYPE_MTIME, ts_mctime)){
+                if(0 > compare_timespec(st, stat_time_type::MTIME, ts_mctime)){
                     S3FS_PRN_DBG("cache file stale, removing: %s", cachepath.c_str());
                     if(unlink(cachepath.c_str()) != 0){
                         return (0 == errno ? -EIO : -errno);
@@ -868,7 +868,7 @@ bool FdEntity::UpdateCtime()
         return false;
     }
 
-    orgmeta["x-amz-meta-ctime"] = str_stat_time(st, ST_TYPE_CTIME);
+    orgmeta["x-amz-meta-ctime"] = str_stat_time(st, stat_time_type::CTIME);
 
     return true;
 }
@@ -881,7 +881,7 @@ bool FdEntity::UpdateAtime()
         return false;
     }
 
-    orgmeta["x-amz-meta-atime"] = str_stat_time(st, ST_TYPE_ATIME);
+    orgmeta["x-amz-meta-atime"] = str_stat_time(st, stat_time_type::ATIME);
 
     return true;
 }
@@ -910,7 +910,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
         if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
             return false;
         }
-        orgmeta["x-amz-meta-mtime"] = str_stat_time(st, ST_TYPE_MTIME);
+        orgmeta["x-amz-meta-mtime"] = str_stat_time(st, stat_time_type::MTIME);
     }
     return true;
 }
@@ -946,7 +946,7 @@ bool FdEntity::ClearHoldingMtime(AutoLock::Type locktype)
         ts[0].tv_sec  = holding_mtime.tv_sec;
         ts[0].tv_nsec = holding_mtime.tv_nsec;
 
-        set_stat_to_timespec(st, ST_TYPE_CTIME, ts_ctime);
+        set_stat_to_timespec(st, stat_time_type::CTIME, ts_ctime);
         ts[1].tv_sec  = ts_ctime.tv_sec;
         ts[1].tv_nsec = ts_ctime.tv_nsec;
 
@@ -959,7 +959,7 @@ bool FdEntity::ClearHoldingMtime(AutoLock::Type locktype)
         struct timespec ts[2];
         struct timespec ts_ctime;
 
-        set_stat_to_timespec(st, ST_TYPE_CTIME, ts_ctime);
+        set_stat_to_timespec(st, stat_time_type::CTIME, ts_ctime);
         ts[0].tv_sec  = ts_ctime.tv_sec;
         ts[0].tv_nsec = ts_ctime.tv_nsec;
 
@@ -1109,7 +1109,7 @@ int FdEntity::Load(off_t start, off_t size, AutoLock::Type type, bool is_modifie
               break;
           }
           // Set loaded flag
-          pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, (is_modified_flag ? PageList::PAGE_LOAD_MODIFIED : PageList::PAGE_LOADED));
+          pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, (is_modified_flag ? PageList::page_status::LOAD_MODIFIED : PageList::page_status::LOADED));
         }
         PageList::FreeList(unloaded_list);
     }
@@ -1311,7 +1311,7 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     s3fscurl.DestroyCurlHandle();
 
     // Clear the dirty flag, because the meta data is updated.
-    pending_status = NO_UPDATE_PENDING;
+    pending_status = pending_status_t::NO_UPDATE_PENDING;
 
     // reset upload_id
     if(!pseudo_obj->InitialUploadInfo(upload_id)){
@@ -1624,7 +1624,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
     if(0 == result){
         pagelist.ClearAllModified();
-        pending_status = NO_UPDATE_PENDING;
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
     }
     return result;
 }
@@ -1752,7 +1752,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
     if(0 == result){
         pagelist.ClearAllModified();
-        pending_status = NO_UPDATE_PENDING;
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
     }
     return result;
 }
@@ -1870,7 +1870,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             }
 
             // Clear the dirty flag, because the meta data is updated.
-            pending_status = NO_UPDATE_PENDING;
+            pending_status = pending_status_t::NO_UPDATE_PENDING;
         }
 
         //
@@ -1976,7 +1976,7 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
     AutoLock auto_lock2(&fdent_data_lock);
 
     if(force_load){
-        pagelist.SetPageLoadedStatus(start, size, PageList::PAGE_NOT_LOAD_MODIFIED);
+        pagelist.SetPageLoadedStatus(start, size, PageList::page_status::NOT_LOAD_MODIFIED);
     }
 
     ssize_t rsize;
@@ -2057,7 +2057,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
         }
 
         // add new area
-        pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), PageList::PAGE_MODIFIED);
+        pagelist.SetPageLoadedStatus(pagelist.Size(), start - pagelist.Size(), PageList::page_status::MODIFIED);
     }
 
     ssize_t wsize;
@@ -2123,7 +2123,7 @@ ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* b
         return -errno;
     }
     if(0 < wsize){
-        pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pagelist.SetPageLoadedStatus(start, wsize, PageList::page_status::LOAD_MODIFIED);
         AddUntreated(start, wsize);
     }
 
@@ -2197,7 +2197,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
         return -errno;
     }
     if(0 < wsize){
-        pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pagelist.SetPageLoadedStatus(start, wsize, PageList::page_status::LOAD_MODIFIED);
         AddUntreated(start, wsize);
     }
 
@@ -2284,7 +2284,7 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
         return -errno;
     }
     if(0 < wsize){
-        pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pagelist.SetPageLoadedStatus(start, wsize, PageList::page_status::LOAD_MODIFIED);
         AddUntreated(start, wsize);
     }
 
@@ -2337,7 +2337,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
         return -errno;
     }
     if(0 < wsize){
-        pagelist.SetPageLoadedStatus(start, wsize, PageList::PAGE_LOAD_MODIFIED);
+        pagelist.SetPageLoadedStatus(start, wsize, PageList::page_status::LOAD_MODIFIED);
         AddUntreated(start, wsize);
     }
 
@@ -2356,7 +2356,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
 
     if(!isuploading && pseudo_obj->IsUploading()){
         // Clear the dirty flag, because the meta data is updated.
-        pending_status = NO_UPDATE_PENDING;
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
     }
 
     return wsize;
@@ -2397,11 +2397,11 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         SetAtime(atime, AutoLock::ALREADY_LOCKED);
     }
 
-    if(NO_UPDATE_PENDING == pending_status && (IsUploading(AutoLock::ALREADY_LOCKED) || pagelist.IsModified())){
-        pending_status = UPDATE_META_PENDING;
+    if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading(AutoLock::ALREADY_LOCKED) || pagelist.IsModified())){
+        pending_status = pending_status_t::UPDATE_META_PENDING;
     }
 
-    return (NO_UPDATE_PENDING != pending_status);
+    return (pending_status_t::NO_UPDATE_PENDING != pending_status);
 }
 
 // global function in s3fs.cpp
@@ -2412,11 +2412,11 @@ int FdEntity::UploadPending(int fd, AutoLock::Type type)
     AutoLock auto_lock(&fdent_lock, type);
     int result;
 
-    if(NO_UPDATE_PENDING == pending_status){
+    if(pending_status_t::NO_UPDATE_PENDING == pending_status){
        // nothing to do
        result = 0;
 
-    }else if(UPDATE_META_PENDING == pending_status){
+    }else if(pending_status_t::UPDATE_META_PENDING == pending_status){
         headers_t updatemeta = orgmeta;
         updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(path.c_str()));
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
@@ -2426,7 +2426,7 @@ int FdEntity::UploadPending(int fd, AutoLock::Type type)
         if(0 != result){
             S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
         }else{
-            pending_status = NO_UPDATE_PENDING;
+            pending_status = pending_status_t::NO_UPDATE_PENDING;
         }
 
     }else{  // CREATE_FILE_PENDING == pending_status
@@ -2438,7 +2438,7 @@ int FdEntity::UploadPending(int fd, AutoLock::Type type)
             if(0 != result){
                 S3FS_PRN_ERR("failed to flush for file(%s) by(%d).", path.c_str(), result);
             }else{
-                pending_status = NO_UPDATE_PENDING;
+                pending_status = pending_status_t::NO_UPDATE_PENDING;
             }
         }
     }
@@ -2509,7 +2509,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
             }
             return false;
         }
-        if(!pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, PageList::PAGE_NOT_LOAD_MODIFIED)){
+        if(!pagelist.SetPageLoadedStatus(iter->offset, iter->bytes, PageList::page_status::NOT_LOAD_MODIFIED)){
             S3FS_PRN_ERR("succeed to punch HOLEs in the cache file, but failed to update the cache stat.");
             return false;
         }
@@ -2527,14 +2527,14 @@ void FdEntity::MarkDirtyNewFile()
     AutoLock auto_lock(&fdent_lock);
 
     pagelist.Init(0, false, true);
-    pending_status = CREATE_FILE_PENDING;
+    pending_status = pending_status_t::CREATE_FILE_PENDING;
 }
 
 bool FdEntity::IsDirtyNewFile() const
 {
     AutoLock auto_lock(&fdent_lock);
 
-    return (CREATE_FILE_PENDING == pending_status);
+    return (pending_status_t::CREATE_FILE_PENDING == pending_status);
 }
 
 bool FdEntity::AddUntreated(off_t start, off_t size)

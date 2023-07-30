@@ -485,7 +485,7 @@ int compare_timespec(const struct stat& st, stat_time_type type, const struct ti
 
 void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts)
 {
-    if(ST_TYPE_ATIME == type){
+    if(stat_time_type::ATIME == type){
         #if defined(__APPLE__)
             st.st_atime             = ts.tv_sec;
             st.st_atimespec.tv_nsec = ts.tv_nsec;
@@ -493,7 +493,7 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
             st.st_atim.tv_sec       = ts.tv_sec;
             st.st_atim.tv_nsec      = ts.tv_nsec;
         #endif
-    }else if(ST_TYPE_MTIME == type){
+    }else if(stat_time_type::MTIME == type){
         #if defined(__APPLE__)
             st.st_mtime             = ts.tv_sec;
             st.st_mtimespec.tv_nsec = ts.tv_nsec;
@@ -501,7 +501,7 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
             st.st_mtim.tv_sec       = ts.tv_sec;
             st.st_mtim.tv_nsec      = ts.tv_nsec;
         #endif
-    }else if(ST_TYPE_CTIME == type){
+    }else if(stat_time_type::CTIME == type){
         #if defined(__APPLE__)
             st.st_ctime             = ts.tv_sec;
             st.st_ctimespec.tv_nsec = ts.tv_nsec;
@@ -510,27 +510,27 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
             st.st_ctim.tv_nsec      = ts.tv_nsec;
         #endif
     }else{
-        S3FS_PRN_ERR("unknown type(%d), so skip to set value.", type);
+        S3FS_PRN_ERR("unknown type(%d), so skip to set value.", static_cast<int>(type));
     }
 }
 
 struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts)
 {
-    if(ST_TYPE_ATIME == type){
+    if(stat_time_type::ATIME == type){
         #if defined(__APPLE__)
            ts.tv_sec  = st.st_atime;
            ts.tv_nsec = st.st_atimespec.tv_nsec;
         #else
            ts         = st.st_atim;
         #endif
-    }else if(ST_TYPE_MTIME == type){
+    }else if(stat_time_type::MTIME == type){
         #if defined(__APPLE__)
            ts.tv_sec  = st.st_mtime;
            ts.tv_nsec = st.st_mtimespec.tv_nsec;
         #else
            ts         = st.st_mtim;
         #endif
-    }else if(ST_TYPE_CTIME == type){
+    }else if(stat_time_type::CTIME == type){
         #if defined(__APPLE__)
            ts.tv_sec  = st.st_ctime;
            ts.tv_nsec = st.st_ctimespec.tv_nsec;
@@ -538,7 +538,7 @@ struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type
            ts         = st.st_ctim;
         #endif
     }else{
-        S3FS_PRN_ERR("unknown type(%d), so use 0 as timespec.", type);
+        S3FS_PRN_ERR("unknown type(%d), so use 0 as timespec.", static_cast<int>(type));
         ts.tv_sec     = 0;
         ts.tv_nsec    = 0;
     }

@@ -33,7 +33,7 @@ void test_compress()
   ASSERT_EQUALS(off_t(42), list.Size());
   ASSERT_FALSE(list.IsPageLoaded(0, 1));
 
-  list.SetPageLoadedStatus(0, 1, /*pstatus=*/ PageList::PAGE_LOADED);
+  list.SetPageLoadedStatus(0, 1, /*pstatus=*/ PageList::page_status::LOADED);
   ASSERT_TRUE(list.IsPageLoaded(0, 1));
   ASSERT_FALSE(list.IsPageLoaded(0, 2));
 
@@ -44,7 +44,7 @@ void test_compress()
   ASSERT_EQUALS(off_t(41), size);
 
   // test adding subsequent page then compressing
-  list.SetPageLoadedStatus(1, 3, /*pstatus=*/ PageList::PAGE_LOADED);
+  list.SetPageLoadedStatus(1, 3, /*pstatus=*/ PageList::page_status::LOADED);
   list.Compress();
   ASSERT_TRUE(list.IsPageLoaded(0, 3));
 
@@ -53,7 +53,7 @@ void test_compress()
   ASSERT_EQUALS(off_t(38), size);
 
   // test adding non-contiguous page then compressing
-  list.SetPageLoadedStatus(5, 1, /*pstatus=*/ PageList::PAGE_LOADED);
+  list.SetPageLoadedStatus(5, 1, /*pstatus=*/ PageList::page_status::LOADED);
   list.Compress();
 
   ASSERT_TRUE(list.FindUnloadedPage(0, start, size));
@@ -63,7 +63,7 @@ void test_compress()
   printf("\n");
 
   // test adding page between two pages then compressing
-  list.SetPageLoadedStatus(4, 1, /*pstatus=*/ PageList::PAGE_LOADED);
+  list.SetPageLoadedStatus(4, 1, /*pstatus=*/ PageList::page_status::LOADED);
   list.Compress();
 
   list.Dump();

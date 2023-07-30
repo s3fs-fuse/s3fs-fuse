@@ -79,11 +79,11 @@ class PageList
         bool          is_shrink;    // [NOTE] true if it has been shrinked even once
 
     public:
-        enum page_status{
-            PAGE_NOT_LOAD_MODIFIED = 0,
-            PAGE_LOADED,
-            PAGE_MODIFIED,
-            PAGE_LOAD_MODIFIED
+        enum class page_status{
+            NOT_LOAD_MODIFIED = 0,
+            LOADED,
+            MODIFIED,
+            LOAD_MODIFIED
         };
 
     private:
@@ -106,7 +106,7 @@ class PageList
         bool Resize(off_t size, bool is_loaded, bool is_modified);
 
         bool IsPageLoaded(off_t start = 0, off_t size = 0) const;                  // size=0 is checking to end of list
-        bool SetPageLoadedStatus(off_t start, off_t size, PageList::page_status pstatus = PAGE_LOADED, bool is_compress = true);
+        bool SetPageLoadedStatus(off_t start, off_t size, PageList::page_status pstatus = page_status::LOADED, bool is_compress = true);
         bool FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const;
         off_t GetTotalUnloadedPageSize(off_t start = 0, off_t size = 0, off_t limit_size = 0) const;   // size=0 is checking to end of list
         size_t GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list

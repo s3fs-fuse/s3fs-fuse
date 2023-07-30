@@ -23,7 +23,7 @@
 
 #include <curl/curl.h>
 
-class sse_type_t;
+enum class sse_type_t;
 
 //----------------------------------------------
 // Functions

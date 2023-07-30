@@ -32,7 +32,7 @@
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
-utility_incomp_type utility_mode = NO_UTILITY_MODE;
+utility_incomp_type utility_mode = utility_incomp_type::NO_UTILITY_MODE;
 
 //-------------------------------------------------------------------
 // Functions
@@ -100,7 +100,7 @@ static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
 
 int s3fs_utility_processing(time_t abort_time)
 {
-    if(NO_UTILITY_MODE == utility_mode){
+    if(utility_incomp_type::NO_UTILITY_MODE == utility_mode){
         return EXIT_FAILURE;
     }
     printf("\n*** s3fs run as utility mode.\n\n");
@@ -128,10 +128,10 @@ int s3fs_utility_processing(time_t abort_time)
                 result = EXIT_FAILURE;
 
             }else{
-                if(INCOMP_TYPE_LIST == utility_mode){
+                if(utility_incomp_type::INCOMP_TYPE_LIST == utility_mode){
                     // print list
                     print_incomp_mpu_list(list);
-                }else if(INCOMP_TYPE_ABORT == utility_mode){
+                }else if(utility_incomp_type::INCOMP_TYPE_ABORT == utility_mode){
                     // remove
                     if(!abort_incomp_mpu_list(list, abort_time)){
                         S3FS_PRN_DBG("an error occurred during removal process.");

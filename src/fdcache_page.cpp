@@ -510,8 +510,8 @@ bool PageList::IsPageLoaded(off_t start, off_t size) const
 bool PageList::SetPageLoadedStatus(off_t start, off_t size, PageList::page_status pstatus, bool is_compress)
 {
     off_t now_size    = Size();
-    bool  is_loaded   = (PAGE_LOAD_MODIFIED == pstatus || PAGE_LOADED == pstatus);
-    bool  is_modified = (PAGE_LOAD_MODIFIED == pstatus || PAGE_MODIFIED == pstatus);
+    bool  is_loaded   = (page_status::LOAD_MODIFIED == pstatus || page_status::LOADED == pstatus);
+    bool  is_modified = (page_status::LOAD_MODIFIED == pstatus || page_status::MODIFIED == pstatus);
 
     if(now_size <= start){
         if(now_size < start){
@@ -949,16 +949,16 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
                 is_modified = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
             }
             // add new area
-            PageList::page_status pstatus = PageList::PAGE_NOT_LOAD_MODIFIED;
+            PageList::page_status pstatus = PageList::page_status::NOT_LOAD_MODIFIED;
             if(is_loaded){
                 if(is_modified){
-                    pstatus = PageList::PAGE_LOAD_MODIFIED;
+                    pstatus = PageList::page_status::LOAD_MODIFIED;
                 }else{
-                    pstatus = PageList::PAGE_LOADED;
+                    pstatus = PageList::page_status::LOADED;
                 }
             }else{
                 if(is_modified){
-                    pstatus = PageList::PAGE_MODIFIED;
+                    pstatus = PageList::page_status::MODIFIED;
                 }
             }
             SetPageLoadedStatus(offset, size, pstatus);
