@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
@@ -371,7 +372,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
 //
 static bool filepart_partnum_compare(const filepart& src1, const filepart& src2)
 {
-    return (src1.get_part_number() <= src2.get_part_number());
+    return src1.get_part_number() < src2.get_part_number();
 }
 
 bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type)
@@ -394,7 +395,7 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
     upload_list.emplace_back(false, physical_fd, start, size, is_copy, petag_entity);
 
     // sort by part number
-    upload_list.sort(filepart_partnum_compare);
+    std::sort(upload_list.begin(), upload_list.end(), filepart_partnum_compare);
 
     // set etag pointer
     *ppetag = petag_entity;

@@ -21,6 +21,9 @@
 #ifndef S3FS_THREADPOOLMAN_H_
 #define S3FS_THREADPOOLMAN_H_
 
+#include <list>
+#include <vector>
+
 #include "psemaphore.h"
 
 //------------------------------------------------
@@ -50,7 +53,7 @@ struct thpoolman_param
 
 typedef std::list<thpoolman_param*>  thpoolman_params_t;
 
-typedef std::list<pthread_t>  thread_list_t;
+typedef std::vector<pthread_t> thread_list_t;
 
 //------------------------------------------------
 // Class ThreadPoolMan

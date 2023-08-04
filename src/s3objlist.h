@@ -21,7 +21,6 @@
 #ifndef S3FS_S3OBJLIST_H_
 #define S3FS_S3OBJLIST_H_
 
-#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -39,7 +38,7 @@ struct s3obj_entry{
 };
 
 typedef std::map<std::string, struct s3obj_entry> s3obj_t;
-typedef std::list<std::string> s3obj_list_t;
+typedef std::vector<std::string> s3obj_list_t;
 
 //-------------------------------------------------------------------
 // Class S3ObjList
