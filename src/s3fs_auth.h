@@ -21,8 +21,12 @@
 #ifndef S3FS_AUTH_H_
 #define S3FS_AUTH_H_
 
+#include <array>
 #include <string>
 #include <sys/types.h>
+
+typedef std::array<unsigned char, 16> md5_t;
+typedef std::array<unsigned char, 32> sha256_t;
 
 //-------------------------------------------------------------------
 // Utility functions for Authentication
@@ -43,11 +47,9 @@ bool s3fs_init_crypt_mutex();
 bool s3fs_destroy_crypt_mutex();
 bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
 bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
-size_t get_md5_digest_length();
-unsigned char* s3fs_md5_fd(int fd, off_t start, off_t size);
-bool s3fs_sha256(const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
-size_t get_sha256_digest_length();
-unsigned char* s3fs_sha256_fd(int fd, off_t start, off_t size);
+bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result);
+bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest);
+bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result);
 
 #endif // S3FS_AUTH_H_
 

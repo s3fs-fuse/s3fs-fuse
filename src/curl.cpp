@@ -2808,8 +2808,8 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringCQ += payload_hash;
 
     std::string   kSecret = "AWS4" + secret_access_key;
-    unsigned char *kDate, *kRegion, *kService, *kSigning, *sRequest               = nullptr;
-    unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len, sRequest_len = 0;
+    unsigned char *kDate, *kRegion, *kService, *kSigning            = nullptr;
+    unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len = 0;
 
     s3fs_HMAC256(kSecret.c_str(), kSecret.size(), reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate, &kDate_len);
     s3fs_HMAC256(kDate, kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion, &kRegion_len);
@@ -2821,13 +2821,13 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
     const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
     size_t               cRequest_len = StringCQ.size();
-    s3fs_sha256(cRequest, cRequest_len, &sRequest, &sRequest_len);
+    sha256_t sRequest;
+    s3fs_sha256(cRequest, cRequest_len, &sRequest);
 
     StringToSign  = "AWS4-HMAC-SHA256\n";
     StringToSign += date8601 + "\n";
     StringToSign += strdate + "/" + endpoint + "/s3/aws4_request\n";
-    StringToSign += s3fs_hex_lower(sRequest, sRequest_len);
-    delete[] sRequest;
+    StringToSign += s3fs_hex_lower(sRequest.data(), sRequest.size());
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
     size_t               cscope_len = StringToSign.size();
@@ -2859,11 +2859,9 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
         case REQTYPE::COMPLETEMULTIPOST:
             {
                 size_t          cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
-                unsigned char*  sRequest     = nullptr;
-                unsigned int    sRequest_len = 0;
-                s3fs_sha256(b_postdata, cRequest_len, &sRequest, &sRequest_len);
-                payload_hash = s3fs_hex_lower(sRequest, sRequest_len);
-                delete[] sRequest;
+                sha256_t sRequest;
+                s3fs_sha256(b_postdata, cRequest_len, &sRequest);
+                payload_hash = s3fs_hex_lower(sRequest.data(), sRequest.size());
                 break;
             }
 
@@ -4120,16 +4118,15 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
 
     // make md5 and file pointer
     if(S3fsCurl::is_content_md5){
-        unsigned char *md5raw = s3fs_md5_fd(partdata.fd, partdata.startpos, partdata.size);
-        if(md5raw == nullptr){
+        md5_t md5raw;
+        if(!s3fs_md5_fd(partdata.fd, partdata.startpos, partdata.size, &md5raw)){
             S3FS_PRN_ERR("Could not make md5 for file(part %d)", part_num);
             return -EIO;
         }
-        partdata.etag = s3fs_hex_lower(md5raw, get_md5_digest_length());
-        char* md5base64p = s3fs_base64(md5raw, get_md5_digest_length());
+        partdata.etag = s3fs_hex_lower(md5raw.data(), md5raw.size());
+        char* md5base64p = s3fs_base64(md5raw.data(), md5raw.size());
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", md5base64p);
         delete[] md5base64p;
-        delete[] md5raw;
     }
 
     // make request
