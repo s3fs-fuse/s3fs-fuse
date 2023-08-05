@@ -3282,7 +3282,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     }
 
     // Make single head request(with max).
-    for(s3obj_list_t::iterator iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+    for(s3obj_list_t::iterator iter = headlist.begin(); headlist.end() != iter; ++iter){
         std::string disppath = path + (*iter);
         std::string etag     = head.GetETag((*iter).c_str());
         struct stat st;
@@ -3312,6 +3312,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             continue;
         }
     }
+    headlist.clear();
 
     // Multi request
     if(0 != (result = curlmulti.Request())){

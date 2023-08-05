@@ -172,10 +172,12 @@ struct etagpair
     }
 };
 
+// Requires pointer stability and thus must be a list not a vector
 typedef std::list<etagpair> etaglist_t;
 
 struct petagpool
 {
+    // Requires pointer stability and thus must be a list not a vector
     std::list<etagpair> petaglist;
 
     ~petagpool()
@@ -249,7 +251,7 @@ struct filepart
     }
 };
 
-typedef std::list<filepart> filepart_list_t;
+typedef std::vector<filepart> filepart_list_t;
 
 //
 // Each part information for Untreated parts
@@ -307,7 +309,7 @@ struct untreatedpart
     }
 };
 
-typedef std::list<untreatedpart> untreated_list_t;
+typedef std::vector<untreatedpart> untreated_list_t;
 
 //
 // Information on each part of multipart upload
@@ -321,7 +323,7 @@ struct mp_part
     explicit mp_part(off_t set_start = 0, off_t set_size = 0, int part = 0) : start(set_start), size(set_size), part_num(part) {}
 };
 
-typedef std::list<struct mp_part> mp_part_list_t;
+typedef std::vector<struct mp_part> mp_part_list_t;
 
 inline off_t total_mp_part_list(const mp_part_list_t& mplist)
 {
@@ -346,7 +348,7 @@ typedef std::map<std::string, std::string, case_insensitive_compare_func> mimes_
 //-------------------------------------------------------------------
 // Typedefs specialized for use
 //-------------------------------------------------------------------
-typedef std::list<std::string>             readline_t;
+typedef std::vector<std::string>           readline_t;
 typedef std::map<std::string, std::string> kvmap_t;
 typedef std::map<std::string, kvmap_t>     bucketkvmap_t;
 

@@ -21,8 +21,8 @@
 #ifndef S3FS_FDCACHE_PAGE_H_
 #define S3FS_FDCACHE_PAGE_H_
 
-#include <list>
 #include <sys/types.h>
+#include <vector>
 
 //------------------------------------------------
 // Symbols
@@ -61,7 +61,7 @@ struct fdpage
         return (0 < bytes ? offset + bytes - 1 : 0);
     }
 };
-typedef std::list<struct fdpage> fdpage_list_t;
+typedef std::vector<struct fdpage> fdpage_list_t;
 
 //------------------------------------------------
 // Class PageList

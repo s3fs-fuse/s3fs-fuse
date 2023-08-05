@@ -22,7 +22,6 @@
 #define S3FS_CURL_H_
 
 #include <curl/curl.h>
-#include <list>
 #include <map>
 #include <memory>
 #include <vector>
@@ -84,7 +83,7 @@ class Semaphore;
 typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
 
 typedef std::map<std::string, std::string> sseckeymap_t;
-typedef std::list<sseckeymap_t>            sseckeylist_t;
+typedef std::vector<sseckeymap_t>          sseckeylist_t;
 
 // Class for lapping curl
 //

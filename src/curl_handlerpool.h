@@ -23,6 +23,7 @@
 
 #include <cassert>
 #include <curl/curl.h>
+#include <list>
 
 //----------------------------------------------
 // Typedefs

@@ -22,8 +22,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <climits>
-#include <string>
 #include <list>
+#include <string>
+#include <vector>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -41,8 +42,8 @@ struct write_block_part
     off_t size;
 };
 
-typedef std::list<write_block_part> wbpart_list_t;
-typedef std::list<std::string>      strlist_t;
+typedef std::vector<write_block_part> wbpart_list_t;
+typedef std::list<std::string>        strlist_t;
 
 //---------------------------------------------------------
 // Const

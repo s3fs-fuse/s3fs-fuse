@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <regex.h>
+#include <vector>
 
 #include "metaheader.h"
 

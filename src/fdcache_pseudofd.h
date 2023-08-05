@@ -21,6 +21,8 @@
 #ifndef S3FS_FDCACHE_PSEUDOFD_H_
 #define S3FS_FDCACHE_PSEUDOFD_H_
 
+#include <vector>
+
 //------------------------------------------------
 // Typdefs
 //------------------------------------------------

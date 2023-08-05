@@ -22,6 +22,7 @@
 #define S3FS_CURL_MULTI_H_
 
 #include <memory>
+#include <vector>
 
 //----------------------------------------------
 // Typedef
