@@ -256,10 +256,25 @@ bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, siz
 // OpenSSL 3.0 deprecated the MD5_*** low-level encryption functions,
 // so we should use the high-level EVP API instead.
 //
+
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
+{
+    unsigned int digestlen = static_cast<unsigned int>(digest->size());
+
+    const EVP_MD* md    = EVP_get_digestbyname("md5");
+    EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
+    EVP_DigestInit_ex(mdctx, md, nullptr);
+    EVP_DigestUpdate(mdctx, data, datalen);
+    EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
+    EVP_MD_CTX_destroy(mdctx);
+
+    return true;
+}
+
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
     EVP_MD_CTX*    mdctx;
-    unsigned int   md5_digest_len = result->size();
+    unsigned int   md5_digest_len = static_cast<unsigned int>(result->size());
     off_t          bytes;
 
     if(-1 == size){
@@ -303,6 +318,22 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 //-------------------------------------------------------------------
 // Utility Function for MD5 (OpenSSL < 3.0)
 //-------------------------------------------------------------------
+
+// TODO: Does this fail on OpenSSL < 3.0 and we need to use MD5_CTX functions?
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
+{
+    unsigned int digestlen = digest->size();
+
+    const EVP_MD* md    = EVP_get_digestbyname("md5");
+    EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
+    EVP_DigestInit_ex(mdctx, md, nullptr);
+    EVP_DigestUpdate(mdctx, data, datalen);
+    EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
+    EVP_MD_CTX_destroy(mdctx);
+
+    return true;
+}
+
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
     MD5_CTX md5ctx;
@@ -349,8 +380,7 @@ bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest)
     EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
     EVP_DigestInit_ex(mdctx, md, nullptr);
     EVP_DigestUpdate(mdctx, data, datalen);
-    // TODO: strange
-    unsigned int digestlen = digest->size();
+    unsigned int digestlen = static_cast<unsigned int>(digest->size());
     EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
     EVP_MD_CTX_destroy(mdctx);
 
