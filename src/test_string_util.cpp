@@ -20,7 +20,6 @@
 
 #include <cstdlib>
 #include <limits>
-#include <memory>
 #include <stdint.h>
 #include <string>
 
@@ -55,15 +54,16 @@ void test_trim()
 void test_base64()
 {
     std::unique_ptr<unsigned char[]> buf;
+    char tmpbuf = '\0';
     size_t len;
 
-    ASSERT_STREQUALS(s3fs_base64(nullptr, 0).c_str(), nullptr);
+    ASSERT_EQUALS(s3fs_base64(nullptr, 0), std::string(""));
     buf = s3fs_decode64(nullptr, 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, nullptr, 0);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, &tmpbuf, 0);
 
-    ASSERT_STREQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0).c_str(), nullptr);
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), std::string(""));
     buf = s3fs_decode64("", 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, nullptr, 0);
+    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, &tmpbuf, 0);
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), std::string("MQ=="));
     buf = s3fs_decode64("MQ==", 4, &len);
