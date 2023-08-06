@@ -373,31 +373,26 @@ std::string s3fs_hex_upper(const unsigned char* input, size_t length)
     return s3fs_hex(input, length, "0123456789ABCDEF");
 }
 
-char* s3fs_base64(const unsigned char* input, size_t length)
+std::string s3fs_base64(const unsigned char* input, size_t length)
 {
     static const char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    char* result;
 
-    if(!input || 0 == length){
-        return nullptr;
-    }
-    result = new char[((length + 3 - 1) / 3) * 4 + 1];
+    std::string result;
+    result.reserve(((length + 3 - 1) / 3) * 4 + 1);
 
     unsigned char parts[4];
     size_t rpos;
-    size_t wpos;
-    for(rpos = 0, wpos = 0; rpos < length; rpos += 3){
+    for(rpos = 0; rpos < length; rpos += 3){
         parts[0] = (input[rpos] & 0xfc) >> 2;
         parts[1] = ((input[rpos] & 0x03) << 4) | ((((rpos + 1) < length ? input[rpos + 1] : 0x00) & 0xf0) >> 4);
         parts[2] = (rpos + 1) < length ? (((input[rpos + 1] & 0x0f) << 2) | ((((rpos + 2) < length ? input[rpos + 2] : 0x00) & 0xc0) >> 6)) : 0x40;
         parts[3] = (rpos + 2) < length ? (input[rpos + 2] & 0x3f) : 0x40;
 
-        result[wpos++] = base[parts[0]];
-        result[wpos++] = base[parts[1]];
-        result[wpos++] = base[parts[2]];
-        result[wpos++] = base[parts[3]];
+        result += base[parts[0]];
+        result += base[parts[1]];
+        result += base[parts[2]];
+        result += base[parts[3]];
     }
-    result[wpos] = '\0';
 
     return result;
 }

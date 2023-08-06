@@ -3636,15 +3636,8 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
     }
 
     // convert value by base64
-    char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
-    if(!base64val){
-        free_xattrs(xattrs);
-        return false;
-    }
+    xattrvalue = s3fs_base64(iter->second->pvalue, iter->second->length);
     free_xattrs(xattrs);
-
-    xattrvalue = base64val;
-    delete[] base64val;
 
     return true;
 }
@@ -3771,11 +3764,7 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs)
         strxattrs += "\":\"";
 
         if(iter->second){
-            char* base64val = s3fs_base64((iter->second)->pvalue, (iter->second)->length);
-            if(base64val){
-                strxattrs += base64val;
-                delete[] base64val;
-            }
+            strxattrs += s3fs_base64(iter->second->pvalue, iter->second->length);
         }
         strxattrs += '\"';
     }

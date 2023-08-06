@@ -30,20 +30,11 @@
 std::string s3fs_get_content_md5(int fd)
 {
     md5_t md5;
-    char* base64;
-    std::string Signature;
-
     if(!s3fs_md5_fd(fd, 0, -1, &md5)){
+        // TODO: better return value?
         return std::string("");
     }
-    if(nullptr == (base64 = s3fs_base64(md5.data(), md5.size()))){
-        return std::string("");  // ENOMEM
-    }
-
-    Signature = base64;
-    delete[] base64;
-
-    return Signature;
+    return s3fs_base64(md5.data(), md5.size());
 }
 
 std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)

@@ -815,16 +815,8 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
             return false;
         }
     } else {
-        char* pbase64_key;
-
-        if(nullptr != (pbase64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length()))) {
-            raw_key = onekey;
-            base64_key = pbase64_key;
-            delete[] pbase64_key;
-        } else {
-            S3FS_PRN_ERR("Failed to convert base64 from SSE-C key %s", onekey.c_str());
-            return false;
-        }
+        base64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length());
+        raw_key = onekey;
     }
 
     // make MD5
@@ -2767,15 +2759,8 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
 
     s3fs_HMAC(key, key_len, sdata, sdata_len, &md, &md_len);
 
-    char* base64;
-    if(nullptr == (base64 = s3fs_base64(md, md_len))){
-        delete[] md;
-        return std::string("");  // ENOMEM
-    }
+    Signature = s3fs_base64(md, md_len);
     delete[] md;
-
-    Signature = base64;
-    delete[] base64;
 
     return Signature;
 }
@@ -4124,9 +4109,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
             return -EIO;
         }
         partdata.etag = s3fs_hex_lower(md5raw.data(), md5raw.size());
-        char* md5base64p = s3fs_base64(md5raw.data(), md5raw.size());
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", md5base64p);
-        delete[] md5base64p;
+        std::string md5base64 = s3fs_base64(md5raw.data(), md5raw.size());
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", md5base64.c_str());
     }
 
     // make request
