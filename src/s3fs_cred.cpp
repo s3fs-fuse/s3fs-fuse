@@ -29,6 +29,7 @@
 
 #include "common.h"
 #include "s3fs_cred.h"
+#include "s3fs_help.h"
 #include "s3fs_logger.h"
 #include "curl.h"
 #include "string_util.h"
@@ -1522,6 +1523,7 @@ bool S3fsCred::CheckForbiddenBucketParams()
     // The first plain argument is the bucket
     if(bucket_name.empty()){
         S3FS_PRN_EXIT("missing BUCKET argument.");
+        show_usage();
         return false;
     }
 
