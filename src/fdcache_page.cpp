@@ -358,14 +358,6 @@ PageList::PageList(off_t size, bool is_loaded, bool is_modified, bool shrinked) 
     Init(size, is_loaded, is_modified);
 }
 
-PageList::PageList(const PageList& other)
-{
-    for(fdpage_list_t::const_iterator iter = other.pages.begin(); iter != other.pages.end(); ++iter){
-        pages.push_back(*iter);
-    }
-    is_shrink = other.is_shrink;
-}
-
 PageList::~PageList()
 {
     Clear();
