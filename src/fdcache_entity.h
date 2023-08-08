@@ -111,7 +111,7 @@ class FdEntity
         int Dup(int fd, AutoLock::Type locktype = AutoLock::NONE);
         int OpenPseudoFd(int flags = O_RDONLY, AutoLock::Type locktype = AutoLock::NONE);
         int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE) const;
-        const char* GetPath() const { return path.c_str(); }
+        const std::string& GetPath() const { return path; }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;

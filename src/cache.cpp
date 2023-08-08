@@ -248,7 +248,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
                     std::string tag = lower(hiter->first);
                     if(tag == "etag"){
                         stretag = hiter->second;
-                        if('\0' != petag[0] && 0 != strcmp(petag, stretag.c_str())){
+                        if('\0' != petag[0] && petag != stretag){
                             is_delete_cache = true;
                         }
                         break;

@@ -217,18 +217,18 @@ int main(int argc, char** argv)
         struct stat st;
         if(0 == stat(fiter->c_str(), &st)){
             if(!S_ISREG(st.st_mode)){
-                std::cerr << "[ERROR] File " << fiter->c_str() << " is existed, but it is not regular file." << std::endl;
+                std::cerr << "[ERROR] File " << *fiter << " is existed, but it is not regular file." << std::endl;
                 free(pData);
                 exit(EXIT_FAILURE);
             }
             if(-1 == (fd = open(fiter->c_str(), O_WRONLY))){
-                std::cerr << "[ERROR] Could not open " << fiter->c_str() << std::endl;
+                std::cerr << "[ERROR] Could not open " << *fiter << std::endl;
                 free(pData);
                 exit(EXIT_FAILURE);
             }
         }else{
             if(-1 == (fd = open(fiter->c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644))){
-                std::cerr << "[ERROR] Could not create " << fiter->c_str() << std::endl;
+                std::cerr << "[ERROR] Could not create " << *fiter << std::endl;
                 free(pData);
                 exit(EXIT_FAILURE);
             }
@@ -240,7 +240,7 @@ int main(int argc, char** argv)
             for(ssize_t writepos = 0, writecnt = 0; writepos < piter->size; writepos += writecnt){
                 if(-1 == (writecnt = pwrite(fd, &(pData[writepos]), static_cast<size_t>(piter->size - writepos), (piter->start + writepos)))){
                     if(EAGAIN != errno && EWOULDBLOCK != errno && EINTR != errno){
-                        std::cerr << "[ERROR] Failed writing to " << fiter->c_str() << " by errno : " << errno << std::endl;
+                        std::cerr << "[ERROR] Failed writing to " << *fiter << " by errno : " << errno << std::endl;
                         close(fd);
                         free(pData);
                         exit(EXIT_FAILURE);
