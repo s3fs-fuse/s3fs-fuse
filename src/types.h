@@ -322,6 +322,23 @@ inline off_t total_mp_part_list(const mp_part_list_t& mplist)
     return size;
 }
 
+//
+// Rename directory struct
+//
+struct mvnode
+{
+    mvnode(std::string old_path, std::string new_path, bool is_dir, bool is_normdir)
+        : old_path(std::move(old_path))
+        , new_path(std::move(new_path))
+        , is_dir(is_dir)
+        , is_normdir(is_normdir)
+    {}
+    std::string old_path;
+    std::string new_path;
+    bool is_dir;
+    bool is_normdir;
+};
+
 //-------------------------------------------------------------------
 // mimes_t
 //-------------------------------------------------------------------
