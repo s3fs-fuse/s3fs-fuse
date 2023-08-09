@@ -588,7 +588,7 @@ bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
     AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     stat_cache_t::iterator iter;
-    if(stat_cache.end() != (iter = stat_cache.find(std::string(key)))){
+    if(stat_cache.end() != (iter = stat_cache.find(key))){
         stat_cache.erase(iter);
     }
     if(0 < strlen(key) && 0 != strcmp(key, "/")){
@@ -740,7 +740,7 @@ bool StatCache::DelSymlink(const char* key, AutoLock::Type locktype)
     AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     symlink_cache_t::iterator iter;
-    if(symlink_cache.end() != (iter = symlink_cache.find(std::string(key)))){
+    if(symlink_cache.end() != (iter = symlink_cache.find(key))){
         symlink_cache.erase(iter);
     }
     S3FS_MALLOCTRIM(0);

@@ -569,8 +569,8 @@ bool S3fsCred::SetIAMCredentials(const char* response, AutoLock::Type type)
         }
         AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
     }else{
-        AWSAccessKeyId       = keyval[std::string(S3fsCred::IAMCRED_ACCESSKEYID)];
-        AWSSecretAccessKey   = keyval[std::string(S3fsCred::IAMCRED_SECRETACCESSKEY)];
+        AWSAccessKeyId       = keyval[S3fsCred::IAMCRED_ACCESSKEYID];
+        AWSSecretAccessKey   = keyval[S3fsCred::IAMCRED_SECRETACCESSKEY];
         AWSAccessTokenExpire = cvtIAMExpireStringToTime(keyval[IAM_expiry_field].c_str());
     }
     return true;

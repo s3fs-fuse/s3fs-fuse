@@ -328,7 +328,7 @@ int SyncFiller::Fill(const char *name, const struct stat *stbuf, off_t off)
     AutoLock auto_lock(&filler_lock);
 
     int result = 0;
-    if(filled.insert(std::string(name)).second){
+    if(filled.insert(name).second){
         result = filler_func(filler_buff, name, stbuf, off);
     }
     return result;
@@ -1072,7 +1072,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     std::string strValue;
 
     // check symbolic link cache
-    if(!StatCache::getStatCacheData()->GetSymlink(std::string(path), strValue)){
+    if(!StatCache::getStatCacheData()->GetSymlink(path, strValue)){
         // not found in cache, then open the path
         {   // scope for AutoFdEntity
             AutoFdEntity autoent;
@@ -1101,7 +1101,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         }
 
         // check buf if it has space words.
-        strValue = trim(std::string(buf));
+        strValue = trim(buf);
 
         // decode wtf8. This will always be shorter
         if(use_wtf8){
@@ -1109,7 +1109,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         }
 
         // add symbolic link cache
-        if(!StatCache::getStatCacheData()->AddSymlink(std::string(path), strValue)){
+        if(!StatCache::getStatCacheData()->AddSymlink(path, strValue)){
           S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
         }
     }
@@ -1129,7 +1129,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 
     std::string strnow = s3fs_str_realtime();
     headers_t   meta;
-    meta["Content-Type"]     = S3fsCurl::LookupMimeType(std::string(path));
+    meta["Content-Type"]     = S3fsCurl::LookupMimeType(path);
     meta["x-amz-meta-uid"]   = std::to_string(uid);
     meta["x-amz-meta-gid"]   = std::to_string(gid);
     meta["x-amz-meta-mode"]  = std::to_string(mode);
@@ -1260,8 +1260,8 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
     meta["x-amz-meta-ctime"] = str(ts_ctime);
 
     if(pxattrvalue){
-        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(std::string(pxattrvalue)).c_str());
-        meta["x-amz-meta-xattr"] = std::string(pxattrvalue);
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(pxattrvalue).c_str());
+        meta["x-amz-meta-xattr"] = pxattrvalue;
     }
 
     S3fsCurl s3fscurl;
@@ -1446,7 +1446,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
 
     std::string strnow = s3fs_str_realtime();
     headers_t   headers;
-    headers["Content-Type"]     = std::string("application/octet-stream"); // Static
+    headers["Content-Type"]     = "application/octet-stream"; // Static
     headers["x-amz-meta-mode"]  = std::to_string(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
     headers["x-amz-meta-atime"] = strnow;
     headers["x-amz-meta-ctime"] = strnow;
@@ -1467,7 +1467,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
             return -errno;
         }
         // write(without space words)
-        strFrom           = trim(std::string(from));
+        strFrom           = trim(from);
         ssize_t from_size = static_cast<ssize_t>(strFrom.length());
         ssize_t ressize;
         if(from_size != (ressize = ent->Write(autoent.GetPseudoFd(), strFrom.c_str(), 0, from_size))){
@@ -1486,7 +1486,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     }
 
     StatCache::getStatCacheData()->DelStat(to);
-    if(!StatCache::getStatCacheData()->AddSymlink(std::string(to), strFrom)){
+    if(!StatCache::getStatCacheData()->AddSymlink(to, strFrom)){
         S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
     }
 
@@ -1527,7 +1527,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         meta["x-amz-meta-ctime"]     = s3fs_str_realtime();
     }
     meta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
-    meta["Content-Type"]             = S3fsCurl::LookupMimeType(std::string(to));
+    meta["Content-Type"]             = S3fsCurl::LookupMimeType(to);
     meta["x-amz-metadata-directive"] = "REPLACE";
 
     std::string xattrvalue;
@@ -2783,7 +2783,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         }
 
         std::string strnow       = s3fs_str_realtime();
-        meta["Content-Type"]     = std::string("application/octet-stream"); // Static
+        meta["Content-Type"]     = "application/octet-stream"; // Static
         meta["x-amz-meta-mode"]  = std::to_string(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
         meta["x-amz-meta-ctime"] = strnow;
         meta["x-amz-meta-mtime"] = strnow;
@@ -3101,7 +3101,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         // [NOTE]
         // All opened file's stats is cached with no truncate flag.
         // Thus we unset it here.
-        StatCache::getStatCacheData()->ChangeNoTruncateFlag(std::string(path), false);
+        StatCache::getStatCacheData()->ChangeNoTruncateFlag(path, false);
 
         // [NOTICE]
         // At first, we remove stats cache.
@@ -3350,7 +3350,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         umask(dirmask);
 
         headers_t   dummy_header;
-        dummy_header["Content-Type"]     = std::string("application/x-directory");          // directory
+        dummy_header["Content-Type"]     = "application/x-directory";          // directory
         dummy_header["x-amz-meta-uid"]   = std::to_string(is_s3fs_uid ? s3fs_uid : geteuid());
         dummy_header["x-amz-meta-gid"]   = std::to_string(is_s3fs_gid ? s3fs_gid : getegid());
         dummy_header["x-amz-meta-mode"]  = std::to_string(S_IFDIR | (~dirmask & (S_IRWXU | S_IRWXG | S_IRWXO)));
@@ -3733,7 +3733,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     }
 
     // parse each key:val
-    for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : std::string("")), pair_nextpos = restxattrs.find_first_of(',')){
+    for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : ""), pair_nextpos = restxattrs.find_first_of(',')){
         std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
         std::string key;
         xattr_value val;
@@ -4192,7 +4192,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     if(!xattrs.empty()){
         updatemeta["x-amz-meta-xattr"]     = build_xattrs(xattrs);
     }else{
-        updatemeta["x-amz-meta-xattr"]     = std::string("");      // This is a special case. If empty, this header will eventually be removed.
+        updatemeta["x-amz-meta-xattr"]     = "";      // This is a special case. If empty, this header will eventually be removed.
     }
 
     // check opened file handle.

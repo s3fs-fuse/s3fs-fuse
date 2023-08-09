@@ -158,8 +158,8 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     }
 
     // Make dir path and filename
-    std::string   strdirpath = mydirname(std::string(reinterpret_cast<char*>(fullpath)));
-    std::string   strmybpath = mybasename(std::string(reinterpret_cast<char*>(fullpath)));
+    std::string   strdirpath = mydirname(reinterpret_cast<const char*>(fullpath));
+    std::string   strmybpath = mybasename(reinterpret_cast<const char*>(fullpath));
     const char* dirpath = strdirpath.c_str();
     const char* mybname = strmybpath.c_str();
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;

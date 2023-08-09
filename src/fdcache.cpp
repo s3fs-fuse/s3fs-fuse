@@ -489,7 +489,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
     }
     AutoLock auto_lock(&FdManager::fd_manager_lock, locktype);
 
-    fdent_map_t::iterator iter = fent.find(std::string(path));
+    fdent_map_t::iterator iter = fent.find(path);
     if(fent.end() != iter && iter->second){
         if(-1 == existfd){
             if(newfd){
@@ -544,7 +544,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     // search in mapping by key(path)
-    fdent_map_t::iterator iter = fent.find(std::string(path));
+    fdent_map_t::iterator iter = fent.find(path);
     if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
         // If the cache directory is not specified, s3fs opens a temporary file
         // when the file is opened.
@@ -602,7 +602,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
 
         if(!cache_path.empty()){
             // using cache
-            fent[std::string(path)] = ent;
+            fent[path] = ent;
         }else{
             // not using cache, so the key of fdentity is set not really existing path.
             // (but not strictly unexisting path.)
