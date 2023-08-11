@@ -43,8 +43,8 @@ class AutoFdEntity
       int       pseudo_fd;
 
   private:
-      AutoFdEntity(AutoFdEntity& other);
-      bool operator=(AutoFdEntity& other);
+      AutoFdEntity(const AutoFdEntity&) = delete;
+      AutoFdEntity& operator=(const AutoFdEntity&) = delete;
 
   public:
       AutoFdEntity();

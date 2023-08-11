@@ -98,7 +98,8 @@ class PageList
         static void FreeList(fdpage_list_t& list);
 
         explicit PageList(off_t size = 0, bool is_loaded = false, bool is_modified = false, bool shrinked = false);
-        explicit PageList(const PageList& other);
+        PageList(const PageList&) = delete;
+        PageList& operator=(const PageList&) = delete;
         ~PageList();
 
         bool Init(off_t size, bool is_loaded, bool is_modified);

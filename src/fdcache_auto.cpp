@@ -31,24 +31,6 @@ AutoFdEntity::AutoFdEntity() : pFdEntity(nullptr), pseudo_fd(-1)
 {
 }
 
-// [NOTE]
-// The copy constructor should not be called, then this is private method.
-// Even if it is called, the consistency of the number of
-// references can be maintained, but this case is not assumed.
-//
-AutoFdEntity::AutoFdEntity(AutoFdEntity& other) : pFdEntity(nullptr), pseudo_fd(-1)
-{
-    S3FS_PRN_WARN("This method should not be called. Please check the caller.");
-
-    if(other.pFdEntity){
-        if(-1 != (pseudo_fd = other.pFdEntity->Dup(other.pseudo_fd))){
-            pFdEntity = other.pFdEntity;
-        }else{
-            S3FS_PRN_ERR("Failed duplicating fd in AutoFdEntity.");
-        }
-    }
-}
-
 AutoFdEntity::~AutoFdEntity()
 {
     Close();
@@ -129,28 +111,6 @@ FdEntity* AutoFdEntity::OpenExistFdEntity(const char* path, int flags)
         return nullptr;
     }
     return pFdEntity;
-}
-
-// [NOTE]
-// This operator should not be called, then this is private method.
-// Even if it is called, the consistency of the number of
-// references can be maintained, but this case is not assumed.
-//
-bool AutoFdEntity::operator=(AutoFdEntity& other)
-{
-    S3FS_PRN_WARN("This method should not be called. Please check the caller.");
-
-    Close();
-
-    if(other.pFdEntity){
-        if(-1 != (pseudo_fd = other.pFdEntity->Dup(other.pseudo_fd))){
-            pFdEntity = other.pFdEntity;
-        }else{
-            S3FS_PRN_ERR("Failed duplicating fd in AutoFdEntity.");
-            return false;
-        }
-    }
-    return true;
 }
 
 /*

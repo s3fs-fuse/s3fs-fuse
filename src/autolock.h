@@ -40,7 +40,8 @@ class AutoLock
         bool is_lock_acquired;
 
     private:
-        AutoLock(const AutoLock&);
+        AutoLock(const AutoLock&) = delete;
+        AutoLock& operator=(const AutoLock&) = delete;
 
     public:
         explicit AutoLock(pthread_mutex_t* pmutex, Type type = NONE);
