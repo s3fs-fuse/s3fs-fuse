@@ -218,7 +218,8 @@ bool FdManager::MakeRandomTempPath(const char* path, std::string& tmppath)
 {
     char szBuff[64];
 
-    sprintf(szBuff, NOCACHE_PATH_PREFIX_FORM, random());     // worry for performance, but maybe don't worry.
+    snprintf(szBuff, sizeof(szBuff), NOCACHE_PATH_PREFIX_FORM, random());   // worry for performance, but maybe don't worry.
+    szBuff[sizeof(szBuff) - 1] = '\0';                                      // for safety
     tmppath  = szBuff;
     tmppath += path ? path : "";
     return true;

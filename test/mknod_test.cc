@@ -73,27 +73,31 @@ bool TestMknod(const char* basepath, mode_t mode)
         case S_IFREG:
             str_mode = str_mode_reg;
             dev      = 0;
-            sprintf(filepath, "%s.%s", basepath, str_ext_reg);
+            snprintf(filepath, sizeof(filepath), "%s.%s", basepath, str_ext_reg);
+            filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         case S_IFCHR:
             str_mode = str_mode_chr;
             dev      = makedev(0, 0);
-            sprintf(filepath, "%s.%s", basepath, str_ext_chr);
+            snprintf(filepath, sizeof(filepath), "%s.%s", basepath, str_ext_chr);
+            filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         case S_IFBLK:
             str_mode = str_mode_blk;
-            dev      = makedev((unsigned int)(259), 0);     // temporary value
-            sprintf(filepath, "%s.%s", basepath, str_ext_blk);
+            dev      = makedev((unsigned int)(259), 0); // temporary value
+            snprintf(filepath, sizeof(filepath), "%s.%s", basepath, str_ext_blk);
+            filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         case S_IFIFO:
             str_mode = str_mode_fifo;
             dev      = 0;
-            sprintf(filepath, "%s.%s", basepath, str_ext_fifo);
+            snprintf(filepath, sizeof(filepath), "%s.%s", basepath, str_ext_fifo);
+            filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         case S_IFSOCK:
             str_mode = str_mode_sock;
             dev      = 0;
-            snprintf(filepath, S3FS_TEST_PATH_MAX, "%s.%s", basepath, str_ext_sock);
+            snprintf(filepath, sizeof(filepath), "%s.%s", basepath, str_ext_sock);
             filepath[S3FS_TEST_PATH_MAX - 1] = '\0';    // for safety
             break;
         default:
