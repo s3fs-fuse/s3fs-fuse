@@ -2142,7 +2142,7 @@ bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle) const
 //
 bool S3fsCurl::RemakeHandle()
 {
-    S3FS_PRN_INFO3("Retry request. [type=%d][url=%s][path=%s]", type, url.c_str(), path.c_str());
+    S3FS_PRN_INFO3("Retry request. [type=%d][url=%s][path=%s]", static_cast<int>(type), url.c_str(), path.c_str());
 
     if(REQTYPE::UNSET == type){
         return false;
@@ -2444,7 +2444,7 @@ bool S3fsCurl::RemakeHandle()
             break;
 
         default:
-            S3FS_PRN_ERR("request type is unknown(%d)", type);
+            S3FS_PRN_ERR("request type is unknown(%d)", static_cast<int>(type));
             return false;
     }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent

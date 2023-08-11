@@ -334,7 +334,8 @@ int FdEntity::OpenMirrorFile()
         // (do not care for threading, because allowed any value returned.)
         //
         char         szfile[NAME_MAX + 1];
-        sprintf(szfile, "%x.tmp", rand_r(&seed));
+        snprintf(szfile, sizeof(szfile), "%x.tmp", rand_r(&seed));
+        szfile[NAME_MAX] = '\0';                            // for safety
         mirrorpath = bupdir + "/" + szfile;
 
         // link mirror file to cache file

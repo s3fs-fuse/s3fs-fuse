@@ -41,7 +41,8 @@ int main(int argc, const char *argv[])
 
     int  fd;
     char filepath[4096];
-    sprintf(filepath, "%s\r", argv[1]);
+    snprintf(filepath, sizeof(filepath), "%s\r", argv[1]);
+    filepath[sizeof(filepath) - 1] = '\0';              // for safety
 
     // create empty file
     if(-1 == (fd = open(filepath, O_CREAT|O_RDWR, 0644))){
