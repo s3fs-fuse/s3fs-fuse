@@ -418,14 +418,9 @@ inline unsigned char char_decode64(const char ch)
     return by;
 }
 
-unsigned char* s3fs_decode64(const char* input, size_t input_len, size_t* plength)
+std::unique_ptr<unsigned char[]> s3fs_decode64(const char* input, size_t input_len, size_t* plength)
 {
-    unsigned char* result;
-    if(!input || 0 == input_len || !plength){
-        return nullptr;
-    }
-    result = new unsigned char[input_len / 4 * 3];
-
+    std::unique_ptr<unsigned char[]> result(new unsigned char[input_len / 4 * 3]);
     unsigned char parts[4];
     size_t rpos;
     size_t wpos;

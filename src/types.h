@@ -25,6 +25,7 @@
 #include <cstring>
 #include <string>
 #include <map>
+#include <memory>
 #include <list>
 #include <vector>
 
@@ -56,14 +57,11 @@
 //
 typedef struct xattr_value
 {
-    unsigned char* pvalue;
+    std::unique_ptr<unsigned char[]> pvalue;
     size_t         length;
 
     explicit xattr_value(unsigned char* pval = nullptr, size_t len = 0) : pvalue(pval), length(len) {}
-    ~xattr_value()
-    {
-        delete[] pvalue;
-    }
+    ~xattr_value() {}
 }XATTRVAL, *PXATTRVAL;
 
 typedef std::map<std::string, PXATTRVAL> xattrs_t;

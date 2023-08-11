@@ -803,17 +803,11 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     std::string base64_key;
     std::string raw_key;
     if(onekey.length() > 256 / 8){
-        char* p_key;
         size_t keylength;
 
-        if(nullptr != (p_key = reinterpret_cast<char*>(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength)))) {
-            raw_key = std::string(p_key, keylength);
-            base64_key = onekey;
-            delete[] p_key;
-        } else {
-            S3FS_PRN_ERR("Failed to convert base64 to SSE-C key %s", onekey.c_str());
-            return false;
-        }
+        std::unique_ptr<unsigned char[]> p_key(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength));
+        raw_key = std::string(reinterpret_cast<char *>(p_key.get()), keylength);
+        base64_key = onekey;
     } else {
         base64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length());
         raw_key = onekey;

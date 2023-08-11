@@ -3636,7 +3636,7 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
     }
 
     // convert value by base64
-    xattrvalue = s3fs_base64(iter->second->pvalue, iter->second->length);
+    xattrvalue = s3fs_base64(iter->second->pvalue.get(), iter->second->length);
     free_xattrs(xattrs);
 
     return true;
@@ -3764,7 +3764,7 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs)
         strxattrs += "\":\"";
 
         if(iter->second){
-            strxattrs += s3fs_base64(iter->second->pvalue, iter->second->length);
+            strxattrs += s3fs_base64(iter->second->pvalue.get(), iter->second->length);
         }
         strxattrs += '\"';
     }
@@ -3821,8 +3821,8 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     PXATTRVAL pval = new XATTRVAL;
     pval->length = size;
     if(0 < size){
-        pval->pvalue = new unsigned char[size];
-        memcpy(pval->pvalue, value, size);
+        pval->pvalue.reset(new unsigned char[size]);
+        memcpy(pval->pvalue.get(), value, size);
     }else{
         pval->pvalue = nullptr;
     }
@@ -4034,7 +4034,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     unsigned char* pvalue = nullptr;
     if(nullptr != xiter->second){
         length = xiter->second->length;
-        pvalue = xiter->second->pvalue;
+        pvalue = xiter->second->pvalue.get();
     }
 
     if(0 < size){
