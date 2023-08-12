@@ -994,6 +994,7 @@ function test_update_time_touch() {
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    sleep 1
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -2258,56 +2259,76 @@ function test_not_existed_dir_obj() {
     echo data2 | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME_2}"
 
     # Top directory
+    #
+    # [NOTE]
+    # Immediately after uploading with the aws command, there is a case where
+    # the directory path cannot be found (404 error).
+    # In this case, it may be listed correctly after a few retries.
+    # This error is a response problem on the S3 server side, not a problem
+    # with the s3fs process, so we try again.
+    #
+    _RETRY_COUNT=0
     # shellcheck disable=SC2010
-    if ! ls -1 | grep -q '^not_existed_dir_single$'; then
-    echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
-    return 1;
-    fi
+    while ! ls | grep -q 'not_existed_dir_single'; do
+        if [ "${_RETRY_COUNT}" -ge 3 ]; then
+            echo "Expect to find \"not_existed_dir_single\" directory by ls command, but it is not found (after ${_RETRY_COUNT} retries)"
+            return 1
+        fi
+        sleep 1
+    done
+
+    _RETRY_COUNT=0
     # shellcheck disable=SC2010
-    if ! ls -1 | grep -q '^not_existed_dir_parent$'; then
-    echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
-    return 1;
-    fi
+    while ! ls | grep -q 'not_existed_dir_parent'; do
+        if [ "${_RETRY_COUNT}" -ge 3 ]; then
+            echo "Expect to find \"not_existed_dir_parent\" directory by ls command, but it is not found (after ${_RETRY_COUNT} retries)"
+            return 1
+        fi
+        sleep 1
+    done
 
     # Single nest directory
-    if ! stat not_existed_dir_single; then
-    echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
-    return 1;
+    # shellcheck disable=SC2086
+    if ! "${STAT_BIN[@]}" not_existed_dir_single; then
+        echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+        return 1;
     fi
     # shellcheck disable=SC2010
-    if ! ls -1 not_existed_dir_single | grep -q "^${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
-    return 1;
+    if ! ls not_existed_dir_single | grep -q "^${TEST_TEXT_FILE}\$"; then
+        echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+        return 1;
     fi
     # shellcheck disable=SC2010
-    if ! ls -1 "not_existed_dir_single/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_single/${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
-    return 1;
+    if ! ls "not_existed_dir_single/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_single/${TEST_TEXT_FILE}\$"; then
+        echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+        return 1;
     fi
 
     # Double nest directory
-    if ! stat not_existed_dir_parent; then
-    echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
-    return 1;
+    # shellcheck disable=SC2086
+    if ! "${STAT_BIN[@]}" not_existed_dir_parent; then
+        echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+        return 1;
     fi
     # shellcheck disable=SC2010
-    if ! ls -1 not_existed_dir_parent | grep -q '^not_existed_dir_child'; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
-    return 1;
+    if ! ls not_existed_dir_parent | grep -q '^not_existed_dir_child'; then
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+        return 1;
     fi
-    if ! stat not_existed_dir_parent/not_existed_dir_child; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
-    return 1;
-    fi
-    # shellcheck disable=SC2010
-    if ! ls -1 not_existed_dir_parent/not_existed_dir_child | grep -q "^${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
-    return 1;
+    # shellcheck disable=SC2086
+    if ! "${STAT_BIN[@]}" not_existed_dir_parent/not_existed_dir_child; then
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+        return 1;
     fi
     # shellcheck disable=SC2010
-    if ! ls -1 "not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
-    return 1;
+    if ! ls not_existed_dir_parent/not_existed_dir_child | grep -q "^${TEST_TEXT_FILE}\$"; then
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+        return 1;
+    fi
+    # shellcheck disable=SC2010
+    if ! ls "not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\$"; then
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+        return 1;
     fi
 
     rm -rf not_existed_dir_single
