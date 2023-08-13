@@ -204,9 +204,6 @@ void StatCache::Clear()
 {
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ++iter){
-        delete (*iter).second;
-    }
     stat_cache.clear();
     S3FS_MALLOCTRIM(0);
 }
@@ -229,7 +226,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
     }
 
     if(iter != stat_cache.end() && (*iter).second){
-        stat_cache_entry* ent = (*iter).second;
+        stat_cache_entry* ent = iter->second.get();
         if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
             if(ent->noobjcache){
                 if(!IsCacheNoObject){
@@ -315,7 +312,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     }
 
     if(iter != stat_cache.end() && (*iter).second) {
-        const stat_cache_entry* ent = (*iter).second;
+        const stat_cache_entry* ent = iter->second.get();
         if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
             if((*iter).second->noobjcache){
                 // noobjcache = true means no object.
@@ -362,9 +359,8 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     }
 
     // make new
-    stat_cache_entry* ent = new stat_cache_entry();
+    std::unique_ptr<stat_cache_entry> ent(new stat_cache_entry());
     if(!convert_header_to_stat(key.c_str(), meta, &(ent->stbuf), forcedir)){
-        delete ent;
         return false;
     }
     ent->hit_count  = 0;
@@ -393,14 +389,10 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.insert(std::make_pair(key, ent));
-    if(!pair.second){
-        delete pair.first->second;
-        pair.first->second = ent;
-    }
+    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.emplace(key, std::move(ent));
 
     // check symbolic link cache
-    if(!S_ISLNK(ent->stbuf.st_mode)){
+    if(!S_ISLNK(pair.first->second->stbuf.st_mode)){
         if(symlink_cache.end() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
             DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
@@ -428,7 +420,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
     if(stat_cache.end() == iter || !(iter->second)){
         return true;
     }
-    stat_cache_entry* ent = iter->second;
+    stat_cache_entry* ent = iter->second.get();
 
     // update only meta keys
     for(headers_t::iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
@@ -487,7 +479,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
 
     // make new
-    stat_cache_entry* ent = new stat_cache_entry();
+    std::unique_ptr<stat_cache_entry> ent(new stat_cache_entry());
     memset(&(ent->stbuf), 0, sizeof(struct stat));
     ent->hit_count  = 0;
     ent->isforce    = false;
@@ -499,11 +491,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.insert(std::make_pair(key, ent));
-    if(!pair.second){
-        delete pair.first->second;
-        pair.first->second = ent;
-    }
+    stat_cache.emplace(key, std::move(ent));
 
     // check symbolic link cache
     if(symlink_cache.end() != symlink_cache.find(key)){
@@ -519,7 +507,7 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
     stat_cache_t::iterator iter = stat_cache.find(key);
 
     if(stat_cache.end() != iter){
-        stat_cache_entry* ent = iter->second;
+        stat_cache_entry* ent = iter->second.get();
         if(ent){
             if(no_truncate){
                 ++(ent->notruncate);
@@ -543,9 +531,8 @@ bool StatCache::TruncateCache()
     // 1) erase over expire time
     if(IsExpireTime){
         for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
-            stat_cache_entry* entry = iter->second;
+            const stat_cache_entry* entry = iter->second.get();
             if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
-                delete entry;
                 iter = stat_cache.erase(iter);
             }else{
                 ++iter;
@@ -563,7 +550,7 @@ bool StatCache::TruncateCache()
     statiterlist_t    erase_iters;
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
         // check no truncate
-        const stat_cache_entry* ent = iter->second;
+        const stat_cache_entry* ent = iter->second.get();
         if(ent && 0L < ent->notruncate){
             // skip for no truncate entry and keep extra counts for this entity.
             if(0 < erase_count){
@@ -584,7 +571,6 @@ bool StatCache::TruncateCache()
         stat_cache_t::iterator siter = *iiter;
 
         S3FS_PRN_DBG("truncate stat cache[path=%s]", siter->first.c_str());
-        delete siter->second;
         stat_cache.erase(siter);
     }
     S3FS_MALLOCTRIM(0);
@@ -603,7 +589,6 @@ bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
 
     stat_cache_t::iterator iter;
     if(stat_cache.end() != (iter = stat_cache.find(std::string(key)))){
-        delete (*iter).second;
         stat_cache.erase(iter);
     }
     if(0 < strlen(key) && 0 != strcmp(key, "/")){
@@ -616,7 +601,6 @@ bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
             strpath += "/";
         }
         if(stat_cache.end() != (iter = stat_cache.find(strpath))){
-            delete (*iter).second;
             stat_cache.erase(iter);
         }
     }
@@ -634,7 +618,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
 
     symlink_cache_t::iterator iter = symlink_cache.find(strpath);
     if(iter != symlink_cache.end() && iter->second){
-        symlink_cache_entry* ent = iter->second;
+        symlink_cache_entry* ent = iter->second.get();
         if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){   // use the same as Stats
             // found
             S3FS_PRN_DBG("symbolic link cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
@@ -687,7 +671,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     }
 
     // make new
-    symlink_cache_entry* ent = new symlink_cache_entry();
+    std::unique_ptr<symlink_cache_entry> ent(new symlink_cache_entry());
     ent->link       = value;
     ent->hit_count  = 0;
     SetStatCacheTime(ent->cache_date);    // Set time(use the same as Stats).
@@ -695,11 +679,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    std::pair<symlink_cache_t::iterator, bool> pair = symlink_cache.insert(std::make_pair(key, ent));
-    if(!pair.second){
-        delete pair.first->second;
-        pair.first->second = ent;
-    }
+    symlink_cache.emplace(key, std::move(ent));
 
     return true;
 }
@@ -715,9 +695,8 @@ bool StatCache::TruncateSymlink()
     // 1) erase over expire time
     if(IsExpireTime){
         for(symlink_cache_t::iterator iter = symlink_cache.begin(); iter != symlink_cache.end(); ){
-            symlink_cache_entry* entry = iter->second;
+            const symlink_cache_entry* entry = iter->second.get();
             if(!entry || IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
-                delete entry;
                 iter = symlink_cache.erase(iter);
             }else{
                 ++iter;
@@ -744,7 +723,6 @@ bool StatCache::TruncateSymlink()
         symlink_cache_t::iterator siter = *iiter;
 
         S3FS_PRN_DBG("truncate symbolic link  cache[path=%s]", siter->first.c_str());
-        delete siter->second;
         symlink_cache.erase(siter);
     }
     S3FS_MALLOCTRIM(0);
@@ -763,7 +741,6 @@ bool StatCache::DelSymlink(const char* key, AutoLock::Type locktype)
 
     symlink_cache_t::iterator iter;
     if(symlink_cache.end() != (iter = symlink_cache.find(std::string(key)))){
-        delete iter->second;
         symlink_cache.erase(iter);
     }
     S3FS_MALLOCTRIM(0);
