@@ -22,7 +22,6 @@
 #define S3FS_CACHE_H_
 
 #include <cstring>
-#include <memory>
 
 #include "autolock.h"
 #include "metaheader.h"
@@ -51,7 +50,7 @@ struct stat_cache_entry {
     }
 };
 
-typedef std::map<std::string, std::unique_ptr<stat_cache_entry>> stat_cache_t; // key=path
+typedef std::map<std::string, stat_cache_entry> stat_cache_t; // key=path
 
 //
 // Struct for symbolic link cache
@@ -68,7 +67,7 @@ struct symlink_cache_entry {
     }
 };
 
-typedef std::map<std::string, std::unique_ptr<symlink_cache_entry>> symlink_cache_t;
+typedef std::map<std::string, symlink_cache_entry> symlink_cache_t;
 
 //-------------------------------------------------------------------
 // Class StatCache
