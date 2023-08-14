@@ -1536,7 +1536,7 @@ bool S3fsCred::CheckForbiddenBucketParams()
     // check bucket name for illegal characters
     size_t found = bucket_name.find_first_of("/:\\;!@#$%^&*?|+=");
     if(found != std::string::npos){
-        S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character.", bucket_name.c_str());
+        S3FS_PRN_EXIT("BUCKET %s -- bucket name contains an illegal character: '%c' at position %zu", bucket_name.c_str(), bucket_name[found], found);
         return false;
     }
 
