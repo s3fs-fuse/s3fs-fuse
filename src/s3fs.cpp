@@ -137,8 +137,7 @@ static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
 static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue);
-static void free_xattrs(xattrs_t& xattrs);
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, PXATTRVAL& pval);
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, xattr_value* pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string raw_build_xattrs(const xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
@@ -3640,14 +3639,12 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
     }
 
     xattrs_t::iterator iter;
-    if(xattrs.end() == (iter = xattrs.find(targetkey)) || !(iter->second)){
-        free_xattrs(xattrs);
+    if(xattrs.end() == (iter = xattrs.find(targetkey))){
         return false;
     }
 
     // convert value by base64
-    xattrvalue = s3fs_base64(iter->second->pvalue.get(), iter->second->length);
-    free_xattrs(xattrs);
+    xattrvalue = s3fs_base64(iter->second.pvalue.get(), iter->second.length);
 
     return true;
 }
@@ -3690,15 +3687,7 @@ static bool build_inherited_xattr_value(const char* path, std::string& xattrvalu
     return true;
 }
 
-static void free_xattrs(xattrs_t& xattrs)
-{
-    for(xattrs_t::iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
-        delete iter->second;
-    }
-    xattrs.clear();
-}
-
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, PXATTRVAL& pval)
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, xattr_value* pval)
 {
     // parse key and value
     size_t pos;
@@ -3715,7 +3704,6 @@ static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, P
         return false;
     }
 
-    pval = new XATTRVAL;
     pval->length = 0;
     pval->pvalue = s3fs_decode64(tmpval.c_str(), tmpval.size(), &pval->length);
 
@@ -3748,12 +3736,12 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : std::string("")), pair_nextpos = restxattrs.find_first_of(',')){
         std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
         std::string key;
-        PXATTRVAL pval = nullptr;
-        if(!parse_xattr_keyval(pair, key, pval)){
+        xattr_value val;
+        if(!parse_xattr_keyval(pair, key, &val)){
             // something format error, so skip this.
             continue;
         }
-        xattrs[key] = pval;
+        xattrs.emplace(std::move(key), std::move(val));
     }
     return xattrs.size();
 }
@@ -3772,10 +3760,7 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs)
         strxattrs += '\"';
         strxattrs += iter->first;
         strxattrs += "\":\"";
-
-        if(iter->second){
-            strxattrs += s3fs_base64(iter->second->pvalue.get(), iter->second->length);
-        }
+        strxattrs += s3fs_base64(iter->second.pvalue.get(), iter->second.length);
         strxattrs += '\"';
     }
     if(is_set){
@@ -3822,28 +3807,18 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     parse_xattrs(strxattrs, xattrs);
 
     // add name(do not care overwrite and empty name/value)
-    xattrs_t::iterator xiter;
-    if(xattrs.end() != (xiter = xattrs.find(std::string(name)))){
-        // found same head. free value.
-        delete xiter->second;
-    }
-
-    PXATTRVAL pval = new XATTRVAL;
-    pval->length = size;
+    xattr_value val;
+    val.length = size;
     if(0 < size){
-        pval->pvalue.reset(new unsigned char[size]);
-        memcpy(pval->pvalue.get(), value, size);
-    }else{
-        pval->pvalue = nullptr;
+        val.pvalue.reset(new unsigned char[size]);
+        memcpy(val.pvalue.get(), value, size);
     }
-    xattrs[std::string(name)] = pval;
+    xattrs.emplace(name, std::move(val));
 
     // build new strxattrs(not encoded) and set it to headers_t
     meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
 
     S3FS_PRN_DBG("Set xattrs(after adding %s key) = %s", name, raw_build_xattrs(xattrs).c_str());
-
-    free_xattrs(xattrs);
 
     return 0;
 }
@@ -4035,29 +4010,22 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     xattrs_t::iterator xiter = xattrs.find(strname);
     if(xattrs.end() == xiter){
         // not found name in xattrs
-        free_xattrs(xattrs);
         return -ENOATTR;
     }
 
     // decode
-    size_t         length = 0;
-    unsigned char* pvalue = nullptr;
-    if(nullptr != xiter->second){
-        length = xiter->second->length;
-        pvalue = xiter->second->pvalue.get();
-    }
+    size_t         length = xiter->second.length;
+    unsigned char* pvalue = xiter->second.pvalue.get();
 
     if(0 < size){
         if(static_cast<size_t>(size) < length){
             // over buffer size
-            free_xattrs(xattrs);
             return -ERANGE;
         }
         if(pvalue){
             memcpy(value, pvalue, length);
         }
     }
-    free_xattrs(xattrs);
 
     return static_cast<int>(length);
 }
@@ -4105,17 +4073,14 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     }
 
     if(0 == total){
-        free_xattrs(xattrs);
         return 0;
     }
 
     // check parameters
     if(0 == size){
-        free_xattrs(xattrs);
         return static_cast<int>(total);
     }
     if(!list || size < total){
-        free_xattrs(xattrs);
         return -ERANGE;
     }
 
@@ -4127,7 +4092,6 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
             setpos = &setpos[strlen(setpos) + 1];
         }
     }
-    free_xattrs(xattrs);
 
     return static_cast<int>(total);
 }
@@ -4185,12 +4149,10 @@ static int s3fs_removexattr(const char* path, const char* name)
     std::string strname = name;
     xattrs_t::iterator xiter = xattrs.find(strname);
     if(xattrs.end() == xiter){
-        free_xattrs(xattrs);
         return -ENOATTR;
     }
 
     // make new header_t after deleting name xattr
-    delete xiter->second;
     xattrs.erase(xiter);
 
     S3FS_PRN_DBG("Reset xattrs(after delete %s key) = %s", name, raw_build_xattrs(xattrs).c_str());
@@ -4214,7 +4176,6 @@ static int s3fs_removexattr(const char* path, const char* name)
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
         if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
-            free_xattrs(xattrs);
             return result;
         }
 
@@ -4233,7 +4194,6 @@ static int s3fs_removexattr(const char* path, const char* name)
     }else{
         updatemeta["x-amz-meta-xattr"]     = std::string("");      // This is a special case. If empty, this header will eventually be removed.
     }
-    free_xattrs(xattrs);
 
     // check opened file handle.
     //
