@@ -1933,32 +1933,16 @@ function test_content_type() {
     local DIR_NAME; DIR_NAME=$(basename "${PWD}")
 
     touch "test.txt"
-    local CONTENT_TYPE; CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.txt" | grep "ContentType")
-    if ! echo "${CONTENT_TYPE}" | grep -q "text/plain"; then
-        echo "Unexpected Content-Type: ${CONTENT_TYPE}"
-        return 1;
-    fi
+    check_content_type "${DIR_NAME}/test.txt" "text/plain"
 
     touch "test.jpg"
-    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.jpg" | grep "ContentType")
-    if ! echo "${CONTENT_TYPE}" | grep -q "image/jpeg"; then
-        echo "Unexpected Content-Type: ${CONTENT_TYPE}"
-        return 1;
-    fi
+    check_content_type "${DIR_NAME}/test.jpg" "image/jpeg"
 
     touch "test.bin"
-    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.bin" | grep "ContentType")
-    if ! echo "${CONTENT_TYPE}" | grep -q "application/octet-stream"; then
-        echo "Unexpected Content-Type: ${CONTENT_TYPE}"
-        return 1;
-    fi
+    check_content_type "${DIR_NAME}/test.bin" "application/octet-stream"
 
     mkdir "test.dir"
-    CONTENT_TYPE=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${DIR_NAME}/test.dir/" | grep "ContentType")
-    if ! echo "${CONTENT_TYPE}" | grep -q "application/x-directory"; then
-        echo "Unexpected Content-Type: ${CONTENT_TYPE}"
-        return 1;
-    fi
+    check_content_type "${DIR_NAME}/test.dir/" "application/x-directory"
 
     rm -f test.txt
     rm -f test.jpg
