@@ -206,9 +206,15 @@ class MpStatFlag
         mutable pthread_mutex_t flag_lock;
         bool                    is_lock_init;
         bool                    has_mp_stat;
+
     public:
         MpStatFlag();
+        MpStatFlag(const MpStatFlag&) = delete;
+        MpStatFlag(MpStatFlag&&) = delete;
         ~MpStatFlag();
+        MpStatFlag& operator=(const MpStatFlag&) = delete;
+        MpStatFlag& operator=(MpStatFlag&&) = delete;
+
         bool Get();
         bool Set(bool flag);
 };
@@ -272,7 +278,11 @@ class SyncFiller
 
     public:
         explicit SyncFiller(void* buff = nullptr, fuse_fill_dir_t filler = nullptr);
+        SyncFiller(const SyncFiller&) = delete;
+        SyncFiller(SyncFiller&&) = delete;
         ~SyncFiller();
+        SyncFiller& operator=(const SyncFiller&) = delete;
+        SyncFiller& operator=(SyncFiller&&) = delete;
 
         int Fill(const char *name, const struct stat *stbuf, off_t off);
         int SufficiencyFill(const std::vector<std::string>& pathlist);

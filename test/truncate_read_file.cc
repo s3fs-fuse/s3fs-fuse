@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     }
 
     const char* filepath = argv[1];
-    off_t       size     = (off_t)strtoull(argv[2], NULL, 10);
+    off_t       size     = static_cast<off_t>(strtoull(argv[2], nullptr, 10));
     int         fd;
 
     // open file
