@@ -171,7 +171,7 @@ static bool parse_arguments(int argc, char** argv, strlist_t& files, wbpart_list
     while(-1 != (opt = getopt(argc, argv, "f:p:"))){
         switch(opt){
             case 'f':
-                files.push_back(std::string(optarg));
+                files.emplace_back(optarg);
                 break;
             case 'p':
                 if(!parse_write_blocks(optarg, wbparts, max_size)){
