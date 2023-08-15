@@ -454,7 +454,7 @@ FdManager::~FdManager()
     if(this == FdManager::get()){
         for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
             FdEntity* ent = (*iter).second;
-            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath(), ent->GetOpenCount());
+            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
             delete ent;
         }
         fent.clear();
@@ -508,7 +508,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
         for(iter = fent.begin(); iter != fent.end(); ++iter){
             if(iter->second && iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
-                if(0 == strcmp(iter->second->GetPath(), path)){
+                if(iter->second->GetPath() == path){
                     if(newfd){
                         existfd = iter->second->Dup(existfd);
                     }
@@ -525,7 +525,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
     // when the file is opened.
     if(!FdManager::IsCacheDir()){
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), path)){
+            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
                 return iter->second;
             }
         }
@@ -552,7 +552,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), path)){
+            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
                 break;      // found opened fd in mapping
             }
         }
@@ -669,7 +669,7 @@ int FdManager::GetPseudoFdCount(const char* path)
 
     // search from all entity.
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
-        if(iter->second && 0 == strcmp(iter->second->GetPath(), path)){
+        if(iter->second && iter->second->GetPath() == path){
             // found the entity for the path
             return iter->second->GetOpenCount();
         }
@@ -690,7 +690,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if(iter->second && iter->second->IsOpen() && 0 == strcmp(iter->second->GetPath(), from.c_str())){
+            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == from){
                 break;              // found opened fd in mapping
             }
         }
@@ -719,7 +719,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
 
 bool FdManager::Close(FdEntity* ent, int fd)
 {
-    S3FS_PRN_DBG("[ent->file=%s][pseudo_fd=%d]", ent ? ent->GetPath() : "", fd);
+    S3FS_PRN_DBG("[ent->file=%s][pseudo_fd=%d]", ent ? ent->GetPath().c_str() : "", fd);
 
     if(!ent || -1 == fd){
         return true;  // returns success
