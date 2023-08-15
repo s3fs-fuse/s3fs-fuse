@@ -61,7 +61,7 @@ make check -C test/
 make clean
 ./configure CXXFLAGS="$COMMON_FLAGS"
 make
-RETRIES=100 VALGRIND="--leak-check=full" make check -C test/
+RETRIES=100 VALGRIND="--leak-check=full --error-exitcode=1" make check -C test/
 
 #
 # Local variables:
