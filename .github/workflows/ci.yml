@@ -99,6 +99,14 @@ jobs:
           /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
           make --jobs=$(nproc)
 
+      - name: clang-tidy
+        run: |
+          # skip if clang-tidy does not exist, e.g., CentOS 7
+          if command -v clang-tidy; then
+            make -C src/ clang-tidy
+            make -C test/ clang-tidy
+          fi
+
       - name: Cppcheck
         run: |
           # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
