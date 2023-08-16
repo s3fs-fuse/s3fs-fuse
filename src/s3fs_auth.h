@@ -22,6 +22,7 @@
 #define S3FS_AUTH_H_
 
 #include <array>
+#include <memory>
 #include <string>
 #include <sys/types.h>
 
@@ -45,8 +46,8 @@ bool s3fs_init_global_ssl();
 bool s3fs_destroy_global_ssl();
 bool s3fs_init_crypt_mutex();
 bool s3fs_destroy_crypt_mutex();
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
-bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen);
+std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen);
+std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen);
 bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* result);
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result);
 bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest);

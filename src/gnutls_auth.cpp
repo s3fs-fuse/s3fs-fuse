@@ -106,76 +106,72 @@ bool s3fs_destroy_crypt_mutex()
 //-------------------------------------------------------------------
 #ifdef USE_GNUTLS_NETTLE
 
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
 
-    *digest = new unsigned char[SHA1_DIGEST_SIZE];
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[SHA1_DIGEST_SIZE]);
 
     struct hmac_sha1_ctx ctx_hmac;
     hmac_sha1_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
     hmac_sha1_update(&ctx_hmac, datalen, reinterpret_cast<const uint8_t*>(data));
-    hmac_sha1_digest(&ctx_hmac, SHA1_DIGEST_SIZE, reinterpret_cast<uint8_t*>(*digest));
+    hmac_sha1_digest(&ctx_hmac, SHA1_DIGEST_SIZE, reinterpret_cast<uint8_t*>(digest.get()));
     *digestlen = SHA1_DIGEST_SIZE;
 
-    return true;
+    return digest;
 }
 
-bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
 
-    *digest = new unsigned char[SHA256_DIGEST_SIZE];
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[SHA256_DIGEST_SIZE]);
 
     struct hmac_sha256_ctx ctx_hmac;
     hmac_sha256_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
     hmac_sha256_update(&ctx_hmac, datalen, reinterpret_cast<const uint8_t*>(data));
-    hmac_sha256_digest(&ctx_hmac, SHA256_DIGEST_SIZE, reinterpret_cast<uint8_t*>(*digest));
+    hmac_sha256_digest(&ctx_hmac, SHA256_DIGEST_SIZE, reinterpret_cast<uint8_t*>(digest.get()));
     *digestlen = SHA256_DIGEST_SIZE;
 
-    return true;
+    return digest;
 }
 
 #else // USE_GNUTLS_NETTLE
 
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
 
     if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
-        return false;
+        return nullptr;
     }
-    *digest = new unsigned char[*digestlen + 1];
-    if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, *digest)){
-        delete[] *digest;
-        *digest = nullptr;
-        return false;
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen + 1]);
+    if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, digest.get())){
+        return nullptr;
     }
-    return true;
+    return digest;
 }
 
-bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
 
     if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
-        return false;
+        return nullptr;
     }
-    *digest = new unsigned char[*digestlen + 1];
-    if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, *digest)){
-        delete[] *digest;
-        *digest = nullptr;
-        return false;
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen + 1]);
+    if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, digest.get())){
+        return nullptr;
     }
-    return true;
+    return digest;
 }
 
 #endif // USE_GNUTLS_NETTLE

@@ -224,30 +224,30 @@ bool s3fs_destroy_crypt_mutex()
 //-------------------------------------------------------------------
 // Utility Function for HMAC
 //-------------------------------------------------------------------
-static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen, bool is_sha256)
+static std::unique_ptr<unsigned char[]> s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen, bool is_sha256)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
     (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
-    *digest      = new unsigned char[*digestlen];
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen]);
     if(is_sha256){
-        HMAC(EVP_sha256(), key, static_cast<int>(keylen), data, datalen, *digest, digestlen);
+        HMAC(EVP_sha256(), key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen);
     }else{
-        HMAC(EVP_sha1(), key, static_cast<int>(keylen), data, datalen, *digest, digestlen);
+        HMAC(EVP_sha1(), key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen);
     }
 
-    return true;
+    return digest;
 }
 
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, false);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digestlen, false);
 }
 
-bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digestlen, true);
 }
 
 #ifdef USE_OPENSSL_30

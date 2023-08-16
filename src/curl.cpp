@@ -2738,20 +2738,18 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
     size_t key_len             = secret_access_key.size();
     const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
     size_t sdata_len           = StringToSign.size();
-    unsigned char* md          = nullptr;
-    unsigned int md_len        = 0;;
+    unsigned int md_len        = 0;
 
-    s3fs_HMAC(key, key_len, sdata, sdata_len, &md, &md_len);
+    std::unique_ptr<unsigned char[]> md = s3fs_HMAC(key, key_len, sdata, sdata_len, &md_len);
 
-    Signature = s3fs_base64(md, md_len);
-    delete[] md;
+    Signature = s3fs_base64(md.get(), md_len);
 
     return Signature;
 }
 
 std::string S3fsCurl::CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token)
 {
-    std::string Signature, StringCQ, StringToSign;
+    std::string StringCQ, StringToSign;
     std::string uriencode;
 
     if(!access_token.empty()){
@@ -2777,16 +2775,12 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringCQ += payload_hash;
 
     std::string   kSecret = "AWS4" + secret_access_key;
-    unsigned char *kDate, *kRegion, *kService, *kSigning            = nullptr;
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len = 0;
 
-    s3fs_HMAC256(kSecret.c_str(), kSecret.size(), reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate, &kDate_len);
-    s3fs_HMAC256(kDate, kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion, &kRegion_len);
-    s3fs_HMAC256(kRegion, kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService, &kService_len);
-    s3fs_HMAC256(kService, kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning, &kSigning_len);
-    delete[] kDate;
-    delete[] kRegion;
-    delete[] kService;
+    std::unique_ptr<unsigned char[]> kDate = s3fs_HMAC256(kSecret.c_str(), kSecret.size(), reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate_len);
+    std::unique_ptr<unsigned char[]> kRegion = s3fs_HMAC256(kDate.get(), kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion_len);
+    std::unique_ptr<unsigned char[]> kService = s3fs_HMAC256(kRegion.get(), kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService_len);
+    std::unique_ptr<unsigned char[]> kSigning = s3fs_HMAC256(kService.get(), kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning_len);
 
     const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
     size_t               cRequest_len = StringCQ.size();
@@ -2800,16 +2794,11 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
     const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
     size_t               cscope_len = StringToSign.size();
-    unsigned char*       md         = nullptr;
     unsigned int         md_len     = 0;
 
-    s3fs_HMAC256(kSigning, kSigning_len, cscope, cscope_len, &md, &md_len);
-    delete[] kSigning;
+    std::unique_ptr<unsigned char[]> md = s3fs_HMAC256(kSigning.get(), kSigning_len, cscope, cscope_len, &md_len);
 
-    Signature = s3fs_hex_lower(md, md_len);
-    delete[] md;
-
-    return Signature;
+    return s3fs_hex_lower(md.get(), md_len);
 }
 
 void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
