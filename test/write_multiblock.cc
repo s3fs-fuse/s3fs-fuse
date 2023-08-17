@@ -23,6 +23,7 @@
 #include <iostream>
 #include <climits>
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,7 @@ const char usage_string[] = "Usage : \"write_multiblock -f <file path> -p <start
 //---------------------------------------------------------
 // Utility functions
 //---------------------------------------------------------
-static unsigned char* create_random_data(off_t size)
+static std::unique_ptr<unsigned char[]> create_random_data(off_t size)
 {
     int fd;
     if(-1 == (fd = open("/dev/urandom", O_RDONLY))){
@@ -61,17 +62,11 @@ static unsigned char* create_random_data(off_t size)
         return nullptr;
     }
 
-    unsigned char* pbuff;
-    if(nullptr == (pbuff = reinterpret_cast<unsigned char*>(malloc(size)))){
-        std::cerr << "[ERROR] Could not allocate memory." << std::endl;
-        close(fd);
-        return nullptr;
-    }
+    std::unique_ptr<unsigned char[]> pbuff(new unsigned char[size]);
     for(ssize_t readpos = 0, readcnt = 0; readpos < size; readpos += readcnt){
         if(-1 == (readcnt = read(fd, &(pbuff[readpos]), static_cast<size_t>(size - readpos)))){
             if(EAGAIN != errno && EWOULDBLOCK != errno && EINTR != errno){
                 std::cerr << "[ERROR] Failed reading from /dev/urandom with errno: " << errno << std::endl;
-                free(pbuff);
                 close(fd);
                 return nullptr;
             }
@@ -206,10 +201,7 @@ int main(int argc, char** argv)
     }
 
     // make data and buffer
-    unsigned char* pData;
-    if(nullptr == (pData = create_random_data(max_size))){
-        exit(EXIT_FAILURE);
-    }
+    std::unique_ptr<unsigned char[]> pData = create_random_data(max_size);
 
     for(strlist_t::const_iterator fiter = files.begin(); fiter != files.end(); ++fiter){
         // open/create file
@@ -218,18 +210,15 @@ int main(int argc, char** argv)
         if(0 == stat(fiter->c_str(), &st)){
             if(!S_ISREG(st.st_mode)){
                 std::cerr << "[ERROR] File " << *fiter << " is existed, but it is not regular file." << std::endl;
-                free(pData);
                 exit(EXIT_FAILURE);
             }
             if(-1 == (fd = open(fiter->c_str(), O_WRONLY))){
                 std::cerr << "[ERROR] Could not open " << *fiter << std::endl;
-                free(pData);
                 exit(EXIT_FAILURE);
             }
         }else{
             if(-1 == (fd = open(fiter->c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644))){
                 std::cerr << "[ERROR] Could not create " << *fiter << std::endl;
-                free(pData);
                 exit(EXIT_FAILURE);
             }
         }
@@ -242,7 +231,6 @@ int main(int argc, char** argv)
                     if(EAGAIN != errno && EWOULDBLOCK != errno && EINTR != errno){
                         std::cerr << "[ERROR] Failed writing to " << *fiter << " by errno : " << errno << std::endl;
                         close(fd);
-                        free(pData);
                         exit(EXIT_FAILURE);
                     }
                     writecnt = 0;
@@ -252,7 +240,6 @@ int main(int argc, char** argv)
         // close file
         close(fd);
     }
-    free(pData);
 
     exit(EXIT_SUCCESS);
 }
