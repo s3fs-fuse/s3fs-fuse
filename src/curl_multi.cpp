@@ -277,26 +277,25 @@ int S3fsMultiCurl::MultiRead()
                 // immediately even if retry processing is required. 
                 s3fscurl->DestroyCurlHandle();
             }else{
-                std::unique_ptr<S3fsCurl> retrycurl;
-
                 // Reset offset
                 if(isNeedResetOffset){
                     S3fsCurl::ResetOffset(s3fscurl.get());
                 }
 
                 // For retry
-                S3fsCurl* retry_ptr = nullptr;
+                std::unique_ptr<S3fsCurl> retrycurl;
+                const S3fsCurl* retrycurl_ptr = retrycurl.get();  // save this due to std::move below
                 if(RetryCallback){
-                    retry_ptr = RetryCallback(s3fscurl.get());
-                    retrycurl.reset(retry_ptr);
-                    if(nullptr != retry_ptr){
+                    retrycurl = RetryCallback(s3fscurl.get());
+                    if(nullptr != retrycurl){
                         clist_all.push_back(std::move(retrycurl));
                     }else{
                         // set EIO and wait for other parts.
                         result = -EIO;
                     }
                 }
-                if(s3fscurl.get() != retry_ptr){
+                // cppcheck-suppress mismatchingContainers
+                if(s3fscurl.get() != retrycurl_ptr){
                     s3fscurl->DestroyCurlHandle();
                 }
             }

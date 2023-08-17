@@ -225,10 +225,10 @@ class S3fsCurl
         static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
         static bool CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
         static bool MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
-        static S3fsCurl* UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
-        static S3fsCurl* CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
-        static S3fsCurl* MixMultipartPostRetryCallback(S3fsCurl* s3fscurl);
-        static S3fsCurl* ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> MixMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
         // lazy functions for set curl options
         static bool CopyMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
