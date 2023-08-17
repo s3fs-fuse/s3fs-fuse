@@ -4011,7 +4011,7 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     }
 
     int result;
-    if(0 == (result = RequestPerform()) && 0 < bodydata.size()){
+    if(0 == (result = RequestPerform()) && !bodydata.empty()){
         body.swap(bodydata);
     }else{
         body = "";
