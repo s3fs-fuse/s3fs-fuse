@@ -84,7 +84,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         (*iter).second.orgname = orgname;
         (*iter).second.is_dir  = is_dir;
         if(etag){
-            (*iter).second.etag = std::string(etag);  // over write
+            (*iter).second.etag = etag;  // over write
         }
     }else{
         // add new object
@@ -145,10 +145,10 @@ std::string S3ObjList::GetOrgName(const char* name) const
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return std::string("");
+        return "";
     }
     if(nullptr == (ps3obj = GetS3Obj(name))){
-        return std::string("");
+        return "";
     }
     return ps3obj->orgname;
 }
@@ -158,13 +158,13 @@ std::string S3ObjList::GetNormalizedName(const char* name) const
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return std::string("");
+        return "";
     }
     if(nullptr == (ps3obj = GetS3Obj(name))){
-        return std::string("");
+        return "";
     }
     if(ps3obj->normalname.empty()){
-        return std::string(name);
+        return name;
     }
     return ps3obj->normalname;
 }
@@ -174,10 +174,10 @@ std::string S3ObjList::GetETag(const char* name) const
     const s3obj_entry* ps3obj;
 
     if(!name || '\0' == name[0]){
-        return std::string("");
+        return "";
     }
     if(nullptr == (ps3obj = GetS3Obj(name))){
-        return std::string("");
+        return "";
     }
     return ps3obj->etag;
 }

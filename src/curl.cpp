@@ -1492,7 +1492,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     std::string srcresource;
     std::string srcurl;
     MakeUrlResource(get_realpath(tpath).c_str(), srcresource, srcurl);
-    meta["Content-Type"]      = S3fsCurl::LookupMimeType(std::string(tpath));
+    meta["Content-Type"]      = S3fsCurl::LookupMimeType(tpath);
     meta["x-amz-copy-source"] = srcresource;
 
     // Initialize S3fsMultiCurl
@@ -2897,7 +2897,7 @@ void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::stri
 
     if(!S3fsCurl::IsPublicBucket()){
         std::string Signature = CalcSignatureV2(op, get_header_value(requestHeaders, "Content-MD5"), get_header_value(requestHeaders, "Content-Type"), date, resource, secret_access_key, access_token);
-        requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", std::string("AWS " + access_key_id + ":" + Signature).c_str());
+        requestHeaders   = curl_slist_sort_insert(requestHeaders, "Authorization", ("AWS " + access_key_id + ":" + Signature).c_str());
     }
 }
 
@@ -2974,7 +2974,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
         return -EIO;
     }
     response.erase();
-    url = std::string(token_url);
+    url = token_url;
     if(!CreateCurlHandle()){
         return -EIO;
     }
@@ -3053,7 +3053,8 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
         // make contents
         postContent += "grant_type=urn:ibm:params:oauth:grant-type:apikey";
         postContent += "&response_type=cloud_iam";
-        postContent += "&apikey=" + std::string(ibm_secret_access_key);
+        postContent += "&apikey=";
+        postContent += ibm_secret_access_key;
 
         // set postdata
         postdata             = reinterpret_cast<const unsigned char*>(postContent.c_str());
@@ -3329,7 +3330,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     responseHeaders.clear();
     bodydata.Clear();
 
-    std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
+    std::string contype = S3fsCurl::LookupMimeType(tpath);
     requestHeaders      = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
@@ -3470,7 +3471,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-MD5", strMD5.c_str());
     }
 
-    std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
+    std::string contype = S3fsCurl::LookupMimeType(tpath);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
@@ -3791,7 +3792,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     bodydata.Clear();
     responseHeaders.clear();
 
-    std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
+    std::string contype = S3fsCurl::LookupMimeType(tpath);
 
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key   = lower(iter->first);
@@ -4194,7 +4195,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     bodydata.Clear();
     headdata.Clear();
 
-    std::string contype = S3fsCurl::LookupMimeType(std::string(to));
+    std::string contype = S3fsCurl::LookupMimeType(to);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
@@ -4403,7 +4404,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     std::string srcurl;
     MakeUrlResource(get_realpath(from).c_str(), srcresource, srcurl);
 
-    meta["Content-Type"]      = S3fsCurl::LookupMimeType(std::string(to));
+    meta["Content-Type"]      = S3fsCurl::LookupMimeType(to);
     meta["x-amz-copy-source"] = srcresource;
 
     if(0 != (result = PreMultipartPostRequest(to, meta, upload_id, true))){

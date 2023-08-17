@@ -32,7 +32,7 @@ std::string s3fs_get_content_md5(int fd)
     md5_t md5;
     if(!s3fs_md5_fd(fd, 0, -1, &md5)){
         // TODO: better return value?
-        return std::string("");
+        return "";
     }
     return s3fs_base64(md5.data(), md5.size());
 }
@@ -42,7 +42,8 @@ std::string s3fs_sha256_hex_fd(int fd, off_t start, off_t size)
     sha256_t sha256;
 
     if(!s3fs_sha256_fd(fd, start, size, &sha256)){
-        return std::string("");
+        // TODO: better return value?
+        return "";
     }
 
     std::string sha256hex = s3fs_hex_lower(sha256.data(), sha256.size());

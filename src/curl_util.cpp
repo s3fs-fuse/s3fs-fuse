@@ -61,8 +61,8 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     }
 
     // key & value are trimmed and lower (only key)
-    std::string strkey = trim(std::string(key));
-    std::string strval = value ? trim(std::string(value)) : "";
+    std::string strkey = trim(key);
+    std::string strval = value ? trim(value) : "";
     std::string strnew = key + std::string(": ") + strval;
     char* data;
     if(nullptr == (data = strdup(strnew.c_str()))){
@@ -107,7 +107,7 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key)
         return list;
     }
 
-    std::string strkey = trim(std::string(key));
+    std::string strkey = trim(key);
     struct curl_slist **p = &list;
     while(*p){
         std::string strcur = (*p)->data;
@@ -259,8 +259,8 @@ std::string prepare_url(const char* url)
     std::string uri;
     std::string hostname;
     std::string path;
-    std::string url_str = std::string(url);
-    std::string token = std::string("/") + S3fsCred::GetBucket();
+    std::string url_str = url;
+    std::string token = "/" + S3fsCred::GetBucket();
     size_t bucket_pos;
     size_t bucket_length = token.size();
     size_t uri_length = 0;

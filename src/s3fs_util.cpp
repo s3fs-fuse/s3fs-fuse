@@ -108,12 +108,12 @@ std::string get_username(uid_t uid)
 
     if(0 != result){
         S3FS_PRN_ERR("could not get pw information(%d).", result);
-        return std::string("");
+        return "";
     }
 
     // check pw
     if(nullptr == ppwinfo){
-        return std::string("");
+        return "";
     }
     std::string name = SAFESTRPTR(ppwinfo->pw_name);
     return name;
@@ -222,7 +222,7 @@ std::string mydirname(const std::string& path)
 std::string mydirname(const char* path)
 {
     if(!path || '\0' == path[0]){
-        return std::string("");
+        return "";
     }
 
     char *buf = strdup(path);
@@ -243,7 +243,7 @@ std::string mybasename(const std::string& path)
 std::string mybasename(const char* path)
 {
     if(!path || '\0' == path[0]){
-        return std::string("");
+        return "";
     }
 
     char *buf = strdup(path);

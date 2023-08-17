@@ -1035,7 +1035,7 @@ bool FdEntity::SetContentType(const char* path)
         return false;
     }
     AutoLock auto_lock(&fdent_lock);
-    orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(std::string(path));
+    orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(path);
     return true;
 }
 
