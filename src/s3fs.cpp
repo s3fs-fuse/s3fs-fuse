@@ -3489,14 +3489,14 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             S3FS_PRN_ERR("ListBucketRequest returns with error.");
             return result;
         }
-        const BodyData* body = s3fscurl.GetBodyData();
+        const std::string* body = s3fscurl.GetBodyData();
 
         // [NOTE]
         // CR code(\r) is replaced with LF(\n) by xmlReadMemory() function.
         // To prevent that, only CR code is encoded by following function.
         // The encoded CR code is decoded with append_objects_from_xml(_ex).
         //
-        std::string encbody = get_encoded_cr_code(body->str());
+        std::string encbody = get_encoded_cr_code(body->c_str());
 
         // xmlDocPtr
         if(nullptr == (doc = xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0))){
@@ -4410,10 +4410,10 @@ static int s3fs_check_service()
         if(300 <= responseCode && responseCode < 500){
 
             // check region error(for putting message or retrying)
-            const BodyData* body = s3fscurl.GetBodyData();
+            const std::string* body = s3fscurl.GetBodyData();
             std::string expectregion;
             std::string expectendpoint;
-            if(check_region_error(body->str(), body->size(), expectregion)){
+            if(check_region_error(body->c_str(), body->size(), expectregion)){
                 // [NOTE]
                 // If endpoint is not specified(using us-east-1 region) and
                 // an error is encountered accessing a different region, we
@@ -4455,7 +4455,7 @@ static int s3fs_check_service()
                     S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
                 }
 
-            }else if(check_endpoint_error(body->str(), body->size(), expectendpoint)){
+            }else if(check_endpoint_error(body->c_str(), body->size(), expectendpoint)){
                 // redirect error
                 if(pathrequeststyle){
                     S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
