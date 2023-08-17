@@ -30,38 +30,38 @@ COMMON_FLAGS="-g -O0 -Wno-cpp"
 make clean
 ./configure CXXFLAGS="$COMMON_FLAGS -D_GLIBCXX_DEBUG"
 make --jobs="$(nproc)"
-make check -C test/
+ALL_TESTS=1 make check -C test/
 
 # run tests under AddressSanitizer, https://clang.llvm.org/docs/AddressSanitizer.html
 make clean
 ./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=address -fsanitize-address-use-after-scope"
 make --jobs="$(nproc)"
-ASAN_OPTIONS='detect_leaks=1,detect_stack_use_after_return=1' make check -C test/
+ALL_TESTS=1 ASAN_OPTIONS='detect_leaks=1,detect_stack_use_after_return=1' make check -C test/
 
 # run tests under MemorySanitizer, https://clang.llvm.org/docs/MemorySanitizer.html
 # TODO: this requires a custom libc++
 #make clean
 #./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=memory"
 #make --jobs="$(nproc)"
-#make check -C test/
+#ALL_TESTS=1 make check -C test/
 
 # run tests under ThreadSanitizer, https://clang.llvm.org/docs/ThreadSanitizer.html
 make clean
 ./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=thread"
 make --jobs="$(nproc)"
-TSAN_OPTIONS='halt_on_error=1' make check -C test/
+ALL_TESTS=1 TSAN_OPTIONS='halt_on_error=1' make check -C test/
 
 # run tests under UndefinedBehaviorSanitizer, https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 make clean
 ./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
 make --jobs="$(nproc)"
-make check -C test/
+ALL_TESTS=1 make check -C test/
 
 # run tests with Valgrind
 make clean
 ./configure CXXFLAGS="$COMMON_FLAGS"
 make --jobs="$(nproc)"
-RETRIES=100 VALGRIND="--leak-check=full --error-exitcode=1" make check -C test/
+ALL_TESTS=1 RETRIES=100 VALGRIND="--leak-check=full --error-exitcode=1" make check -C test/
 
 #
 # Local variables:
