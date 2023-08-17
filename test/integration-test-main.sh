@@ -2533,11 +2533,34 @@ function test_time_mountpoint {
     fi
 }
 
+function test_file_names_longer_than_posix() {
+    local DIR_NAME; DIR_NAME=$(basename "${PWD}")
+    a256="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    #a256="aaaa"
+
+    if ! touch "${a256}"; then
+        echo "could not create long file name"
+        return 1
+    fi
+    rm -f "${a256}"
+
+    echo data | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${DIR_NAME}/${a256}"
+    # shellcheck disable=SC2012
+    count=$(ls | wc -l)
+    if [ "${count}" = 0 ]; then
+        echo "failed to list long file name"
+        return 1
+    fi
+    rm -f "${a256}"
+}
+
 function add_all_tests {
     # shellcheck disable=SC2009
     if ps u -p "${S3FS_PID}" | grep -q use_cache; then
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
+    else
+        add_tests test_file_names_longer_than_posix
     fi
     # shellcheck disable=SC2009
     if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
