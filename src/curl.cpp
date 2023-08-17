@@ -593,13 +593,8 @@ bool S3fsCurl::LocateBundle()
 
 size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBlocks, void* data)
 {
-    BodyData* body  = static_cast<BodyData*>(data);
-
-    if(!body->Append(ptr, blockSize, numBlocks)){
-        S3FS_PRN_CRIT("BodyData.Append() returned false.");
-        S3FS_FUSE_EXIT();
-        return -1;
-    }
+    std::string* body  = static_cast<std::string*>(data);
+    body->append(static_cast<const char*>(ptr), blockSize * numBlocks);
     return (blockSize * numBlocks);
 }
 
@@ -688,7 +683,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
 
     // Buffer initial bytes in case it is an XML error response.
     if(pCurl->bodydata.size() < GET_OBJECT_RESPONSE_LIMIT){
-        pCurl->bodydata.Append(ptr, std::min(size * nmemb, GET_OBJECT_RESPONSE_LIMIT - pCurl->bodydata.size()));
+        pCurl->bodydata.append(static_cast<const char*>(ptr), std::min(size * nmemb, GET_OBJECT_RESPONSE_LIMIT - pCurl->bodydata.size()));
     }
 
     // write size
@@ -1326,9 +1321,9 @@ int S3fsCurl::MapPutErrorResponse(int result)
     //       <HostId>BHzLOATeDuvN8Es1wI8IcERq4kl4dc2A9tOB8Yqr39Ys6fl7N4EJ8sjGiVvu6wLP</HostId>
     //     </Error>
     //
-    const char* pstrbody = bodydata.str();
+    const char* pstrbody = bodydata.c_str();
     std::string code;
-    if(!pstrbody || simple_parse_xml(pstrbody, bodydata.size(), "Code", code)){
+    if(simple_parse_xml(pstrbody, bodydata.size(), "Code", code)){
         S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or nullptr). The request failed during copying the object in S3.  Code: %s", code.c_str());
         // TODO: parse more specific error from <Code>
         result = -EIO;
@@ -2092,8 +2087,8 @@ bool S3fsCurl::ClearInternalData()
         requestHeaders = nullptr;
     }
     responseHeaders.clear();
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
     LastResponseCode     = S3FSCURL_RESPONSECODE_NOTSET;
     postdata             = nullptr;
     postdata_remaining   = 0;
@@ -2161,8 +2156,8 @@ bool S3fsCurl::RemakeHandle()
     // reinitialize internal data
     requestHeaders = curl_slist_remove(requestHeaders, "Authorization");
     responseHeaders.clear();
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
     LastResponseCode   = S3FSCURL_RESPONSECODE_NOTSET;
 
     // count up(only use for multipart)
@@ -2505,7 +2500,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 {
                     // Try to parse more specific AWS error code otherwise fall back to HTTP error code.
                     std::string value;
-                    if(simple_parse_xml(bodydata.str(), bodydata.size(), "Code", value)){
+                    if(simple_parse_xml(bodydata.c_str(), bodydata.size(), "Code", value)){
                         // TODO: other error codes
                         if(value == "EntityTooLarge"){
                             result = -EFBIG;
@@ -2524,7 +2519,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 switch(responseCode){
                     case 301:
                     case 307:
-                        S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", bodydata.str());
+                        S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", bodydata.c_str());
                         S3FS_PRN_ERR("The options of url and endpoint may be useful for solving, please try to use both options.");
                         result = -EIO;
                         break;
@@ -2538,19 +2533,19 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                             S3FS_PRN_ERR("HEAD HTTP response code %ld, returning EPERM.", responseCode);
                             result = -EPERM;
                         }else{
-                            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
+                            S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.c_str());
                             result = -EIO;
                         }
                         break;
 
                     case 403:
-                        S3FS_PRN_ERR("HTTP response code %ld, returning EPERM. Body Text: %s", responseCode, bodydata.str());
+                        S3FS_PRN_ERR("HTTP response code %ld, returning EPERM. Body Text: %s", responseCode, bodydata.c_str());
                         result = -EPERM;
                         break;
 
                     case 404:
                         S3FS_PRN_INFO3("HTTP response code 404 was returned, returning ENOENT");
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.str());
+                        S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
                         result = -ENOENT;
                         break;
 
@@ -2561,21 +2556,21 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
                     case 501:
                         S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.str());
+                        S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
                         result = -ENOTSUP;
                         break;
 
                     case 500:
                     case 503: {
                         S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.str());
+                        S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
                         // Add jitter to avoid thundering herd.
                         unsigned int sleep_time = 2 << retry_count;
                         sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
                         break;
                     }
                     default:
-                        S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
+                        S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.c_str());
                         result = -EIO;
                         break;
                 }
@@ -2985,7 +2980,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     }
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     std::string ttlstr = std::to_string(token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, token_ttl_hdr, ttlstr.c_str());
@@ -3021,11 +3016,11 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     int result = RequestPerform(true);
 
     if(0 == result){
-        response = bodydata.str();
+        response.swap(bodydata);
     }else{
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAMv2 api token.", result);
     }
-    bodydata.Clear();
+    bodydata.clear();
 
     return result;
 }
@@ -3051,7 +3046,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     }
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
     std::string postContent;
 
     if(ibm_secret_access_key){
@@ -3107,11 +3102,11 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
 
     // analyzing response
     if(0 == result){
-        response = bodydata.str();
+        response.swap(bodydata);
     }else{
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAM role name.", result);
     }
-    bodydata.Clear();
+    bodydata.clear();
 
     return (0 == result);
 }
@@ -3138,7 +3133,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     }
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     if(iam_v2_token){
         requestHeaders = curl_slist_sort_insert(requestHeaders, S3fsCred::IAMv2_token_hdr, iam_v2_token);
@@ -3165,11 +3160,11 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
 
     // analyzing response
     if(0 == result){
-        token = bodydata.str();
+        token.swap(bodydata);
     }else{
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAM role name from meta data.", result);
     }
-    bodydata.Clear();
+    bodydata.clear();
 
     return (0 == result);
 }
@@ -3332,7 +3327,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     path            = get_realpath(tpath);
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
     requestHeaders      = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
@@ -3407,7 +3402,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 
     int result = RequestPerform();
     result = MapPutErrorResponse(result);
-    bodydata.Clear();
+    bodydata.clear();
 
     return result;
 }
@@ -3458,7 +3453,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     path            = get_realpath(tpath);
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     // Make request headers
     if(S3fsCurl::is_content_md5){
@@ -3549,7 +3544,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
     int result = RequestPerform();
     result = MapPutErrorResponse(result);
-    bodydata.Clear();
+    bodydata.clear();
     if(file){
         fclose(file);
     }
@@ -3686,7 +3681,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
     path            = strCheckPath;
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     op = "GET";
     type = REQTYPE::CHKBUCKET;
@@ -3710,7 +3705,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
 
     int result = RequestPerform();
     if (result != 0) {
-        S3FS_PRN_ERR("Check bucket failed, S3 response: %s", bodydata.str());
+        S3FS_PRN_ERR("Check bucket failed, S3 response: %s", bodydata.c_str());
     }
     return result;
 }
@@ -3738,7 +3733,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     path            = get_realpath(tpath);
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     op = "GET";
     type = REQTYPE::LISTBUCKET;
@@ -3793,7 +3788,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     url            = prepare_url(turl.c_str());
     path           = get_realpath(tpath);
     requestHeaders = nullptr;
-    bodydata.Clear();
+    bodydata.clear();
     responseHeaders.clear();
 
     std::string contype = S3fsCurl::LookupMimeType(std::string(tpath));
@@ -3864,16 +3859,16 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     // request
     int result;
     if(0 != (result = RequestPerform())){
-        bodydata.Clear();
+        bodydata.clear();
         return result;
     }
 
-    if(!simple_parse_xml(bodydata.str(), bodydata.size(), "UploadId", upload_id)){
-        bodydata.Clear();
+    if(!simple_parse_xml(bodydata.c_str(), bodydata.size(), "UploadId", upload_id)){
+        bodydata.clear();
         return -EIO;
     }
 
-    bodydata.Clear();
+    bodydata.clear();
     return 0;
 }
 
@@ -3924,7 +3919,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     url                  = prepare_url(turl.c_str());
     path                 = get_realpath(tpath);
     requestHeaders       = nullptr;
-    bodydata.Clear();
+    bodydata.clear();
     responseHeaders.clear();
     std::string contype  = "application/xml";
 
@@ -3974,7 +3969,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
 
     // request
     int result = RequestPerform();
-    bodydata.Clear();
+    bodydata.clear();
     postdata   = nullptr;
     b_postdata = nullptr;
 
@@ -3998,7 +3993,7 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     url             = prepare_url(turl.c_str());
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
+    bodydata.clear();
 
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Accept", nullptr);
 
@@ -4021,11 +4016,11 @@ int S3fsCurl::MultipartListRequest(std::string& body)
 
     int result;
     if(0 == (result = RequestPerform()) && 0 < bodydata.size()){
-        body = bodydata.str();
+        body.swap(bodydata);
     }else{
         body = "";
     }
-    bodydata.Clear();
+    bodydata.clear();
 
     return result;
 }
@@ -4122,8 +4117,8 @@ int S3fsCurl::UploadMultipartPostSetup(const char* tpath, int part_num, const st
     turl              += urlargs;
     url                = prepare_url(turl.c_str());
     path               = get_realpath(tpath);
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
     responseHeaders.clear();
 
     // SSE-C
@@ -4168,8 +4163,8 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
     }
 
     // closing
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
 
     return result;
 }
@@ -4196,8 +4191,8 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     path            = get_realpath(to);
     requestHeaders  = nullptr;
     responseHeaders.clear();
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
 
     std::string contype = S3fsCurl::LookupMimeType(std::string(to));
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
@@ -4282,15 +4277,15 @@ bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 bool S3fsCurl::CopyMultipartPostComplete()
 {
     std::string etag;
-    partdata.uploaded = simple_parse_xml(bodydata.str(), bodydata.size(), "ETag", etag);
+    partdata.uploaded = simple_parse_xml(bodydata.c_str(), bodydata.size(), "ETag", etag);
     if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
         etag.erase(etag.size() - 1);
         etag.erase(0, 1);
     }
     partdata.petag->etag = etag;
 
-    bodydata.Clear();
-    headdata.Clear();
+    bodydata.clear();
+    headdata.clear();
 
     return true;
 }
