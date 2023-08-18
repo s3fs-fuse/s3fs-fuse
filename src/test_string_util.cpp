@@ -53,37 +53,36 @@ void test_trim()
 
 void test_base64()
 {
-    std::unique_ptr<unsigned char[]> buf;
+    std::string buf;
     char tmpbuf = '\0';
-    size_t len;
 
     ASSERT_EQUALS(s3fs_base64(nullptr, 0), std::string(""));
-    buf = s3fs_decode64(nullptr, 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, &tmpbuf, 0);
+    buf = s3fs_decode64(nullptr, 0);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), &tmpbuf, 0);
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), std::string(""));
-    buf = s3fs_decode64("", 0, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, &tmpbuf, 0);
+    buf = s3fs_decode64("", 0);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), &tmpbuf, 0);
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), std::string("MQ=="));
-    buf = s3fs_decode64("MQ==", 4, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, "1", 1);
-    ASSERT_EQUALS(len, static_cast<size_t>(1));
+    buf = s3fs_decode64("MQ==", 4);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "1", 1);
+    ASSERT_EQUALS(buf.length(), static_cast<size_t>(1));
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("12"), 2), std::string("MTI="));
-    buf = s3fs_decode64("MTI=", 4, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, "12", 2);
-    ASSERT_EQUALS(len, static_cast<size_t>(2));
+    buf = s3fs_decode64("MTI=", 4);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "12", 2);
+    ASSERT_EQUALS(buf.length(), static_cast<size_t>(2));
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("123"), 3), std::string("MTIz"));
-    buf = s3fs_decode64("MTIz", 4, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, "123", 3);
-    ASSERT_EQUALS(len, static_cast<size_t>(3));
+    buf = s3fs_decode64("MTIz", 4);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "123", 3);
+    ASSERT_EQUALS(buf.length(), static_cast<size_t>(3));
 
     ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1234"), 4), std::string("MTIzNA=="));
-    buf = s3fs_decode64("MTIzNA==", 8, &len);
-    ASSERT_BUFEQUALS(reinterpret_cast<const char *>(buf.get()), len, "1234", 4);
-    ASSERT_EQUALS(len, static_cast<size_t>(4));
+    buf = s3fs_decode64("MTIzNA==", 8);
+    ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "1234", 4);
+    ASSERT_EQUALS(buf.length(), static_cast<size_t>(4));
 
     // TODO: invalid input
 }

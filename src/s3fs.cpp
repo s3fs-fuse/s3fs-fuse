@@ -137,7 +137,7 @@ static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
 static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue);
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, xattr_value* pval);
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, std::string* pval);
 static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 static std::string raw_build_xattrs(const xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
@@ -3643,7 +3643,7 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
     }
 
     // convert value by base64
-    xattrvalue = s3fs_base64(iter->second.pvalue.get(), iter->second.length);
+    xattrvalue = s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
 
     return true;
 }
@@ -3686,7 +3686,7 @@ static bool build_inherited_xattr_value(const char* path, std::string& xattrvalu
     return true;
 }
 
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, xattr_value* pval)
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, std::string* pval)
 {
     // parse key and value
     size_t pos;
@@ -3703,8 +3703,7 @@ static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, x
         return false;
     }
 
-    pval->length = 0;
-    pval->pvalue = s3fs_decode64(tmpval.c_str(), tmpval.size(), &pval->length);
+    *pval = s3fs_decode64(tmpval.c_str(), tmpval.size());
 
     return true;
 }
@@ -3735,7 +3734,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : ""), pair_nextpos = restxattrs.find_first_of(',')){
         std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
         std::string key;
-        xattr_value val;
+        std::string val;
         if(!parse_xattr_keyval(pair, key, &val)){
             // something format error, so skip this.
             continue;
@@ -3759,7 +3758,7 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs)
         strxattrs += '\"';
         strxattrs += iter->first;
         strxattrs += "\":\"";
-        strxattrs += s3fs_base64(iter->second.pvalue.get(), iter->second.length);
+        strxattrs += s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
         strxattrs += '\"';
     }
     if(is_set){
@@ -3806,12 +3805,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     parse_xattrs(strxattrs, xattrs);
 
     // add name(do not care overwrite and empty name/value)
-    xattr_value val;
-    val.length = size;
-    if(0 < size){
-        val.pvalue.reset(new unsigned char[size]);
-        memcpy(val.pvalue.get(), value, size);
-    }
+    std::string val(value, size);
     xattrs.emplace(name, std::move(val));
 
     // build new strxattrs(not encoded) and set it to headers_t
@@ -4013,8 +4007,8 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     }
 
     // decode
-    size_t         length = xiter->second.length;
-    unsigned char* pvalue = xiter->second.pvalue.get();
+    size_t      length = xiter->second.length();
+    const char* pvalue = xiter->second.c_str();
 
     if(0 < size){
         if(static_cast<size_t>(size) < length){

@@ -798,10 +798,8 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     std::string base64_key;
     std::string raw_key;
     if(onekey.length() > 256 / 8){
-        size_t keylength;
-
-        std::unique_ptr<unsigned char[]> p_key(s3fs_decode64(onekey.c_str(), onekey.size(), &keylength));
-        raw_key = std::string(reinterpret_cast<char *>(p_key.get()), keylength);
+        std::string p_key(s3fs_decode64(onekey.c_str(), onekey.size()));
+        raw_key = p_key;
         base64_key = onekey;
     } else {
         base64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length());
