@@ -37,23 +37,6 @@
 // This function is like curl_slist_append function, but this adds data by a-sorting.
 // Because AWS signature needs sorted header.
 //
-struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data)
-{
-    if(!data){
-        return list;
-    }
-    std::string strkey = data;
-    std::string strval;
-
-    std::string::size_type pos = strkey.find(':', 0);
-    if(std::string::npos != pos){
-        strval = strkey.substr(pos + 1);
-        strkey.erase(pos);
-    }
-
-    return curl_slist_sort_insert(list, strkey.c_str(), strval.c_str());
-}
-
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value)
 {
     if(!key){
@@ -174,37 +157,6 @@ std::string get_header_value(const struct curl_slist* list, const std::string &k
     }
 
     return "";
-}
-
-std::string get_canonical_headers(const struct curl_slist* list)
-{
-    std::string canonical_headers;
-
-    if(!list){
-        canonical_headers = "\n";
-        return canonical_headers;
-    }
-
-    for( ; list; list = list->next){
-        std::string strhead = list->data;
-        size_t pos;
-        if(std::string::npos != (pos = strhead.find(':', 0))){
-            std::string strkey = trim(lower(strhead.substr(0, pos)));
-            std::string strval = trim(strhead.substr(pos + 1));
-            if (strval.empty()) {
-                // skip empty-value headers (as they are discarded by libcurl)
-                continue;
-            }
-            strhead = strkey;
-            strhead += ":";
-            strhead += strval;
-        }else{
-            strhead = trim(lower(strhead));
-        }
-        canonical_headers += strhead;
-        canonical_headers += "\n";
-    }
-    return canonical_headers;
 }
 
 std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)

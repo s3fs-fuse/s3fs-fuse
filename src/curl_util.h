@@ -28,7 +28,6 @@ enum class sse_type_t;
 //----------------------------------------------
 // Functions
 //----------------------------------------------
-struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* data);
 struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* key, const char* value);
 struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key);
 std::string get_sorted_header_keys(const struct curl_slist* list);
