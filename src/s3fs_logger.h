@@ -140,6 +140,10 @@ class S3fsLog
 
         explicit S3fsLog();
         ~S3fsLog();
+        S3fsLog(const S3fsLog&) = delete;
+        S3fsLog(S3fsLog&&) = delete;
+        S3fsLog& operator=(const S3fsLog&) = delete;
+        S3fsLog& operator=(S3fsLog&&) = delete;
 };
 
 //-------------------------------------------------------------------

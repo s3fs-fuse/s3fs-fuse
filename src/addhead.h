@@ -69,6 +69,10 @@ class AdditionalHeader
     protected:
         AdditionalHeader();
         ~AdditionalHeader();
+        AdditionalHeader(const AdditionalHeader&) = delete;
+        AdditionalHeader(AdditionalHeader&&) = delete;
+        AdditionalHeader& operator=(const AdditionalHeader&) = delete;
+        AdditionalHeader& operator=(AdditionalHeader&&) = delete;
 
     public:
         // Reference singleton

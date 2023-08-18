@@ -102,6 +102,10 @@ class FdEntity
 
         explicit FdEntity(const char* tpath = nullptr, const char* cpath = nullptr);
         ~FdEntity();
+        FdEntity(const FdEntity&) = delete;
+        FdEntity(FdEntity&&) = delete;
+        FdEntity& operator=(const FdEntity&) = delete;
+        FdEntity& operator=(FdEntity&&) = delete;
 
         void Close(int fd);
         bool IsOpen() const { return (-1 != physical_fd); }
