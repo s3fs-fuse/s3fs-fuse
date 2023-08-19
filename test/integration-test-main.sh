@@ -815,6 +815,10 @@ function test_extended_attributes {
     touch "${TEST_TEXT_FILE}"
 
     # set value
+    set_xattr key1 value0 "${TEST_TEXT_FILE}"
+    get_xattr key1 "${TEST_TEXT_FILE}" | grep -q '^value0$'
+
+    # over write value
     set_xattr key1 value1 "${TEST_TEXT_FILE}"
     get_xattr key1 "${TEST_TEXT_FILE}" | grep -q '^value1$'
 

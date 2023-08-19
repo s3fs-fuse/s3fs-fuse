@@ -3739,7 +3739,7 @@ static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
             // something format error, so skip this.
             continue;
         }
-        xattrs.emplace(std::move(key), std::move(val));
+        xattrs[key] = val;
     }
     return xattrs.size();
 }
@@ -3805,8 +3805,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     parse_xattrs(strxattrs, xattrs);
 
     // add name(do not care overwrite and empty name/value)
-    std::string val(value, size);
-    xattrs.emplace(name, std::move(val));
+    xattrs[name] = std::string(value, size);
 
     // build new strxattrs(not encoded) and set it to headers_t
     meta["x-amz-meta-xattr"] = build_xattrs(xattrs);
