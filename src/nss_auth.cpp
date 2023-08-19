@@ -87,10 +87,10 @@ bool s3fs_destroy_crypt_mutex()
 //-------------------------------------------------------------------
 // Utility Function for HMAC
 //-------------------------------------------------------------------
-static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen, bool is_sha256)
+static std::unique_ptr<unsigned char[]> s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen, bool is_sha256)
 {
-    if(!key || !data || !digest || !digestlen){
-        return false;
+    if(!key || !data || !digestlen){
+        return nullptr;
     }
 
     PK11SlotInfo* Slot;
@@ -101,16 +101,16 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
     SECItem       NullSecItem  = {siBuffer, nullptr, 0};
 
     if(nullptr == (Slot = PK11_GetInternalKeySlot())){
-        return false;
+        return nullptr;
     }
     if(nullptr == (pKey = PK11_ImportSymKey(Slot, (is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), PK11_OriginUnwrap, CKA_SIGN, &KeySecItem, nullptr))){
         PK11_FreeSlot(Slot);
-        return false;
+        return nullptr;
     }
     if(nullptr == (Context = PK11_CreateContextBySymKey((is_sha256 ? CKM_SHA256_HMAC : CKM_SHA_1_HMAC), CKA_SIGN, pKey, &NullSecItem))){
         PK11_FreeSymKey(pKey);
         PK11_FreeSlot(Slot);
-        return false;
+        return nullptr;
     }
 
     *digestlen = 0;
@@ -121,26 +121,26 @@ static bool s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* d
         PK11_DestroyContext(Context, PR_TRUE);
         PK11_FreeSymKey(pKey);
         PK11_FreeSlot(Slot);
-        return false;
+        return nullptr;
     }
     PK11_DestroyContext(Context, PR_TRUE);
     PK11_FreeSymKey(pKey);
     PK11_FreeSlot(Slot);
 
-    *digest = new unsigned char[*digestlen];
-    memcpy(*digest, tmpdigest, *digestlen);
+    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen]);
+    memcpy(digest.get(), tmpdigest, *digestlen);
 
-    return true;
+    return digest;
 }
 
-bool s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, false);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digestlen, false);
 }
 
-bool s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned char** digest, unsigned int* digestlen)
+std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen)
 {
-    return s3fs_HMAC_RAW(key, keylen, data, datalen, digest, digestlen, true);
+    return s3fs_HMAC_RAW(key, keylen, data, datalen, digestlen, true);
 }
 
 //-------------------------------------------------------------------
