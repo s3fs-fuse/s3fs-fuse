@@ -25,7 +25,6 @@
 #include <cstring>
 #include <string>
 #include <map>
-#include <memory>
 #include <list>
 #include <vector>
 
@@ -55,18 +54,7 @@
 // This header is url encoded string which is json formatted.
 //   x-amz-meta-xattr:urlencode({"xattr-1":"base64(value-1)","xattr-2":"base64(value-2)","xattr-3":"base64(value-3)"})
 //
-struct xattr_value
-{
-    std::unique_ptr<unsigned char[]> pvalue;
-    size_t         length;
-
-    xattr_value() : pvalue(), length(0) {}
-    xattr_value(const xattr_value& xv) = delete;
-    xattr_value(xattr_value&& xv) : pvalue(std::move(xv.pvalue)), length(xv.length) {}
-    ~xattr_value() {}
-};
-
-typedef std::map<std::string, xattr_value> xattrs_t;
+typedef std::map<std::string, std::string> xattrs_t;
 
 //-------------------------------------------------------------------
 // acl_t

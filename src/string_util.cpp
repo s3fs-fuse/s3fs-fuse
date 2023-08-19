@@ -418,29 +418,28 @@ inline unsigned char char_decode64(const char ch)
     return by;
 }
 
-std::unique_ptr<unsigned char[]> s3fs_decode64(const char* input, size_t input_len, size_t* plength)
+std::string s3fs_decode64(const char* input, size_t input_len)
 {
-    std::unique_ptr<unsigned char[]> result(new unsigned char[input_len / 4 * 3]);
+    std::string result;
+    result.reserve(input_len / 4 * 3);
     unsigned char parts[4];
     size_t rpos;
-    size_t wpos;
-    for(rpos = 0, wpos = 0; rpos < input_len; rpos += 4){
+    for(rpos = 0; rpos < input_len; rpos += 4){
         parts[0] = char_decode64(input[rpos]);
         parts[1] = (rpos + 1) < input_len ? char_decode64(input[rpos + 1]) : 64;
         parts[2] = (rpos + 2) < input_len ? char_decode64(input[rpos + 2]) : 64;
         parts[3] = (rpos + 3) < input_len ? char_decode64(input[rpos + 3]) : 64;
 
-        result[wpos++] = ((parts[0] << 2) & 0xfc) | ((parts[1] >> 4) & 0x03);
+        result += static_cast<char>(((parts[0] << 2) & 0xfc) | ((parts[1] >> 4) & 0x03));
         if(64 == parts[2]){
             break;
         }
-        result[wpos++] = ((parts[1] << 4) & 0xf0) | ((parts[2] >> 2) & 0x0f);
+        result += static_cast<char>(((parts[1] << 4) & 0xf0) | ((parts[2] >> 2) & 0x0f));
         if(64 == parts[3]){
             break;
         }
-        result[wpos++] = ((parts[2] << 6) & 0xc0) | (parts[3] & 0x3f);
+        result += static_cast<char>(((parts[2] << 6) & 0xc0) | (parts[3] & 0x3f));
     }
-    *plength = wpos;
     return result;
 }
 
