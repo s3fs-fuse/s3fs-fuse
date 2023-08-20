@@ -30,20 +30,36 @@
 //----------------------------------------------
 // Structure / Typedef
 //----------------------------------------------
-typedef struct add_header{
+struct add_header{
+    add_header(std::unique_ptr<regex_t> pregex, std::string basestring, std::string headkey, std::string headvalue)
+        : pregex(std::move(pregex))
+        , basestring(std::move(basestring))
+        , headkey(std::move(headkey))
+        , headvalue(std::move(headvalue))
+    {}
     ~add_header() {
         if(pregex){
             regfree(pregex.get());
         }
     }
 
+    add_header(const add_header&) = delete;
+    add_header(add_header&& val)
+        : pregex(std::move(val.pregex))
+        , basestring(std::move(val.basestring))
+        , headkey(std::move(val.headkey))
+        , headvalue(std::move(val.headvalue))
+    {}
+    add_header& operator=(const add_header&) = delete;
+    add_header& operator=(add_header&&) = delete;
+
     std::unique_ptr<regex_t> pregex;         // not nullptr means using regex, nullptr means comparing suffix directly.
     std::string   basestring;
     std::string   headkey;
     std::string   headvalue;
-}ADDHEAD;
+};
 
-typedef std::vector<std::unique_ptr<ADDHEAD>> addheadlist_t;
+typedef std::vector<add_header> addheadlist_t;
 
 //----------------------------------------------
 // Class AdditionalHeader

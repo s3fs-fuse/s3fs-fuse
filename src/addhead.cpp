@@ -110,7 +110,6 @@ bool AdditionalHeader::Load(const char* file)
             return false;
         }
 
-        std::unique_ptr<ADDHEAD> paddhead(new ADDHEAD);
         if(0 == strncasecmp(key.c_str(), ADD_HEAD_REGEX, strlen(ADD_HEAD_REGEX))){
             // regex
             if(key.size() <= strlen(ADD_HEAD_REGEX)){
@@ -119,32 +118,21 @@ bool AdditionalHeader::Load(const char* file)
             }
             key.erase(0, strlen(ADD_HEAD_REGEX));
 
-          // compile
-          std::unique_ptr<regex_t> preg(new regex_t);
-          int       result;
-          if(0 != (result = regcomp(preg.get(), key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
-              char    errbuf[256];
-              regerror(result, preg.get(), errbuf, sizeof(errbuf));
-              S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
-              continue;
-          }
+            // compile
+            std::unique_ptr<regex_t> preg(new regex_t);
+            int       result;
+            if(0 != (result = regcomp(preg.get(), key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
+                char    errbuf[256];
+                regerror(result, preg.get(), errbuf, sizeof(errbuf));
+                S3FS_PRN_ERR("failed to compile regex from %s key by %s.", key.c_str(), errbuf);
+                continue;
+            }
 
-          // set
-          paddhead->pregex = std::move(preg);
-          paddhead->basestring = key;
-          paddhead->headkey    = head;
-          paddhead->headvalue  = value;
-
+            addheadlist.emplace_back(std::move(preg), key, head, value);
         }else{
             // not regex, directly comparing
-            paddhead->pregex.reset(nullptr);
-            paddhead->basestring = key;
-            paddhead->headkey    = head;
-            paddhead->headvalue  = value;
+            addheadlist.emplace_back(nullptr, key, head, value);
         }
-
-        // add list
-        addheadlist.push_back(std::move(paddhead));
 
         // set flag
         is_enable = true;
@@ -177,10 +165,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
     // Because to allow duplicate key, and then scanning the entire table.
     //
     for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
-        const ADDHEAD *paddhead = iter->get();
-        if(!paddhead){
-            continue;
-        }
+        const add_header *paddhead = &*iter;
 
         if(paddhead->pregex){
             // regex
@@ -230,19 +215,17 @@ bool AdditionalHeader::Dump() const
     ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << std::endl;
 
     for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
-      const ADDHEAD *paddhead = iter->get();
+        const add_header *paddhead = &*iter;
 
-      ssdbg << "    [" << cnt << "] = {" << std::endl;
+        ssdbg << "    [" << cnt << "] = {" << std::endl;
 
-      if(paddhead){
-          if(paddhead->pregex){
-              ssdbg << "        type\t\t--->\tregex" << std::endl;
-          }else{
-              ssdbg << "        type\t\t--->\tsuffix matching" << std::endl;
-          }
-            ssdbg << "        base std::string\t--->\t" << paddhead->basestring << std::endl;
-            ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << std::endl;
+        if(paddhead->pregex){
+            ssdbg << "        type\t\t--->\tregex" << std::endl;
+        }else{
+            ssdbg << "        type\t\t--->\tsuffix matching" << std::endl;
         }
+        ssdbg << "        base std::string\t--->\t" << paddhead->basestring << std::endl;
+        ssdbg << "        add header\t--->\t"  << paddhead->headkey << ": " << paddhead->headvalue << std::endl;
         ssdbg << "    }" << std::endl;
     }
 
