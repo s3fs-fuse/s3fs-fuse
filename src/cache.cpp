@@ -508,13 +508,11 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
 
     if(stat_cache.end() != iter){
         stat_cache_entry* ent = &iter->second;
-        if(ent){
-            if(no_truncate){
-                ++(ent->notruncate);
-            }else{
-                if(0L < ent->notruncate){
-                    --(ent->notruncate);
-                }
+        if(no_truncate){
+            ++(ent->notruncate);
+        }else{
+            if(0L < ent->notruncate){
+                --(ent->notruncate);
             }
         }
     }
@@ -531,8 +529,8 @@ bool StatCache::TruncateCache()
     // 1) erase over expire time
     if(IsExpireTime){
         for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
-            stat_cache_entry* entry = &iter->second;
-            if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
+            const stat_cache_entry* entry = &iter->second;
+            if(0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime)){
                 iter = stat_cache.erase(iter);
             }else{
                 ++iter;
@@ -551,7 +549,7 @@ bool StatCache::TruncateCache()
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
         // check no truncate
         const stat_cache_entry* ent = &iter->second;
-        if(ent && 0L < ent->notruncate){
+        if(0L < ent->notruncate){
             // skip for no truncate entry and keep extra counts for this entity.
             if(0 < erase_count){
                 --erase_count;     // decrement
