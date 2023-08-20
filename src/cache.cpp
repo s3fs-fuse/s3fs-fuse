@@ -84,9 +84,9 @@ struct sort_statiterlist{
     // ascending order
     bool operator()(const stat_cache_t::iterator& src1, const stat_cache_t::iterator& src2) const
     {
-        int result = CompareStatCacheTime(src1->second->cache_date, src2->second->cache_date);
+        int result = CompareStatCacheTime(src1->second.cache_date, src2->second.cache_date);
         if(0 == result){
-            if(src1->second->hit_count < src2->second->hit_count){
+            if(src1->second.hit_count < src2->second.hit_count){
                 result = -1;
             }
         }
@@ -103,9 +103,9 @@ struct sort_symlinkiterlist{
     // ascending order
     bool operator()(const symlink_cache_t::iterator& src1, const symlink_cache_t::iterator& src2) const
     {
-        int result = CompareStatCacheTime(src1->second->cache_date, src2->second->cache_date);  // use the same as Stats
+        int result = CompareStatCacheTime(src1->second.cache_date, src2->second.cache_date);  // use the same as Stats
         if(0 == result){
-            if(src1->second->hit_count < src2->second->hit_count){
+            if(src1->second.hit_count < src2->second.hit_count){
                 result = -1;
             }
         }
@@ -225,8 +225,8 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
         iter = stat_cache.find(strpath);
     }
 
-    if(iter != stat_cache.end() && (*iter).second){
-        stat_cache_entry* ent = iter->second.get();
+    if(iter != stat_cache.end()){
+        stat_cache_entry* ent = &iter->second;
         if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
             if(ent->noobjcache){
                 if(!IsCacheNoObject){
@@ -311,12 +311,12 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
         iter    = stat_cache.find(strpath);
     }
 
-    if(iter != stat_cache.end() && (*iter).second) {
-        const stat_cache_entry* ent = iter->second.get();
-        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime((*iter).second->cache_date, ExpireTime)){
-            if((*iter).second->noobjcache){
+    if(iter != stat_cache.end()) {
+        const stat_cache_entry* ent = &iter->second;
+        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(iter->second.cache_date, ExpireTime)){
+            if(iter->second.noobjcache){
                 // noobjcache = true means no object.
-                SetStatCacheTime((*iter).second->cache_date);
+                SetStatCacheTime((*iter).second.cache_date);
                 return true;
             }
         }else{
@@ -359,30 +359,30 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     }
 
     // make new
-    std::unique_ptr<stat_cache_entry> ent(new stat_cache_entry());
-    if(!convert_header_to_stat(key.c_str(), meta, &(ent->stbuf), forcedir)){
+    stat_cache_entry ent;
+    if(!convert_header_to_stat(key.c_str(), meta, &ent.stbuf, forcedir)){
         return false;
     }
-    ent->hit_count  = 0;
-    ent->isforce    = forcedir;
-    ent->noobjcache = false;
-    ent->notruncate = (no_truncate ? 1L : 0L);
-    ent->meta.clear();
-    SetStatCacheTime(ent->cache_date);    // Set time.
+    ent.hit_count  = 0;
+    ent.isforce    = forcedir;
+    ent.noobjcache = false;
+    ent.notruncate = (no_truncate ? 1L : 0L);
+    ent.meta.clear();
+    SetStatCacheTime(ent.cache_date);    // Set time.
     //copy only some keys
     for(headers_t::const_iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string tag   = lower(iter->first);
         std::string value = iter->second;
         if(tag == "content-type"){
-            ent->meta[iter->first] = value;
+            ent.meta[iter->first] = value;
         }else if(tag == "content-length"){
-            ent->meta[iter->first] = value;
+            ent.meta[iter->first] = value;
         }else if(tag == "etag"){
-            ent->meta[iter->first] = value;
+            ent.meta[iter->first] = value;
         }else if(tag == "last-modified"){
-            ent->meta[iter->first] = value;
+            ent.meta[iter->first] = value;
         }else if(is_prefix(tag.c_str(), "x-amz")){
-            ent->meta[tag] = value;      // key is lower case for "x-amz"
+            ent.meta[tag] = value;      // key is lower case for "x-amz"
         }
     }
 
@@ -392,7 +392,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     std::pair<stat_cache_t::iterator, bool> pair = stat_cache.emplace(key, std::move(ent));
 
     // check symbolic link cache
-    if(!S_ISLNK(pair.first->second->stbuf.st_mode)){
+    if(!S_ISLNK(pair.first->second.stbuf.st_mode)){
         if(symlink_cache.end() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
             DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
@@ -417,10 +417,10 @@ bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
 
     AutoLock lock(&StatCache::stat_cache_lock);
     stat_cache_t::iterator iter = stat_cache.find(key);
-    if(stat_cache.end() == iter || !(iter->second)){
+    if(stat_cache.end() == iter){
         return true;
     }
-    stat_cache_entry* ent = iter->second.get();
+    stat_cache_entry* ent = &iter->second;
 
     // update only meta keys
     for(headers_t::iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
@@ -479,14 +479,14 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
 
     // make new
-    std::unique_ptr<stat_cache_entry> ent(new stat_cache_entry());
-    memset(&(ent->stbuf), 0, sizeof(struct stat));
-    ent->hit_count  = 0;
-    ent->isforce    = false;
-    ent->noobjcache = true;
-    ent->notruncate = 0L;
-    ent->meta.clear();
-    SetStatCacheTime(ent->cache_date);    // Set time.
+    stat_cache_entry ent;
+    memset(&ent.stbuf, 0, sizeof(struct stat));
+    ent.hit_count  = 0;
+    ent.isforce    = false;
+    ent.noobjcache = true;
+    ent.notruncate = 0L;
+    ent.meta.clear();
+    SetStatCacheTime(ent.cache_date);    // Set time.
 
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
@@ -507,7 +507,7 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
     stat_cache_t::iterator iter = stat_cache.find(key);
 
     if(stat_cache.end() != iter){
-        stat_cache_entry* ent = iter->second.get();
+        stat_cache_entry* ent = &iter->second;
         if(ent){
             if(no_truncate){
                 ++(ent->notruncate);
@@ -531,7 +531,7 @@ bool StatCache::TruncateCache()
     // 1) erase over expire time
     if(IsExpireTime){
         for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
-            const stat_cache_entry* entry = iter->second.get();
+            stat_cache_entry* entry = &iter->second;
             if(!entry || (0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime))){
                 iter = stat_cache.erase(iter);
             }else{
@@ -550,7 +550,7 @@ bool StatCache::TruncateCache()
     statiterlist_t    erase_iters;
     for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
         // check no truncate
-        const stat_cache_entry* ent = iter->second.get();
+        const stat_cache_entry* ent = &iter->second;
         if(ent && 0L < ent->notruncate){
             // skip for no truncate entry and keep extra counts for this entity.
             if(0 < erase_count){
@@ -617,8 +617,8 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     AutoLock lock(&StatCache::stat_cache_lock);
 
     symlink_cache_t::iterator iter = symlink_cache.find(strpath);
-    if(iter != symlink_cache.end() && iter->second){
-        symlink_cache_entry* ent = iter->second.get();
+    if(iter != symlink_cache.end()){
+        symlink_cache_entry* ent = &iter->second;
         if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){   // use the same as Stats
             // found
             S3FS_PRN_DBG("symbolic link cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
@@ -671,10 +671,10 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     }
 
     // make new
-    std::unique_ptr<symlink_cache_entry> ent(new symlink_cache_entry());
-    ent->link       = value;
-    ent->hit_count  = 0;
-    SetStatCacheTime(ent->cache_date);    // Set time(use the same as Stats).
+    symlink_cache_entry ent;
+    ent.link       = value;
+    ent.hit_count  = 0;
+    SetStatCacheTime(ent.cache_date);    // Set time(use the same as Stats).
 
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
@@ -695,8 +695,8 @@ bool StatCache::TruncateSymlink()
     // 1) erase over expire time
     if(IsExpireTime){
         for(symlink_cache_t::iterator iter = symlink_cache.begin(); iter != symlink_cache.end(); ){
-            const symlink_cache_entry* entry = iter->second.get();
-            if(!entry || IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
+            const symlink_cache_entry* entry = &iter->second;
+            if(IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
                 iter = symlink_cache.erase(iter);
             }else{
                 ++iter;
