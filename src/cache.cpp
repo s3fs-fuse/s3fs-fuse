@@ -389,10 +389,10 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    std::pair<stat_cache_t::iterator, bool> pair = stat_cache.emplace(key, std::move(ent));
+    const auto& value = stat_cache[key] = std::move(ent);
 
     // check symbolic link cache
-    if(!S_ISLNK(pair.first->second.stbuf.st_mode)){
+    if(!S_ISLNK(value.stbuf.st_mode)){
         if(symlink_cache.end() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
             DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
@@ -491,7 +491,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    stat_cache.emplace(key, std::move(ent));
+    stat_cache[key] = std::move(ent);
 
     // check symbolic link cache
     if(symlink_cache.end() != symlink_cache.find(key)){
@@ -677,7 +677,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     // add
     AutoLock lock(&StatCache::stat_cache_lock);
 
-    symlink_cache.emplace(key, std::move(ent));
+    symlink_cache[key] = std::move(ent);
 
     return true;
 }
