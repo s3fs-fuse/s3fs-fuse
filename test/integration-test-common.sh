@@ -94,6 +94,8 @@ S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
 CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
 
+PJDFSTEST_HASH="c711b5f6b666579846afba399a998f74f60c488b"
+
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
 then
 	echo "Missing credentials file: ${S3FS_CREDENTIALS_FILE}"
@@ -193,6 +195,18 @@ function start_s3proxy {
 
         # wait for Chaos HTTP Proxy to start
         wait_for_port 1080
+    fi
+
+    if [ ! -d "pjd-pjdfstest-${PJDFSTEST_HASH:0:7}" ]; then
+        curl "https://api.github.com/repos/pjd/pjdfstest/tarball/${PJDFSTEST_HASH}" \
+            --fail --location --silent --output /tmp/pjdfstest.tar.gz
+        tar zxf /tmp/pjdfstest.tar.gz
+        rm -f /tmp/pjdfstest.tar.gz
+
+        rm -f pjdfstest
+        ln -s "pjd-pjdfstest-${PJDFSTEST_HASH:0:7}" pjdfstest
+
+        (cd pjdfstest && autoreconf -ifs && ./configure && make)
     fi
 }
 
