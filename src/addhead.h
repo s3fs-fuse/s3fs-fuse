@@ -44,12 +44,7 @@ struct add_header{
     }
 
     add_header(const add_header&) = delete;
-    add_header(add_header&& val)
-        : pregex(std::move(val.pregex))
-        , basestring(std::move(val.basestring))
-        , headkey(std::move(val.headkey))
-        , headvalue(std::move(val.headvalue))
-    {}
+    add_header(add_header&& val) = default;
     add_header& operator=(const add_header&) = delete;
     add_header& operator=(add_header&&) = delete;
 
