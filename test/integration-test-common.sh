@@ -72,11 +72,7 @@ S3FS=../src/s3fs
 # [NOTE]
 # CHAOS HTTP PROXY does not support HTTPS.
 #
-if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-    : "${S3_URL:="https://127.0.0.1:8080"}"
-else
-    : "${S3_URL:="http://127.0.0.1:8080"}"
-fi
+: "${S3_URL:="http://127.0.0.1:8080"}"
 : "${S3_ENDPOINT:="us-east-1"}"
 : "${S3FS_CREDENTIALS_FILE:="passwd-s3fs"}"
 : "${TEST_BUCKET_1:="s3fs-integration-test"}"
