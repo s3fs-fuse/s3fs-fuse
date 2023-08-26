@@ -139,34 +139,11 @@ function mk_test_file {
     fi
 }
 
-function rm_test_file {
-    if [ $# = 0 ]; then
-        local FILE="${TEST_TEXT_FILE}"
-    else
-        local FILE="$1"
-    fi
-    rm -f "${FILE}"
-
-    if [ -e "${FILE}" ]
-    then
-        echo "Could not cleanup file ${TEST_TEXT_FILE}"
-        exit 1
-    fi
-}
-
 function mk_test_dir {
     mkdir "${TEST_DIR}"
 
     if [ ! -d "${TEST_DIR}" ]; then
         echo "Directory ${TEST_DIR} was not created"
-        exit 1
-    fi
-}
-
-function rm_test_dir {
-    rmdir "${TEST_DIR}"
-    if [ -e "${TEST_DIR}" ]; then
-        echo "Could not remove the test directory, it still exists: ${TEST_DIR}"
         exit 1
     fi
 }
@@ -255,6 +232,9 @@ function run_suite {
            report_fail "${t}"
        fi
        set -o errexit
+
+       # Clean up temporary files
+       rm -rf "${TEST_SCRIPT_DIR:?}/${TEST_BUCKET_MOUNT_POINT_1:?}/${key_prefix:?}"/*
    done
    cd "${orig_dir}"
    clean_run_dir

@@ -34,8 +34,6 @@ function test_create_empty_file {
     check_file_size "${TEST_TEXT_FILE}" 0
 
     aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${OBJECT_NAME}"
-
-    rm_test_file
 }
 
 function test_append_file {
@@ -48,8 +46,6 @@ function test_append_file {
     done > "${TEST_TEXT_FILE}"
 
     check_file_size "${TEST_TEXT_FILE}" $((TEST_TEXT_FILE_LENGTH * $((${#TEST_INPUT} + 1)) ))
-
-    rm_test_file
 }
 
 function test_truncate_file {
@@ -61,21 +57,12 @@ function test_truncate_file {
     : > "${TEST_TEXT_FILE}"
 
     check_file_size "${TEST_TEXT_FILE}" 0
-
-    rm_test_file
 }
 
 function test_truncate_upload {
     describe "Testing truncate file for uploading ..."
 
-    # This file size uses multipart, mix upload when uploading.
-    # We will test these cases.
-
-    rm_test_file "${BIG_FILE}"
-
     "${TRUNCATE_BIN}" "${BIG_FILE}" -s "${BIG_FILE_LENGTH}"
-
-    rm_test_file "${BIG_FILE}"
 }
 
 function test_truncate_empty_file {
@@ -88,8 +75,6 @@ function test_truncate_empty_file {
     "${TRUNCATE_BIN}" "${TEST_TEXT_FILE}" -s "${t_size}"
 
     check_file_size "${TEST_TEXT_FILE}" "${t_size}"
-
-    rm_test_file
 }
 
 function test_truncate_shrink_file {
@@ -107,9 +92,6 @@ function test_truncate_shrink_file {
     if ! cmp "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" "${BIG_TRUNCATE_TEST_FILE}"; then
        return 1
     fi
-
-    rm -f "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}"
-    rm_test_file "${BIG_TRUNCATE_TEST_FILE}"
 }
 
 function test_truncate_shrink_read_file {
@@ -130,17 +112,10 @@ function test_truncate_shrink_read_file {
 
     # Truncate the file to 1024 length
     local t_size=1024
-
-    rm_test_file
 }
 
 function test_mv_file {
     describe "Testing mv file function ..."
-    # if the rename file exists, delete it
-    if [ -e "${ALT_TEST_TEXT_FILE}" ]
-    then
-       rm "${ALT_TEST_TEXT_FILE}"
-    fi
 
     if [ -e "${ALT_TEST_TEXT_FILE}" ]
     then
@@ -175,9 +150,6 @@ function test_mv_file {
        echo "moved file length is not as expected expected: $ALT_TEXT_LENGTH  got: $ALT_FILE_LENGTH"
        return 1
     fi
-
-    # clean up
-    rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
 function test_mv_to_exist_file {
@@ -189,8 +161,6 @@ function test_mv_to_exist_file {
     ../../junk_data $((BIG_MV_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${BIG_FILE}-mv"
 
     mv "${BIG_FILE}" "${BIG_FILE}-mv"
-
-    rm_test_file "${BIG_FILE}-mv"
 }
 
 function test_mv_empty_directory {
@@ -274,9 +244,6 @@ function test_redirects {
        echo "LINE2 was not as expected, got ${LINE2}, expected 123456"
        return 1
     fi
-
-    # clean up
-    rm_test_file
 }
 
 function test_mkdir_rmdir {
@@ -288,7 +255,6 @@ function test_mkdir_rmdir {
     fi
 
     mk_test_dir
-    rm_test_dir
 }
 
 function test_chmod {
@@ -308,9 +274,6 @@ function test_chmod {
       echo "Could not modify ${TEST_TEXT_FILE} permissions"
       return 1
     fi
-
-    # clean up
-    rm_test_file
 }
 
 function test_chown {
@@ -352,9 +315,6 @@ function test_chown {
         return 1
       fi
     fi
-
-    # clean up
-    rm_test_file
 }
 
 function test_list {
@@ -368,9 +328,6 @@ function test_list {
         echo "Expected 2 file but got ${file_cnt}"
         return 1
     fi
-
-    rm_test_file
-    rm_test_dir
 }
 
 function test_remove_nonempty_directory {
@@ -381,8 +338,6 @@ function test_remove_nonempty_directory {
         set +o pipefail
         rmdir "${TEST_DIR}" 2>&1 | grep -q "Directory not empty"
     )
-    rm "${TEST_DIR}/file"
-    rm_test_dir
 }
 
 function test_external_directory_creation {
@@ -395,7 +350,6 @@ function test_external_directory_creation {
     get_permissions directory | grep -q 750$
     ls directory
     cmp <(echo "data") directory/"${TEST_TEXT_FILE}"
-    rm -f directory/"${TEST_TEXT_FILE}"
 }
 
 function test_external_modification {
@@ -415,7 +369,6 @@ function test_external_modification {
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "new new" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp "${TEST_TEXT_FILE}" <(echo "new new")
-    rm -f "${TEST_TEXT_FILE}"
 }
 
 function test_external_creation {
@@ -435,7 +388,6 @@ function test_external_creation {
 
     sleep 1
     [ -e "${TEST_TEXT_FILE}" ]
-    rm -f "${TEST_TEXT_FILE}"
 }
 
 function test_read_external_object() {
@@ -443,7 +395,6 @@ function test_read_external_object() {
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp "${TEST_TEXT_FILE}" <(echo "test")
-    rm -f "${TEST_TEXT_FILE}"
 }
 
 function test_read_external_dir_object() {
@@ -458,7 +409,6 @@ function test_read_external_dir_object() {
         echo "sub directory a/c/m time is underflow(-1)."
         return 1
     fi
-    rm -rf "${SUB_DIR_NAME}"
 }
 
 function test_update_metadata_external_small_object() {
@@ -517,12 +467,6 @@ function test_update_metadata_external_small_object() {
     echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
     del_xattr key "${TEST_RMXATTR_FILE}"
     cmp "${TEST_RMXATTR_FILE}" <(echo "${TEST_INPUT}")
-
-    rm -f "${TEST_CHMOD_FILE}"
-    rm -f "${TEST_CHOWN_FILE}"
-    rm -f "${TEST_UTIMENS_FILE}"
-    rm -f "${TEST_SETXATTR_FILE}"
-    rm -f "${TEST_RMXATTR_FILE}"
 }
 
 function test_update_metadata_external_large_object() {
@@ -581,13 +525,6 @@ function test_update_metadata_external_large_object() {
     aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
     del_xattr key "${TEST_RMXATTR_FILE}"
     cmp "${TEST_RMXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
-
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
-    rm -f "${TEST_CHMOD_FILE}"
-    rm -f "${TEST_CHOWN_FILE}"
-    rm -f "${TEST_UTIMENS_FILE}"
-    rm -f "${TEST_SETXATTR_FILE}"
-    rm -f "${TEST_RMXATTR_FILE}"
 }
 
 function test_rename_before_close {
@@ -603,9 +540,6 @@ function test_rename_before_close {
         echo "rename before close failed"
         return 1
     fi
-
-    rm_test_file "${TEST_TEXT_FILE}.new"
-    rm -f "${TEST_TEXT_FILE}"
 }
 
 function test_multipart_upload {
@@ -620,9 +554,6 @@ function test_multipart_upload {
     then
        return 1
     fi
-
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
-    rm_test_file "${BIG_FILE}"
 }
 
 function test_multipart_copy {
@@ -641,9 +572,6 @@ function test_multipart_copy {
 
     #check the renamed file content-type
     check_content_type "$1/${BIG_FILE}-copy" "application/octet-stream"
-
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
-    rm_test_file "${BIG_FILE}-copy"
 }
 
 function test_multipart_mix {
@@ -722,11 +650,6 @@ function test_multipart_mix {
     then
        return 1
     fi
-
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
-    rm -f "${TEMP_DIR}/${BIG_FILE}-mix"
-    rm_test_file "${BIG_FILE}"
-    rm_test_file "${BIG_FILE}-mix"
 }
 
 function test_utimens_during_multipart {
@@ -738,9 +661,6 @@ function test_utimens_during_multipart {
 
     # The second copy of the "-p" option calls utimens during multipart upload.
     cp -p "${TEMP_DIR}/${BIG_FILE}" "${BIG_FILE}"
-
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
-    rm_test_file "${BIG_FILE}"
 }
 
 function test_special_characters {
@@ -761,23 +681,17 @@ function test_special_characters {
     )
 
     mkdir "TOYOTA TRUCK 8.2.2"
-    rm -rf "TOYOTA TRUCK 8.2.2"
 }
 
 function test_hardlink {
     describe "Testing hardlinks ..."
 
-    rm -f "${TEST_TEXT_FILE}"
-    rm -f "${ALT_TEST_TEXT_FILE}"
     echo foo > "${TEST_TEXT_FILE}"
 
     (
         set +o pipefail
         ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q -e 'Operation not supported' -e 'Not supported'
     )
-
-    rm_test_file
-    rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
 function test_mknod {
@@ -785,16 +699,12 @@ function test_mknod {
 
     local MKNOD_TEST_FILE_BASENAME="mknod_testfile"
 
-    rm -f "${MKNOD_TEST_FILE_BASENAME}*"
-
     ../../mknod_test "${MKNOD_TEST_FILE_BASENAME}"
 }
 
 function test_symlink {
     describe "Testing symlinks ..."
 
-    rm -f "${TEST_TEXT_FILE}"
-    rm -f "${ALT_TEST_TEXT_FILE}"
     echo foo > "${TEST_TEXT_FILE}"
 
     ln -s "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
@@ -804,14 +714,11 @@ function test_symlink {
 
     [ -L "${ALT_TEST_TEXT_FILE}" ]
     [ ! -f "${ALT_TEST_TEXT_FILE}" ]
-
-    rm -f "${ALT_TEST_TEXT_FILE}"
 }
 
 function test_extended_attributes {
     describe "Testing extended attributes ..."
 
-    rm -f "${TEST_TEXT_FILE}"
     touch "${TEST_TEXT_FILE}"
 
     # set value
@@ -831,18 +738,10 @@ function test_extended_attributes {
     del_xattr key1 "${TEST_TEXT_FILE}"
     get_xattr key1 "${TEST_TEXT_FILE}" && return 1
     get_xattr key2 "${TEST_TEXT_FILE}" | grep -q '^value2$'
-
-    rm_test_file
 }
 
 function test_mtime_file {
     describe "Testing mtime preservation function ..."
-
-    # if the rename file exists, delete it
-    if [ -e "${ALT_TEST_TEXT_FILE}" ] || [ -L "${ALT_TEST_TEXT_FILE}" ]
-    then
-       rm "${ALT_TEST_TEXT_FILE}"
-    fi
 
     if [ -e "${ALT_TEST_TEXT_FILE}" ]
     then
@@ -886,9 +785,6 @@ function test_mtime_file {
            fi
        fi
     fi
-
-    rm_test_file
-    rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
 # [NOTE]
@@ -928,7 +824,6 @@ function test_update_time_chmod() {
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_chown() {
@@ -952,7 +847,6 @@ function test_update_time_chown() {
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_xattr() {
@@ -976,7 +870,6 @@ function test_update_time_xattr() {
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_touch() {
@@ -1000,7 +893,6 @@ function test_update_time_touch() {
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_touch_a() {
@@ -1024,7 +916,6 @@ function test_update_time_touch_a() {
         echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
         return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_append() {
@@ -1048,7 +939,6 @@ function test_update_time_append() {
         echo "append expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime and same atime: $base_atime == $atime"
         return 1
     fi
-    rm_test_file
 }
 
 function test_update_time_cp_p() {
@@ -1097,9 +987,6 @@ function test_update_time_mv() {
        echo "mv expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
-    rm_test_file "${TIME_TEST_TEXT_FILE}"
-    rm_test_file "${TIME2_TEST_TEXT_FILE}"
 }
 
 # [NOTE]
@@ -1131,8 +1018,6 @@ function test_update_directory_time_chmod() {
        echo "chmod expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
-    rm -rf "${TEST_DIR}"
 }
 
 function test_update_directory_time_chown {
@@ -1156,8 +1041,6 @@ function test_update_directory_time_chown {
        echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
-    rm -rf "${TEST_DIR}"
 }
 
 function test_update_directory_time_set_xattr {
@@ -1181,8 +1064,6 @@ function test_update_directory_time_set_xattr {
        echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
-
-    rm -rf "${TEST_DIR}"
 }
 
 function test_update_directory_time_touch {
@@ -1206,8 +1087,6 @@ function test_update_directory_time_touch {
        echo "touch expected updated ctime: $base_ctime != $ctime, mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
        return 1
     fi
-
-    rm -rf "${TEST_DIR}"
 }
 
 function test_update_directory_time_touch_a {
@@ -1231,8 +1110,6 @@ function test_update_directory_time_touch_a {
         echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
         return 1
     fi
-
-    rm -rf "${TEST_DIR}"
 }
 
 function test_update_directory_time_subdir() {
@@ -1284,10 +1161,6 @@ function test_update_directory_time_subdir() {
        echo "mv for a file in directory expected same ctime: $subfile_ctime == $ctime, mtime: $subfile_mtime == $mtime, atime: $subfile_atime == $atime"
        return 1
     fi
-
-    rm -rf "${TIME_TEST_SUBDIR}"
-    rm -rf "${TIME_TEST_DIR}"
-    rm -rf "${TEST_DIR}"
 }
 
 # [NOTE]
@@ -1315,9 +1188,6 @@ function test_update_chmod_opened_file() {
        echo "the file conversion by sed in place command failed."
        return 1
     fi
-
-    # clean up
-    rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
 function test_update_parent_directory_time_sub() {
@@ -1798,9 +1668,6 @@ function test_posix_acl {
        echo "Could not copy without posix acl to ${POSIX_ACL_TEST_FILE4} file in no-acl directory"
        return 1
     fi
-
-    rm -rf "${POSIX_ACL_TEST_DIR1}"
-    rm -rf "${POSIX_ACL_TEST_DIR2}"
 }
 
 function test_copy_file {
@@ -1809,15 +1676,11 @@ function test_copy_file {
    dd if=/dev/urandom of=/tmp/simple_file bs=1024 count=1
    cp /tmp/simple_file copied_simple_file
    cmp /tmp/simple_file copied_simple_file
-
-   rm_test_file /tmp/simple_file
-   rm_test_file copied_simple_file
 }
 
 function test_write_after_seek_ahead {
    describe "Test writes succeed after a seek ahead ..."
    dd if=/dev/zero of=testfile seek=1 count=1 bs=1024
-   rm_test_file testfile
 }
 
 function test_overwrite_existing_file_range {
@@ -1833,9 +1696,6 @@ function test_overwrite_existing_file_range {
     dd if=/dev/zero of=/tmp/cmp_base_file seek=1 count=1 bs=1024 conv=notrunc
 
     cmp "${TEST_TEXT_FILE}" /tmp/cmp_base_file
-
-    rm_test_file /tmp/cmp_base_file
-    rm_test_file
 }
 
 function test_concurrent_directory_updates {
@@ -1854,8 +1714,6 @@ function test_concurrent_directory_updates {
         done &
     done
     wait
-    # shellcheck disable=SC2046
-    rm -f $(seq 5)
 }
 
 function test_concurrent_reads {
@@ -1865,7 +1723,6 @@ function test_concurrent_reads {
         dd if="${TEST_TEXT_FILE}" of=/dev/null seek=$((RANDOM % BIG_FILE_LENGTH)) count=16 bs=1024 &
     done
     wait
-    rm_test_file
 }
 
 function test_concurrent_writes {
@@ -1875,12 +1732,10 @@ function test_concurrent_writes {
         dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=$((RANDOM % BIG_FILE_LENGTH)) count=16 bs=1024 conv=notrunc &
     done
     wait
-    rm_test_file
 }
 
 function test_open_second_fd {
     describe "read from an open fd ..."
-    rm_test_file second_fd_file
 
     local RESULT
     # shellcheck disable=SC2094
@@ -1889,19 +1744,16 @@ function test_open_second_fd {
         echo "size mismatch, expected: 4, was: ${RESULT}"
         return 1
     fi
-    rm_test_file second_fd_file
 }
 
 function test_write_multiple_offsets {
     describe "test writing to multiple offsets ..."
     ../../write_multiblock -f "${TEST_TEXT_FILE}" -p "1024:1" -p "$((16 * 1024 * 1024)):1" -p "$((18 * 1024 * 1024)):1"
-    rm_test_file "${TEST_TEXT_FILE}"
 }
 
 function test_write_multiple_offsets_backwards {
     describe "test writing to multiple offsets ..."
     ../../write_multiblock -f "${TEST_TEXT_FILE}" -p "$((20 * 1024 * 1024 + 1)):1" -p "$((10 * 1024 * 1024)):1"
-    rm_test_file "${TEST_TEXT_FILE}"
 }
 
 function test_clean_up_cache() {
@@ -1919,16 +1771,13 @@ function test_clean_up_cache() {
     local file_cnt="${#file_list[@]}"
     if [ "${file_cnt}" != "${count}" ]; then
         echo "Expected $count files but got ${file_cnt}"
-        rm -rf "${dir}"
         return 1
     fi
     local CACHE_DISK_AVAIL_SIZE; CACHE_DISK_AVAIL_SIZE=$(get_disk_avail_size "${CACHE_DIR}")
     if [ "${CACHE_DISK_AVAIL_SIZE}" -lt "${ENSURE_DISKFREE_SIZE}" ];then
         echo "Cache disk avail size:${CACHE_DISK_AVAIL_SIZE} less than ensure_diskfree size:${ENSURE_DISKFREE_SIZE}"
-        rm -rf "${dir}"
         return 1
     fi
-    rm -rf "${dir}"
 }
 
 function test_content_type() {
@@ -1947,11 +1796,6 @@ function test_content_type() {
 
     mkdir "test.dir"
     check_content_type "${DIR_NAME}/test.dir/" "application/x-directory"
-
-    rm -f test.txt
-    rm -f test.jpg
-    rm -f test.bin
-    rm -rf test.dir
 }
 
 # create more files than -o max_stat_cache_size
@@ -1965,9 +1809,6 @@ function test_truncate_cache() {
         done
         ls "${dir}"
     done
-
-    # shellcheck disable=SC2046
-    rm -rf $(seq 2)
 }
 
 function test_cache_file_stat() {
@@ -2064,14 +1905,10 @@ function test_cache_file_stat() {
         echo "the file size indicated by the cache stat file is different: \"${BIG_FILE_LENGTH}\" != \"${CACHE_TOTAL_SIZE}\""
         return 1;
     fi
-
-    rm_test_file "${BIG_FILE}"
 }
 
 function test_zero_cache_file_stat() {
     describe "Test zero byte cache file stat ..."
-
-    rm_test_file "${TEST_TEXT_FILE}"
 
     #
     # create empty file
@@ -2090,14 +1927,10 @@ function test_zero_cache_file_stat() {
         echo "The cache file stat after creating an empty file is incorrect : ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
         return 1;
     fi
-    rm_test_file "${TEST_TEXT_FILE}"
 }
 
 function test_upload_sparsefile {
     describe "Testing upload sparse file ..."
-
-    rm_test_file "${BIG_FILE}"
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
 
     #
     # Make all HOLE file
@@ -2120,9 +1953,6 @@ function test_upload_sparsefile {
     # check
     #
     cmp "${TEMP_DIR}/${BIG_FILE}" "${BIG_FILE}"
-
-    rm_test_file "${BIG_FILE}"
-    rm -f "${TEMP_DIR}/${BIG_FILE}"
 }
 
 function test_mix_upload_entities() {
@@ -2151,8 +1981,6 @@ function test_mix_upload_entities() {
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}" bs=1 count=16 seek=1073152 conv=notrunc
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}" bs=1 count=16 seek=26214400 conv=notrunc
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}" bs=1 count=16 seek=26222592 conv=notrunc
-
-    rm_test_file "${BIG_FILE}"
 }
 
 #
@@ -2224,9 +2052,6 @@ function test_ensurespace_move_file() {
         echo "Failed to move file with file length: ${MOVED_FILE_LENGTH} ${BIG_FILE_LENGTH}"
         return 1
     fi
-
-    rm_test_file "${BIG_FILE}"
-    rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"
 }
 
 function test_not_existed_dir_obj() {
@@ -2297,9 +2122,6 @@ function test_not_existed_dir_obj() {
     echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
     return 1;
     fi
-
-    rm -rf not_existed_dir_single
-    rm -rf not_existed_dir_parent
 }
 
 function test_ut_ossfs {
@@ -2353,8 +2175,7 @@ function test_write_data_with_skip() {
     #
     # Clean files
     #
-    rm_test_file "${_SKIPWRITE_FILE}"
-    rm_test_file "${_TMP_SKIPWRITE_FILE}"
+    rm -f "${_TMP_SKIPWRITE_FILE}"
 
     #
     # Create new file in bucket and temporary directory(/tmp)
@@ -2455,8 +2276,7 @@ function test_write_data_with_skip() {
     #
     # Clean files
     #
-    rm_test_file "${_SKIPWRITE_FILE}"
-    rm_test_file "${_TMP_SKIPWRITE_FILE}"
+    rm -f "${_TMP_SKIPWRITE_FILE}"
 }
 
 function test_chmod_mountpoint {
@@ -2555,7 +2375,6 @@ function test_file_names_longer_than_posix() {
         echo "failed to list long file name"
         return 1
     fi
-    rm -f "${a256}"
 }
 
 function add_all_tests {
