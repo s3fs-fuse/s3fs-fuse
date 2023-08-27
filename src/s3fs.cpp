@@ -819,8 +819,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
     }
     if(pcxt->gid == obj_gid){
         base_mask |= S_IRWXG;
-    }
-    if(1 == is_uid_include_group(pcxt->uid, obj_gid)){
+    } else if(1 == is_uid_include_group(pcxt->uid, obj_gid)){
         base_mask |= S_IRWXG;
     }
     mode &= base_mask;
