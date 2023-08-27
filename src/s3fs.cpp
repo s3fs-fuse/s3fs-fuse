@@ -1033,7 +1033,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     WTF8_ENCODE(path)
     int result;
 
-    S3FS_PRN_INFO("[path=%s]", path);
+    FUSE_CTX_INFO("[path=%s]", path);
 
     // check parent directory attribute.
     if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -1070,6 +1070,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     }
     WTF8_ENCODE(path)
     std::string strValue;
+    FUSE_CTX_INFO("[path=%s]", path);
 
     // check symbolic link cache
     if(!StatCache::getStatCacheData()->GetSymlink(path, strValue)){
@@ -1147,7 +1148,7 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
     int       result;
     struct fuse_context* pcxt;
 
-    S3FS_PRN_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
+    FUSE_CTX_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
@@ -1176,7 +1177,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     int result;
     struct fuse_context* pcxt;
 
-    S3FS_PRN_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
+    FUSE_CTX_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
@@ -1274,7 +1275,7 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
     int result;
     struct fuse_context* pcxt;
 
-    S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
+    FUSE_CTX_INFO("[path=%s][mode=%04o]", path, mode);
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
@@ -1321,7 +1322,7 @@ static int s3fs_unlink(const char* _path)
     WTF8_ENCODE(path)
     int result;
 
-    S3FS_PRN_INFO("[path=%s]", path);
+    FUSE_CTX_INFO("[path=%s]", path);
 
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
@@ -1365,7 +1366,7 @@ static int s3fs_rmdir(const char* _path)
     std::string strpath;
     struct stat stbuf;
 
-    S3FS_PRN_INFO("[path=%s]", path);
+    FUSE_CTX_INFO("[path=%s]", path);
 
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
@@ -1429,7 +1430,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     int result;
     struct fuse_context* pcxt;
 
-    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
@@ -1604,7 +1605,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
 {
     int result;
 
-    S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
+    FUSE_CTX_INFO1("[from=%s][to=%s]", from , to);
 
     if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
         // not permit writing "to" object parent dir.
@@ -1877,7 +1878,7 @@ static int s3fs_rename(const char* _from, const char* _to)
     struct stat buf;
     int result;
 
-    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
 
     if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
         // not permit writing "to" object parent dir.
@@ -1939,7 +1940,7 @@ static int s3fs_link(const char* _from, const char* _to)
 {
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
-    S3FS_PRN_INFO("[from=%s][to=%s]", from, to);
+    FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
     return -ENOTSUP;
 }
 
@@ -1954,7 +1955,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     struct stat stbuf;
     dirtype nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO("[path=%s][mode=%04o]", path, mode);
+    FUSE_CTX_INFO("[path=%s][mode=%04o]", path, mode);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2059,7 +2060,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     struct stat stbuf;
     dirtype     nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO1("[path=%s][mode=%04o]", path, mode);
+    FUSE_CTX_INFO1("[path=%s][mode=%04o]", path, mode);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2152,7 +2153,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     struct stat stbuf;
     dirtype nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
+    FUSE_CTX_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2264,7 +2265,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     struct stat stbuf;
     dirtype     nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
+    FUSE_CTX_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2477,7 +2478,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
+    FUSE_CTX_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2608,7 +2609,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     struct stat stbuf;
     dirtype     nDirType = dirtype::UNKNOWN;
 
-    S3FS_PRN_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
+    FUSE_CTX_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2712,7 +2713,7 @@ static int s3fs_truncate(const char* _path, off_t size)
     AutoFdEntity autoent;
     FdEntity*    ent = nullptr;
 
-    S3FS_PRN_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
+    FUSE_CTX_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
 
     if(size < 0){
         size = 0;
@@ -2812,7 +2813,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     struct stat st;
     bool needs_flush = false;
 
-    S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
+    FUSE_CTX_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
     if ((fi->flags & O_ACCMODE) == O_RDONLY && fi->flags & O_TRUNC) {
         return -EACCES;
@@ -2905,7 +2906,7 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
+    FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -2933,7 +2934,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
     WTF8_ENCODE(path)
     ssize_t res;
 
-    S3FS_PRN_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+    FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -2991,7 +2992,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     WTF8_ENCODE(path)
     int result;
 
-    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
+    FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
     if(0 != (result = check_parent_object_access(path, X_OK))){
@@ -3037,7 +3038,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     WTF8_ENCODE(path)
     int result = 0;
 
-    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
+    FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -3069,7 +3070,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
-    S3FS_PRN_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
+    FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
@@ -3146,7 +3147,7 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     int result;
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
 
-    S3FS_PRN_INFO("[path=%s][flags=0x%x]", path, fi->flags);
+    FUSE_CTX_INFO("[path=%s][flags=0x%x]", path, fi->flags);
 
     if(0 == (result = check_object_access(path, mask, nullptr))){
         result = check_parent_object_access(path, X_OK);
@@ -3397,7 +3398,7 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     S3ObjList head;
     int result;
 
-    S3FS_PRN_INFO("[path=%s]", path);
+    FUSE_CTX_INFO("[path=%s]", path);
 
     if(0 != (result = check_object_access(path, R_OK, nullptr))){
         return result;
@@ -3821,7 +3822,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
 #endif
 {
-    S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
+    FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
 
     if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
@@ -3958,7 +3959,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
 #endif
 {
-    S3FS_PRN_INFO("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
+    FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
 
     if(!path || !name){
         return -EIO;
@@ -4090,7 +4091,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
 static int s3fs_removexattr(const char* path, const char* name)
 {
-    S3FS_PRN_INFO("[path=%s][name=%s]", path, name);
+    FUSE_CTX_INFO("[path=%s][name=%s]", path, name);
 
     if(!path || !name){
         return -EIO;
@@ -4307,7 +4308,7 @@ static void s3fs_destroy(void*)
 
 static int s3fs_access(const char* path, int mask)
 {
-    S3FS_PRN_INFO("[path=%s][mask=%s%s%s%s]", path,
+    FUSE_CTX_INFO("[path=%s][mask=%s%s%s%s]", path,
             ((mask & R_OK) == R_OK) ? "R_OK " : "",
             ((mask & W_OK) == W_OK) ? "W_OK " : "",
             ((mask & X_OK) == X_OK) ? "X_OK " : "",

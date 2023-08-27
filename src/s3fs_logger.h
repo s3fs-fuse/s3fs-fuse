@@ -230,6 +230,34 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
 #define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_CACHE(fp, ...)   S3FS_LOW_CACHE(fp, ##__VA_ARGS__, "")
 
+// Macros to print log with fuse context
+#define PRINT_FUSE_CTX(level, indent, fmt, ...) do {                    \
+    if(S3fsLog::IsS3fsLogLevel(level)){                                 \
+        struct fuse_context *ctx = fuse_get_context();                  \
+        if(ctx == NULL){                                                \
+            S3FS_LOW_LOGPRN2(level, indent, fmt, ##__VA_ARGS__);        \
+        }else{                                                          \
+            S3FS_LOW_LOGPRN2(level, indent, fmt"[pid=%u,uid=%u,gid=%u]",\
+                ##__VA_ARGS__,                                          \
+                (unsigned int)(ctx->pid),                               \
+                (unsigned int)(ctx->uid),                               \
+                (unsigned int)(ctx->gid));                              \
+        }                                                               \
+    }                                                                   \
+} while (0)
+
+#define FUSE_CTX_INFO(fmt, ...) do {                            \
+    PRINT_FUSE_CTX(S3fsLog::LEVEL_INFO, 0, fmt, ##__VA_ARGS__); \
+} while (0)
+
+#define FUSE_CTX_INFO1(fmt, ...) do {                           \
+    PRINT_FUSE_CTX(S3fsLog::LEVEL_INFO, 1, fmt, ##__VA_ARGS__); \
+} while (0)
+
+#define FUSE_CTX_DBG(fmt, ...) do {                                 \
+    PRINT_FUSE_CTX(S3fsLog::LEVEL_DBG, 0, fmt, ##__VA_ARGS__);  \
+} while (0)
+
 #endif // S3FS_LOGGER_H_
 
 /*
