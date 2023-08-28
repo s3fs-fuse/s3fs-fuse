@@ -146,6 +146,8 @@ static bool set_mountpoint_attribute(struct stat& mpst);
 static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 static fsblkcnt_t parse_bucket_size(char* value);
+static bool is_cmd_exists(const std::string& command);
+static int print_umount_message(const std::string& mp, bool force);
 
 //-------------------------------------------------------------------
 // fuse interface functions
@@ -4634,6 +4636,35 @@ static fsblkcnt_t parse_bucket_size(char* max_size)
     return n_bytes;
 }
 
+static bool is_cmd_exists(const std::string& command)
+{
+    // The `command -v` is a POSIX-compliant method for checking the existence of a program.
+    std::string cmd = "command -v " + command + " >/dev/null 2>&1";
+    int result = system(cmd.c_str());
+    return (result !=-1 && WIFEXITED(result) && WEXITSTATUS(result) == 0);
+}
+
+static int print_umount_message(const std::string& mp, bool force)
+{
+    std::string cmd;
+    if (is_cmd_exists("fusermount")){
+        if (force){
+            cmd = "fusermount -uz " + mp;
+        } else {
+            cmd = "fusermount -u " + mp;
+        }
+    }else{
+        if (force){
+            cmd = "umount -l " + mp;
+        } else {
+            cmd = "umount " + mp;
+        }
+    }
+
+    S3FS_PRN_EXIT("MOUNTPOINT %s is stale, you could use this command to fix: %s", mp.c_str(), cmd.c_str());
+
+    return 0;
+}
 
 // This is repeatedly called by the fuse option parser
 // if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
@@ -4669,7 +4700,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             set_mountpoint_attribute(stbuf);
 #else
             if(stat(arg, &stbuf) == -1){
-                S3FS_PRN_EXIT("unable to access MOUNTPOINT %s: %s", mountpoint.c_str(), strerror(errno));
+                // check stale mountpoint
+                if(errno == ENOTCONN){
+                    print_umount_message(mountpoint, true);
+                } else {
+                    S3FS_PRN_EXIT("unable to access MOUNTPOINT %s: %s", mountpoint.c_str(), strerror(errno));
+                }
                 return -1;
             }
             if(!(S_ISDIR(stbuf.st_mode))){
