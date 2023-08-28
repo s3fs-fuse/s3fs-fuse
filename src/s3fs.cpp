@@ -1225,9 +1225,10 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(nullptr == (ent = autoent.Open(path, &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, AutoLock::NONE))){
+    int error = 0;
+    if(nullptr == (ent = autoent.Open(path, &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, AutoLock::NONE, &error))){
         StatCache::getStatCacheData()->DelStat(path);
-        return -EIO;
+        return error;
     }
     ent->MarkDirtyNewFile();
     fi->fh = autoent.Detach();       // KEEP fdentity open;
