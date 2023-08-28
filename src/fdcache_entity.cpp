@@ -1367,11 +1367,17 @@ int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
     }
 
     S3fsCurl s3fscurl(true);
-    int      result;
-    if(0 != (result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist))){
+    int      result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist);
+    s3fscurl.DestroyCurlHandle();
+    if(0 != result){
+        S3fsCurl s3fscurl_abort(true);
+        int result2 = s3fscurl.AbortMultipartUpload(path.c_str(), upload_id);
+        s3fscurl_abort.DestroyCurlHandle();
+        if(0 != result2){
+            S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
+        }
         return result;
     }
-    s3fscurl.DestroyCurlHandle();
 
     // clear multipart upload info
     untreated_list.ClearAll();
@@ -1913,13 +1919,21 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             return -EIO;
         }else{
             S3fsCurl s3fscurl(true);
-            if(0 != (result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist))){
+            result = s3fscurl.CompleteMultipartPostRequest(path.c_str(), upload_id, etaglist);
+            s3fscurl.DestroyCurlHandle();
+            if(0 != result){
                 S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
                 untreated_list.ClearAll();
                 pseudo_obj->ClearUploadInfo(); // clear multipart upload info
+
+                S3fsCurl s3fscurl_abort(true);
+                int result2 = s3fscurl.AbortMultipartUpload(path.c_str(), upload_id);
+                s3fscurl_abort.DestroyCurlHandle();
+                if(0 != result2){
+                    S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
+                }
                 return result;
             }
-            s3fscurl.DestroyCurlHandle();
         }
         untreated_list.ClearAll();
         pseudo_obj->ClearUploadInfo();         // clear multipart upload info
