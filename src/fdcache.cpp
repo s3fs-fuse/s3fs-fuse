@@ -155,18 +155,13 @@ int FdManager::DeleteCacheFile(const char* path)
         }else{
             S3FS_PRN_ERR("failed to delete file(%s): errno=%d", path, errno);
         }
-        result = -errno;
+        return -errno;
     }
-    if(!CacheFileStat::DeleteCacheFileStat(path)){
-        if(ENOENT == errno){
-            S3FS_PRN_DBG("failed to delete stat file(%s): errno=%d", path, errno);
+    if(0 != (result = CacheFileStat::DeleteCacheFileStat(path))){
+        if(-ENOENT == result){
+            S3FS_PRN_DBG("failed to delete stat file(%s): errno=%d", path, result);
         }else{
-            S3FS_PRN_ERR("failed to delete stat file(%s): errno=%d", path, errno);
-        }
-        if(0 != errno){
-            result = -errno;
-        }else{
-            result = -EIO;
+            S3FS_PRN_ERR("failed to delete stat file(%s): errno=%d", path, result);
         }
     }
     return result;
@@ -595,7 +590,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
 
         // open
         if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
-            S3FS_PRN_ERR("failed to open and create new pseudo fd for path(%s).", path);
+            S3FS_PRN_ERR("failed to open and create new pseudo fd for path(%s) errno:%d.", path, fd);
             delete ent;
             return nullptr;
         }

@@ -78,11 +78,14 @@ FdEntity* AutoFdEntity::Attach(const char* path, int existfd)
     return pFdEntity;
 }
 
-FdEntity* AutoFdEntity::Open(const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
+FdEntity* AutoFdEntity::Open(const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type, int* error)
 {
     Close();
 
     if(nullptr == (pFdEntity = FdManager::get()->Open(pseudo_fd, path, pmeta, size, ts_mctime, flags, force_tmpfile, is_create, ignore_modify, type))){
+        if(error){
+            *error = pseudo_fd;
+        }
         pseudo_fd = -1;
         return nullptr;
     }

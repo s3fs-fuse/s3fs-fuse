@@ -544,12 +544,13 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
                     S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
 
                     // remove cache stat file if it is existed
-                    if(!CacheFileStat::DeleteCacheFileStat(path.c_str())){
-                        if(ENOENT != errno){
-                            S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), errno);
+                    int result;
+                    if(0 != (result = CacheFileStat::DeleteCacheFileStat(path.c_str()))){
+                        if(-ENOENT != result){
+                            S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), result);
                         }
                     }
-                    return (0 == errno ? -EIO : -errno);
+                    return result;
                 }
                 need_save_csf = true;       // need to update page info
                 inode         = FdEntity::GetInode(physical_fd);
