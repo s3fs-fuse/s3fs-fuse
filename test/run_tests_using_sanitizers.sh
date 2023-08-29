@@ -61,7 +61,7 @@ ALL_TESTS=1 make check -C test/
 make clean
 ./configure CXXFLAGS="$COMMON_FLAGS"
 make --jobs="$(nproc)"
-ALL_TESTS=1 RETRIES=100 VALGRIND="--leak-check=full --error-exitcode=1" make check -C test/
+ALL_TESTS=1 RETRIES=100 VALGRIND="--leak-check=full --error-exitcode=1" S3_URL=http://127.0.0.1:8081 make check -C test/
 
 #
 # Local variables:

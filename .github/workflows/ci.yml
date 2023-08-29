@@ -208,7 +208,6 @@ jobs:
       # [NOTE]
       # Currently following test is not supported:
       #    - sanitize_memory   : Future support planned
-      #    - valgrind          : Requires more than an hour of testing time
       #
       matrix:
         checktype:
@@ -216,6 +215,7 @@ jobs:
           - sanitize_address
           - sanitize_others
           - sanitize_thread
+          - valgrind
 
     container:
       image: fedora:38
@@ -263,6 +263,7 @@ jobs:
               echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"                   >> $GITHUB_ENV
               echo 'VALGRIND=--leak-check=full'                        >> $GITHUB_ENV
               echo 'RETRIES=100'                                       >> $GITHUB_ENV
+              echo 'S3_URL=http://127.0.0.1:8081'                      >> $GITHUB_ENV
           fi
 
       - name: Build
