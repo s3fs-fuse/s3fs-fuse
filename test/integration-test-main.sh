@@ -2386,8 +2386,7 @@ function test_write_data_with_skip() {
     #
     # delete cache file if using cache
     #
-    # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
+    if s3fs_args | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -2403,8 +2402,7 @@ function test_write_data_with_skip() {
     # [NOTE]
     # This test uses the file used in the previous test as an existing file.
     #
-    # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
+    if s3fs_args | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -2441,8 +2439,7 @@ function test_write_data_with_skip() {
     #
     # delete cache file if using cache
     #
-    # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
+    if s3fs_args | grep -q use_cache; then
         rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
         rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${_SKIPWRITE_FILE}"
     fi
@@ -2559,15 +2556,13 @@ function test_file_names_longer_than_posix() {
 }
 
 function add_all_tests {
-    # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q use_cache; then
+    if s3fs_args | grep -q use_cache; then
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
     else
         add_tests test_file_names_longer_than_posix
     fi
-    # shellcheck disable=SC2009
-    if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
     fi
     add_tests test_create_empty_file
@@ -2628,12 +2623,10 @@ function add_all_tests {
     fi
     add_tests test_update_directory_time_subdir
     add_tests test_update_chmod_opened_file
-    # shellcheck disable=SC2009
-    if ps u -p "${S3FS_PID}" | grep -q update_parent_dir_stat; then
+    if s3fs_args | grep -q update_parent_dir_stat; then
         add_tests test_update_parent_directory_time
     fi
-    # shellcheck disable=SC2009
-    if ! ps u -p "${S3FS_PID}" | grep -q use_xattr; then
+    if ! s3fs_args | grep -q use_xattr; then
         add_tests test_posix_acl
     fi
 
@@ -2654,8 +2647,7 @@ function add_all_tests {
     add_tests test_not_existed_dir_obj
     add_tests test_ut_ossfs
     add_tests test_cr_filename
-    # shellcheck disable=SC2009
-    if ! ps u -p "${S3FS_PID}" | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file
     fi
     add_tests test_write_data_with_skip

@@ -336,13 +336,11 @@ function aws_cli() {
     fi
 
     if [ "$1" = "s3" ] && [ "$2" != "ls" ] && [ "$2" != "mb" ]; then
-        # shellcheck disable=SC2009
-        if ps u -p "${S3FS_PID}" | grep -q use_sse=custom; then
+        if s3fs_args | grep -q use_sse=custom; then
             FLAGS="${FLAGS} --sse-c AES256 --sse-c-key fileb:///tmp/ssekey.bin"
         fi
     elif [ "$1" = "s3api" ] && [ "$2" != "head-bucket" ]; then
-        # shellcheck disable=SC2009
-        if ps u -p "${S3FS_PID}" | grep -q use_sse=custom; then
+        if s3fs_args | grep -q use_sse=custom; then
             FLAGS="${FLAGS} --sse-customer-algorithm AES256 --sse-customer-key $(cat /tmp/ssekey) --sse-customer-key-md5 $(cat /tmp/ssekeymd5)"
         fi
     fi
@@ -376,6 +374,10 @@ function make_random_string() {
     "${BASE64_BIN}" --wrap=0 < /dev/urandom | tr -d /+ | head -c "${END_POS}"
 
     return 0
+}
+
+function s3fs_args() {
+    ps -o args -p "${S3FS_PID}" --no-headers
 }
 
 #
