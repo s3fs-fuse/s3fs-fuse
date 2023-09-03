@@ -1775,7 +1775,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
     if(-1 == physical_fd || !pseudo_obj){
         return -EBADF;
     }
-    int result;
+    int result = 0;
 
     if(pagelist.Size() <= S3fsCurl::GetMultipartSize()){
         //
