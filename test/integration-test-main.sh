@@ -393,7 +393,7 @@ function test_external_directory_creation {
     echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     # shellcheck disable=SC2010
     ls | grep -q directory
-    ls directory >/dev/null 2>&1
+    stat directory >/dev/null 2>&1
     get_permissions directory | grep -q 750$
     ls directory
     cmp <(echo "data") directory/"${TEST_TEXT_FILE}"
@@ -2254,8 +2254,7 @@ function test_not_existed_dir_obj() {
     fi
 
     # Single nest directory
-    # shellcheck disable=SC2010
-    if ! ls -d not_existed_dir_single | grep -q '^not_existed_dir_single$'; then
+    if ! stat not_existed_dir_single; then
     echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
     return 1;
     fi
@@ -2271,8 +2270,7 @@ function test_not_existed_dir_obj() {
     fi
 
     # Double nest directory
-    # shellcheck disable=SC2010
-    if ! ls -d not_existed_dir_parent | grep -q '^not_existed_dir_parent'; then
+    if ! stat not_existed_dir_parent; then
     echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
     return 1;
     fi
@@ -2281,8 +2279,7 @@ function test_not_existed_dir_obj() {
     echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
     return 1;
     fi
-    # shellcheck disable=SC2010
-    if ! ls -d not_existed_dir_parent/not_existed_dir_child | grep -q '^not_existed_dir_parent/not_existed_dir_child'; then
+    if ! stat not_existed_dir_parent/not_existed_dir_child; then
     echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
     return 1;
     fi
