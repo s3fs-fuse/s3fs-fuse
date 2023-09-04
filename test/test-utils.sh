@@ -95,11 +95,19 @@ function del_xattr() {
     fi
 }
 
+function get_inode() {
+    if [ "$(uname)" = "Darwin" ]; then
+        stat -f "%i" "$1"
+    else
+        stat --format "%i" "$1"
+    fi
+}
+
 function get_size() {
     if [ "$(uname)" = "Darwin" ]; then
         stat -f "%z" "$1"
     else
-        stat -c %s "$1"
+        stat --format "%s" "$1"
     fi
 }
 
