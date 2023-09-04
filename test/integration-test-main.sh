@@ -366,6 +366,7 @@ function test_list {
     local file_cnt=${#file_list[@]}
     if [ "${file_cnt}" -ne 2 ]; then
         echo "Expected 2 file but got ${file_cnt}"
+        echo "Files: " "${file_list[@]}"
         return 1
     fi
 
