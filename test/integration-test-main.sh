@@ -2555,6 +2555,29 @@ function test_file_names_longer_than_posix() {
     rm -f "${a256}"
 }
 
+function test_statvfs() {
+    describe "Testing the free/available size on mount point(statvfs)..."
+
+    # [NOTE]
+    # The df command result format is different between Linux and macos,
+    # but the order of Total/Used/Available size is the same.
+    #
+    local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
+    local DF_RESULT;  DF_RESULT=$(df "${MOUNTPOINT_DIR}" 2>/dev/null | tail -n +2)
+    local TOTAL_SIZE; TOTAL_SIZE=$(echo "${DF_RESULT}" | awk '{print $2}')
+    local USED_SIZE;  USED_SIZE=$(echo "${DF_RESULT}" | awk '{print $3}')
+    local AVAIL_SIZE; AVAIL_SIZE=$(echo "${DF_RESULT}" | awk '{print $4}')
+
+    # [NOTE]
+    # In the disk information (statvfs) provided by s3fs, Total size and
+    # Available size are always the same and not 0, and used size is always 0.
+    #
+    if [ -z "${TOTAL_SIZE}" ] || [ -z "${AVAIL_SIZE}" ] || [ -z "${USED_SIZE}" ] || [ "${TOTAL_SIZE}" = "0" ] || [ "${AVAIL_SIZE}" = "0" ] || [ "${TOTAL_SIZE}" != "${AVAIL_SIZE}" ] || [ "${USED_SIZE}" != "0" ]; then
+        echo "The result of df <mount point> command is wrong: Total=${TOTAL_SIZE}, Used=${USED_SIZE}, Available=${AVAIL_SIZE}"
+        return 1
+    fi
+}
+
 function add_all_tests {
     if s3fs_args | grep -q use_cache; then
         add_tests test_cache_file_stat
@@ -2658,6 +2681,7 @@ function add_all_tests {
     # add_tests test_chmod_mountpoint
     # add_tests test_chown_mountpoint
     add_tests test_time_mountpoint
+    add_tests test_statvfs
 }
 
 init_suite

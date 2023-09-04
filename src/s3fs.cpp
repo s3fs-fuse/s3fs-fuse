@@ -101,7 +101,8 @@ static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static int max_thread_count       = 5;  // default is 5
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
-static fsblkcnt_t bucket_size;       // advertised size of the bucket
+static fsblkcnt_t bucket_block_count;                       // advertised block count of the bucket
+static unsigned long s3fs_block_size = 16 * 1024 * 1024;    // s3fs block size is 16MB
 
 //-------------------------------------------------------------------
 // Global functions : prototype
@@ -2968,20 +2969,24 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 {
     // WTF8_ENCODE(path)
-    stbuf->f_bsize  = 16 * 1024 * 1024;
+    stbuf->f_bsize   = s3fs_block_size;
     stbuf->f_namemax = NAME_MAX;
+
 #if defined(__MSYS__)
     // WinFsp resolves the free space from f_bfree * f_frsize, and the total space from f_blocks * f_frsize (in bytes).
+    stbuf->f_blocks = bucket_block_count;
     stbuf->f_frsize = stbuf->f_bsize;
-    stbuf->f_blocks = bucket_size;
-    stbuf->f_bfree = stbuf->f_blocks;
+    stbuf->f_bfree  = stbuf->f_blocks;
 #elif defined(__APPLE__)
-    stbuf->f_blocks = bucket_size;
+    stbuf->f_blocks = bucket_block_count;
+    stbuf->f_frsize = stbuf->f_bsize;
     stbuf->f_bfree  = stbuf->f_blocks;
     stbuf->f_files  = UINT32_MAX;
     stbuf->f_ffree  = UINT32_MAX;
+    stbuf->f_favail = UINT32_MAX;
 #else
-    stbuf->f_blocks = bucket_size / stbuf->f_bsize;
+    stbuf->f_frsize = stbuf->f_bsize;
+    stbuf->f_blocks = bucket_block_count;
     stbuf->f_bfree  = stbuf->f_blocks;
 #endif
     stbuf->f_bavail = stbuf->f_blocks;
@@ -4576,65 +4581,96 @@ static int set_bucket(const char* arg)
     return 0;
 }
 
-// parse --bucket_size option
-// max_size: a string like 20000000, 30GiB, 20TB etc
-// return: the integer of type fsblkcnt_t corresponding to max_size,
-//         or 0 when errors
+//
+// Utility function for parse "--bucket_size" option
+//
+// max_size: A string like 20000000, 30GiB, 20TB etc
+// return:   An integer of type fsblkcnt_t corresponding to the number
+//           of blocks with max_size calculated with the s3fs block size,
+//           or 0 on error
+//
 static fsblkcnt_t parse_bucket_size(char* max_size)
 {
+    const unsigned long long ten00   = 1000L;
+    const unsigned long long ten24   = 1024L;
+    unsigned long long       scale   = 1;
+    unsigned long long       n_bytes = 0;
     char *ptr;
-    fsblkcnt_t scale=1;
-    fsblkcnt_t n_bytes=0;
-    fsblkcnt_t ten00=static_cast<fsblkcnt_t>(1000L);
-    fsblkcnt_t ten24=static_cast<fsblkcnt_t>(1024L);
 
-    if ((ptr=strstr(max_size,"GB"))!=nullptr) {
-        scale=ten00*ten00*ten00;
-        if(strlen(ptr)>2)return 0; // no trailing garbage
-        *ptr='\0';
+    if(nullptr != (ptr = strstr(max_size, "GB"))){
+        scale = ten00 * ten00 * ten00;
+        if(2 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"GiB"))!=nullptr) {
-        scale=ten24*ten24*ten24;
-        if(strlen(ptr)>3)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "GiB"))){
+        scale = ten24 * ten24 * ten24;
+        if(3 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"TB"))!=nullptr) {
-        scale=ten00*ten00*ten00*ten00;
-        if(strlen(ptr)>2)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "TB"))){
+        scale = ten00 * ten00 * ten00 * ten00;
+        if(2 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"TiB"))!=nullptr) {
-        scale=ten24*ten24*ten24*ten24;
-        if(strlen(ptr)>3)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "TiB"))){
+        scale = ten24 * ten24 * ten24 * ten24;
+        if(3 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"PB"))!=nullptr) {
-        scale=ten00*ten00*ten00*ten00*ten00;
-        if(strlen(ptr)>2)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "PB"))){
+        scale = ten00 * ten00 * ten00 * ten00 * ten00;
+        if(2 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"PiB"))!=nullptr) {
-        scale=ten24*ten24*ten24*ten24*ten24;
-        if(strlen(ptr)>3)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "PiB"))){
+        scale = ten24 * ten24 * ten24 * ten24 * ten24;
+        if(3 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"EB"))!=nullptr) {
-        scale=ten00*ten00*ten00*ten00*ten00*ten00;
-        if(strlen(ptr)>2)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "EB"))){
+        scale = ten00 * ten00 * ten00 * ten00 * ten00 * ten00;
+        if(2 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
-    else if ((ptr=strstr(max_size,"EiB"))!=nullptr) {
-        scale=ten24*ten24*ten24*ten24*ten24*ten24;
-        if(strlen(ptr)>3)return 0; // no trailing garbage
-        *ptr='\0';
+        *ptr = '\0';
+    }else if(nullptr != (ptr = strstr(max_size, "EiB"))){
+        scale = ten24 * ten24 * ten24 * ten24 * ten24 * ten24;
+        if(3 < strlen(ptr)){
+            return 0;   // no trailing garbage
         }
+        *ptr = '\0';
+    }
+
     // extra check
-    for(ptr=max_size;*ptr!='\0';++ptr) if( ! isdigit(*ptr) ) return 0;
-    n_bytes=static_cast<fsblkcnt_t>(strtoul(max_size,nullptr,10));
-    n_bytes*=scale;
-    if(n_bytes<=0)return 0;
-            
-    return n_bytes;
+    for(ptr = max_size; *ptr != '\0'; ++ptr){
+        if(!isdigit(*ptr)){
+            return 0;   // wrong number
+        }
+        n_bytes = static_cast<unsigned long long>(strtoull(max_size, nullptr, 10));
+        if((INT64_MAX / scale) < n_bytes){
+            return 0;   // overflow
+        }
+        n_bytes *= scale;
+    }
+
+    // [NOTE]
+    // To round a number by s3fs block size.
+    // And need to check the result value because fsblkcnt_t is 32bit in macos etc.
+    //
+    n_bytes /= s3fs_block_size;
+
+    if(sizeof(fsblkcnt_t) <= 4){
+        if(INT32_MAX < n_bytes){
+            return 0;   // overflow
+        }
+    }
+    return static_cast<fsblkcnt_t>(n_bytes);    // cast to fsblkcnt_t
 }
 
 static bool is_cmd_exists(const std::string& command)
@@ -4766,8 +4802,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 1; // continue for fuse option
         }
         else if(is_prefix(arg, "bucket_size=")){
-            bucket_size = parse_bucket_size(const_cast<char *>(strchr(arg, '=')) + sizeof(char));
-            if(0 == bucket_size){
+            bucket_block_count = parse_bucket_size(const_cast<char *>(strchr(arg, '=')) + sizeof(char));
+            if(0 == bucket_block_count){
                 S3FS_PRN_EXIT("invalid bucket_size option.");
                 return -1;
             }
@@ -5440,15 +5476,14 @@ int main(int argc, char* argv[])
         {nullptr, 0, nullptr, 0}
     };
 
-// init bucket_size
+    // init bucket_block_size
 #if defined(__MSYS__)
-    bucket_size=static_cast<fsblkcnt_t>(INT32_MAX);
+    bucket_block_count = static_cast<fsblkcnt_t>(INT32_MAX);
 #elif defined(__APPLE__)
-    bucket_size=static_cast<fsblkcnt_t>(INT32_MAX);
+    bucket_block_count = static_cast<fsblkcnt_t>(INT32_MAX);
 #else
-    bucket_size=~0U;
+    bucket_block_count = ~0U;
 #endif
-
 
     // init xml2
     xmlInitParser();
