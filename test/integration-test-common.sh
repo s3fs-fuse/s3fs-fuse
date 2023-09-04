@@ -90,6 +90,7 @@ export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
 S3PROXY_VERSION="2.0.0"
 S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
+MINIO_BINARY="${MINIO_BINARY-minio}"
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
 CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
@@ -142,22 +143,14 @@ function retry {
 # PUBLIC=1:     use s3proxy-noauth.conf (no request signing)
 # 
 function start_s3proxy {
-    if [ -n "${PUBLIC}" ]; then
-        local S3PROXY_CONFIG="s3proxy-noauth.conf"
-    else
-        if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-            local S3PROXY_CONFIG="s3proxy.conf"
-        else
-            local S3PROXY_CONFIG="s3proxy_http.conf"
-        fi
-    fi
-
-    if [ -n "${S3PROXY_BINARY}" ]
+    if [ -n "${MINIO_BINARY}" ]
     then
-        if [ ! -e "${S3PROXY_BINARY}" ]; then
-            curl "https://github.com/gaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
-                --fail --location --silent --output "${S3PROXY_BINARY}"
-            chmod +x "${S3PROXY_BINARY}"
+        if [ ! -e "${MINIO_BINARY}" ]; then
+            # TODO: darwin-amd64, darwin-arm64, linux-arm, and linux-arm64
+            curl https://dl.min.io/server/minio/release/linux-amd64/minio --fail --silent --output "${MINIO_BINARY}"
+            chmod +x "${MINIO_BINARY}"
+            curl https://dl.min.io/client/mc/release/linux-amd64/mc --silent --output mc
+            chmod +x mc
         fi
 
         # generate self-signed SSL certificate
@@ -166,15 +159,16 @@ function start_s3proxy {
         # The PROXY test is HTTP only, so do not create CA certificates.
         #
         if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-            S3PROXY_CACERT_FILE="/tmp/keystore.pem"
-            rm -f /tmp/keystore.jks "${S3PROXY_CACERT_FILE}"
-            printf 'password\npassword\n\n\n\n\n\n\ny' | keytool -genkey -keystore /tmp/keystore.jks -keyalg RSA -keysize 2048 -validity 365 -ext SAN=IP:127.0.0.1
-            echo password | keytool -exportcert -keystore /tmp/keystore.jks -rfc -file "${S3PROXY_CACERT_FILE}"
+            S3PROXY_CACERT_FILE="/tmp/certs/public.crt"
+            rm -rf /tmp/certs/
+            mkdir -p /tmp/certs
+            echo -e '\n\n\n\n\n\n127.0.0.1' | openssl req -new -x509 -nodes -days 365 -addext 'subjectAltName = IP:127.0.0.1' -keyout /tmp/certs/private.key -out /tmp/certs/public.crt
         else
             S3PROXY_CACERT_FILE=""
         fi
 
-        "${STDBUF_BIN}" -oL -eL java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
+        rm -rf /var/tmp/blobstore/
+        MINIO_ROOT_USER=local-identity MINIO_ROOT_PASSWORD=local-credential "${STDBUF_BIN}" -oL -eL "./${MINIO_BINARY}" server --address "127.0.0.1:8080" --certs-dir /tmp/certs /var/tmp/blobstore &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
