@@ -40,6 +40,10 @@ class CurlHandlerPool
         {
             assert(maxHandlers > 0);
         }
+        CurlHandlerPool(const CurlHandlerPool&) = delete;
+        CurlHandlerPool(CurlHandlerPool&&) = delete;
+        CurlHandlerPool& operator=(const CurlHandlerPool&) = delete;
+        CurlHandlerPool& operator=(CurlHandlerPool&&) = delete;
 
         bool Init();
         bool Destroy();

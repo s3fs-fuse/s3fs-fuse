@@ -159,6 +159,10 @@ class S3fsCred
 
         S3fsCred();
         ~S3fsCred();
+        S3fsCred(const S3fsCred&) = delete;
+        S3fsCred(S3fsCred&&) = delete;
+        S3fsCred& operator=(const S3fsCred&) = delete;
+        S3fsCred& operator=(S3fsCred&&) = delete;
 
         bool IsIBMIAMAuth() const { return is_ibm_iam_auth; }
 

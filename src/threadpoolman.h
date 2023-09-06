@@ -80,6 +80,10 @@ class ThreadPoolMan
 
         explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
+        ThreadPoolMan(const ThreadPoolMan&) = delete;
+        ThreadPoolMan(ThreadPoolMan&&) = delete;
+        ThreadPoolMan& operator=(const ThreadPoolMan&) = delete;
+        ThreadPoolMan& operator=(ThreadPoolMan&&) = delete;
 
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);

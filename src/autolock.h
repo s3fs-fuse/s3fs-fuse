@@ -41,7 +41,9 @@ class AutoLock
 
     private:
         AutoLock(const AutoLock&) = delete;
+        AutoLock(AutoLock&&) = delete;
         AutoLock& operator=(const AutoLock&) = delete;
+        AutoLock& operator=(AutoLock&&) = delete;
 
     public:
         explicit AutoLock(pthread_mutex_t* pmutex, Type type = NONE);

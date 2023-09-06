@@ -44,7 +44,9 @@ class AutoFdEntity
 
   private:
       AutoFdEntity(const AutoFdEntity&) = delete;
+      AutoFdEntity(AutoFdEntity&&) = delete;
       AutoFdEntity& operator=(const AutoFdEntity&) = delete;
+      AutoFdEntity& operator=(AutoFdEntity&&) = delete;
 
   public:
       AutoFdEntity();

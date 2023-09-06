@@ -92,6 +92,10 @@ class PseudoFdInfo
     public:
         explicit PseudoFdInfo(int fd = -1, int open_flags = 0);
         ~PseudoFdInfo();
+        PseudoFdInfo(const PseudoFdInfo&) = delete;
+        PseudoFdInfo(PseudoFdInfo&&) = delete;
+        PseudoFdInfo& operator=(const PseudoFdInfo&) = delete;
+        PseudoFdInfo& operator=(PseudoFdInfo&&) = delete;
 
         int GetPhysicalFd() const { return physical_fd; }
         int GetPseudoFd() const { return pseudo_fd; }

@@ -45,6 +45,10 @@ class PseudoFdManager
 
         PseudoFdManager();
         ~PseudoFdManager();
+        PseudoFdManager(const PseudoFdManager&) = delete;
+        PseudoFdManager(PseudoFdManager&&) = delete;
+        PseudoFdManager& operator=(const PseudoFdManager&) = delete;
+        PseudoFdManager& operator=(PseudoFdManager&&) = delete;
 
         int GetUnusedMinPseudoFd() const;
         int CreatePseudoFd();

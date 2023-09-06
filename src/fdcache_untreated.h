@@ -42,6 +42,10 @@ class UntreatedParts
     public:
         UntreatedParts();
         ~UntreatedParts();
+        UntreatedParts(const UntreatedParts&) = delete;
+        UntreatedParts(UntreatedParts&&) = delete;
+        UntreatedParts& operator=(const UntreatedParts&) = delete;
+        UntreatedParts& operator=(UntreatedParts&&) = delete;
 
         bool empty();
 

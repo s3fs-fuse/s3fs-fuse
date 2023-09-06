@@ -201,6 +201,10 @@ class S3fsCurl
         // constructor/destructor
         explicit S3fsCurl(bool ahbe = false);
         ~S3fsCurl();
+        S3fsCurl(const S3fsCurl&) = delete;
+        S3fsCurl(S3fsCurl&&) = delete;
+        S3fsCurl& operator=(const S3fsCurl&) = delete;
+        S3fsCurl& operator=(S3fsCurl&&) = delete;
 
     private:
         // class methods
