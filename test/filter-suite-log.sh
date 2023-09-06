@@ -81,29 +81,29 @@ while read -r line; do
     if [ "${prev_line_type}" -eq 1 ]; then
         if [ "${number_type[1]}" -eq 2 ]; then
             # if passed, cut s3fs information messages
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
         elif [ "${number_type[1]}" -eq 3 ]; then
             # if failed, print all
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%'
         else
             # there is start keyword but not end keyword, so print all
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%'
         fi
     elif [ "${prev_line_type}" -eq 2 ] || [ "${prev_line_type}" -eq 3 ]; then
         if [ "${number_type[1]}" -eq 2 ] || [ "${number_type[1]}" -eq 3 ]; then
             # previous is end of chmpx, but this type is end of chmpx without start keyword. then print all
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%'
         else
             # this area is not from start to end, cut s3fs information messages
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
         fi
     else
         if [ "${number_type[1]}" -eq 2 ] || [ "${number_type[1]}" -eq 3 ]; then
             # previous is normal, but this type is end of chmpx without start keyword. then print all
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%'
         else
             # this area is normal, cut s3fs information messages
-            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+\%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
+            head "-${head_line_cnt}" "${SUITELOG}" | tail "-${tail_line_cnt}" | grep -v -e '[0-9]\+%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
         fi
     fi
     if [ "${number_type[1]}" -eq 3 ]; then
@@ -121,9 +121,9 @@ file_line_cnt=$(wc -l "${SUITELOG}" | awk '{print $1}')
 tail_line_cnt=$((file_line_cnt - prev_line_number))
 
 if [ "${prev_line_type}" -eq 1 ]; then
-    tail "-${tail_line_cnt}" "${SUITELOG}" | grep -v -e '[0-9]\+\%'
+    tail "-${tail_line_cnt}" "${SUITELOG}" | grep -v -e '[0-9]\+%'
 else
-    tail "-${tail_line_cnt}" "${SUITELOG}" | grep -v -e '[0-9]\+\%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
+    tail "-${tail_line_cnt}" "${SUITELOG}" | grep -v -e '[0-9]\+%' | grep -v -e '^s3fs: ' -a -e '\[INF\]'
 fi
 
 #
