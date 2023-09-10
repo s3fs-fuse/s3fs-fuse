@@ -337,6 +337,7 @@ function test_chown {
 
     # if they're the same, we have a problem.
     local CHANGED_PERMISSIONS
+    # TODO: add helper
     if [ "$(uname)" = "Darwin" ]; then
         CHANGED_PERMISSIONS=$(stat -f "%u:%g" "${TEST_TEXT_FILE}")
     else
@@ -1847,8 +1848,8 @@ function test_concurrent_directory_updates {
     for _ in $(seq 10); do
         for i in $(seq 5); do
             local file
-            # shellcheck disable=SC2012,SC2046
-            file=$(ls $(seq 5) | "${SED_BIN}" -n "$((RANDOM % 5 + 1))p")
+            # shellcheck disable=SC2046
+            file=$(echo [1-5] | "${SED_BIN}" -n "$((RANDOM % 5 + 1))p")
             cat "${file}" >/dev/null || true
             rm -f "${file}"
             echo "foo" > "${file}" || true
@@ -1985,8 +1986,7 @@ function test_cache_file_stat() {
     # get cache file inode number
     #
     local CACHE_FILE_INODE
-    # shellcheck disable=SC2012
-    CACHE_FILE_INODE=$(ls -i "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}" 2>/dev/null | awk '{print $1}')
+    CACHE_FILE_INODE=$(get_inode "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
     if [ -z "${CACHE_FILE_INODE}" ]; then
         echo "Not found cache file or failed to get inode: ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
         return 1;
@@ -2029,8 +2029,7 @@ function test_cache_file_stat() {
     #
     # get cache file inode number
     #
-    # shellcheck disable=SC2012
-    CACHE_FILE_INODE=$(ls -i "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}" 2>/dev/null | awk '{print $1}')
+    CACHE_FILE_INODE=$(get_inode "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
     if [ -z "${CACHE_FILE_INODE}" ]; then
         echo "Not found cache file or failed to get inode: ${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
         return 1;
@@ -2211,8 +2210,7 @@ function test_ensurespace_move_file() {
         MOVED_PERMISSIONS=$(stat --format=%u:%g "${BIG_FILE}")
     fi
     local MOVED_FILE_LENGTH
-    # shellcheck disable=SC2012
-    MOVED_FILE_LENGTH=$(ls -l "${BIG_FILE}" | awk '{print $5}')
+    MOVED_FILE_LENGTH=$(get_size "${BIG_FILE}")
 
     #
     # check
@@ -2547,9 +2545,8 @@ function test_file_names_longer_than_posix() {
     rm -f "${a256}"
 
     echo data | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${DIR_NAME}/${a256}"
-    # shellcheck disable=SC2012
-    count=$(ls | wc -l)
-    if [ "${count}" = 0 ]; then
+    files=(*)
+    if [ "${#files[@]}" = 0 ]; then
         echo "failed to list long file name"
         return 1
     fi
