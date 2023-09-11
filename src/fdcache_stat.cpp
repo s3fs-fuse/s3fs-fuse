@@ -208,34 +208,35 @@ bool CacheFileStat::RawOpen(bool readonly)
         return false;
     }
     // open
+    int tmpfd;
     if(readonly){
-        if(-1 == (fd = open(sfile_path.c_str(), O_RDONLY))){
+        if(-1 == (tmpfd = open(sfile_path.c_str(), O_RDONLY))){
             S3FS_PRN_ERR("failed to read only open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
             return false;
         }
     }else{
-        if(-1 == (fd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
+        if(-1 == (tmpfd = open(sfile_path.c_str(), O_CREAT|O_RDWR, 0600))){
             S3FS_PRN_ERR("failed to open cache stat file path(%s) - errno(%d)", path.c_str(), errno);
             return false;
         }
     }
+    scope_guard guard([&]() { close(tmpfd); });
+
     // lock
-    if(-1 == flock(fd, LOCK_EX)){
+    if(-1 == flock(tmpfd, LOCK_EX)){
         S3FS_PRN_ERR("failed to lock cache stat file(%s) - errno(%d)", path.c_str(), errno);
-        close(fd);
-        fd = -1;
         return false;
     }
     // seek top
-    if(0 != lseek(fd, 0, SEEK_SET)){
+    if(0 != lseek(tmpfd, 0, SEEK_SET)){
         S3FS_PRN_ERR("failed to lseek cache stat file(%s) - errno(%d)", path.c_str(), errno);
-        flock(fd, LOCK_UN);
-        close(fd);
-        fd = -1;
+        flock(tmpfd, LOCK_UN);
         return false;
     }
     S3FS_PRN_DBG("file locked(%s - %s)", path.c_str(), sfile_path.c_str());
 
+    guard.dismiss();
+    fd = tmpfd;
     return true;
 }
 
