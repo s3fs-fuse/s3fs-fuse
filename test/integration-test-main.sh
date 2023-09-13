@@ -1848,8 +1848,8 @@ function test_concurrent_directory_updates {
     for _ in $(seq 10); do
         for i in $(seq 5); do
             local file
-            # shellcheck disable=SC2046
-            file=$(echo [1-5] | "${SED_BIN}" -n "$((RANDOM % 5 + 1))p")
+            # shellcheck disable=SC2012,SC2046
+            file=$(ls $(seq 5) | "${SED_BIN}" -n "$((RANDOM % 5 + 1))p")
             cat "${file}" >/dev/null || true
             rm -f "${file}"
             echo "foo" > "${file}" || true
