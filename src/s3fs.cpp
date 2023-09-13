@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
@@ -39,7 +40,6 @@
 #include "curl_multi.h"
 #include "s3objlist.h"
 #include "cache.h"
-#include "mvnode.h"
 #include "addhead.h"
 #include "sighandlers.h"
 #include "s3fs_xml.h"
@@ -1736,9 +1736,7 @@ static int rename_directory(const char* from, const char* to)
     std::string nowcache;                      // now cache path(not used)
     dirtype DirType;
     bool normdir; 
-    MVNODE* mn_head = nullptr;
-    MVNODE* mn_tail = nullptr;
-    MVNODE* mn_cur;
+    std::vector<mvnode> mvnodes;
     struct stat stbuf;
     int result;
     bool is_dir;
@@ -1746,7 +1744,7 @@ static int rename_directory(const char* from, const char* to)
     S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
 
     //
-    // Initiate and Add base directory into MVNODE struct.
+    // Initiate and Add base directory into mvnode struct.
     //
     strto += "/";
     if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, nullptr, &DirType) && dirtype::UNKNOWN != DirType){
@@ -1756,9 +1754,7 @@ static int rename_directory(const char* from, const char* to)
             normdir = true;
             strfrom = from;               // from directory is not removed, but from directory attr is needed.
         }
-        if(nullptr == (add_mvnode(&mn_head, &mn_tail, strfrom.c_str(), strto.c_str(), true, normdir))){
-            return -ENOMEM;
-        }
+        mvnodes.emplace_back(strfrom, strto, true, normdir);
     }else{
         // Something wrong about "from" directory.
     }
@@ -1806,20 +1802,20 @@ static int rename_directory(const char* from, const char* to)
         }
         
         // push this one onto the stack
-        if(nullptr == add_mvnode(&mn_head, &mn_tail, from_name.c_str(), to_name.c_str(), is_dir, normdir)){
-            return -ENOMEM;
-        }
+        mvnodes.emplace_back(from_name, to_name, is_dir, normdir);
     }
+
+    std::sort(mvnodes.begin(), mvnodes.end(), [](const mvnode& a, const mvnode& b) { return a.old_path < b.old_path; });
 
     //
     // rename
     //
     // rename directory objects.
-    for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
-        if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+    for(auto mn_cur = mvnodes.cbegin(); mn_cur != mvnodes.cend(); ++mn_cur){
+        if(mn_cur->is_dir && !mn_cur->old_path.empty()){
             std::string xattrvalue;
             const char* pxattrvalue;
-            if(get_meta_xattr_value(mn_cur->old_path, xattrvalue)){
+            if(get_meta_xattr_value(mn_cur->old_path.c_str(), xattrvalue)){
                 pxattrvalue = xattrvalue.c_str();
             }else{
                 pxattrvalue = nullptr;
@@ -1829,9 +1825,8 @@ static int rename_directory(const char* from, const char* to)
             // The ctime is updated only for the top (from) directory.
             // Other than that, it will not be updated.
             //
-            if(0 != (result = clone_directory_object(mn_cur->old_path, mn_cur->new_path, (strfrom == mn_cur->old_path), pxattrvalue))){
+            if(0 != (result = clone_directory_object(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), (strfrom == mn_cur->old_path), pxattrvalue))){
                 S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
-                free_mvnodes(mn_head);
                 return result;
             }
         }
@@ -1839,28 +1834,26 @@ static int rename_directory(const char* from, const char* to)
 
     // iterate over the list - copy the files with rename_object
     // does a safe copy - copies first and then deletes old
-    for(mn_cur = mn_head; mn_cur; mn_cur = mn_cur->next){
+    for(auto mn_cur = mvnodes.begin(); mn_cur != mvnodes.end(); ++mn_cur){
         if(!mn_cur->is_dir){
             if(!nocopyapi && !norenameapi){
-                result = rename_object(mn_cur->old_path, mn_cur->new_path, false);          // keep ctime
+                result = rename_object(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), false);          // keep ctime
             }else{
-                result = rename_object_nocopy(mn_cur->old_path, mn_cur->new_path, false);   // keep ctime
+                result = rename_object_nocopy(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), false);   // keep ctime
             }
             if(0 != result){
                 S3FS_PRN_ERR("rename_object returned an error(%d)", result);
-                free_mvnodes(mn_head);
                 return result;
             }
         }
     }
 
     // Iterate over old the directories, bottoms up and remove
-    for(mn_cur = mn_tail; mn_cur; mn_cur = mn_cur->prev){
-        if(mn_cur->is_dir && mn_cur->old_path && '\0' != mn_cur->old_path[0]){
+    for(auto mn_cur = mvnodes.rbegin(); mn_cur != mvnodes.rend(); ++mn_cur){
+        if(mn_cur->is_dir && !mn_cur->old_path.empty()){
             if(!(mn_cur->is_normdir)){
-                if(0 != (result = s3fs_rmdir(mn_cur->old_path))){
+                if(0 != (result = s3fs_rmdir(mn_cur->old_path.c_str()))){
                     S3FS_PRN_ERR("s3fs_rmdir returned an error(%d)", result);
-                    free_mvnodes(mn_head);
                     return result;
                 }
             }else{
@@ -1869,7 +1862,6 @@ static int rename_directory(const char* from, const char* to)
             }
         }
     }
-    free_mvnodes(mn_head);
 
     return 0;
 }
