@@ -1921,6 +1921,7 @@ function test_clean_up_cache() {
     local file_cnt="${#file_list[@]}"
     if [ "${file_cnt}" != "${count}" ]; then
         echo "Expected $count files but got ${file_cnt}"
+        echo "Files: " "${file_list[@]}"
         rm -rf "${dir}"
         return 1
     fi
