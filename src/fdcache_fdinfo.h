@@ -70,8 +70,8 @@ class PseudoFdInfo
         bool                    is_lock_init;
         mutable pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
         Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
-        volatile int            instruct_count;     // number of instructions for processing by threads
-        volatile int            completed_count;    // number of completed processes by thread
+        int                     instruct_count;     // number of instructions for processing by threads
+        int                     completed_count;    // number of completed processes by thread
         int                     last_result;        // the result of thread processing
 
     private:
