@@ -2453,6 +2453,76 @@ function test_write_data_with_skip() {
     rm_test_file "${_TMP_SKIPWRITE_FILE}"
 }
 
+function test_not_boundary_writes {
+    describe "Test non-boundary write ..."
+
+    # [MEMO]
+    # Files used in this test, multipart related sizes, etc.
+    #
+    #    Test file size:                25MB(25 * 1024 * 1024)
+    #    Multipart size:                10MB
+    #    Multipart minimum upload size:  5MB
+    #
+    # The multipart upload part that should be executed here is as follows:
+    #    Part number 1:             0 - 10,485,759 (size = 10MB)
+    #    Part number 2:    10,485,760 - 20,971,519 (size = 10MB)
+    #    Part number 3:    20,971,520 - 26,214,399 (size =  5MB)
+    #
+    local BOUNDAY_TEST_FILE_SIZE; BOUNDAY_TEST_FILE_SIZE=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
+
+    ../../junk_data "${BOUNDAY_TEST_FILE_SIZE}" > "${TEST_TEXT_FILE}"
+
+    #
+    # Write in First boundary
+    #
+    # Write 0 - 3,145,727(3MB) : less than the multipart minimum size from the beginning
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=3072 bs=1024 conv=notrunc
+
+    # Write 0 - 7,340,031(7MB) : multipart exceeding the minimum size from the beginning
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=7168 bs=1024 conv=notrunc
+
+    # Write 0 - 12,582,911(12MB) : beyond the multipart size boundary from the beginning
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=12288 bs=1024 conv=notrunc
+
+    #
+    # Write in First and second boundary
+    #
+    # Write 3,145,728 - 4,194,303(1MB) : less than the minimum multipart size from the middle of the first multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=1024 bs=1024 conv=notrunc
+
+    # Write 3,145,728 - 9,437,183(6MB) : exceeding the minimum multipart size from the middle of the first multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=6144 bs=1024 conv=notrunc
+
+    # Write 3,145,728 - 12,582,911(9MB) : beyond the multipart boundary from the middle of the first multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=9216 bs=1024 conv=notrunc
+
+    #
+    # Write in Second boundary
+    #
+    # Write 12,582,912 - 14,680,063(2MB) : below the minimum multipart size from the middle of the multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=2048 bs=1024 conv=notrunc
+
+    # Write 12,582,912 - 18,874,367(6MB) : data exceeding the minimum multipart size from the middle of the multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=6144 bs=1024 conv=notrunc
+
+    # Write 12,582,912 - 23,068,671(10MB) : beyond the multipart boundary from the middle of the multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=10240 bs=1024 conv=notrunc
+
+    # Write 12,582,912 - 26,214,399(13MB) : beyond the multipart boundary(last) from the middle of the multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=13312 bs=1024 conv=notrunc
+
+    #
+    # Write in Last boundary
+    #
+    # Write 23,068,672 - 24,117,247(1MB) : below the minimum multipart size from the middle of the final multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22528 count=1024 bs=1024 conv=notrunc
+
+    # Write 23,068,672 - 26,214,399(3MB) : beyond the multipart boundary(last) from the middle of the final multipart area
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22528 count=3072 bs=1024 conv=notrunc
+
+    rm_test_file
+}
+
 function test_chmod_mountpoint {
     describe "Testing chmod to mount point..."
 
@@ -2673,6 +2743,7 @@ function add_all_tests {
         add_tests test_ensurespace_move_file
     fi
     add_tests test_write_data_with_skip
+    add_tests test_not_boundary_writes
 
     # [NOTE]
     # The test on CI will fail depending on the permissions, so skip these(chmod/chown).
