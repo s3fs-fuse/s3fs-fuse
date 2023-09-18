@@ -979,7 +979,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
 
                             if( (copy_riter->start + copy_riter->size) == tmp_cur_start &&
                                 (copy_riter->size + (tmp_cur_untreated_iter->start - tmp_cur_start)) <= FIVE_GB &&
-                                ((tmp_cur_start + tmp_cur_size) - (tmp_cur_untreated_iter->start - tmp_cur_start)) >= MIN_MULTIPART_SIZE )
+                                ((tmp_cur_start + tmp_cur_size) - tmp_cur_untreated_iter->start) >= MIN_MULTIPART_SIZE )
                             {
                                 //
                                 // Unify to this area to previouse copy area.
