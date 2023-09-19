@@ -93,7 +93,7 @@ Otherwise consult the [compilation instructions](COMPILATION.md).
 s3fs supports the standard
 [AWS credentials file](https://docs.aws.amazon.com/cli/latest/userguide/cli-config-files.html)
 stored in `${HOME}/.aws/credentials`.  Alternatively, s3fs supports a custom passwd file.
-Finally s3fs recognizes the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+Finally s3fs recognizes the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`
 environment variables.
 
 The default location for the s3fs password file can be created:
