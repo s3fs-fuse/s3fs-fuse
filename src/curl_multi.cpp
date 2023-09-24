@@ -218,6 +218,8 @@ int S3fsMultiCurl::MultiRead()
                 isPostpone = true;
             }else if(400 > responseCode){
                 // add into stat cache
+                // cppcheck-suppress unmatchedSuppression
+                // cppcheck-suppress knownPointerToBool
                 if(SuccessCallback && !SuccessCallback(s3fscurl.get(), pSuccessCallbackParam)){
                     S3FS_PRN_WARN("error from success callback function(%s).", s3fscurl->url.c_str());
                 }
@@ -232,6 +234,8 @@ int S3fsMultiCurl::MultiRead()
                     S3FS_PRN_WARN("failed a request(%ld: %s)", responseCode, s3fscurl->url.c_str());
                 }
 				// Call callback function
+                // cppcheck-suppress unmatchedSuppression
+                // cppcheck-suppress knownPointerToBool
                 if(NotFoundCallback && !NotFoundCallback(s3fscurl.get(), pNotFoundCallbackParam)){
                     S3FS_PRN_WARN("error from not found callback function(%s).", s3fscurl->url.c_str());
                 }

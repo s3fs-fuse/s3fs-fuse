@@ -37,7 +37,7 @@ utility_incomp_type utility_mode = utility_incomp_type::NO_UTILITY_MODE;
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static void print_incomp_mpu_list(incomp_mpu_list_t& list)
+static void print_incomp_mpu_list(const incomp_mpu_list_t& list)
 {
     printf("\n");
     printf("Lists the parts that have been uploaded for a specific multipart upload.\n");
@@ -47,7 +47,7 @@ static void print_incomp_mpu_list(incomp_mpu_list_t& list)
         printf("---------------------------------------------------------------\n");
 
         int cnt = 0;
-        for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
+        for(incomp_mpu_list_t::const_iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
             printf(" Path     : %s\n", (*iter).key.c_str());
             printf(" UploadId : %s\n", (*iter).id.c_str());
             printf(" Date     : %s\n", (*iter).date.c_str());
@@ -60,7 +60,7 @@ static void print_incomp_mpu_list(incomp_mpu_list_t& list)
     }
 }
 
-static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
+static bool abort_incomp_mpu_list(const incomp_mpu_list_t& list, time_t abort_time)
 {
     if(list.empty()){
         return true;
@@ -70,7 +70,7 @@ static bool abort_incomp_mpu_list(incomp_mpu_list_t& list, time_t abort_time)
     // do removing.
     S3fsCurl s3fscurl;
     bool     result = true;
-    for(incomp_mpu_list_t::iterator iter = list.begin(); iter != list.end(); ++iter){
+    for(incomp_mpu_list_t::const_iterator iter = list.begin(); iter != list.end(); ++iter){
         const char* tpath     = (*iter).key.c_str();
         std::string upload_id = (*iter).id;
 
