@@ -2664,7 +2664,7 @@ function add_all_tests {
     add_tests test_upload_sparsefile
     add_tests test_mix_upload_entities
     # TODO: investigate why only Alpine cannot see the implicit directory objects.
-    if grep -q -i -e 'ID="alpine"' /etc/os-release; then
+    if ! test -f /etc/os-release || ! grep -q -i -e 'ID=alpine' -e 'ID="alpine"' /etc/os-release; then
         add_tests test_not_existed_dir_obj
     fi
     add_tests test_ut_ossfs
