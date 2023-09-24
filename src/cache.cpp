@@ -408,7 +408,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 // Since the file mode may change while the file is open, it is
 // updated as well.
 //
-bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
+bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
 {
     if(CacheSize < 1){
         return true;
@@ -423,7 +423,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, headers_t& meta)
     stat_cache_entry* ent = &iter->second;
 
     // update only meta keys
-    for(headers_t::iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
+    for(headers_t::const_iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
         std::string tag   = lower(metaiter->first);
         std::string value = metaiter->second;
         if(tag == "content-type"){

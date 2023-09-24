@@ -166,7 +166,7 @@ class StatCache
         bool AddStat(const std::string& key, const headers_t& meta, bool forcedir = false, bool no_truncate = false);
 
         // Update meta stats
-        bool UpdateMetaStats(const std::string& key, headers_t& meta);
+        bool UpdateMetaStats(const std::string& key, const headers_t& meta);
 
         // Change no truncate flag
         void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
