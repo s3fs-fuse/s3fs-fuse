@@ -71,6 +71,22 @@ else
 fi
 export SED_BUFFER_FLAG="--unbuffered"
 
+# [NOTE]
+# Specifying cache disable option depending on stat(coreutils) version
+# TODO: investigate why this is necessary #2327
+#
+if grep -q -i -e 'ID=ubuntu' /etc/os-release && grep -q -i -e 'VERSION_ID="20.04"' /etc/os-release; then
+    STAT_BIN=(stat)
+elif grep -q -i -e 'ID=debian' /etc/os-release && grep -q -i -e 'VERSION_ID="10"' /etc/os-release; then
+    STAT_BIN=(stat)
+elif grep -q -i -e 'ID="centos"' /etc/os-release && grep -q -i -e 'VERSION_ID="7"' /etc/os-release; then
+    STAT_BIN=(stat)
+elif [ "$(uname)" = "Darwin" ]; then
+    STAT_BIN=(stat)
+else
+    STAT_BIN=(stat --cache=never)
+fi
+
 function get_xattr() {
     if [ "$(uname)" = "Darwin" ]; then
         xattr -p "$1" "$2"
@@ -97,17 +113,17 @@ function del_xattr() {
 
 function get_inode() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%i" "$1"
+        "${STAT_BIN[@]}" -f "%i" "$1"
     else
-        stat --format "%i" "$1"
+        "${STAT_BIN[@]}" --format "%i" "$1"
     fi
 }
 
 function get_size() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%z" "$1"
+        "${STAT_BIN[@]}" -f "%z" "$1"
     else
-        stat --format "%s" "$1"
+        "${STAT_BIN[@]}" --format "%s" "$1"
     fi
 }
 
@@ -289,35 +305,35 @@ function run_suite {
 function get_ctime() {
     # ex: "1657504903.019784214"
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%Fc" "$1"
+        "${STAT_BIN[@]}" -f "%Fc" "$1"
     else
-        stat -c "%.9Z" "$1"
+        "${STAT_BIN[@]}" --format "%.9Z" "$1"
     fi
 }
 
 function get_mtime() {
     # ex: "1657504903.019784214"
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%Fm" "$1"
+        "${STAT_BIN[@]}" -f "%Fm" "$1"
     else
-        stat -c "%.9Y" "$1"
+        "${STAT_BIN[@]}" --format "%.9Y" "$1"
     fi
 }
 
 function get_atime() {
     # ex: "1657504903.019784214"
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%Fa" "$1"
+        "${STAT_BIN[@]}" -f "%Fa" "$1"
     else
-        stat -c "%0.9X" "$1"
+        "${STAT_BIN[@]}" --format "%.9X" "$1"
     fi
 }
 
 function get_permissions() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%p" "$1"
+        "${STAT_BIN[@]}" -f "%p" "$1"
     else
-        stat -c "%a" "$1"
+        "${STAT_BIN[@]}" --format "%a" "$1"
     fi
 }
 
