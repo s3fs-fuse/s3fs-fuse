@@ -75,16 +75,10 @@ export SED_BUFFER_FLAG="--unbuffered"
 # Specifying cache disable option depending on stat(coreutils) version
 # TODO: investigate why this is necessary #2327
 #
-if grep -q -i -e 'ID=ubuntu' /etc/os-release && grep -q -i -e 'VERSION_ID="20.04"' /etc/os-release; then
-    STAT_BIN=(stat)
-elif grep -q -i -e 'ID=debian' /etc/os-release && grep -q -i -e 'VERSION_ID="10"' /etc/os-release; then
-    STAT_BIN=(stat)
-elif grep -q -i -e 'ID="centos"' /etc/os-release && grep -q -i -e 'VERSION_ID="7"' /etc/os-release; then
-    STAT_BIN=(stat)
-elif [ "$(uname)" = "Darwin" ]; then
-    STAT_BIN=(stat)
-else
+if stat --cached=never / >/dev/null 2>&1; then
     STAT_BIN=(stat --cache=never)
+else
+    STAT_BIN=(stat)
 fi
 
 function get_xattr() {
