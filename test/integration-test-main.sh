@@ -320,11 +320,7 @@ function test_chown {
     mk_test_file
 
     local ORIGINAL_PERMISSIONS
-    if [ "$(uname)" = "Darwin" ]; then
-        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" "${TEST_TEXT_FILE}")
-    else
-        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g "${TEST_TEXT_FILE}")
-    fi
+    ORIGINAL_PERMISSIONS=$(get_user_and_group "${TEST_TEXT_FILE}")
 
     # [NOTE]
     # Prevents test interruptions due to permission errors, etc.
@@ -337,12 +333,7 @@ function test_chown {
 
     # if they're the same, we have a problem.
     local CHANGED_PERMISSIONS
-    # TODO: add helper
-    if [ "$(uname)" = "Darwin" ]; then
-        CHANGED_PERMISSIONS=$(stat -f "%u:%g" "${TEST_TEXT_FILE}")
-    else
-        CHANGED_PERMISSIONS=$(stat --format=%u:%g "${TEST_TEXT_FILE}")
-    fi
+    CHANGED_PERMISSIONS=$(get_user_and_group "${TEST_TEXT_FILE}")
     if [ "${CHANGED_PERMISSIONS}" = "${ORIGINAL_PERMISSIONS}" ]
     then
       if [ "${ORIGINAL_PERMISSIONS}" = "1000:1000" ]
@@ -651,6 +642,7 @@ function test_multipart_copy {
 function test_multipart_mix {
     describe "Testing multi-part mix ..."
 
+    # TODO: why is this necessary?
     if [ "$(uname)" = "Darwin" ]; then
        cat /dev/null > "${BIG_FILE}"
     fi
@@ -2175,11 +2167,7 @@ function test_ensurespace_move_file() {
     # Backup file stat
     #
     local ORIGINAL_PERMISSIONS
-    if [ "$(uname)" = "Darwin" ]; then
-        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}")
-    else
-        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}")
-    fi
+    ORIGINAL_PERMISSIONS=$(get_user_and_group "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}")
 
     #
     # Fill the disk size
@@ -2205,11 +2193,7 @@ function test_ensurespace_move_file() {
     # file stat
     #
     local MOVED_PERMISSIONS
-    if [ "$(uname)" = "Darwin" ]; then
-        MOVED_PERMISSIONS=$(stat -f "%u:%g" "${BIG_FILE}")
-    else
-        MOVED_PERMISSIONS=$(stat --format=%u:%g "${BIG_FILE}")
-    fi
+    MOVED_PERMISSIONS=$(get_user_and_group "${BIG_FILE}")
     local MOVED_FILE_LENGTH
     MOVED_FILE_LENGTH=$(get_size "${BIG_FILE}")
 
@@ -2547,11 +2531,7 @@ function test_chown_mountpoint {
     local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
 
     local ORIGINAL_PERMISSIONS
-    if [ "$(uname)" = "Darwin" ]; then
-        ORIGINAL_PERMISSIONS=$(stat -f "%u:%g" "${MOUNTPOINT_DIR}")
-    else
-        ORIGINAL_PERMISSIONS=$(stat --format=%u:%g "${MOUNTPOINT_DIR}")
-    fi
+    ORIGINAL_PERMISSIONS=$(get_user_and_group "${MOUNTPOINT_DIR}")
 
     # [NOTE]
     # Prevents test interruptions due to permission errors, etc.
@@ -2563,11 +2543,7 @@ function test_chown_mountpoint {
 
     # if they're the same, we have a problem.
     local CHANGED_PERMISSIONS
-    if [ "$(uname)" = "Darwin" ]; then
-        CHANGED_PERMISSIONS=$(stat -f "%u:%g" "${MOUNTPOINT_DIR}")
-    else
-        CHANGED_PERMISSIONS=$(stat --format=%u:%g "${MOUNTPOINT_DIR}")
-    fi
+    CHANGED_PERMISSIONS=$(get_user_and_group "${MOUNTPOINT_DIR}")
     if [ "${CHANGED_PERMISSIONS}" = "${ORIGINAL_PERMISSIONS}" ]
     then
       if [ "${ORIGINAL_PERMISSIONS}" = "1000:1000" ]

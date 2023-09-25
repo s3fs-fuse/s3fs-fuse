@@ -331,6 +331,14 @@ function get_permissions() {
     fi
 }
 
+function get_user_and_group() {
+    if [ "$(uname)" = "Darwin" ]; then
+        stat -f "%u:%g" "$1"
+    else
+        "${STAT_BIN[@]}" --format "%u:%g" "$1"
+    fi
+}
+
 function check_content_type() {
     local INFO_STR
     INFO_STR=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "$1" | jq -r .ContentType)
