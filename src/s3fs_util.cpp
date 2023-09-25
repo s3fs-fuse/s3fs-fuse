@@ -567,6 +567,14 @@ std::string s3fs_str_realtime()
     return str(*s3fs_realtime(ts));
 }
 
+int s3fs_fclose(FILE* fp)
+{
+    if(fp == nullptr){
+        return 0;
+    }
+    return fclose(fp);
+}
+
 /*
 * Local variables:
 * tab-width: 4

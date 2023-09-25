@@ -3393,7 +3393,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 {
     struct stat st;
-    FILE*       file = nullptr;
+    std::unique_ptr<FILE, decltype(&s3fs_fclose)> file(nullptr, &s3fs_fclose);
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3409,23 +3409,20 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         // The fd should not be closed here, so call dup here to duplicate it.
         //
         int fd2;
-        if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || nullptr == (file = fdopen(fd2, "rb"))){
+        if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || nullptr == (file = {fdopen(fd2, "rb"), &s3fs_fclose})){
             S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
             if(-1 != fd2){
                 close(fd2);
             }
             return -errno;
         }
-        b_infile = file;
+        b_infile = file.get();
     }else{
         // This case is creating zero byte object.(calling by create_file_object())
         S3FS_PRN_INFO3("create zero byte file object.");
     }
 
     if(!CreateCurlHandle()){
-        if(file){
-            fclose(file);
-        }
         return -EIO;
     }
     std::string resource;
@@ -3511,7 +3508,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size))){ // Content-Length
             return -EIO;
         }
-        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, file)){
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, file.get())){
             return -EIO;
         }
     }else{
@@ -3528,9 +3525,6 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     int result = RequestPerform();
     result = MapPutErrorResponse(result);
     bodydata.clear();
-    if(file){
-        fclose(file);
-    }
     return result;
 }
 

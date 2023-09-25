@@ -1156,13 +1156,10 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     FdManager::get()->ChangeEntityToTempPath(this, path.c_str());
 
     // open temporary file
-    FILE* ptmpfp;
-    int   tmpfd;
-    if(nullptr == (ptmpfp = FdManager::MakeTempFile()) || -1 ==(tmpfd = fileno(ptmpfp))){
+    int tmpfd;
+    std::unique_ptr<FILE, decltype(&s3fs_fclose)> ptmpfp(FdManager::MakeTempFile(), &s3fs_fclose);
+    if(nullptr == ptmpfp || -1 == (tmpfd = fileno(ptmpfp.get()))){
         S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
-        if(ptmpfp){
-            fclose(ptmpfp);
-        }
         return (0 == errno ? -EIO : -errno);
     }
 
@@ -1283,9 +1280,6 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d), but continue...", physical_fd);
         }
     }
-
-    // close temporary
-    fclose(ptmpfp);
 
     return result;
 }

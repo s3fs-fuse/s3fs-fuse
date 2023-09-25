@@ -74,6 +74,9 @@ std::string str_stat_time(const struct stat& st, stat_time_type type);
 struct timespec* s3fs_realtime(struct timespec& ts);
 std::string s3fs_str_realtime();
 
+// Wrap fclose since it is illegal to take the address of a stdlib function
+int s3fs_fclose(FILE* fp);
+
 #endif // S3FS_S3FS_UTIL_H_
 
 /*

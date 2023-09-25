@@ -307,13 +307,10 @@ bool FdManager::HaveLseekHole()
     }
 
     // create temporary file
-    FILE* ptmpfp;
-    int   fd;
-    if(nullptr == (ptmpfp = MakeTempFile()) || -1 == (fd = fileno(ptmpfp))){
+    int fd;
+    std::unique_ptr<FILE, decltype(&s3fs_fclose)> ptmpfp(MakeTempFile(), &s3fs_fclose);
+    if(nullptr == ptmpfp || -1 == (fd = fileno(ptmpfp.get()))){
         S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
-        if(ptmpfp){
-            fclose(ptmpfp);
-        }
         FdManager::checked_lseek   = true;
         FdManager::have_lseek_hole = false;
         return false;
@@ -333,7 +330,6 @@ bool FdManager::HaveLseekHole()
             result = false;
         }
     }
-    fclose(ptmpfp);
 
     FdManager::checked_lseek   = true;
     FdManager::have_lseek_hole = result;
