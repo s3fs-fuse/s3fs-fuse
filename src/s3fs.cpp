@@ -3509,13 +3509,11 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             return -EIO;
         }
         if(true == (truncated = is_truncated(doc))){
-            xmlChar* tmpch;
-            if(nullptr != (tmpch = get_next_continuation_token(doc))){
-                next_continuation_token = reinterpret_cast<char*>(tmpch);
-                xmlFree(tmpch);
+            auto tmpch = get_next_continuation_token(doc);
+            if(nullptr != tmpch){
+                next_continuation_token = reinterpret_cast<const char*>(tmpch.get());
             }else if(nullptr != (tmpch = get_next_marker(doc))){
-                next_marker = reinterpret_cast<char*>(tmpch);
-                xmlFree(tmpch);
+                next_marker = reinterpret_cast<const char*>(tmpch.get());
             }
 
             if(next_continuation_token.empty() && next_marker.empty()){
