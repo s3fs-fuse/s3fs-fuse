@@ -28,6 +28,7 @@
 
 #include "common.h"
 #include "s3fs_logger.h"
+#include "s3fs_util.h"
 #include "fdcache_fdinfo.h"
 #include "fdcache_pseudofd.h"
 #include "fdcache_entity.h"
@@ -179,19 +180,25 @@ bool PseudoFdInfo::OpenUploadFd(AutoLock::Type type)
     }
 
     // duplicate fd
-    if(-1 == (upload_fd = dup(physical_fd)) || 0 != lseek(upload_fd, 0, SEEK_SET)){
+    int fd;
+    if(-1 == (fd = dup(physical_fd))){
         S3FS_PRN_ERR("Could not duplicate physical file descriptor(errno=%d)", errno);
-        if(-1 != upload_fd){
-            close(upload_fd);
-        }
+        return false;
+    }
+    scope_guard guard([&]() { close(fd); });
+
+    if(0 != lseek(fd, 0, SEEK_SET)){
+        S3FS_PRN_ERR("Could not seek physical file descriptor(errno=%d)", errno);
         return false;
     }
     struct stat st;
-    if(-1 == fstat(upload_fd, &st)){
+    if(-1 == fstat(fd, &st)){
         S3FS_PRN_ERR("Invalid file descriptor for uploading(errno=%d)", errno);
-        close(upload_fd);
         return false;
     }
+
+    guard.dismiss();
+    upload_fd = fd;
     return true;
 }
 

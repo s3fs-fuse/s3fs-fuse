@@ -21,6 +21,8 @@
 #ifndef S3FS_S3FS_UTIL_H_
 #define S3FS_S3FS_UTIL_H_
 
+#include <functional>
+
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME          0
 #endif
@@ -76,6 +78,32 @@ std::string s3fs_str_realtime();
 
 // Wrap fclose since it is illegal to take the address of a stdlib function
 int s3fs_fclose(FILE* fp);
+
+class scope_guard {
+public:
+    template<class Callable>
+    explicit scope_guard(Callable&& undo_func)
+        : func(std::forward<Callable>(undo_func))
+    {}
+
+    ~scope_guard() {
+        if(func != nullptr) {
+            func();
+        }
+    }
+
+    void dismiss() {
+        func = nullptr;
+    }
+
+    scope_guard(const scope_guard&) = delete;
+    scope_guard(scope_guard&& other) = delete;
+    scope_guard& operator=(const scope_guard&) = delete;
+    scope_guard& operator=(scope_guard&&) = delete;
+
+private:
+    std::function<void()> func;
+};
 
 #endif // S3FS_S3FS_UTIL_H_
 
