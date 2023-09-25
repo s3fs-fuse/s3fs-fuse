@@ -92,6 +92,8 @@ class FdEntity
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
 
+        bool ReserveDiskSpace(off_t size);
+
         bool AddUntreated(off_t start, off_t size);
 
     public:
@@ -149,7 +151,6 @@ class FdEntity
         ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
         ssize_t Write(int fd, const char* bytes, off_t start, size_t size);
 
-        bool ReserveDiskSpace(off_t size);
         bool PunchHole(off_t start = 0, size_t size = 0);
 
         void MarkDirtyNewFile();
