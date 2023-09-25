@@ -775,7 +775,8 @@ bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 
 bool FdEntity::IsModified() const
 {
-    AutoLock auto_data_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_data_lock2(&fdent_data_lock);
     return pagelist.IsModified();
 }
 
@@ -1383,7 +1384,8 @@ int FdEntity::NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj)
 
 off_t FdEntity::BytesModified()
 {
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
     return pagelist.BytesModified();
 }
 
@@ -2407,6 +2409,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         SetAtime(atime, AutoLock::ALREADY_LOCKED);
     }
 
+    AutoLock auto_lock2(&fdent_data_lock);
     if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading(AutoLock::ALREADY_LOCKED) || pagelist.IsModified())){
         pending_status = pending_status_t::UPDATE_META_PENDING;
     }
@@ -2492,7 +2495,8 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
-    AutoLock auto_lock(&fdent_data_lock);
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
 
     if(-1 == physical_fd){
         return false;
@@ -2535,6 +2539,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
 void FdEntity::MarkDirtyNewFile()
 {
     AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
 
     pagelist.Init(0, false, true);
     pending_status = pending_status_t::CREATE_FILE_PENDING;
