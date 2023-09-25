@@ -34,7 +34,7 @@ AC_CHECK_HEADERS([attr/xattr.h])
 AC_CHECK_HEADERS([sys/extattr.h])
 AC_CHECK_FUNCS([fallocate])
 
-CXXFLAGS="$CXXFLAGS -Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=3 -std=c++11"
+CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=3 -std=c++11 $CXXFLAGS"
 
 dnl ----------------------------------------------
 dnl For macOS
