@@ -1864,12 +1864,28 @@ function test_concurrent_reads {
 
 function test_concurrent_writes {
     describe "Test concurrent writes to a file ..."
+
     ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${TEST_TEXT_FILE}"
-    for _ in $(seq 10); do
+
+    NUM_PROCS=10
+    PIDS=()
+    for _ in $(seq "${NUM_PROCS}"); do
         dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=$((RANDOM % BIG_FILE_LENGTH)) count=16 bs=1024 conv=notrunc &
+        PIDS+=($!)
     done
-    wait
+
+    GRC=0
+    for PID in "${PIDS[@]}"; do
+        wait "${PID}"
+        RC=$?
+        [ $RC -ne 0 ] && GRC="${RC}"
+    done
     rm_test_file
+
+    if [ "${GRC}" -ne 0 ]; then
+        echo "unexpected return code: $GRC"
+        return 1
+    fi
 }
 
 function test_open_second_fd {
