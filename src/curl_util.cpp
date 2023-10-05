@@ -264,8 +264,8 @@ std::string url_to_host(const std::string &url)
 {
     S3FS_PRN_INFO3("url is %s", url.c_str());
 
-    static const char HTTP[] = "http://";
-    static const char HTTPS[] = "https://";
+    static constexpr char HTTP[] = "http://";
+    static constexpr char HTTPS[] = "https://";
     std::string hostname;
 
     if (is_prefix(url.c_str(), HTTP)) {

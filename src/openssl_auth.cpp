@@ -44,7 +44,7 @@
 //-------------------------------------------------------------------
 const char* s3fs_crypt_lib_name()
 {
-    static const char version[] = "OpenSSL";
+    static constexpr char version[] = "OpenSSL";
 
     return version;
 }

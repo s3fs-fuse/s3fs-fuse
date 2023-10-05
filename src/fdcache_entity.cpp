@@ -41,7 +41,7 @@
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-static const int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max count
+static constexpr int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max count
 
 //------------------------------------------------
 // FdEntity class variables

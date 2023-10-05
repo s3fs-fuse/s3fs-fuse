@@ -34,7 +34,7 @@
 //-------------------------------------------------------------------
 // Variables
 //-------------------------------------------------------------------
-static const char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
+static constexpr char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
 
 // [NOTE]
 // mutex for static variables in GetXmlNsUrl

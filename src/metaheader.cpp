@@ -27,7 +27,7 @@
 #include "metaheader.h"
 #include "string_util.h"
 
-static const struct timespec DEFAULT_TIMESPEC = {-1, 0};
+static constexpr struct timespec DEFAULT_TIMESPEC = {-1, 0};
 
 //-------------------------------------------------------------------
 // Utility functions for convert

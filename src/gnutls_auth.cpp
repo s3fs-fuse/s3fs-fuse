@@ -50,7 +50,7 @@
 
 const char* s3fs_crypt_lib_name(void)
 {
-    static const char version[] = "GnuTLS(nettle)";
+    static constexpr char version[] = "GnuTLS(nettle)";
 
     return version;
 }
@@ -59,7 +59,7 @@ const char* s3fs_crypt_lib_name(void)
 
 const char* s3fs_crypt_lib_name()
 {
-    static const char version[] = "GnuTLS(gcrypt)";
+    static constexpr char version[] = "GnuTLS(gcrypt)";
 
     return version;
 }

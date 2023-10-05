@@ -34,27 +34,27 @@
 //---------------------------------------------------------
 // Const
 //---------------------------------------------------------
-const char usage_string[]  = "Usage : \"mknod_test <base file path>\"";
+static constexpr char usage_string[]  = "Usage : \"mknod_test <base file path>\"";
 
-const char str_mode_reg[]  = "REGULAR";
-const char str_mode_chr[]  = "CHARACTER";
-const char str_mode_blk[]  = "BLOCK";
-const char str_mode_fifo[] = "FIFO";
-const char str_mode_sock[] = "SOCK";
+static constexpr char str_mode_reg[]  = "REGULAR";
+static constexpr char str_mode_chr[]  = "CHARACTER";
+static constexpr char str_mode_blk[]  = "BLOCK";
+static constexpr char str_mode_fifo[] = "FIFO";
+static constexpr char str_mode_sock[] = "SOCK";
 
-const char str_ext_reg[]   = "reg";
-const char str_ext_chr[]   = "chr";
-const char str_ext_blk[]   = "blk";
-const char str_ext_fifo[]  = "fifo";
-const char str_ext_sock[]  = "sock";
+static constexpr char str_ext_reg[]   = "reg";
+static constexpr char str_ext_chr[]   = "chr";
+static constexpr char str_ext_blk[]   = "blk";
+static constexpr char str_ext_fifo[]  = "fifo";
+static constexpr char str_ext_sock[]  = "sock";
 
 // [NOTE]
 // It would be nice if PATH_MAX could be used as is, but since there are
 // issues using on Linux and we also must support for macos, this simple
 // test program defines a fixed value for simplicity.
 //
-static const size_t S3FS_TEST_PATH_MAX = 255;
-static const size_t MAX_BASE_PATH_LENGTH = S3FS_TEST_PATH_MAX - 5;
+static constexpr size_t S3FS_TEST_PATH_MAX = 255;
+static constexpr size_t MAX_BASE_PATH_LENGTH = S3FS_TEST_PATH_MAX - 5;
 
 //---------------------------------------------------------
 // Test function
