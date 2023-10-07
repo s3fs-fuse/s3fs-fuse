@@ -49,6 +49,15 @@ void test_trim()
     ASSERT_EQUALS(std::string("1234"), trim_right("1234  "));
     ASSERT_EQUALS(std::string("  1234"), trim_right("  1234"));
     ASSERT_EQUALS(std::string("1234"), trim_right("1234"));
+
+    ASSERT_EQUALS(std::string("1234"), peeloff("\"1234\""));            // "1234"   -> 1234
+    ASSERT_EQUALS(std::string("\"1234\""), peeloff("\"\"1234\"\""));    // ""1234"" -> "1234"
+    ASSERT_EQUALS(std::string("\"1234"), peeloff("\"\"1234\""));        // ""1234"  ->  "1234
+    ASSERT_EQUALS(std::string("1234\""), peeloff("\"1234\"\""));        // "1234""  -> 1234"
+    ASSERT_EQUALS(std::string("\"1234"), peeloff("\"1234"));            // "1234    -> "1234
+    ASSERT_EQUALS(std::string("1234\""), peeloff("1234\""));            // 1234"    -> 1234"
+    ASSERT_EQUALS(std::string(" \"1234\""), peeloff(" \"1234\""));      // _"1234"  -> _"1234"
+    ASSERT_EQUALS(std::string("\"1234\" "), peeloff("\"1234\" "));      // "1234"_  -> "1234"_
 }
 
 void test_base64()
