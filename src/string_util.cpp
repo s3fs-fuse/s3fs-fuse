@@ -105,15 +105,13 @@ std::string lower(std::string s)
     return s;
 }
 
-std::string trim_left(const std::string &s, const char *t /* = SPACES */)
+std::string trim_left(std::string d, const char *t /* = SPACES */)
 {
-    std::string d(s);
-    return d.erase(0, s.find_first_not_of(t));
+    return d.erase(0, d.find_first_not_of(t));
 }
 
-std::string trim_right(const std::string &s, const char *t /* = SPACES */)
+std::string trim_right(std::string d, const char *t /* = SPACES */)
 {
-    std::string d(s);
     std::string::size_type i(d.find_last_not_of(t));
     if(i == std::string::npos){
         return "";
@@ -122,9 +120,9 @@ std::string trim_right(const std::string &s, const char *t /* = SPACES */)
     }
 }
 
-std::string trim(const std::string &s, const char *t /* = SPACES */)
+std::string trim(std::string s, const char *t /* = SPACES */)
 {
-    return trim_left(trim_right(s, t), t);
+    return trim_left(trim_right(std::move(s), t), t);
 }
 
 //
