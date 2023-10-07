@@ -42,7 +42,7 @@ std::string url_to_host(const std::string &url);
 std::string get_bucket_host();
 const char* getCurlDebugHead(curl_infotype type);
 
-bool etag_equals(std::string s1, std::string s2);
+bool etag_equals(const std::string& s1, const std::string& s2);
 
 #endif // S3FS_CURL_UTIL_H_
 

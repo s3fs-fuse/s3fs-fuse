@@ -4218,6 +4218,7 @@ bool S3fsCurl::UploadMultipartPostComplete()
     if (it == responseHeaders.end()) {
         return false;
     }
+    std::string etag = peeloff(it->second);
 
     // check etag(md5);
     //
@@ -4227,11 +4228,11 @@ bool S3fsCurl::UploadMultipartPostComplete()
     // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
     //
     if(S3fsCurl::is_content_md5 && sse_type_t::SSE_C != S3fsCurl::GetSseType() && sse_type_t::SSE_KMS != S3fsCurl::GetSseType()){
-        if(!etag_equals(it->second, partdata.etag)){
+        if(!etag_equals(etag, partdata.etag)){
             return false;
         }
     }
-    partdata.petag->etag = it->second;
+    partdata.petag->etag = etag;
     partdata.uploaded = true;
 
     return true;
@@ -4255,11 +4256,7 @@ bool S3fsCurl::CopyMultipartPostComplete()
 {
     std::string etag;
     partdata.uploaded = simple_parse_xml(bodydata.c_str(), bodydata.size(), "ETag", etag);
-    if(etag.size() >= 2 && *etag.begin() == '"' && *etag.rbegin() == '"'){
-        etag.erase(etag.size() - 1);
-        etag.erase(0, 1);
-    }
-    partdata.petag->etag = etag;
+    partdata.petag->etag = peeloff(etag);
 
     bodydata.clear();
     headdata.clear();
