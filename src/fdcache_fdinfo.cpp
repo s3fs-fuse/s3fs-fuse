@@ -466,9 +466,9 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
     return true;
 }
 
-bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_list_t& upload_list, const mp_part_list_t& copy_list, int& result)
+bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, int& result)
 {
-    S3FS_PRN_DBG("[path=%s][upload_list(%zu)][copy_list(%zu)]", SAFESTRPTR(path), upload_list.size(), copy_list.size());
+    S3FS_PRN_DBG("[path=%s][to_upload_list(%zu)][copy_list(%zu)]", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
 
     result = 0;
 
@@ -476,8 +476,8 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
         return false;
     }
 
-    if(!ParallelMultipartUpload(path, upload_list, false, AutoLock::NONE) || !ParallelMultipartUpload(path, copy_list, true, AutoLock::NONE)){
-        S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), upload_list.size(), copy_list.size());
+    if(!ParallelMultipartUpload(path, to_upload_list, false, AutoLock::NONE) || !ParallelMultipartUpload(path, copy_list, true, AutoLock::NONE)){
+        S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, to_upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
         return false;
     }
 
