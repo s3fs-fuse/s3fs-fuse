@@ -642,10 +642,6 @@ function test_multipart_copy {
 function test_multipart_mix {
     describe "Testing multi-part mix ..."
 
-    # TODO: why is this necessary?
-    if [ "$(uname)" = "Darwin" ]; then
-       cat /dev/null > "${BIG_FILE}"
-    fi
     ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
     dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs="${BIG_FILE_BLOCK_SIZE}" count="${BIG_FILE_COUNT}"
 
@@ -717,10 +713,29 @@ function test_multipart_mix {
        return 1
     fi
 
+    # [NOTE]
+    # For macos, in order to free up disk space for statvfs (or df command),
+    # it is necessary to zero out the file size, delete it, and sync it.
+    # In the case of macos, even if you delete a file, there seems to be a
+    # delay in the free space being reflected.
+    # Testing the ensure_diskfree option shows that if this is not done, free
+    # disk space will be exhausted.
+    #
+    if [ "$(uname)" = "Darwin" ]; then
+        cat /dev/null > "${TEMP_DIR}/${BIG_FILE}"
+        cat /dev/null > "${TEMP_DIR}/${BIG_FILE}-mix"
+        cat /dev/null > "${BIG_FILE}"
+        cat /dev/null > "${BIG_FILE}-mix"
+    fi
+
     rm -f "${TEMP_DIR}/${BIG_FILE}"
     rm -f "${TEMP_DIR}/${BIG_FILE}-mix"
     rm_test_file "${BIG_FILE}"
     rm_test_file "${BIG_FILE}-mix"
+
+    if [ "$(uname)" = "Darwin" ]; then
+        sync
+    fi
 }
 
 function test_utimens_during_multipart {
