@@ -627,7 +627,7 @@ bool S3fsCred::CheckS3fsPasswdFilePerms()
 
     // let's get the file info
     if(stat(passwd_file.c_str(), &info) != 0){
-        S3FS_PRN_EXIT("unexpected error from stat(%s).", passwd_file.c_str());
+        S3FS_PRN_EXIT("unexpected error from stat(%s): %s", passwd_file.c_str(), strerror(errno));
         return false;
     }
 
