@@ -75,9 +75,9 @@ off_t cvt_strtoofft(const char* str, int base);
 //
 // String Manipulation
 //
-std::string trim_left(const std::string &s, const char *t = SPACES);
-std::string trim_right(const std::string &s, const char *t = SPACES);
-std::string trim(const std::string &s, const char *t = SPACES);
+std::string trim_left(std::string s, const char *t = SPACES);
+std::string trim_right(std::string s, const char *t = SPACES);
+std::string trim(std::string s, const char *t = SPACES);
 std::string lower(std::string s);
 
 //
