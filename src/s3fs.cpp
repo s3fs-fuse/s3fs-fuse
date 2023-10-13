@@ -5750,12 +5750,17 @@ int main(int argc, char* argv[])
 
     // check free disk space
     if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
-        S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs.");
-        S3fsCurl::DestroyS3fsCurl();
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
-        exit(EXIT_FAILURE);
+        // clean cache dir and retry
+        S3FS_PRN_WARN("No enough disk space for s3fs, try to clean cache dir");
+        FdManager::get()->CleanupCacheDir();
+
+        if(!FdManager::IsSafeDiskSpaceWithLog(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+            S3fsCurl::DestroyS3fsCurl();
+            s3fs_destroy_global_ssl();
+            destroy_parser_xml_lock();
+            destroy_basename_lock();
+            exit(EXIT_FAILURE);
+        }
     }
 
     // set mp stat flag object

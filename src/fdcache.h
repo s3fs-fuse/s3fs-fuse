@@ -78,6 +78,7 @@ class FdManager
       static off_t SetEnsureFreeDiskSpace(off_t size);
       static bool InitFakeUsedDiskSize(off_t fake_freesize);
       static bool IsSafeDiskSpace(const char* path, off_t size);
+      static bool IsSafeDiskSpaceWithLog(const char* path, off_t size);
       static void FreeReservedDiskSpace(off_t size);
       static bool ReserveDiskSpace(off_t size);
       static bool HaveLseekHole();
