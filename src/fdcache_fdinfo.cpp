@@ -763,7 +763,8 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, o
 // to_upload_list       : A list of areas to upload in multipart upload.
 // to_copy_list         : A list of areas for copy upload in multipart upload.
 // to_download_list     : A list of areas that must be downloaded before multipart upload.
-// cancel_upload_list : A list of areas that have already been uploaded and will be canceled(overwritten).
+// cancel_upload_list   : A list of areas that have already been uploaded and will be canceled(overwritten).
+// wait_upload_complete : If cancellation areas exist, this flag is set to true when it is necessary to wait until the upload of those cancellation areas is complete.
 // file_size            : The size of the upload file.
 // use_copy             : Specify true if copy multipart upload is available.
 //
@@ -771,7 +772,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, o
 // The untreated_list in fdentity does not change, but upload_list is changed.
 // (If you want to restore it, you can use cancel_upload_list.)
 //
-bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, off_t max_mp_size, off_t file_size, bool use_copy)
+bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy)
 {
     AutoLock auto_lock(&upload_list_lock);
 
@@ -780,6 +781,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
     to_copy_list.clear();
     to_download_list.clear();
     cancel_upload_list.clear();
+    wait_upload_complete = false;
 
     // Duplicate untreated list
     untreated_list_t dup_untreated_list;
@@ -939,6 +941,11 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                 // So this current area only needs to be uploaded again.
                 //
                 S3FS_PRN_DBG("Cancel upload: start=%lld, size=%lld", static_cast<long long int>(overlap_uploaded_iter->startpos), static_cast<long long int>(overlap_uploaded_iter->size));
+
+                if(!overlap_uploaded_iter->uploaded){
+                    S3FS_PRN_DBG("This cancel upload area is still uploading, so you must wait for it to complete before starting any Stream uploads.");
+                    wait_upload_complete = true;
+                }
                 cancel_upload_list.push_back(*overlap_uploaded_iter);               // add this uploaded area to cancel_upload_list
                 uploaded_iter = upload_list.erase(overlap_uploaded_iter);           // remove it from upload_list
 
