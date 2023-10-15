@@ -1737,7 +1737,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
                 return result;
             }
             untreated_list.ClearParts(untreated_start, untreated_size);
-	    }
+        }
         // complete multipart uploading.
         if(0 != (result = NoCacheCompleteMultipartPost(pseudo_obj))){
             S3FS_PRN_ERR("failed to complete(finish) multipart post for file(physical_fd=%d).", physical_fd);
@@ -1812,7 +1812,8 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         mp_part_list_t  to_copy_list;
         mp_part_list_t  to_download_list;
         filepart_list_t cancel_uploaded_list;
-        if(!pseudo_obj->ExtractUploadPartsFromAllArea(untreated_list, to_upload_list, to_copy_list, to_download_list, cancel_uploaded_list, S3fsCurl::GetMultipartSize(), pagelist.Size(), FdEntity::mixmultipart)){
+        bool            wait_upload_complete = false;
+        if(!pseudo_obj->ExtractUploadPartsFromAllArea(untreated_list, to_upload_list, to_copy_list, to_download_list, cancel_uploaded_list, wait_upload_complete, S3fsCurl::GetMultipartSize(), pagelist.Size(), FdEntity::mixmultipart)){
             S3FS_PRN_ERR("Failed to extract various upload parts list from all area: errno(EIO)");
             return -EIO;
         }
@@ -1885,6 +1886,26 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         if(S3fsLog::IsS3fsLogDbg()){
             for(filepart_list_t::const_iterator cancel_iter = cancel_uploaded_list.begin(); cancel_iter != cancel_uploaded_list.end(); ++cancel_iter){
                 S3FS_PRN_DBG("Cancel uploaded: start(%lld), size(%lld), part number(%d)", static_cast<long long int>(cancel_iter->startpos), static_cast<long long int>(cancel_iter->size), (cancel_iter->petag ? cancel_iter->petag->part_num : -1));
+            }
+        }
+
+        // [NOTE]
+        // If there is a part where has already been uploading, that part
+        // is re-updated after finishing uploading, so the part of the last
+        // uploded must be canceled.
+        // (These are cancel_uploaded_list, cancellation processing means
+        // re-uploading the same area.)
+        //
+        // In rare cases, the completion of the previous upload and the
+        // re-upload may be reversed, causing the ETag to be reversed,
+        // in which case the upload will fail.
+        // To prevent this, if the upload of the same area as the re-upload
+        // is incomplete, we must wait for it to complete here.
+        //
+        if(wait_upload_complete){
+            if(0 != (result = pseudo_obj->WaitAllThreadsExit())){
+                S3FS_PRN_ERR("Some cancel area uploads that were waiting to complete failed with %d.", result);
+                return result;
             }
         }
 
