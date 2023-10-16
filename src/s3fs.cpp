@@ -5142,8 +5142,38 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             max_dirty_data = size;
             return 0;
         }
+        if(is_prefix(arg, "free_space_ratio=")){
+            int ratio = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+
+            if(FdManager::GetEnsureFreeDiskSpace()!=0){
+                S3FS_PRN_EXIT("option free_space_ratio conflicts with ensure_diskfree, please set only one of them.");
+                return -1;
+            }
+
+            if(ratio < 0 || ratio > 100){
+                S3FS_PRN_EXIT("option free_space_ratio must between 0 to 100, which is: %d", ratio);
+                return -1;
+            }
+
+            off_t dfsize = FdManager::GetTotalDiskSpaceByRatio(ratio);
+            S3FS_PRN_INFO("Free space ratio set to %d %%, ensure the available disk space is greater than %.3f MB", ratio, static_cast<double>(dfsize) / 1024 / 1024);
+
+            if(dfsize < S3fsCurl::GetMultipartSize()){
+                S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
+                dfsize = S3fsCurl::GetMultipartSize();
+            }
+            FdManager::SetEnsureFreeDiskSpace(dfsize);
+            return 0;
+        }
         else if(is_prefix(arg, "ensure_diskfree=")){
             off_t dfsize = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10) * 1024 * 1024;
+
+            if(FdManager::GetEnsureFreeDiskSpace()!=0){
+                S3FS_PRN_EXIT("option free_space_ratio conflicts with ensure_diskfree, please set only one of them.");
+                return -1;
+            }
+
+            S3FS_PRN_INFO("Set and ensure the available disk space is greater than %.3f MB.", static_cast<double>(dfsize) / 1024 / 1024);
             if(dfsize < S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
                 dfsize = S3fsCurl::GetMultipartSize();
@@ -5700,6 +5730,19 @@ int main(int argc, char* argv[])
         FdManager::InitFakeUsedDiskSize(fake_diskfree_size);
     }
 
+    // Set default value of free_space_ratio to 10%
+    if(FdManager::GetEnsureFreeDiskSpace()==0){
+        int ratio = 10;
+        off_t dfsize = FdManager::GetTotalDiskSpaceByRatio(ratio);
+        S3FS_PRN_INFO("Free space ratio default to %d %%, ensure the available disk space is greater than %.3f MB", ratio, static_cast<double>(dfsize) / 1024 / 1024);
+
+        if(dfsize < S3fsCurl::GetMultipartSize()){
+            S3FS_PRN_WARN("specified size to ensure disk free space is smaller than multipart size, so set multipart size to it.");
+            dfsize = S3fsCurl::GetMultipartSize();
+        }
+        FdManager::SetEnsureFreeDiskSpace(dfsize);
+    }
+
     // set user agent
     S3fsCurl::InitUserAgent();
 
@@ -5754,7 +5797,7 @@ int main(int argc, char* argv[])
         S3FS_PRN_WARN("No enough disk space for s3fs, try to clean cache dir");
         FdManager::get()->CleanupCacheDir();
 
-        if(!FdManager::IsSafeDiskSpaceWithLog(NULL, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+        if(!FdManager::IsSafeDiskSpaceWithLog(nullptr, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
             destroy_parser_xml_lock();

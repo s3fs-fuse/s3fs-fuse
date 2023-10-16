@@ -266,9 +266,38 @@ bool FdManager::InitFakeUsedDiskSize(off_t fake_freesize)
     return true;
 }
 
+off_t FdManager::GetTotalDiskSpaceByRatio(int ratio)
+{
+    return FdManager::GetTotalDiskSpace(nullptr) * ratio / 100;
+}
+
+off_t FdManager::GetTotalDiskSpace(const char* path)
+{
+    struct statvfs vfsbuf;
+    int result = FdManager::GetVfsStat(path, &vfsbuf);
+    if(result == -1){
+        return 0;
+    }
+
+    off_t actual_totalsize = vfsbuf.f_blocks * vfsbuf.f_frsize;
+
+    return actual_totalsize;
+}
+
 off_t FdManager::GetFreeDiskSpace(const char* path)
 {
     struct statvfs vfsbuf;
+    int result = FdManager::GetVfsStat(path, &vfsbuf);
+    if(result == -1){
+        return 0;
+    }
+
+    off_t actual_freesize = vfsbuf.f_bavail * vfsbuf.f_frsize;
+
+    return (FdManager::fake_used_disk_space < actual_freesize ? (actual_freesize - FdManager::fake_used_disk_space) : 0);
+}
+
+int FdManager::GetVfsStat(const char* path, struct statvfs* vfsbuf){
     std::string ctoppath;
     if(!FdManager::cache_dir.empty()){
         ctoppath = FdManager::cache_dir + "/";
@@ -284,14 +313,12 @@ off_t FdManager::GetFreeDiskSpace(const char* path)
     }else{
         ctoppath += ".";
     }
-    if(-1 == statvfs(ctoppath.c_str(), &vfsbuf)){
+    if(-1 == statvfs(ctoppath.c_str(), vfsbuf)){
         S3FS_PRN_ERR("could not get vfs stat by errno(%d)", errno);
-        return 0;
+        return -1;
     }
 
-    off_t actual_freesize = vfsbuf.f_bavail * vfsbuf.f_frsize;
-
-    return (FdManager::fake_used_disk_space < actual_freesize ? (actual_freesize - FdManager::fake_used_disk_space) : 0);
+    return 0;
 }
 
 bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
@@ -307,7 +334,7 @@ bool FdManager::IsSafeDiskSpaceWithLog(const char* path, off_t size)
     if(needsize <= fsize){
         return true;
     } else {
-        S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", (double) needsize / 1024 / 1024, (double) fsize / 1024 / 1024 );
+        S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", static_cast<double>(needsize) / 1024 / 1024, static_cast<double>(fsize) / 1024 / 1024);
         return false;
     }
 }
