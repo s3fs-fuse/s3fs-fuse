@@ -3660,6 +3660,14 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir)
     responseHeaders.clear();
     bodydata.clear();
 
+    // SSE
+    if(S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
+        std::string ssevalue;
+        if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
+            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+        }
+    }
+    
     op = "GET";
     type = REQTYPE::CHKBUCKET;
 
