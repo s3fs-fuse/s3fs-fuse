@@ -20,7 +20,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([s3fs],[1.93.2])
+AC_INIT([s3fs],[1.93.3])
 AC_CONFIG_HEADER([config.h])
 
 AC_CANONICAL_TARGET
