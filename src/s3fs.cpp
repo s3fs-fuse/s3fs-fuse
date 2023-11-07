@@ -2567,6 +2567,21 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // If there is data in the Stats cache, update the Stats cache.
                 StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
 
+                // [NOTE]
+                // There are cases where this function is called during the process of
+                // creating a new file (before uploading).
+                // In this case, a temporary cache exists in the Stat cache.(see s3fs_create)
+                // So we need to update the cache, if it exists.
+                //
+                // Previously, the process of creating a new file was to update the
+                // file content after first uploading the file, but now the file is
+                // not created until flushing.
+                // So we need to create a temporary Stat cache for it.
+                //
+                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                    return -EIO;
+                }
+
             }else{
                 S3FS_PRN_INFO("meta is not pending, but need to keep current mtime.");
 
