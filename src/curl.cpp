@@ -2139,7 +2139,10 @@ bool S3fsCurl::RemakeHandle()
     // rewind file
     struct stat st;
     if(b_infile){
-        rewind(b_infile);
+        if(-1 == fseek(b_infile, 0, SEEK_SET)){
+            S3FS_PRN_WARN("Could not reset position(fd=%d)", fileno(b_infile));
+            return false;
+        }
         if(-1 == fstat(fileno(b_infile), &st)){
             S3FS_PRN_WARN("Could not get file stat(fd=%d)", fileno(b_infile));
             return false;
