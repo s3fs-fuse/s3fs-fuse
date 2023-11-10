@@ -2031,6 +2031,16 @@ static int s3fs_chmod(const char* _path, mode_t mode)
 
                 // If there is data in the Stats cache, update the Stats cache.
                 StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
+
+                // [NOTE]
+                // There are cases where this function is called during the process of
+                // creating a new file (before uploading).
+                // In this case, a temporary cache exists in the Stat cache.
+                // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
+                //
+                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                    return -EIO;
+                }
             }
         }
         if(need_put_header){
@@ -2236,6 +2246,16 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 
                 // If there is data in the Stats cache, update the Stats cache.
                 StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
+
+                // [NOTE]
+                // There are cases where this function is called during the process of
+                // creating a new file (before uploading).
+                // In this case, a temporary cache exists in the Stat cache.
+                // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
+                //
+                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                    return -EIO;
+                }
             }
         }
         if(need_put_header){
@@ -3948,6 +3968,16 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
 
             // If there is data in the Stats cache, update the Stats cache.
             StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
+
+            // [NOTE]
+            // There are cases where this function is called during the process of
+            // creating a new file (before uploading).
+            // In this case, a temporary cache exists in the Stat cache.
+            // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
+            //
+            if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                return -EIO;
+            }
         }
     }
     if(need_put_header){
