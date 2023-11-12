@@ -206,8 +206,8 @@ class MpStatFlag
 {
     private:
         mutable pthread_mutex_t flag_lock;
-        bool                    is_lock_init;
-        bool                    has_mp_stat;
+        bool                    is_lock_init = false;
+        bool                    has_mp_stat = false;
 
     public:
         MpStatFlag();
@@ -221,7 +221,7 @@ class MpStatFlag
         bool Set(bool flag);
 };
 
-MpStatFlag::MpStatFlag() : is_lock_init(false), has_mp_stat(false)
+MpStatFlag::MpStatFlag()
 {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -273,7 +273,7 @@ class SyncFiller
 {
     private:
         mutable pthread_mutex_t filler_lock;
-        bool                    is_lock_init;
+        bool                    is_lock_init = false;
         void*                   filler_buff;
         fuse_fill_dir_t         filler_func;
         std::set<std::string>   filled;
@@ -290,7 +290,7 @@ class SyncFiller
         int SufficiencyFill(const std::vector<std::string>& pathlist);
 };
 
-SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : is_lock_init(false), filler_buff(buff), filler_func(filler)
+SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : filler_buff(buff), filler_func(filler)
 {
     if(!filler_buff || !filler_func){
         S3FS_PRN_CRIT("Internal error: SyncFiller constructor parameter is critical value.");
