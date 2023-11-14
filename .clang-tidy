@@ -67,5 +67,6 @@ Checks: '
     -readability-isolate-declaration,
     -readability-magic-numbers,
     -readability-named-parameter,
+    -readability-redundant-declaration,
     -readability-simplify-boolean-expr,
     -readability-suspicious-call-argument'

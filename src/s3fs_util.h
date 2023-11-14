@@ -66,7 +66,11 @@ enum class stat_time_type{
     MTIME,
     CTIME
 };
-extern const struct timespec S3FS_OMIT_TS;
+
+//-------------------------------------------------------------------
+// Utility for nanosecond time(timespec)
+//-------------------------------------------------------------------
+static constexpr struct timespec S3FS_OMIT_TS = {0, UTIME_OMIT};
 
 int compare_timespec(const struct timespec& ts1, const struct timespec& ts2);
 int compare_timespec(const struct stat& st, stat_time_type type, const struct timespec& ts);

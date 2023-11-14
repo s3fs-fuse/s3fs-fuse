@@ -49,7 +49,7 @@ typedef std::list<std::string>        strlist_t;
 //---------------------------------------------------------
 // Const
 //---------------------------------------------------------
-const char usage_string[] = "Usage : \"write_multiblock -f <file path> -p <start offset:size>\" (allows -f and -p multiple times.)";
+static constexpr char usage_string[] = "Usage : \"write_multiblock -f <file path> -p <start offset:size>\" (allows -f and -p multiple times.)";
 
 //---------------------------------------------------------
 // Utility functions

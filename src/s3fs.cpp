@@ -5540,7 +5540,7 @@ int main(int argc, char* argv[])
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
 
-    static const struct option long_opts[] = {
+    static constexpr struct option long_opts[] = {
         {"help",                 no_argument,       nullptr, 'h'},
         {"version",              no_argument,       nullptr, 0},
         {"debug",                no_argument,       nullptr, 'd'},

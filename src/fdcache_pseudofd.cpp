@@ -33,7 +33,7 @@
 // The minimum pseudo fd value starts 2.
 // This is to avoid mistakes for 0(stdout) and 1(stderr), which are usually used.
 //
-static const int MIN_PSEUDOFD_NUMBER = 2;
+static constexpr int MIN_PSEUDOFD_NUMBER = 2;
 
 //------------------------------------------------
 // PseudoFdManager class methods

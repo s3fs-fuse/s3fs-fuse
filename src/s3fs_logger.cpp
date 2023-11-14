@@ -30,10 +30,9 @@
 //-------------------------------------------------------------------
 // S3fsLog class : variables
 //-------------------------------------------------------------------
-const int               S3fsLog::NEST_MAX;
-const char* const       S3fsLog::nest_spaces[S3fsLog::NEST_MAX] = {"", "  ", "    ", "      "};
-const char              S3fsLog::LOGFILEENV[]     = "S3FS_LOGFILE";
-const char              S3fsLog::MSGTIMESTAMP[]   = "S3FS_MSGTIMESTAMP";
+constexpr char          S3fsLog::LOGFILEENV[];
+constexpr const char*   S3fsLog::nest_spaces[];
+constexpr char          S3fsLog::MSGTIMESTAMP[];
 S3fsLog*                S3fsLog::pSingleton       = nullptr;
 S3fsLog::s3fs_log_level S3fsLog::debug_level      = S3fsLog::LEVEL_CRIT;
 FILE*                   S3fsLog::logfp            = nullptr;

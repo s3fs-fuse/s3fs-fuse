@@ -40,16 +40,16 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 class S3fsCred
 {
     private:
-        static const char*  ALLBUCKET_FIELDS_TYPE;      // special key for mapping(This name is absolutely not used as a bucket name)
-        static const char*  KEYVAL_FIELDS_TYPE;         // special key for mapping(This name is absolutely not used as a bucket name)
-        static const char*  AWS_ACCESSKEYID;
-        static const char*  AWS_SECRETKEY;
+        static constexpr char ALLBUCKET_FIELDS_TYPE[] = "";  // special key for mapping(This name is absolutely not used as a bucket name)
+        static constexpr char KEYVAL_FIELDS_TYPE[] = "\t";  // special key for mapping(This name is absolutely not used as a bucket name)
+        static constexpr char AWS_ACCESSKEYID[] = "AWSAccessKeyId";
+        static constexpr char AWS_SECRETKEY[] = "AWSSecretKey";
 
-        static const int    IAM_EXPIRE_MERGIN;
-        static const char*  ECS_IAM_ENV_VAR;
-        static const char*  IAMCRED_ACCESSKEYID;
-        static const char*  IAMCRED_SECRETACCESSKEY;
-        static const char*  IAMCRED_ROLEARN;
+        static constexpr int IAM_EXPIRE_MERGIN = 20 * 60;  // update timing
+        static constexpr char ECS_IAM_ENV_VAR[] = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+        static constexpr char IAMCRED_ACCESSKEYID[] = "AccessKeyId";
+        static constexpr char IAMCRED_SECRETACCESSKEY[] = "SecretAccessKey";
+        static constexpr char IAMCRED_ROLEARN[] = "RoleArn";
 
         static std::string  bucket_name;
 
@@ -89,10 +89,10 @@ class S3fsCred
         fp_UpdateS3fsCredential  pFuncCredUpdate;
 
     public:
-        static const char*  IAMv2_token_url;
-        static int          IAMv2_token_ttl;
-        static const char*  IAMv2_token_ttl_hdr;
-        static const char*  IAMv2_token_hdr;
+        static constexpr char IAMv2_token_url[] = "http://169.254.169.254/latest/api/token";
+        static constexpr int IAMv2_token_ttl = 21600;
+        static constexpr char IAMv2_token_ttl_hdr[] = "X-aws-ec2-metadata-token-ttl-seconds";
+        static constexpr char IAMv2_token_hdr[] = "X-aws-ec2-metadata-token";
 
     private:
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
