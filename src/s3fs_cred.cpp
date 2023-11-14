@@ -38,7 +38,7 @@
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
-#define DEFAULT_AWS_PROFILE_NAME    "default"
+static constexpr char DEFAULT_AWS_PROFILE_NAME[] = "default";
 
 //-------------------------------------------------------------------
 // External Credential dummy function
@@ -53,8 +53,8 @@
 //
 const char* VersionS3fsCredential(bool detail)
 {
-    static const char version[]        = "built-in";
-    static const char detail_version[] = 
+    static constexpr char version[]        = "built-in";
+    static constexpr char detail_version[] = 
 		"s3fs-fuse built-in Credential I/F Function\n"
 		"Copyright(C) 2007 s3fs-fuse\n";
 
@@ -113,21 +113,19 @@ bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, ch
 //-------------------------------------------------------------------
 // Class Variables
 //-------------------------------------------------------------------
-const char* S3fsCred::ALLBUCKET_FIELDS_TYPE     = "";
-const char* S3fsCred::KEYVAL_FIELDS_TYPE        = "\t";
-const char* S3fsCred::AWS_ACCESSKEYID           = "AWSAccessKeyId";
-const char* S3fsCred::AWS_SECRETKEY             = "AWSSecretKey";
+constexpr char S3fsCred::ALLBUCKET_FIELDS_TYPE[];
+constexpr char S3fsCred::KEYVAL_FIELDS_TYPE[];
+constexpr char S3fsCred::AWS_ACCESSKEYID[];
+constexpr char S3fsCred::AWS_SECRETKEY[];
 
-const int   S3fsCred::IAM_EXPIRE_MERGIN         = 20 * 60;              // update timing
-const char* S3fsCred::ECS_IAM_ENV_VAR           = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
-const char* S3fsCred::IAMCRED_ACCESSKEYID       = "AccessKeyId";
-const char* S3fsCred::IAMCRED_SECRETACCESSKEY   = "SecretAccessKey";
-const char* S3fsCred::IAMCRED_ROLEARN           = "RoleArn";
+constexpr char S3fsCred::ECS_IAM_ENV_VAR[];
+constexpr char S3fsCred::IAMCRED_ACCESSKEYID[];
+constexpr char S3fsCred::IAMCRED_SECRETACCESSKEY[];
+constexpr char S3fsCred::IAMCRED_ROLEARN[];
 
-const char* S3fsCred::IAMv2_token_url           = "http://169.254.169.254/latest/api/token";
-int         S3fsCred::IAMv2_token_ttl           = 21600;
-const char* S3fsCred::IAMv2_token_ttl_hdr       = "X-aws-ec2-metadata-token-ttl-seconds";
-const char* S3fsCred::IAMv2_token_hdr           = "X-aws-ec2-metadata-token";
+constexpr char S3fsCred::IAMv2_token_url[];
+constexpr char S3fsCred::IAMv2_token_ttl_hdr[];
+constexpr char S3fsCred::IAMv2_token_hdr[];
 
 std::string S3fsCred::bucket_name;
 
@@ -1186,7 +1184,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
 
 const char* S3fsCred::GetCredFuncVersion(bool detail) const
 {
-    static const char errVersion[] = "unknown";
+    static constexpr char errVersion[] = "unknown";
 
     if(!pFuncCredVersion){
         return errVersion;

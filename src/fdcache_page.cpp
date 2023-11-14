@@ -34,7 +34,7 @@
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-static const int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;    // Buffer size in PageList::CheckZeroAreaInFile()
+static constexpr int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;    // Buffer size in PageList::CheckZeroAreaInFile()
 
 //------------------------------------------------
 // fdpage_list_t utility

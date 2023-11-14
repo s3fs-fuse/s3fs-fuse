@@ -32,7 +32,6 @@
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
-const char SPACES[] = " \t\r\n";
 
 //-------------------------------------------------------------------
 // Functions
@@ -147,9 +146,9 @@ std::string peeloff(std::string s)
 //                   Therefore, it is a function to use as URL encoding
 //                   for use in query strings.
 //
-static const char* encode_general_except_chars = ".-_~";    // For general URL encode
-static const char* encode_path_except_chars    = ".-_~/";   // For fuse(included path) URL encode
-static const char* encode_query_except_chars   = ".-_~=&%"; // For query params(and encoded string)
+static constexpr char encode_general_except_chars[] = ".-_~";    // For general URL encode
+static constexpr char encode_path_except_chars[]    = ".-_~/";   // For fuse(included path) URL encode
+static constexpr char encode_query_except_chars[]   = ".-_~=&%"; // For query params(and encoded string)
 
 static std::string rawUrlEncode(const std::string &s, const char* except_chars)
 {
@@ -381,7 +380,7 @@ std::string s3fs_hex_upper(const unsigned char* input, size_t length)
 
 std::string s3fs_base64(const unsigned char* input, size_t length)
 {
-    static const char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    static constexpr char base[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
     std::string result;
     result.reserve(((length + 3 - 1) / 3) * 4 + 1);
@@ -460,7 +459,7 @@ std::string s3fs_decode64(const char* input, size_t input_len)
 
 // Base location for transform.  The range 0xE000 - 0xF8ff
 // is a private range, se use the start of this range.
-static const unsigned int escape_base = 0xe000;
+static constexpr unsigned int escape_base = 0xe000;
 
 // encode bytes into wobbly utf8.  
 // 'result' can be null. returns true if transform was needed.

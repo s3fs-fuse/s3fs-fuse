@@ -38,7 +38,7 @@
 //
 // The following symbols are used by FdManager::RawCheckAllCache().
 //
-#define CACHEDBG_FMT_DIR_PROB   "Directory: %s"
+// These must be #defines due to string literal concatenation.
 #define CACHEDBG_FMT_HEAD       "---------------------------------------------------------------------------\n" \
                                 "Check cache file and its stats file consistency at %s\n"                       \
                                 "---------------------------------------------------------------------------"
@@ -70,7 +70,7 @@
 // This process may not be complete, but it is easy way can
 // be realized.
 //
-#define NOCACHE_PATH_PREFIX_FORM    " __S3FS_UNEXISTED_PATH_%lx__ / "      // important space words for simply
+static constexpr char NOCACHE_PATH_PREFIX_FORM[] = " __S3FS_UNEXISTED_PATH_%lx__ / ";  // important space words for simply
 
 //------------------------------------------------
 // FdManager class variable

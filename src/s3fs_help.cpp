@@ -29,7 +29,7 @@
 //-------------------------------------------------------------------
 // Contents
 //-------------------------------------------------------------------
-static const char help_string[] = 
+static constexpr char help_string[] =
     "\n"
     "Mount an Amazon S3 bucket as a file system.\n"
     "\n"
@@ -638,7 +638,7 @@ void show_version()
 
 const char* short_version()
 {
-    static const char short_ver[] = "s3fs version " VERSION "(" COMMIT_HASH_VAL ")";
+    static constexpr char short_ver[] = "s3fs version " VERSION "(" COMMIT_HASH_VAL ")";
     return short_ver;
 }
 

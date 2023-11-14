@@ -444,11 +444,6 @@ void print_launch_message(int argc, char** argv)
     S3FS_PRN_LAUNCH_INFO("%s", message.c_str());
 }
 
-//-------------------------------------------------------------------
-// Utility for nanosecond time(timespec)
-//-------------------------------------------------------------------
-const struct timespec S3FS_OMIT_TS = {0, UTIME_OMIT};
-
 //
 // result: -1  ts1 <  ts2
 //          0  ts1 == ts2

@@ -193,9 +193,9 @@ class S3fsCurl
         CURLcode             curlCode;             // handle curl return
 
     public:
-        static const long S3FSCURL_RESPONSECODE_NOTSET      = -1;
-        static const long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
-        static const int  S3FSCURL_PERFORM_RESULT_NOTSET    = 1;
+        static constexpr long S3FSCURL_RESPONSECODE_NOTSET      = -1;
+        static constexpr long S3FSCURL_RESPONSECODE_FATAL_ERROR = -2;
+        static constexpr int  S3FSCURL_PERFORM_RESULT_NOTSET    = 1;
 
     public:
         // constructor/destructor
