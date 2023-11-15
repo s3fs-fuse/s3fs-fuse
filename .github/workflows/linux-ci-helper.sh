@@ -66,8 +66,8 @@ AWSCLI_ZIP_FILE="awscliv2.zip"
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
-# shellcheck disable=SC2089
-CONFIGURE_OPTIONS="CXXFLAGS='-O -std=c++03 -DS3FS_PTHREAD_ERRORCHECK=1' --prefix=/usr --with-openssl"
+CXXFLAGS="-O -DS3FS_PTHREAD_ERRORCHECK=1"
+CONFIGURE_OPTIONS="--prefix=/usr --with-openssl"
 
 #-----------------------------------------------------------
 # OS dependent variables
@@ -290,8 +290,8 @@ fi
 #-----------------------------------------------------------
 echo "${PRGNAME} [INFO] Set environment for configure options"
 
-# shellcheck disable=SC2090
-export CONFIGURE_OPTIONS
+echo "CXXFLAGS=${CXXFLAGS}"                   >> "${GITHUB_ENV}"
+echo "CONFIGURE_OPTIONS=${CONFIGURE_OPTIONS}" >> "${GITHUB_ENV}"
 
 echo "${PRGNAME} [INFO] Finish Linux helper for installing packages."
 
