@@ -2260,54 +2260,54 @@ function test_not_existed_dir_obj() {
     # Top directory
     # shellcheck disable=SC2010
     if ! ls -1 | grep -q '^not_existed_dir_single$'; then
-    echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 | grep -q '^not_existed_dir_parent$'; then
-    echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+        return 1
     fi
 
     # Single nest directory
     if ! stat not_existed_dir_single; then
-    echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_single\" directory, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 not_existed_dir_single | grep -q "^${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 "not_existed_dir_single/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_single/${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_single/${TEST_TEXT_FILE}\" file, but it is not found"
+        return 1
     fi
 
     # Double nest directory
     if ! stat not_existed_dir_parent; then
-    echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent\" directory, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 not_existed_dir_parent | grep -q '^not_existed_dir_child'; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+        return 1
     fi
     if ! stat not_existed_dir_parent/not_existed_dir_child; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child\" directory, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 not_existed_dir_parent/not_existed_dir_child | grep -q "^${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+        return 1
     fi
     # shellcheck disable=SC2010
     if ! ls -1 "not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}" | grep -q "^not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\$"; then
-    echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
-    return 1;
+        echo "Expect to find \"not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}\" directory, but it is not found"
+        return 1
     fi
 
     rm -rf not_existed_dir_single
