@@ -1059,6 +1059,9 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
                 stbuf->st_size = tmpstbuf.st_size;
             }
         }
+        if(0 == strcmp(path, "/")){
+            stbuf->st_size = 4096;
+        }
         stbuf->st_blksize = 4096;
         stbuf->st_blocks  = get_blocks(stbuf->st_size);
 

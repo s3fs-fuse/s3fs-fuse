@@ -804,7 +804,11 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
     }
 
     // size
-    pst->st_size = get_size(meta);
+    if(S_ISDIR(pst->st_mode)){
+        pst->st_size = 4096;
+    }else{
+        pst->st_size = get_size(meta);
+    }
 
     // uid/gid
     pst->st_uid = get_uid(meta);
