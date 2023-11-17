@@ -18,10 +18,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <errno.h>
 #include <memory>
 #include <unistd.h>
 #include <fstream>

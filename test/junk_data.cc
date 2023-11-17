@@ -20,9 +20,9 @@
 
 // Generate junk data at high speed.  An alternative to dd if=/dev/urandom.
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 int main(int argc, const char *argv[])
 {

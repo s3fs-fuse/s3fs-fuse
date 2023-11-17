@@ -18,10 +18,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <errno.h>
-#include <stdint.h>
 
 #include "s3fs_logger.h"
 #include "threadpoolman.h"
