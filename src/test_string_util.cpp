@@ -18,9 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
-#include <stdint.h>
 #include <string>
 
 #include "s3fs_logger.h"

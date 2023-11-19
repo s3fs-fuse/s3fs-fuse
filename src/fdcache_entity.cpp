@@ -18,12 +18,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <cerrno>
+#include <climits>
 #include <memory>
 #include <unistd.h>
-#include <limits.h>
 #include <sys/stat.h>
 
 #include "common.h"

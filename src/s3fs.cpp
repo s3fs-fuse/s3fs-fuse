@@ -19,9 +19,9 @@
  */
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <errno.h>
 #include <memory>
 #include <set>
 #include <unistd.h>
