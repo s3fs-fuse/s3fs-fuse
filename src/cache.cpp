@@ -338,21 +338,17 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     }
     S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
-    bool found;
-    bool do_truncate;
-    {
-        AutoLock lock(&StatCache::stat_cache_lock);
-        found       = stat_cache.end() != stat_cache.find(key);
-        do_truncate = stat_cache.size() > CacheSize;
-    }
+    AutoLock lock(&StatCache::stat_cache_lock);
 
-    if(found){
-        DelStat(key.c_str());
+    if(stat_cache.end() != stat_cache.find(key)){
+        // found cache
+        DelStat(key.c_str(), AutoLock::ALREADY_LOCKED);
     }else{
-        if(do_truncate){
+        // check: need to truncate cache
+        if(stat_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache()){
+            if(!TruncateCache(AutoLock::ALREADY_LOCKED)){
                 return false;
             }
         }
@@ -386,9 +382,6 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
         }
     }
 
-    // add
-    AutoLock lock(&StatCache::stat_cache_lock);
-
     const auto& value = stat_cache[key] = std::move(ent);
 
     // check symbolic link cache
@@ -398,6 +391,13 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
             DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
         }
     }
+
+    // If no_truncate flag is set, set file name to notruncate_file_cache
+    //
+    if(no_truncate){
+        AddNotruncateCache(key);
+    }
+
     return true;
 }
 
@@ -458,21 +458,17 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
     S3FS_PRN_INFO3("add no object cache entry[path=%s]", key.c_str());
 
-    bool found;
-    bool do_truncate;
-    {
-        AutoLock lock(&StatCache::stat_cache_lock);
-        found       = stat_cache.end() != stat_cache.find(key);
-        do_truncate = stat_cache.size() > CacheSize;
-    }
+    AutoLock lock(&StatCache::stat_cache_lock);
 
-    if(found){
-        DelStat(key.c_str());
+    if(stat_cache.end() != stat_cache.find(key)){
+		// found
+        DelStat(key.c_str(), AutoLock::ALREADY_LOCKED);
     }else{
-        if(do_truncate){
+        // check: need to truncate cache
+        if(stat_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache()){
+            if(!TruncateCache(AutoLock::ALREADY_LOCKED)){
                 return false;
             }
         }
@@ -487,9 +483,6 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     ent.notruncate = 0L;
     ent.meta.clear();
     SetStatCacheTime(ent.cache_date);    // Set time.
-
-    // add
-    AutoLock lock(&StatCache::stat_cache_lock);
 
     stat_cache[key] = std::move(ent);
 
@@ -509,18 +502,26 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
     if(stat_cache.end() != iter){
         stat_cache_entry* ent = &iter->second;
         if(no_truncate){
+            if(0L == ent->notruncate){
+                // need to add no truncate cache.
+                AddNotruncateCache(key);
+            }
             ++(ent->notruncate);
         }else{
             if(0L < ent->notruncate){
                 --(ent->notruncate);
+                if(0L == ent->notruncate){
+                    // need to delete from no truncate cache.
+                    DelNotruncateCache(key);
+                }
             }
         }
     }
 }
 
-bool StatCache::TruncateCache()
+bool StatCache::TruncateCache(AutoLock::Type locktype)
 {
-    AutoLock lock(&StatCache::stat_cache_lock);
+    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     if(stat_cache.empty()){
         return true;
@@ -588,6 +589,7 @@ bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
     stat_cache_t::iterator iter;
     if(stat_cache.end() != (iter = stat_cache.find(key))){
         stat_cache.erase(iter);
+        DelNotruncateCache(key);
     }
     if(0 < strlen(key) && 0 != strcmp(key, "/")){
         std::string strpath = key;
@@ -600,6 +602,7 @@ bool StatCache::DelStat(const char* key, AutoLock::Type locktype)
         }
         if(stat_cache.end() != (iter = stat_cache.find(strpath))){
             stat_cache.erase(iter);
+            DelNotruncateCache(strpath);
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -648,21 +651,17 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     }
     S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
 
-    bool found;
-    bool do_truncate;
-    {
-        AutoLock lock(&StatCache::stat_cache_lock);
-        found       = symlink_cache.end() != symlink_cache.find(key);
-        do_truncate = symlink_cache.size() > CacheSize;
-    }
+    AutoLock lock(&StatCache::stat_cache_lock);
 
-    if(found){
-        DelSymlink(key.c_str());
+    if(symlink_cache.end() != symlink_cache.find(key)){
+    	// found
+        DelSymlink(key.c_str(), AutoLock::ALREADY_LOCKED);
     }else{
-        if(do_truncate){
+        // check: need to truncate cache
+        if(symlink_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateSymlink()){
+            if(!TruncateSymlink(AutoLock::ALREADY_LOCKED)){
                 return false;
             }
         }
@@ -674,17 +673,14 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     ent.hit_count  = 0;
     SetStatCacheTime(ent.cache_date);    // Set time(use the same as Stats).
 
-    // add
-    AutoLock lock(&StatCache::stat_cache_lock);
-
     symlink_cache[key] = std::move(ent);
 
     return true;
 }
 
-bool StatCache::TruncateSymlink()
+bool StatCache::TruncateSymlink(AutoLock::Type locktype)
 {
-    AutoLock lock(&StatCache::stat_cache_lock);
+    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     if(symlink_cache.empty()){
         return true;
@@ -743,6 +739,116 @@ bool StatCache::DelSymlink(const char* key, AutoLock::Type locktype)
     }
     S3FS_MALLOCTRIM(0);
 
+    return true;
+}
+
+// [NOTE]
+// Need to lock StatCache::stat_cache_lock before calling this method.
+//
+bool StatCache::AddNotruncateCache(const std::string& key)
+{
+    if(key.empty() || '/' == *key.rbegin()){
+        return false;
+    }
+
+    std::string parentdir = mydirname(key);
+    std::string filename  = mybasename(key);
+    if(parentdir.empty() || filename.empty()){
+        return false;
+    }
+    parentdir += '/';       // directory path must be '/' termination.
+
+    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(parentdir);
+    if(iter == notruncate_file_cache.end()){
+        // add new list
+        notruncate_filelist_t list;
+        list.push_back(filename);
+        notruncate_file_cache[parentdir] = list;
+    }else{
+        // add filename to existed list
+        notruncate_filelist_t& filelist = iter->second;
+        notruncate_filelist_t::const_iterator fiter = std::find(filelist.begin(), filelist.end(), filename);
+        if(fiter == filelist.end()){
+            filelist.push_back(filename);
+        }
+    }
+    return true;
+}
+
+// [NOTE]
+// Need to lock StatCache::stat_cache_lock before calling this method.
+//
+bool StatCache::DelNotruncateCache(const std::string& key)
+{
+    if(key.empty() || '/' == *key.rbegin()){
+        return false;
+    }
+
+    std::string parentdir = mydirname(key);
+    std::string filename  = mybasename(key);
+    if(parentdir.empty() || filename.empty()){
+        return false;
+    }
+    parentdir += '/';       // directory path must be '/' termination.
+
+    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(parentdir);
+    if(iter != notruncate_file_cache.end()){
+        // found directory in map
+        notruncate_filelist_t& filelist = iter->second;
+        notruncate_filelist_t::iterator fiter = std::find(filelist.begin(), filelist.end(), filename);
+        if(fiter != filelist.end()){
+            // found filename in directory file list
+            filelist.erase(fiter);
+            if(filelist.empty()){
+                notruncate_file_cache.erase(parentdir);
+            }
+        }
+    }
+    return true;
+}
+
+// [Background]
+// When s3fs creates a new file, the file does not exist until the file contents
+// are uploaded.(because it doesn't create a 0 byte file)
+// From the time this file is created(opened) until it is uploaded(flush), it
+// will have a Stat cache with the No truncate flag added.
+// This avoids file not existing errors in operations such as chmod and utimens
+// that occur in the short period before file upload.
+// Besides this, we also need to support readdir(list_bucket), this method is
+// called to maintain the cache for readdir and return its value.
+//
+// [NOTE]
+// Add the file names under parentdir to the list.
+// However, if the same file name exists in the list, it will not be added.
+// parentdir must be terminated with a '/'.
+//
+bool StatCache::GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list)
+{
+    if(parentdir.empty()){
+        return false;
+    }
+
+    std::string dirpath = parentdir;
+    if('/' != *dirpath.rbegin()){
+        dirpath += '/';
+    }
+
+    AutoLock lock(&StatCache::stat_cache_lock);
+
+    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(dirpath);
+    if(iter == notruncate_file_cache.end()){
+        // not found directory map
+        return true;
+    }
+
+    // found directory in map
+    const notruncate_filelist_t& filelist = iter->second;
+    for(notruncate_filelist_t::const_iterator fiter = filelist.begin(); fiter != filelist.end(); ++fiter){
+        if(list.end() == std::find(list.begin(), list.end(), *fiter)){
+           // found notuncate file that does not exist in the list, so add it.
+           list.push_back(*fiter);
+        }
+    }
     return true;
 }
 

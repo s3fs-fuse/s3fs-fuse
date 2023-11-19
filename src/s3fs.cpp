@@ -1742,8 +1742,9 @@ static int rename_directory(const char* from, const char* to)
         S3FS_PRN_ERR("list_bucket returns error.");
         return result; 
     }
-    head.GetNameList(headlist);                       // get name without "/".
-    S3ObjList::MakeHierarchizedList(headlist, false); // add hierarchized dir.
+    head.GetNameList(headlist);                                             // get name without "/".
+    StatCache::getStatCacheData()->GetNotruncateCache(basepath, headlist);  // Add notruncate file name from stat cache
+    S3ObjList::MakeHierarchizedList(headlist, false);                       // add hierarchized dir.
 
     s3obj_list_t::const_iterator liter;
     for(liter = headlist.begin(); headlist.end() != liter; ++liter){
@@ -3271,7 +3272,8 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
 
     // Make base path list.
-    head.GetNameList(headlist, true, false);  // get name with "/".
+    head.GetNameList(headlist, true, false);                                        // get name with "/".
+    StatCache::getStatCacheData()->GetNotruncateCache(std::string(path), headlist); // Add notruncate file name from stat cache
 
     // Initialize S3fsMultiCurl
     curlmulti.SetSuccessCallback(multi_head_callback);
