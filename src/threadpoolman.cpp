@@ -53,13 +53,13 @@ void ThreadPoolMan::Destroy()
     }
 }
 
-bool ThreadPoolMan::Instruct(thpoolman_param* pparam)
+bool ThreadPoolMan::Instruct(std::unique_ptr<thpoolman_param> pparam)
 {
     if(!ThreadPoolMan::singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
-    return ThreadPoolMan::singleton->SetInstruction(pparam);
+    return ThreadPoolMan::singleton->SetInstruction(std::move(pparam));
 }
 
 //
@@ -84,12 +84,12 @@ void* ThreadPoolMan::Worker(void* arg)
         }
 
         // get instruction
-        thpoolman_param* pparam;
+        std::unique_ptr<thpoolman_param> pparam;
         {
             AutoLock auto_lock(&(psingleton->thread_list_lock));
 
             if(!psingleton->instruction_list.empty()){
-                pparam = psingleton->instruction_list.front();
+                pparam = std::move(psingleton->instruction_list.front());
                 psingleton->instruction_list.pop_front();
                 if(!pparam){
                     S3FS_PRN_WARN("Got a semaphore, but the instruction is empty.");
@@ -108,7 +108,6 @@ void* ThreadPoolMan::Worker(void* arg)
             if(pparam->psem){
                 pparam->psem->post();
             }
-            delete pparam;
         }
     }
 
@@ -218,13 +217,6 @@ bool ThreadPoolMan::StopThreads()
     while(thpoolman_sem.try_wait()){
     }
 
-    // clear instructions
-    for(thpoolman_params_t::const_iterator iter = instruction_list.begin(); iter != instruction_list.end(); ++iter){
-        thpoolman_param* pparam = *iter;
-        delete pparam;
-    }
-    instruction_list.clear();
-
     return true;
 }
 
@@ -259,7 +251,7 @@ bool ThreadPoolMan::StartThreads(int count)
     return true;
 }
 
-bool ThreadPoolMan::SetInstruction(thpoolman_param* pparam)
+bool ThreadPoolMan::SetInstruction(std::unique_ptr<thpoolman_param> pparam)
 {
     if(!pparam){
         S3FS_PRN_ERR("The parameter value is nullptr.");
@@ -269,7 +261,7 @@ bool ThreadPoolMan::SetInstruction(thpoolman_param* pparam)
     // set parameter to list
     {
         AutoLock auto_lock(&thread_list_lock);
-        instruction_list.push_back(pparam);
+        instruction_list.push_back(std::move(pparam));
     }
 
     // run thread
