@@ -40,12 +40,6 @@
 #include <sys/xattr.h>
 #endif
 
-#if __cplusplus < 201103L
-  #define OPERATOR_EXPLICIT
-#else
-  #define OPERATOR_EXPLICIT     explicit
-#endif
-
 //-------------------------------------------------------------------
 // xattrs_t
 //-------------------------------------------------------------------
