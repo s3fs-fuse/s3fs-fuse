@@ -23,7 +23,6 @@
 #include <cerrno>
 #include <climits>
 #include <iomanip>
-
 #include <sstream>
 
 #include "s3fs_logger.h"
@@ -46,24 +45,6 @@ std::string str(const struct timespec value)
     }
     return s.str();
 }
-
-#ifdef __MSYS__
-/*
- * Polyfill for strptime function
- *
- * This source code is from https://gist.github.com/jeremyfromearth/5694aa3a66714254752179ecf3c95582 .
- */
-char* strptime(const char* s, const char* f, struct tm* tm)
-{
-    std::istringstream input(s);
-    input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
-    input >> std::get_time(tm, f);
-    if (input.fail()) {
-        return nullptr;
-    }
-    return (char*)(s + input.tellg());
-}
-#endif
 
 bool s3fs_strtoofft(off_t* value, const char* str, int base)
 {
@@ -259,11 +240,11 @@ bool get_keyword_value(const std::string& target, const char* keyword, std::stri
 //
 std::string get_date_rfc850()
 {
-    char buf[100];
+    std::ostringstream ss;
     time_t t = time(nullptr);
     struct tm res;
-    strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", gmtime_r(&t, &res));
-    return buf;
+    ss << std::put_time(gmtime_r(&t, &res), "%a, %d %b %Y %H:%M:%S GMT");
+    return ss.str();
 }
 
 void get_date_sigv3(std::string& date, std::string& date8601)
@@ -275,18 +256,18 @@ void get_date_sigv3(std::string& date, std::string& date8601)
 
 std::string get_date_string(time_t tm)
 {
-    char buf[100];
+    std::ostringstream ss;
     struct tm res;
-    strftime(buf, sizeof(buf), "%Y%m%d", gmtime_r(&tm, &res));
-    return buf;
+    ss << std::put_time(gmtime_r(&tm, &res), "%Y%m%d");
+    return ss.str();
 }
 
 std::string get_date_iso8601(time_t tm)
 {
-    char buf[100];
+    std::ostringstream s;
     struct tm res;
-    strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", gmtime_r(&tm, &res));
-    return buf;
+    s << std::put_time(gmtime_r(&tm, &res), "%Y%m%dT%H%M%SZ");
+    return s.str();
 }
 
 bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
@@ -296,8 +277,9 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
     }
 
     struct tm tm;
-    const char* prest = strptime(pdate, "%Y-%m-%dT%T", &tm);
-    if(prest == pdate){
+    std::istringstream ss(pdate);
+    ss >> std::get_time(&tm, "%Y-%m-%dT%T");
+    if(ss.fail()){
         // wrong format
         return false;
     }
