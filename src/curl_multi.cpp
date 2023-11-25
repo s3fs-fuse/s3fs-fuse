@@ -115,7 +115,7 @@ void* S3fsMultiCurl::SetNotFoundCallbackParam(void* param)
     return old;
 }
 
-bool S3fsMultiCurl::SetS3fsCurlObject(std::unique_ptr<S3fsCurl>&& s3fscurl)
+bool S3fsMultiCurl::SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl)
 {
     if(!s3fscurl){
         return false;
