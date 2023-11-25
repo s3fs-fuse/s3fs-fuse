@@ -96,6 +96,9 @@ jobs:
 
       - name: Build
         run: |
+          if [ -f /opt/rh/devtoolset-11/enable ]; then
+            source /opt/rh/devtoolset-11/enable
+          fi
           ./autogen.sh
           /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
           make --jobs=$(nproc)

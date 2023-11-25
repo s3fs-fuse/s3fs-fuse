@@ -79,6 +79,7 @@ PACKAGE_ENABLE_REPO_OPTIONS=""
 PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
 SHELLCHECK_DIRECT_INSTALL=0
 AWSCLI_DIRECT_INSTALL=1
+SCL_INSTALL=0
 
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:23.10" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
@@ -183,6 +184,15 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     INSTALL_CHECKER_PKGS="cppcheck jq"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
+    # [NOTE]
+    # To use C++11 std::get_time/put_time, you need GCC5 or higher.
+    # For building, we need to use devtoolset on CentOS 7.
+    # (devtoolset is not required in the s3fs execution.)
+    #
+    SCL_INSTALL=1
+    INSTALL_SCL_PACKAGES="centos-release-scl"
+    INSTALL_DEVTOOLSET_PACKAGES="devtoolset-11"
+
 elif [ "${CONTAINER_FULLNAME}" = "fedora:39" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
@@ -234,6 +244,15 @@ fi
 #
 echo "${PRGNAME} [INFO] Updates."
 /bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_UPDATE_OPTIONS}"
+
+#
+# Install SCL and devtoolset for CentOS 7
+#
+if [ "${SCL_INSTALL}" -eq 1 ]; then
+    echo "${PRGNAME} [INFO] SCL and devtoolset for CentOS 7."
+    /bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_INSTALL_OPTIONS} ${INSTALL_SCL_PACKAGES}"
+    /bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_INSTALL_OPTIONS} ${INSTALL_DEVTOOLSET_PACKAGES}"
+fi
 
 #
 # Install packages ( with cppcheck )
