@@ -74,7 +74,7 @@ class S3fsMultiCurl
         void* SetSuccessCallbackParam(void* param);
         void* SetNotFoundCallbackParam(void* param);
         bool Clear() { return ClearEx(true); }
-        bool SetS3fsCurlObject(std::unique_ptr<S3fsCurl>&& s3fscurl);
+        bool SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl);
         int Request();
 };
 
