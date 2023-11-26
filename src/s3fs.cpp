@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -205,15 +206,13 @@ static int s3fs_removexattr(const char* path, const char* name);
 class MpStatFlag
 {
     private:
-        mutable pthread_mutex_t flag_lock;
-        bool                    is_lock_init = false;
-        bool                    has_mp_stat = false;
+        std::atomic<bool>       has_mp_stat;
 
     public:
-        MpStatFlag();
+        MpStatFlag() = default;
         MpStatFlag(const MpStatFlag&) = delete;
         MpStatFlag(MpStatFlag&&) = delete;
-        ~MpStatFlag();
+        ~MpStatFlag() = default;
         MpStatFlag& operator=(const MpStatFlag&) = delete;
         MpStatFlag& operator=(MpStatFlag&&) = delete;
 
@@ -221,46 +220,14 @@ class MpStatFlag
         bool Set(bool flag);
 };
 
-MpStatFlag::MpStatFlag()
-{
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-
-    int result;
-    if(0 != (result = pthread_mutex_init(&flag_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init flag_lock: %d", result);
-        abort();
-    }
-    is_lock_init = true;
-}
-
-MpStatFlag::~MpStatFlag()
-{
-    if(is_lock_init){
-        int result;
-        if(0 != (result = pthread_mutex_destroy(&flag_lock))){
-            S3FS_PRN_CRIT("failed to destroy flag_lock: %d", result);
-            abort();
-        }
-        is_lock_init = false;
-    }
-}
-
 bool MpStatFlag::Get()
 {
-    AutoLock auto_lock(&flag_lock);
     return has_mp_stat;
 }
 
 bool MpStatFlag::Set(bool flag)
 {
-    AutoLock auto_lock(&flag_lock);
-    bool old    = has_mp_stat;
-    has_mp_stat = flag;
-    return old;
+    return has_mp_stat.exchange(flag);
 }
 
 // whether the stat information file for mount point exists
