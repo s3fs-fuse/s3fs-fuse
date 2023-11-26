@@ -85,7 +85,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:23.10" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
