@@ -54,14 +54,15 @@ std::string S3fsLog::GetCurrentTime()
         struct timeval  now;
         struct timespec tsnow;
         struct tm res;
+        char   tmp[32];
         if(-1 == clock_gettime(S3FS_CLOCK_MONOTONIC, &tsnow)){
             now.tv_sec  = tsnow.tv_sec;
             now.tv_usec = (tsnow.tv_nsec / 1000);
         }else{
             gettimeofday(&now, nullptr);
         }
-        current_time << std::put_time(gmtime_r(&now.tv_sec, &res), "%Y-%m-%dT%H:%M:%S")
-                     << "." << std::setfill('0') << std::setw(3) << (now.tv_usec / 1000) << "Z ";
+        strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%S", gmtime_r(&now.tv_sec, &res));
+        current_time << tmp << "." << std::setfill('0') << std::setw(3) << (now.tv_usec / 1000) << "Z ";
     }
     return current_time.str();
 }
