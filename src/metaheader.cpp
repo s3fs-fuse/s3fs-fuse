@@ -19,8 +19,6 @@
  */
 
 #include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -256,8 +254,8 @@ time_t cvtIAMExpireStringToTime(const char* s)
     if(!s){
         return 0L;
     }
-    std::istringstream ss(s);
-    ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+    memset(&tm, 0, sizeof(struct tm));
+    strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
     return timegm(&tm); // GMT
 }
 
@@ -267,8 +265,8 @@ time_t get_lastmodified(const char* s)
     if(!s){
         return -1;
     }
-    std::istringstream ss(s);
-    ss >> std::get_time(&tm, "%a, %d %b %Y %H:%M:%S %Z");
+    memset(&tm, 0, sizeof(struct tm));
+    strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
     return timegm(&tm); // GMT
 }
 
