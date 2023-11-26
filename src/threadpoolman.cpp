@@ -117,7 +117,7 @@ void* ThreadPoolMan::Worker(void* arg)
 //------------------------------------------------
 // ThreadPoolMan methods
 //------------------------------------------------
-ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_lock_init(false), is_exit_flag_init(false)
+ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_lock_init(false)
 {
     if(count < 1){
         S3FS_PRN_CRIT("Failed to creating singleton for Thread Manager, because thread count(%d) is under 1.", count);
@@ -141,12 +141,6 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_l
     }
     is_lock_init = true;
 
-    if(0 != (result = pthread_mutex_init(&thread_exit_flag_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init thread_exit_flag_lock: %d", result);
-        abort();
-    }
-    is_exit_flag_init = true;
-
     // create threads
     if(!StartThreads(count)){
         S3FS_PRN_ERR("Failed starting threads at initializing.");
@@ -166,25 +160,15 @@ ThreadPoolMan::~ThreadPoolMan()
         }
         is_lock_init = false;
     }
-    if(is_exit_flag_init ){
-        int result;
-        if(0 != (result = pthread_mutex_destroy(&thread_exit_flag_lock))){
-            S3FS_PRN_CRIT("failed to destroy thread_exit_flag_lock: %d", result);
-            abort();
-        }
-        is_exit_flag_init  = false;
-    }
 }
 
 bool ThreadPoolMan::IsExit() const
 {
-    AutoLock auto_lock(&thread_exit_flag_lock);
     return is_exit;
 }
 
 void ThreadPoolMan::SetExitFlag(bool exit_flag)
 {
-    AutoLock auto_lock(&thread_exit_flag_lock);
     is_exit = exit_flag;
 }
 
