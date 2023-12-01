@@ -24,10 +24,12 @@
 #include <curl/curl.h>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include "autolock.h"
 #include "metaheader.h"
+#include "mutex.h"
 #include "fdcache_page.h"
 
 //----------------------------------------------
@@ -113,7 +115,7 @@ class S3fsCurl
         // class variables
         static pthread_mutex_t  curl_warnings_lock;
         static bool             curl_warnings_once;  // emit older curl warnings only once
-        static pthread_mutex_t  curl_handles_lock;
+        static Mutex            curl_handles_lock;
         static struct callback_locks_t {
             pthread_mutex_t dns;
             pthread_mutex_t ssl_session;
@@ -139,8 +141,8 @@ class S3fsCurl
         static bool             is_dump_body;
         static S3fsCred*        ps3fscred;
         static long             ssl_verify_hostname;
-        static curltime_t       curl_times;
-        static curlprogress_t   curl_progress;
+        static curltime_t       curl_times GUARDED_BY(curl_handles_lock);
+        static curlprogress_t   curl_progress GUARDED_BY(curl_handles_lock);
         static std::string      curl_ca_bundle;
         static mimes_t          mimeTypes;
         static std::string      userAgent;
@@ -249,7 +251,7 @@ class S3fsCurl
         static int RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
         // methods
-        bool ResetHandle(AutoLock::Type locktype = AutoLock::NONE);
+        bool ResetHandle() REQUIRES(S3fsCurl::curl_handles_lock);
         bool RemakeHandle();
         bool ClearInternalData();
         void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
@@ -343,7 +345,8 @@ class S3fsCurl
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
-        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true, AutoLock::Type locktype = AutoLock::NONE);
+        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
+        bool DestroyCurlHandleUnlocked(bool restore_pool = true, bool clear_internal_data = true) REQUIRES(S3fsCurl::curl_handles_lock);
 
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
