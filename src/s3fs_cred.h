@@ -58,7 +58,7 @@ class S3fsCred
 
         static std::string  bucket_name;
 
-        mutable std::mutex token_lock;
+        mutable Mutex token_lock;
 
         std::string         passwd_file;
         std::string         aws_profile;

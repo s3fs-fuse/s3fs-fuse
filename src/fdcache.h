@@ -31,12 +31,13 @@
 //------------------------------------------------
 class FdManager
 {
+  public:
+      static Mutex           fd_manager_lock;
   private:
       static FdManager       singleton;
-      static std::mutex      fd_manager_lock;
-      static std::mutex      cache_cleanup_lock;
-      static std::mutex      reserved_diskspace_lock;
-      static std::mutex      except_entmap_lock;
+      static Mutex           cache_cleanup_lock;
+      static Mutex           reserved_diskspace_lock;
+      static Mutex           except_entmap_lock;
       static std::string     cache_dir;
       static bool            check_cache_dir_exist;
       static off_t           free_disk_space;       // limit free disk space
@@ -100,7 +101,7 @@ class FdManager
 
       // Return FdEntity associated with path, returning nullptr on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true) {
-          const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+          const MutexLocker lock(FdManager::fd_manager_lock);
           return GetFdEntityHasLock(path, existfd, newfd);
       }
       FdEntity* GetFdEntityHasLock(const char* path, int& existfd, bool newfd = true) REQUIRES(FdManager::fd_manager_lock);

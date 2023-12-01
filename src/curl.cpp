@@ -84,7 +84,7 @@ static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.typ
 //-------------------------------------------------------------------
 constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
 std::mutex       S3fsCurl::curl_warnings_lock;
-std::mutex       S3fsCurl::curl_handles_lock;
+Mutex            S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
 CurlHandlerPool* S3fsCurl::sCurlPool           = nullptr;
@@ -315,7 +315,7 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
     time_t     now = time(nullptr);
     progress_t p(dlnow, ulnow);
 
-    const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
+    const MutexLocker auto_lock(S3fsCurl::curl_handles_lock);
 
     // any progress?
     if(p != S3fsCurl::curl_progress[curl]){
@@ -2093,7 +2093,7 @@ bool S3fsCurl::ResetHandle()
 
 bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
 {
-    const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
+    const MutexLocker auto_lock(S3fsCurl::curl_handles_lock);
 
     if(hCurl && remake){
         if(!DestroyCurlHandleHasLock(false, true)){
@@ -2123,7 +2123,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
 
 bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data)
 {
-    const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
+    const MutexLocker auto_lock(S3fsCurl::curl_handles_lock);
     return DestroyCurlHandleHasLock(restore_pool, clear_internal_data);
 }
 
@@ -2256,7 +2256,7 @@ bool S3fsCurl::RemakeHandle()
 
     // reset handle
     {
-        const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
+        const MutexLocker auto_lock(S3fsCurl::curl_handles_lock);
         ResetHandle();
     }
 
@@ -2694,7 +2694,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
                 sleep(4);
                 {
-                    const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
+                    const MutexLocker auto_lock(S3fsCurl::curl_handles_lock);
                     S3fsCurl::curl_times[hCurl] = time(nullptr);
                 }
                 break; 

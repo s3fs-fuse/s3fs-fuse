@@ -464,7 +464,7 @@ bool S3fsCred::LoadIAMCredentials()
 //
 bool S3fsCred::LoadIAMRoleFromMetaData()
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
+    const MutexLocker lock(token_lock);
 
     if(load_iamrole){
         // url(not check iam role)
@@ -1094,7 +1094,7 @@ bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
 
 bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string* secret_access_key, std::string* access_token)
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
+    const MutexLocker lock(token_lock);
 
     if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole()){
         if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGING)){
@@ -1352,7 +1352,7 @@ bool S3fsCred::UpdateExtCredentials()
 //
 int S3fsCred::DetectParam(const char* arg)
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
+    const MutexLocker lock(token_lock);
 
     if(!arg){
         S3FS_PRN_EXIT("parameter arg is empty(null)");
@@ -1502,7 +1502,7 @@ bool S3fsCred::CheckForbiddenBucketParams()
 //
 bool S3fsCred::CheckAllParams()
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
+    const MutexLocker lock(token_lock);
     //
     // Checking forbidden parameters for bucket
     //

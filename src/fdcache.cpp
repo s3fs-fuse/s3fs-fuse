@@ -75,10 +75,10 @@ static constexpr char NOCACHE_PATH_PREFIX_FORM[] = " __S3FS_UNEXISTED_PATH_%lx__
 // FdManager class variable
 //------------------------------------------------
 FdManager       FdManager::singleton;
-std::mutex      FdManager::fd_manager_lock;
-std::mutex      FdManager::cache_cleanup_lock;
-std::mutex      FdManager::reserved_diskspace_lock;
-std::mutex      FdManager::except_entmap_lock;
+Mutex           FdManager::fd_manager_lock;
+Mutex           FdManager::cache_cleanup_lock;
+Mutex           FdManager::reserved_diskspace_lock;
+Mutex           FdManager::except_entmap_lock;
 std::string     FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
@@ -239,13 +239,13 @@ bool FdManager::CheckCacheDirExist()
 
 off_t FdManager::GetEnsureFreeDiskSpace()
 {
-    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
+    const MutexLocker lock(FdManager::reserved_diskspace_lock);
     return FdManager::free_disk_space;
 }
 
 off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
+    const MutexLocker lock(FdManager::reserved_diskspace_lock);
     off_t old = FdManager::free_disk_space;
     FdManager::free_disk_space = size;
     return old;
@@ -428,7 +428,7 @@ FILE* FdManager::MakeTempFile() {
 
 bool FdManager::HasOpenEntityFd(const char* path)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     const FdEntity* ent;
     int         fd = -1;
@@ -443,7 +443,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 //
 int FdManager::GetOpenFdCount(const char* path)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     return FdManager::singleton.GetPseudoFdCount(path);
 }
@@ -536,7 +536,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         return nullptr;
     }
 
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     UpdateEntityToTempPath();
 
@@ -624,7 +624,7 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     UpdateEntityToTempPath();
 
@@ -679,7 +679,7 @@ int FdManager::GetPseudoFdCount(const char* path)
 
 void FdManager::Rename(const std::string &from, const std::string &to)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     UpdateEntityToTempPath();
 
@@ -725,7 +725,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
     if(!ent || -1 == fd){
         return true;  // returns success
     }
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const MutexLocker lock(FdManager::fd_manager_lock);
 
     UpdateEntityToTempPath();
 
@@ -753,7 +753,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
 
 bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
+    const MutexLocker lock(FdManager::except_entmap_lock);
     except_fent[path] = ent;
     return true;
 }
@@ -763,7 +763,7 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 //
 bool FdManager::UpdateEntityToTempPath()
 {
-    const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
+    const MutexLocker lock(FdManager::except_entmap_lock);
 
     for(fdent_direct_map_t::iterator except_iter = except_fent.begin(); except_iter != except_fent.end(); ){
         std::string tmppath;
@@ -801,15 +801,15 @@ void FdManager::CleanupCacheDir()
         return;
     }
 
-    if(FdManager::cache_cleanup_lock.try_lock()){
+    if(FdManager::cache_cleanup_lock.TryLock()){
         //S3FS_PRN_DBG("cache cleanup started");
         CleanupCacheDirInternal("");
         //S3FS_PRN_DBG("cache cleanup ended");
     }else{
         // wait for other thread to finish cache cleanup
-        FdManager::cache_cleanup_lock.lock();
+        FdManager::cache_cleanup_lock.Lock();
     }
-    FdManager::cache_cleanup_lock.unlock();
+    FdManager::cache_cleanup_lock.Unlock();
 }
 
 void FdManager::CleanupCacheDirInternal(const std::string &path)
@@ -840,7 +840,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         if(S_ISDIR(st.st_mode)){
             CleanupCacheDirInternal(next_path);
         }else{
-            if(!FdManager::fd_manager_lock.try_lock()){
+            if(!FdManager::fd_manager_lock.TryLock()){
                 S3FS_PRN_INFO("could not get fd_manager_lock when clean up file(%s), then skip it.", next_path.c_str());
                 continue;
             }
@@ -851,7 +851,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
                 S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
                 FdManager::DeleteCacheFile(next_path.c_str());
             }
-            FdManager::fd_manager_lock.unlock();
+            FdManager::fd_manager_lock.Unlock();
         }
     }
     closedir(dp);
@@ -860,7 +860,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
 bool FdManager::ReserveDiskSpace(off_t size)
 {
     if(IsSafeDiskSpace(nullptr, size)){
-        const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
+        const MutexLocker lock(FdManager::reserved_diskspace_lock);
         free_disk_space += size;
         return true;
     }
@@ -869,7 +869,7 @@ bool FdManager::ReserveDiskSpace(off_t size)
 
 void FdManager::FreeReservedDiskSpace(off_t size)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
+    const MutexLocker lock(FdManager::reserved_diskspace_lock);
     free_disk_space -= size;
 }
 
@@ -954,7 +954,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
             // check if the target file is currently in operation.
             {
-                const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+                const MutexLocker lock(FdManager::fd_manager_lock);
 
                 UpdateEntityToTempPath();
 

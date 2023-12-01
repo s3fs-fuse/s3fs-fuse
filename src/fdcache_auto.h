@@ -24,6 +24,7 @@
 #include <fcntl.h>
 
 #include "common.h"
+#include "fdcache.h"
 #include "metaheader.h"
 
 class FdEntity;

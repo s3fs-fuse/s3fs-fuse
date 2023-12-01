@@ -51,8 +51,14 @@ extern std::string    instance_name;
 //-------------------------------------------------------------------
 #define	S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
 
+#include "mutex.h"
+#ifdef __clang__
+#define REQUIRES(...) \
+  THREAD_ANNOTATION_ATTRIBUTE__(requires_capability(__VA_ARGS__))
+#else
 // empty annotation to indicate lock requirement
 #define REQUIRES(...)
+#endif
 
 #endif // S3FS_COMMON_H_
 

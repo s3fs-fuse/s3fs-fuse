@@ -32,6 +32,7 @@
 #include "common.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
+#include "mutex.h"
 #include "types.h"
 
 //----------------------------------------------
@@ -120,7 +121,7 @@ class S3fsCurl
         // class variables
         static std::mutex       curl_warnings_lock;
         static bool             curl_warnings_once;  // emit older curl warnings only once
-        static std::mutex       curl_handles_lock;
+        static Mutex            curl_handles_lock;
         static struct callback_locks_t {
             std::mutex      dns;
             std::mutex      ssl_session;
@@ -151,8 +152,8 @@ class S3fsCurl
         static std::string      client_priv_key;
         static std::string      client_priv_key_type;
         static std::string      client_key_password;
-        static curltime_t       curl_times;
-        static curlprogress_t   curl_progress;
+        static curltime_t       curl_times GUARDED_BY(curl_handles_lock);
+        static curlprogress_t   curl_progress GUARDED_BY(curl_handles_lock);
         static std::string      curl_ca_bundle;
         static mimes_t          mimeTypes;
         static std::string      userAgent;

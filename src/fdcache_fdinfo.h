@@ -66,7 +66,7 @@ class PseudoFdInfo
         int                     upload_fd;          // duplicated fd for uploading
         filepart_list_t         upload_list;
         petagpool               etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
-        mutable std::mutex      upload_list_lock;   // protects upload_id and upload_list
+        mutable Mutex           upload_list_lock;   // protects upload_id and upload_list
         Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
         int                     instruct_count;     // number of instructions for processing by threads
         int                     completed_count;    // number of completed processes by thread
@@ -80,7 +80,7 @@ class PseudoFdInfo
         bool OpenUploadFd() REQUIRES(upload_list_lock);
         bool ResetUploadInfo() REQUIRES(upload_list_lock);
         bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
-        bool CompleteInstruction(int result) REQUIRES(S3fsCurl::curl_handles_lock);
+        bool CompleteInstruction(int result) REQUIRES(upload_list_lock);
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(upload_list_lock);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(upload_list_lock);
         bool CancelAllThreads();

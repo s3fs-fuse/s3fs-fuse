@@ -111,7 +111,7 @@ struct sort_symlinkiterlist{
 // Static
 //-------------------------------------------------------------------
 StatCache       StatCache::singleton;
-std::mutex      StatCache::stat_cache_lock;
+Mutex           StatCache::stat_cache_lock;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
@@ -181,7 +181,7 @@ bool StatCache::SetCacheNoObject(bool flag)
 
 void StatCache::Clear()
 {
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     stat_cache.clear();
     S3FS_MALLOCTRIM(0);
@@ -192,7 +192,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
     bool is_delete_cache = false;
     std::string strpath = key;
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     stat_cache_t::iterator iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
@@ -278,7 +278,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
         return false;
     }
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     stat_cache_t::iterator iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
@@ -317,7 +317,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     }
     S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     if(stat_cache.end() != stat_cache.find(key)){
         // found cache
@@ -394,7 +394,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
     }
     S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
     stat_cache_t::iterator iter = stat_cache.find(key);
     if(stat_cache.end() == iter){
         return true;
@@ -437,7 +437,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
     S3FS_PRN_INFO3("add no object cache entry[path=%s]", key.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     if(stat_cache.end() != stat_cache.find(key)){
 		// found
@@ -474,7 +474,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
 
 void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
 {
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
     stat_cache_t::iterator iter = stat_cache.find(key);
 
     if(stat_cache.end() != iter){
@@ -586,7 +586,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     bool is_delete_cache = false;
     const std::string& strpath = key;
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     symlink_cache_t::iterator iter = symlink_cache.find(strpath);
     if(iter != symlink_cache.end()){
@@ -622,7 +622,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     }
     S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     if(symlink_cache.end() != symlink_cache.find(key)){
     	// found
@@ -797,7 +797,7 @@ bool StatCache::GetNotruncateCache(const std::string& parentdir, notruncate_file
         dirpath += '/';
     }
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const MutexLocker lock(StatCache::stat_cache_lock);
 
     notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(dirpath);
     if(iter == notruncate_file_cache.end()){

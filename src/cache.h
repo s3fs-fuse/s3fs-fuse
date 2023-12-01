@@ -82,7 +82,7 @@ class StatCache
 {
     private:
         static StatCache       singleton;
-        static std::mutex      stat_cache_lock;
+        static Mutex           stat_cache_lock;
         stat_cache_t           stat_cache;
         bool                   IsExpireTime;
         bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
@@ -179,7 +179,7 @@ class StatCache
         // Delete stat cache
         bool DelStat(const std::string& key)
         {
-            const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+            const MutexLocker lock(StatCache::stat_cache_lock);
             return DelStatHasLock(key);
         }
         bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
@@ -188,7 +188,7 @@ class StatCache
         bool GetSymlink(const std::string& key, std::string& value);
         bool AddSymlink(const std::string& key, const std::string& value);
         bool DelSymlink(const std::string& key) {
-            const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+            const MutexLocker lock(StatCache::stat_cache_lock);
             return DelSymlinkHasLock(key);
         }
         bool DelSymlinkHasLock(const std::string& key);
