@@ -21,6 +21,8 @@
 #ifndef S3FS_SIGHANDLERS_H_
 #define S3FS_SIGHANDLERS_H_
 
+#include <memory>
+
 class Semaphore;
 
 //----------------------------------------------
@@ -29,14 +31,14 @@ class Semaphore;
 class S3fsSignals
 {
     private:
-        static S3fsSignals* pSingleton;
+        static std::unique_ptr<S3fsSignals> pSingleton;
         static bool         enableUsr1;
 
-        pthread_t*          pThreadUsr1;
-        Semaphore*          pSemUsr1;
+        std::unique_ptr<pthread_t> pThreadUsr1;
+        std::unique_ptr<Semaphore> pSemUsr1;
 
     protected:
-        static S3fsSignals* get() { return pSingleton; }
+        static S3fsSignals* get() { return pSingleton.get(); }
 
         static void HandlerUSR1(int sig);
         static void* CheckCacheWorker(void* arg);
@@ -48,7 +50,6 @@ class S3fsSignals
         static bool InitHupHandler();
 
         S3fsSignals();
-        ~S3fsSignals();
         S3fsSignals(const S3fsSignals&) = delete;
         S3fsSignals(S3fsSignals&&) = delete;
         S3fsSignals& operator=(const S3fsSignals&) = delete;
@@ -59,6 +60,7 @@ class S3fsSignals
         bool WakeupUsr1Thread();
 
     public:
+        ~S3fsSignals();
         static bool Initialize();
         static bool Destroy();
 
