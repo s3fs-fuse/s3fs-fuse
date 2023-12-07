@@ -483,9 +483,8 @@ FdManager::~FdManager()
 {
     if(this == FdManager::get()){
         for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
-            FdEntity* ent = (*iter).second;
+            FdEntity* ent = (*iter).second.get();
             S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
-            delete ent;
         }
         fent.clear();
 
@@ -525,12 +524,12 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
             if(newfd){
                 existfd = iter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
             }
-            return iter->second;
+            return iter->second.get();
         }else if(iter->second->FindPseudoFd(existfd)){
             if(newfd){
                 existfd = iter->second->Dup(existfd);
             }
-            return iter->second;
+            return iter->second.get();
         }
     }
 
@@ -542,7 +541,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
                     if(newfd){
                         existfd = iter->second->Dup(existfd);
                     }
-                    return iter->second;
+                    return iter->second.get();
                 }
                 // found fd, but it is used another file(file descriptor is recycled)
                 // so returns nullptr.
@@ -556,7 +555,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
     if(!FdManager::IsCacheDir()){
         for(iter = fent.begin(); iter != fent.end(); ++iter){
             if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
-                return iter->second;
+                return iter->second.get();
             }
         }
     }
@@ -588,10 +587,9 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         }
     }
 
-    FdEntity* ent;
     if(fent.end() != iter){
         // found
-        ent = iter->second;
+        FdEntity* ent = iter->second.get();
 
         // [NOTE]
         // If the file is being modified and ignore_modify flag is false,
@@ -613,6 +611,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
             return nullptr;
         }
 
+        return ent;
     }else if(is_create){
         // not found
         std::string cache_path;
@@ -621,18 +620,17 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
             return nullptr;
         }
         // make new obj
-        ent = new FdEntity(path, cache_path.c_str());
+        std::unique_ptr<FdEntity> ent(new FdEntity(path, cache_path.c_str()));
 
         // open
         if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
             S3FS_PRN_ERR("failed to open and create new pseudo fd for path(%s) errno:%d.", path, fd);
-            delete ent;
             return nullptr;
         }
 
         if(!cache_path.empty()){
             // using cache
-            fent[path] = ent;
+            return (fent[path] = std::move(ent)).get();
         }else{
             // not using cache, so the key of fdentity is set not really existing path.
             // (but not strictly unexisting path.)
@@ -643,12 +641,11 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
             //
             std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
-            fent[tmppath] = ent;
+            return (fent[tmppath] = std::move(ent)).get();
         }
     }else{
         return nullptr;
     }
-    return ent;
 }
 
 // [NOTE]
@@ -665,7 +662,7 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
         if(iter->second && iter->second->FindPseudoFd(existfd)){
             // found existfd in entity
-            return iter->second;
+            return iter->second.get();
         }
     }
     // not found entity
@@ -730,7 +727,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // found
         S3FS_PRN_DBG("[from=%s][to=%s]", from.c_str(), to.c_str());
 
-        FdEntity* ent = iter->second;
+        std::unique_ptr<FdEntity> ent(std::move(iter->second));
 
         // retrieve old fd entity from map
         fent.erase(iter);
@@ -743,7 +740,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         }
 
         // set new fd entity to map
-        fent[fentmapkey] = ent;
+        fent[fentmapkey] = std::move(ent);
     }
 }
 
@@ -757,7 +754,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
-        if(iter->second == ent){
+        if(iter->second.get() == ent){
             ent->Close(fd);
             if(!ent->IsOpen()){
                 // remove found entity from map.
@@ -765,13 +762,12 @@ bool FdManager::Close(FdEntity* ent, int fd)
 
                 // check another key name for entity value to be on the safe side
                 for(; iter != fent.end(); ){
-                    if(iter->second == ent){
+                    if(iter->second.get() == ent){
                         iter = fent.erase(iter);
                     }else{
                         ++iter;
                     }
                 }
-                delete ent;
             }
             return true;
         }
@@ -784,12 +780,11 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
-        if(iter->second == ent){
-            iter = fent.erase(iter);
-
+        if(iter->second.get() == ent){
             std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
-            fent[tmppath] = ent;
+            iter->second.reset(ent);
+            break;
         }else{
             ++iter;
         }
