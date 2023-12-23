@@ -29,7 +29,7 @@
 //-------------------------------------------------------------------
 // Class S3fsSignals
 //-------------------------------------------------------------------
-S3fsSignals* S3fsSignals::pSingleton = nullptr;
+std::unique_ptr<S3fsSignals> S3fsSignals::pSingleton;
 bool S3fsSignals::enableUsr1         = false;
 
 //-------------------------------------------------------------------
@@ -38,15 +38,14 @@ bool S3fsSignals::enableUsr1         = false;
 bool S3fsSignals::Initialize()
 {
     if(!S3fsSignals::pSingleton){
-        S3fsSignals::pSingleton = new S3fsSignals;
+        S3fsSignals::pSingleton.reset(new S3fsSignals);
     }
     return true;
 }
 
 bool S3fsSignals::Destroy()
 {
-    delete S3fsSignals::pSingleton;
-    S3fsSignals::pSingleton = nullptr;
+    S3fsSignals::pSingleton.reset();
     return true;
 }
 
@@ -168,7 +167,7 @@ bool S3fsSignals::InitHupHandler()
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
-S3fsSignals::S3fsSignals() : pThreadUsr1(nullptr), pSemUsr1(nullptr)
+S3fsSignals::S3fsSignals()
 {
     if(S3fsSignals::enableUsr1){
         if(!InitUsr1Handler()){
@@ -201,16 +200,14 @@ bool S3fsSignals::InitUsr1Handler()
 
     // create thread
     int result;
-    pSemUsr1    = new Semaphore(0);
-    pThreadUsr1 = new pthread_t;
-    if(0 != (result = pthread_create(pThreadUsr1, nullptr, S3fsSignals::CheckCacheWorker, static_cast<void*>(pSemUsr1)))){
+    std::unique_ptr<Semaphore> pSemUsr1_tmp(new Semaphore(0));
+    std::unique_ptr<pthread_t> pThreadUsr1_tmp(new pthread_t);
+    if(0 != (result = pthread_create(pThreadUsr1.get(), nullptr, S3fsSignals::CheckCacheWorker, static_cast<void*>(pSemUsr1_tmp.get())))){
         S3FS_PRN_ERR("Could not create thread for SIGUSR1 by %d", result);
-        delete pSemUsr1;
-        delete pThreadUsr1;
-        pSemUsr1    = nullptr;
-        pThreadUsr1 = nullptr;
         return false;
     }
+    pSemUsr1 = std::move(pSemUsr1_tmp);
+    pThreadUsr1 = std::move(pThreadUsr1_tmp);
 
     // set handler
     struct sigaction sa;
@@ -244,10 +241,8 @@ bool S3fsSignals::DestroyUsr1Handler()
         S3FS_PRN_ERR("Could not stop thread for SIGUSR1 by %d", result);
         return false;
     }
-    delete pSemUsr1;
-    delete pThreadUsr1;
-    pSemUsr1    = nullptr;
-    pThreadUsr1 = nullptr;
+    pSemUsr1.reset();
+    pThreadUsr1.reset();
 
     return true;
 }

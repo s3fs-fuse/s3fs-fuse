@@ -59,7 +59,7 @@ class S3fsLog
         static S3fsLog*       pSingleton;
         static s3fs_log_level debug_level;
         static FILE*          logfp;
-        static std::string*   plogfile;
+        static std::string    logfile;
         static bool           time_stamp;
 
     protected:
