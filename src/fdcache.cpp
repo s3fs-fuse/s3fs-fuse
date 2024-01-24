@@ -431,7 +431,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 {
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
-    FdEntity*   ent;
+    const FdEntity* ent;
     int         fd = -1;
     if(nullptr == (ent = FdManager::singleton.GetFdEntity(path, fd, false, AutoLock::ALREADY_LOCKED))){
         return false;
@@ -916,7 +916,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
     }
 
     // loop in directory of cache file's stats
-    struct dirent* pdirent = nullptr;
+    const struct dirent* pdirent = nullptr;
     while(nullptr != (pdirent = readdir(statsdir))){
         if(DT_DIR == pdirent->d_type){
             // found directory

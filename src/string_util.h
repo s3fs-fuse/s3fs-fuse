@@ -79,7 +79,7 @@ std::string trim_left(std::string s, const char *t = SPACES);
 std::string trim_right(std::string s, const char *t = SPACES);
 std::string trim(std::string s, const char *t = SPACES);
 std::string lower(std::string s);
-std::string peeloff(std::string s);
+std::string peeloff(const std::string& s);
 
 //
 // Date string

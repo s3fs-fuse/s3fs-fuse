@@ -820,7 +820,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
     int result;
     struct stat st;
     struct stat* pst = (pstbuf ? pstbuf : &st);
-    struct fuse_context* pcxt;
+    const struct fuse_context* pcxt;
 
     S3FS_PRN_DBG("[path=%s]", path);
 
@@ -1019,7 +1019,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     // (See: Issue 241)
     if(stbuf){
         AutoFdEntity autoent;
-        FdEntity*    ent;
+        const FdEntity*  ent;
         if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
             struct stat tmpstbuf;
             if(ent->GetStats(tmpstbuf)){
@@ -1151,7 +1151,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 {
     WTF8_ENCODE(path)
     int result;
-    struct fuse_context* pcxt;
+    const struct fuse_context* pcxt;
 
     FUSE_CTX_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
 
@@ -1405,7 +1405,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     int result;
-    struct fuse_context* pcxt;
+    const struct fuse_context* pcxt;
 
     FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
 
@@ -2783,7 +2783,7 @@ static int s3fs_truncate(const char* _path, off_t size)
 
     }else{
         // Not found -> Make tmpfile(with size)
-        struct fuse_context* pcxt;
+        const struct fuse_context* pcxt;
         if(nullptr == (pcxt = fuse_get_context())){
             return -EIO;
         }
@@ -4770,7 +4770,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
 
             if(!nonempty){
-                struct dirent *ent;
+                const struct dirent *ent;
                 DIR *dp = opendir(mountpoint.c_str());
                 if(dp == nullptr){
                     S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
