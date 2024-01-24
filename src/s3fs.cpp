@@ -3047,7 +3047,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     WTF8_ENCODE(path)
     int result = 0;
 
-    FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
+    FUSE_CTX_INFO("[path=%s][datasync=%d][pseudo_fd=%llu]", path, datasync, (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
@@ -3059,6 +3059,16 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
             ent->UpdateCtime();
         }
         result = ent->Flush(static_cast<int>(fi->fh), AutoLock::NONE, false);
+
+        if(0 != datasync){
+            // [NOTE]
+            // The metadata are not updated when fdatasync is called.
+            // Instead of it, these metadata are pended and set the dirty flag here.
+            // Setting this flag allows metadata to be updated even if there is no
+            // content update between the fdatasync call and the flush call.
+            //
+            ent->MarkDirtyMetadata();
+        }
 
         if(is_new_file){
             // update parent directory timestamp

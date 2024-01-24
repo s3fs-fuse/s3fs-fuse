@@ -408,8 +408,6 @@ function test_external_modification {
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "new new" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
 
-    wait_ostype 1 "Darwin"
-
     cmp "${TEST_TEXT_FILE}" <(echo "new new")
     rm -f "${TEST_TEXT_FILE}"
 }
@@ -884,7 +882,6 @@ function test_mtime_file {
 
     #copy the test file with preserve mode
     cp -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
-    wait_ostype 1 "Darwin"
 
     local testmtime; testmtime=$(get_mtime "${TEST_TEXT_FILE}")
     local testctime; testctime=$(get_ctime "${TEST_TEXT_FILE}")
@@ -953,7 +950,6 @@ function test_update_time_chown() {
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    wait_ostype 1 "Darwin"
 
     # [NOTE]
     # In this test, chown is called with the same UID.
@@ -1050,7 +1046,6 @@ function test_update_time_touch_a() {
     # "touch -a" -> update ctime/atime, not update mtime
     #
     touch -a "${TEST_TEXT_FILE}"
-    wait_ostype 1 "Darwin"
 
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
@@ -1119,6 +1114,8 @@ function test_update_time_cp_p() {
        echo "cp with -p option expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
        return 1
     fi
+    rm_test_file
+    rm_test_file "${TIME_TEST_TEXT_FILE}"
 }
 
 function test_update_time_mv() {
@@ -1425,7 +1422,6 @@ function test_update_parent_directory_time_sub() {
     local base_atime; base_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
-    wait_ostype 1 "Darwin"
 
     touch "${TEST_PARENTDIR_FILE}"
 
@@ -1444,7 +1440,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     touch "${TEST_PARENTDIR_FILE}"
 
@@ -1463,7 +1458,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     mv "${TEST_PARENTDIR_FILE}" "${TEST_PARENTDIR_FILE_MV}"
 
@@ -1482,7 +1476,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     ln -s "${TEST_PARENTDIR_SYMFILE_BASE}" "${TEST_PARENTDIR_SYMFILE}"
 
@@ -1501,7 +1494,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     touch "${TEST_PARENTDIR_SYMFILE}"
 
@@ -1520,7 +1512,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     mv "${TEST_PARENTDIR_SYMFILE}" "${TEST_PARENTDIR_SYMFILE_MV}"
 
@@ -1539,7 +1530,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     rm "${TEST_PARENTDIR_SYMFILE_MV}"
 
@@ -1558,7 +1548,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     rm "${TEST_PARENTDIR_FILE_MV}"
 
@@ -1577,7 +1566,6 @@ function test_update_parent_directory_time_sub() {
     local base_atime; base_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_PARENTDIR_PARENT}")
-    wait_ostype 1 "Darwin"
 
     mkdir "${TEST_PARENTDIR_DIR}"
 
@@ -1596,7 +1584,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     touch "${TEST_PARENTDIR_DIR}"
 
@@ -1615,7 +1602,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     mv "${TEST_PARENTDIR_DIR}" "${TEST_PARENTDIR_DIR_MV}"
 
@@ -1634,7 +1620,6 @@ function test_update_parent_directory_time_sub() {
     base_atime="${after_atime}"
     base_ctime="${after_ctime}"
     base_mtime="${after_mtime}"
-    wait_ostype 1 "Darwin"
 
     rm -r "${TEST_PARENTDIR_DIR_MV}"
 
