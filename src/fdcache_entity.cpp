@@ -907,6 +907,13 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
             if(!ClearHoldingMtime(AutoLock::ALREADY_LOCKED)){
                 return false;
             }
+            // [NOTE]
+            // If come here after fdatasync has been processed, the file
+            // content update has already taken place. However, the metadata
+            // update is necessary and needs to be flagged in order to
+            // perform it with flush,
+            //
+            pending_status = pending_status_t::UPDATE_META_PENDING;
         }
     }else{
         struct stat st;
@@ -1426,19 +1433,23 @@ int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool forc
 
     AutoLock auto_lock2(&fdent_data_lock);
 
-    if(!force_sync && !pagelist.IsModified()){
+    int result;
+    if(!force_sync && !pagelist.IsModified() && !IsDirtyMetadata()){
         // nothing to update.
         return 0;
     }
-
     if(S3fsLog::IsS3fsLogDbg()){
         pagelist.Dump();
     }
 
-    int result;
     if(nomultipart){
         // No multipart upload
-        result = RowFlushNoMultipart(pseudo_obj, tpath);
+        if(!force_sync && !pagelist.IsModified()){
+            // for only push pending headers
+            result = UploadPending(-1, AutoLock::ALREADY_LOCKED);
+        }else{
+            result = RowFlushNoMultipart(pseudo_obj, tpath);
+        }
     }else if(FdEntity::streamupload){
         // Stream multipart upload
         result = RowFlushStreamMultipart(pseudo_obj, tpath);
@@ -1523,6 +1534,7 @@ int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tp
     if(0 == result){
         pagelist.ClearAllModified();
     }
+
     return result;
 }
 
@@ -2571,6 +2583,29 @@ bool FdEntity::IsDirtyNewFile() const
     AutoLock auto_lock(&fdent_lock);
 
     return (pending_status_t::CREATE_FILE_PENDING == pending_status);
+}
+
+// [NOTE]
+// The fdatasync call only uploads the content but does not update
+// the meta data. In the flush call, if there is no update contents,
+// need to upload only metadata, so use these functions.
+//
+void FdEntity::MarkDirtyMetadata()
+{
+    AutoLock auto_lock(&fdent_lock);
+    AutoLock auto_lock2(&fdent_data_lock);
+
+    if(pending_status_t::NO_UPDATE_PENDING == pending_status){
+        pending_status = pending_status_t::UPDATE_META_PENDING;
+    }
+}
+
+bool FdEntity::IsDirtyMetadata() const
+{
+    // [NOTE]
+    // fdent_lock must be previously locked.
+    //
+    return (pending_status_t::UPDATE_META_PENDING == pending_status);
 }
 
 bool FdEntity::AddUntreated(off_t start, off_t size)

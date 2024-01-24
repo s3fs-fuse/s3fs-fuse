@@ -97,6 +97,8 @@ class FdEntity
 
         bool AddUntreated(off_t start, off_t size);
 
+        bool IsDirtyMetadata() const;
+
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
         static bool SetNoMixMultipart();
@@ -156,6 +158,7 @@ class FdEntity
 
         void MarkDirtyNewFile();
         bool IsDirtyNewFile() const;
+        void MarkDirtyMetadata();
 
         bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const;
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
