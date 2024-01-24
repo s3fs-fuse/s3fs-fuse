@@ -683,7 +683,7 @@ bool PseudoFdInfo::CancelAllThreads()
 // [NOTE]
 // Maximum multipart upload size must be uploading boundary.
 //
-bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size)
+bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size)
 {
     if(untreated_start < 0 || untreated_size <= 0){
         S3FS_PRN_ERR("Paramters are wrong(untreated_start=%lld, untreated_size=%lld).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size));
