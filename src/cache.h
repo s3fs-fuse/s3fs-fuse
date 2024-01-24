@@ -69,6 +69,12 @@ struct symlink_cache_entry {
 
 typedef std::map<std::string, symlink_cache_entry> symlink_cache_t;
 
+//
+// Typedefs for No truncate file name cache
+//
+typedef std::vector<std::string> notruncate_filelist_t;                    // untruncated file name list in dir
+typedef std::map<std::string, notruncate_filelist_t> notruncate_dir_map_t; // key is parent dir path
+
 //-------------------------------------------------------------------
 // Class StatCache
 //-------------------------------------------------------------------
@@ -93,6 +99,7 @@ class StatCache
         unsigned long          CacheSize;
         bool                   IsCacheNoObject;
         symlink_cache_t        symlink_cache;
+        notruncate_dir_map_t   notruncate_file_cache;
 
     private:
         StatCache();
@@ -101,9 +108,12 @@ class StatCache
         void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
         // Truncate stat cache
-        bool TruncateCache();
+        bool TruncateCache(AutoLock::Type locktype = AutoLock::NONE);
         // Truncate symbolic link cache
-        bool TruncateSymlink();
+        bool TruncateSymlink(AutoLock::Type locktype = AutoLock::NONE);
+
+        bool AddNotruncateCache(const std::string& key);
+        bool DelNotruncateCache(const std::string& key);
 
     public:
         // Reference singleton
@@ -182,6 +192,9 @@ class StatCache
         bool GetSymlink(const std::string& key, std::string& value);
         bool AddSymlink(const std::string& key, const std::string& value);
         bool DelSymlink(const char* key, AutoLock::Type locktype = AutoLock::NONE);
+
+        // Cache for Notruncate file
+        bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);
 };
 
 //-------------------------------------------------------------------
