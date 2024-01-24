@@ -400,7 +400,7 @@ bool compare_sysname(const char* target)
     // The buffer size of sysname member in struct utsname is
     // OS dependent, but 512 bytes is sufficient for now.
     //
-    static char* psysname = nullptr;
+    static const char* psysname = nullptr;
     static char  sysname[512];
     if(!psysname){
         struct utsname sysinfo;

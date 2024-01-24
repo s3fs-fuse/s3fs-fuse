@@ -86,7 +86,7 @@ class PseudoFdInfo
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, AutoLock::Type type = AutoLock::NONE);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type = AutoLock::NONE);
         bool CancelAllThreads();
-        bool ExtractUploadPartsFromUntreatedArea(off_t& untreated_start, off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
+        bool ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 
     public:
         explicit PseudoFdInfo(int fd = -1, int open_flags = 0);
