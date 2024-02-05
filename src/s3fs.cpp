@@ -3260,7 +3260,7 @@ static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
     }
 
     std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
-    std::string path       = s3fscurl->GetPath();
+    std::string path       = s3fscurl->GetBasePath();
     std::string base_path  = s3fscurl->GetBasePath();
     std::string saved_path = s3fscurl->GetSpecialSavedPath();
 
@@ -3331,7 +3331,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         // First check for directory, start checking "not SSE-C".
         // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
         std::unique_ptr<S3fsCurl> s3fscurl(new S3fsCurl());
-        if(!s3fscurl->PreHeadRequest(disppath, (*iter), disppath)){  // target path = cache key path.(ex "dir/")
+        if(!s3fscurl->PreHeadRequest(disppath, disppath, disppath)){  // target path = cache key path.(ex "dir/")
             S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
             continue;
         }
@@ -3380,7 +3380,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
         for(s3obj_list_t::iterator reiter = notfound_param.notfound_list.begin(); reiter != notfound_param.notfound_list.end(); ++reiter){
             int dir_result;
-            std::string dirpath = path + (*reiter);
+            std::string dirpath = *reiter;
             if(-ENOTEMPTY == (dir_result = directory_empty(dirpath.c_str()))){
                 // Found objects under the path, so the path is directory.
 
