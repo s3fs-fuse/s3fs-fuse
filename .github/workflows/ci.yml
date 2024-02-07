@@ -83,7 +83,17 @@ jobs:
         run: |
           if [ "${{ matrix.container }}" = "opensuse/leap:15" ]; then zypper install -y tar gzip; fi
 
-      - name: Checkout source code
+      # [NOTE]
+      # actions/checkout@v3 uses nodejs v16 and will be deprecated.
+      # However, @v4 does not work on centos7 depending on the glibc version,
+      # so we will continue to use @v3.
+      #
+      - name: Checkout source code(other than centos7)
+        if: matrix.container != 'centos:centos7'
+        uses: actions/checkout@v4
+
+      - name: Checkout source code(only centos7)
+        if: matrix.container == 'centos:centos7'
         uses: actions/checkout@v3
 
       # [NOTE]
@@ -139,7 +149,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Brew tap
         run: |
@@ -221,7 +231,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install packages
         run: |
