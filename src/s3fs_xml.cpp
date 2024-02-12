@@ -110,7 +110,7 @@ static unique_ptr_xmlChar get_base_exp(xmlDocPtr doc, const char* exp)
         return {nullptr, xmlFree};
     }
     if(xmlXPathNodeSetIsEmpty(marker_xp->nodesetval)){
-        S3FS_PRN_ERR("marker_xp->nodesetval is empty.");
+        S3FS_PRN_INFO("marker_xp->nodesetval is empty.");
         return {nullptr, xmlFree};
     }
     xmlNodeSetPtr nodes  = marker_xp->nodesetval;
