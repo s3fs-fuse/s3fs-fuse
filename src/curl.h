@@ -360,7 +360,7 @@ class S3fsCurl
         int PutRequest(const char* tpath, headers_t& meta, int fd);
         int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
-        int CheckBucket(const char* check_path, bool compat_dir);
+        int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
         int ListBucketRequest(const char* tpath, const char* query);
         int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
         int CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, etaglist_t& parts);

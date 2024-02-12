@@ -4398,6 +4398,23 @@ static bool check_endpoint_error(const char* pbody, size_t len, std::string& exp
     return true;
 }
 
+static bool check_invalid_sse_arg_error(const char* pbody, size_t len)
+{
+    if(!pbody){
+        return false;
+    }
+
+    std::string code;
+    if(!simple_parse_xml(pbody, len, "Code", code) || code != "InvalidArgument"){
+        return false;
+    }
+    std::string argname;
+    if(!simple_parse_xml(pbody, len, "ArgumentName", argname) || argname != "x-amz-server-side-encryption"){
+        return false;
+    }
+    return true;
+}
+
 static bool check_error_message(const char* pbody, size_t len, std::string& message)
 {
     message.clear();
@@ -4439,8 +4456,11 @@ static int s3fs_check_service()
 
     S3fsCurl s3fscurl;
     int      res;
-    if(0 > (res = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir))){
+    bool     force_no_sse = false;
+
+    while(0 > (res = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir, force_no_sse))){
         // get response code
+        bool do_retry     = false;
         long responseCode = s3fscurl.GetLastResponseCode();
 
         // check wrong endpoint, and automatically switch endpoint
@@ -4450,6 +4470,8 @@ static int s3fs_check_service()
             const std::string* body = s3fscurl.GetBodyData();
             std::string expectregion;
             std::string expectendpoint;
+
+            // Check if any case can be retried
             if(check_region_error(body->c_str(), body->size(), expectregion)){
                 // [NOTE]
                 // If endpoint is not specified(using us-east-1 region) and
@@ -4483,10 +4505,9 @@ static int s3fs_check_service()
                         s3host = "https://s3-" + endpoint + ".amazonaws.com";
                     }
 
-                    // retry to check
+                    // Retry with changed host
                     s3fscurl.DestroyCurlHandle();
-                    res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
-                    responseCode = s3fscurl.GetLastResponseCode();
+                    do_retry = true;
 
                 }else{
                     S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
@@ -4500,23 +4521,36 @@ static int s3fs_check_service()
                     S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and endpoint(%s)). You need to specify correct endpoint option.", expectendpoint.c_str(), s3host.c_str(), endpoint.c_str());
                 }
                 return EXIT_FAILURE;
+
+            }else if(check_invalid_sse_arg_error(body->c_str(), body->size())){
+                // SSE argument error, so retry it without SSE
+                S3FS_PRN_CRIT("S3 service returned InvalidArgument(x-amz-server-side-encryption), so retry without adding x-amz-server-side-encryption.");
+
+                // Retry without sse parameters
+                s3fscurl.DestroyCurlHandle();
+                do_retry     = true;
+                force_no_sse = true;
             }
         }
 
-        // retry signature v2
-        if(0 > res && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
+        // Try changing signature from v4 to v2
+        //
+        // [NOTE]
+        // If there is no case to retry with the previous checks, and there
+        // is a chance to retry with signature v2, prepare to retry with v2.
+        //
+        if(!do_retry && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
             // switch sigv2
             S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
-            S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
 
             // retry to check with sigv2
             s3fscurl.DestroyCurlHandle();
-            res          = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir);
-            responseCode = s3fscurl.GetLastResponseCode();
+            do_retry = true;
+            S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
         }
 
         // check errors(after retrying)
-        if(0 > res && responseCode != 200 && responseCode != 301){
+        if(!do_retry && responseCode != 200 && responseCode != 301){
             // parse error message if existed
             std::string errMessage;
             const std::string* body = s3fscurl.GetBodyData();
