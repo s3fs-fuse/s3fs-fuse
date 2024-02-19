@@ -22,6 +22,7 @@
 #define S3FS_S3FS_XML_H_
 
 #include <libxml/xpath.h>
+#include <libxml/parser.h>  // [NOTE] nessetially include this header in some environments
 #include <memory>
 #include <string>
 
