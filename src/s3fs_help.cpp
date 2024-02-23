@@ -128,6 +128,8 @@ static constexpr char help_string[] =
     "        environment which value is <kms id>. You must be careful\n"
     "        about that you can not use the KMS id which is not same EC2\n"
     "        region.\n"
+    "        Additionally, if you specify SSE-KMS, your endpoints must use\n"
+    "        Secure Sockets Layer(SSL) or Transport Layer Security(TLS).\n"
     "\n"
     "   load_sse_c - specify SSE-C keys\n"
     "        Specify the custom-provided encryption keys file path for decrypting\n"
