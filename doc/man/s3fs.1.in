@@ -110,6 +110,7 @@ You can use "k" for short "kmsid".
 If you san specify SSE-KMS type with your <kms id> in AWS KMS, you can set it after "kmsid:" (or "k:").
 If you specify only "kmsid" ("k"), you need to set AWSSSEKMSID environment which value is <kms id>.
 You must be careful about that you can not use the KMS id which is not same EC2 region.
+Additionally, if you specify SSE-KMS, your endpoints must use Secure Sockets Layer(SSL) or Transport Layer Security(TLS).
 .TP
 \fB\-o\fR load_sse_c - specify SSE-C keys
 Specify the custom-provided encryption keys file path for decrypting at downloading.
