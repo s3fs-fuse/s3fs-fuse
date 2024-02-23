@@ -1,6 +1,18 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.94 -- 23 Feb, 2024 (major changes only)
+#2409 - Fixed a bug that mounting with ksmid specified to fail
+#2404 - Fixed ordering problem between fdatasync and flush
+#2399 - Fixed ListBucket/IAM edge cases
+#2376 - Corrected list_bucket to search in stat cache during creating new file
+#2369 - Make dir size 4096 not 0
+#2351 - Added option free_space_ratio to control cache size
+#2325 - Fixed a bug upload boundary calculation in StreamUpload
+#2298 - Abort MPU when MPU fails to avoid litter
+#2261 - Use explicit ownership for memory
+#2179 - Require C++11
+
 Version 1.93 -- 19 Jul, 2023 (major changes only)
 #2212 - Allow listing implicit directories
 #2194 - #2209 - #2211 - #2214 - #2215 - Fix thread safety issues
