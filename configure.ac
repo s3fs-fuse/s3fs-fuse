@@ -20,7 +20,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([s3fs],[1.93.3])
+AC_INIT([s3fs],[1.94])
 AC_CONFIG_HEADER([config.h])
 
 AC_CANONICAL_TARGET
@@ -269,7 +269,7 @@ dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl clock_gettime function(macos)
-AC_SEARCH_LIBS([clock_gettime],[rt posix4]) 
+AC_SEARCH_LIBS([clock_gettime],[rt posix4])
 AC_CHECK_FUNCS([clock_gettime])
 
 dnl ----------------------------------------------
