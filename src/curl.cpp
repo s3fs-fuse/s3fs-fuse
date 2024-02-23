@@ -898,6 +898,13 @@ bool S3fsCurl::FinalCheckSse()
                 S3FS_PRN_ERR("sse type is SSE-KMS, but signature type is not v4. SSE-KMS require signature v4.");
                 return false;
             }
+
+            // SSL/TLS is required for KMS
+            //
+            if(!is_prefix(s3host.c_str(), "https://")){
+                S3FS_PRN_ERR("The sse type is SSE-KMS, but it is not configured to use SSL/TLS. SSE-KMS requires SSL/TLS communication.");
+                return false;
+            }
             return true;
     }
     S3FS_PRN_ERR("sse type is unknown(%d).", static_cast<int>(S3fsCurl::ssetype));
