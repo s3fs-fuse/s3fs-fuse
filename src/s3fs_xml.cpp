@@ -73,7 +73,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
                             strNs = std::string(reinterpret_cast<const char*>(nslist[0]->href), len);
                         }
                     }
-                    S3FS_XMLFREE(nslist);
+                    xmlFreeNsList(*nslist);
                 }
             }
         }

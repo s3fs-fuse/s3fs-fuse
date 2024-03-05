@@ -64,11 +64,6 @@
           xmlFreeDoc(doc); \
           S3FS_MALLOCTRIM(0); \
         }while(0)
-#define S3FS_XMLFREE(ptr) \
-        do{ \
-          xmlFree(ptr); \
-          S3FS_MALLOCTRIM(0); \
-        }while(0)
 #define S3FS_XMLXPATHFREECONTEXT(ctx) \
         do{ \
           xmlXPathFreeContext(ctx); \
