@@ -3459,7 +3459,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     std::string next_marker;
     bool truncated = true;
     S3fsCurl  s3fscurl;
-    xmlDocPtr doc;
 
     S3FS_PRN_INFO1("[path=%s]", path);
 
@@ -3519,20 +3518,20 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         std::string encbody = get_encoded_cr_code(body->c_str());
 
         // xmlDocPtr
-        if(nullptr == (doc = xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0))){
+        std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0), xmlFreeDoc);
+        if(nullptr == doc){
             S3FS_PRN_ERR("xmlReadMemory returns with error.");
             return -EIO;
         }
-        if(0 != append_objects_from_xml(path, doc, head)){
+        if(0 != append_objects_from_xml(path, doc.get(), head)){
             S3FS_PRN_ERR("append_objects_from_xml returns with error.");
-            xmlFreeDoc(doc);
             return -EIO;
         }
-        if(true == (truncated = is_truncated(doc))){
-            auto tmpch = get_next_continuation_token(doc);
+        if(true == (truncated = is_truncated(doc.get()))){
+            auto tmpch = get_next_continuation_token(doc.get());
             if(nullptr != tmpch){
                 next_continuation_token = reinterpret_cast<const char*>(tmpch.get());
-            }else if(nullptr != (tmpch = get_next_marker(doc))){
+            }else if(nullptr != (tmpch = get_next_marker(doc.get()))){
                 next_marker = reinterpret_cast<const char*>(tmpch.get());
             }
 
@@ -3553,7 +3552,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                 }
             }
         }
-        S3FS_XMLFREEDOC(doc);
 
         // reset(initialize) curl object
         s3fscurl.DestroyCurlHandle();

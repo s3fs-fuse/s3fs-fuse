@@ -115,15 +115,15 @@ int s3fs_utility_processing(time_t abort_time)
         // parse result(incomplete multipart upload information)
         S3FS_PRN_DBG("response body = {\n%s\n}", body.c_str());
 
-        xmlDocPtr doc;
-        if(nullptr == (doc = xmlReadMemory(body.c_str(), static_cast<int>(body.size()), "", nullptr, 0))){
+        std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(body.c_str(), static_cast<int>(body.size()), "", nullptr, 0), xmlFreeDoc);
+        if(nullptr == doc){
             S3FS_PRN_DBG("xmlReadMemory exited with error.");
             result = EXIT_FAILURE;
 
         }else{
             // make incomplete uploads list
             incomp_mpu_list_t list;
-            if(!get_incomp_mpu_list(doc, list)){
+            if(!get_incomp_mpu_list(doc.get(), list)){
                 S3FS_PRN_DBG("get_incomp_mpu_list exited with error.");
                 result = EXIT_FAILURE;
 
@@ -139,7 +139,6 @@ int s3fs_utility_processing(time_t abort_time)
                     }
                 }
             }
-            S3FS_XMLFREEDOC(doc);
         }
     }
 
