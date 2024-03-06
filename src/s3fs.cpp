@@ -60,7 +60,7 @@
 #define ENOATTR                   ENODATA
 #endif
 
-enum class dirtype {
+enum class dirtype : int8_t {
     UNKNOWN = -1,
     NEW = 0,
     OLD = 1,
@@ -4040,7 +4040,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     const char* pvalue = xiter->second.c_str();
 
     if(0 < size){
-        if(static_cast<size_t>(size) < length){
+        if(size < length){
             // over buffer size
             return -ERANGE;
         }
@@ -4296,12 +4296,12 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 
     // Investigate system capabilities
     #ifndef __APPLE__
-    if((unsigned int)conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
+    if(conn->capable & FUSE_CAP_ATOMIC_O_TRUNC){
          conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
     }
     #endif
 
-    if((unsigned int)conn->capable & FUSE_CAP_BIG_WRITES){
+    if(conn->capable & FUSE_CAP_BIG_WRITES){
          conn->want |= FUSE_CAP_BIG_WRITES;
     }
 
@@ -4725,7 +4725,7 @@ static fsblkcnt_t parse_bucket_size(char* max_size)
         if(!isdigit(*ptr)){
             return 0;   // wrong number
         }
-        n_bytes = static_cast<unsigned long long>(strtoull(max_size, nullptr, 10));
+        n_bytes = strtoull(max_size, nullptr, 10);
         if((INT64_MAX / scale) < n_bytes){
             return 0;   // overflow
         }
@@ -5199,7 +5199,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(is_prefix(arg, "multipart_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            off_t size = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(!S3fsCurl::SetMultipartSize(size)){
                 S3FS_PRN_EXIT("multipart_size option must be at least 5 MB.");
                 return -1;
@@ -5207,7 +5207,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(is_prefix(arg, "multipart_copy_size=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            off_t size = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(!S3fsCurl::SetMultipartCopySize(size)){
                 S3FS_PRN_EXIT("multipart_copy_size option must be at least 5 MB.");
                 return -1;
@@ -5215,7 +5215,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(is_prefix(arg, "max_dirty_data=")){
-            off_t size = static_cast<off_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            off_t size = cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10);
             if(size >= 50){
                 size *= 1024 * 1024;
             }else if(size != -1){

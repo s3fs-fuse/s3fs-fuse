@@ -609,7 +609,7 @@ size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
     memcpy(ptr, pCurl->postdata, copysize);
 
     pCurl->postdata_remaining = (pCurl->postdata_remaining > static_cast<off_t>(copysize) ? (pCurl->postdata_remaining - copysize) : 0);
-    pCurl->postdata          += static_cast<size_t>(copysize);
+    pCurl->postdata          += copysize;
 
     return copysize;
 }
@@ -963,7 +963,7 @@ bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
 
 bool S3fsCurl::GetSseKeyMd5(size_t pos, std::string& md5)
 {
-    if(S3fsCurl::sseckeys.size() <= static_cast<size_t>(pos)){
+    if(S3fsCurl::sseckeys.size() <= pos){
         return false;
     }
     size_t cnt = 0;
@@ -1526,7 +1526,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
             for(off_t i = 0, bytes = 0; i < iter->bytes; i += bytes){
                 std::unique_ptr<S3fsCurl> s3fscurl_para(new S3fsCurl(true));
 
-                bytes = std::min(static_cast<off_t>(GetMultipartCopySize()), iter->bytes - i);
+                bytes = std::min(GetMultipartCopySize(), iter->bytes - i);
                 /* every part should be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB */
                 off_t remain_bytes = iter->bytes - i - bytes;
 
@@ -3447,7 +3447,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         std::string strMD5;
         if(-1 != fd){
             strMD5 = s3fs_get_content_md5(fd);
-            if(0 == strMD5.length()){
+            if(strMD5.empty()){
                 S3FS_PRN_ERR("Failed to make MD5.");
                 return -EIO;
             }
