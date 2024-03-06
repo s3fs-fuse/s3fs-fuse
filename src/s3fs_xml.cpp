@@ -65,15 +65,14 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
             strNs  = "";
             xmlNodePtr pRootNode = xmlDocGetRootElement(doc);
             if(pRootNode){
-                xmlNsPtr* nslist = xmlGetNsList(doc, pRootNode);
+                std::unique_ptr<xmlNsPtr, decltype(xmlFree)> nslist(xmlGetNsList(doc, pRootNode), xmlFree);
                 if(nslist){
-                    if(nslist[0] && nslist[0]->href){
-                        int len = xmlStrlen(nslist[0]->href);
+                    if(*nslist && (*nslist)[0].href){
+                        int len = xmlStrlen((*nslist)[0].href);
                         if(0 < len){
-                            strNs = std::string(reinterpret_cast<const char*>(nslist[0]->href), len);
+                            strNs = std::string(reinterpret_cast<const char*>((*nslist)[0].href), len);
                         }
                     }
-                    S3FS_XMLFREE(nslist);
                 }
             }
         }
