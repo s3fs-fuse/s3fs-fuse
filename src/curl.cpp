@@ -84,7 +84,7 @@ static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.typ
 // Class S3fsCurl
 //-------------------------------------------------------------------
 pthread_mutex_t  S3fsCurl::curl_warnings_lock;
-pthread_mutex_t  S3fsCurl::curl_handles_lock;
+Mutex            S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
 CurlHandlerPool* S3fsCurl::sCurlPool           = nullptr;
@@ -144,9 +144,6 @@ bool S3fsCurl::InitS3fsCurl()
     if(0 != pthread_mutex_init(&S3fsCurl::curl_warnings_lock, &attr)){
         return false;
     }
-    if(0 != pthread_mutex_init(&S3fsCurl::curl_handles_lock, &attr)){
-        return false;
-    }
     if(0 != pthread_mutex_init(&S3fsCurl::callback_locks.dns, &attr)){
         return false;
     }
@@ -197,9 +194,6 @@ bool S3fsCurl::DestroyS3fsCurl()
         result = false;
     }
     if(0 != pthread_mutex_destroy(&S3fsCurl::callback_locks.ssl_session)){
-        result = false;
-    }
-    if(0 != pthread_mutex_destroy(&S3fsCurl::curl_handles_lock)){
         result = false;
     }
     if(0 != pthread_mutex_destroy(&S3fsCurl::curl_warnings_lock)){
@@ -353,7 +347,7 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
     time_t     now = time(nullptr);
     progress_t p(dlnow, ulnow);
 
-    AutoLock   lock(&S3fsCurl::curl_handles_lock);
+    MutexLocker auto_lock(&S3fsCurl::curl_handles_lock);
 
     // any progress?
     if(p != S3fsCurl::curl_progress[curl]){
@@ -1910,7 +1904,7 @@ S3fsCurl::~S3fsCurl()
     DestroyCurlHandle();
 }
 
-bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
+bool S3fsCurl::ResetHandle()
 {
     bool run_once;
     {
@@ -2003,7 +1997,6 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
         }
     }
 
-    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
     S3fsCurl::curl_times[hCurl]    = time(nullptr);
     S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
@@ -2012,10 +2005,10 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
 
 bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
 {
-    AutoLock lock(&S3fsCurl::curl_handles_lock);
+    MutexLocker auto_lock(&S3fsCurl::curl_handles_lock);
 
     if(hCurl && remake){
-        if(!DestroyCurlHandle(false, true, AutoLock::ALREADY_LOCKED)){
+        if(!DestroyCurlHandleUnlocked(false, true)){
             S3FS_PRN_ERR("could not destroy handle.");
             return false;
         }
@@ -2035,12 +2028,18 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
             }
         }
     }
-    ResetHandle(AutoLock::ALREADY_LOCKED);
+    ResetHandle();
 
     return true;
 }
 
-bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, AutoLock::Type locktype)
+bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data)
+{
+    MutexLocker auto_lock(&S3fsCurl::curl_handles_lock);
+    return DestroyCurlHandleUnlocked(restore_pool, clear_internal_data);
+}
+
+bool S3fsCurl::DestroyCurlHandleUnlocked(bool restore_pool, bool clear_internal_data)
 {
     // [NOTE]
     // If type is REQTYPE::IAMCRED or REQTYPE::IAMROLE, do not clear type.
@@ -2050,8 +2049,6 @@ bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, Au
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         type = REQTYPE::UNSET;
     }
-
-    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
 
     if(clear_internal_data){
         ClearInternalData();
@@ -2170,7 +2167,10 @@ bool S3fsCurl::RemakeHandle()
     partdata.size      = b_partdata_size;
 
     // reset handle
-    ResetHandle();
+    {
+        MutexLocker auto_lock(&S3fsCurl::curl_handles_lock);
+        ResetHandle();
+    }
 
     // set options
     switch(type){
@@ -2605,7 +2605,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
                 sleep(4);
                 {
-                    AutoLock lock(&S3fsCurl::curl_handles_lock);
+                    MutexLocker auto_lock(&S3fsCurl::curl_handles_lock);
                     S3fsCurl::curl_times[hCurl] = time(nullptr);
                 }
                 break; 
