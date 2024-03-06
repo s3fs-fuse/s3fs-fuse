@@ -197,7 +197,7 @@ bool S3ObjList::GetLastName(std::string& lastname) const
     bool result = false;
     lastname = "";
     for(s3obj_t::const_iterator iter = objects.begin(); iter != objects.end(); ++iter){
-        if((*iter).second.orgname.length()){
+        if(!iter->second.orgname.empty()){
             if(lastname.compare(iter->second.orgname) < 0){
                 lastname = (*iter).second.orgname;
                 result = true;

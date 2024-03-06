@@ -1180,10 +1180,10 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
             break;
         }
         // download each multipart size(default 10MB) in unit
-        for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < static_cast<off_t>(iter->bytes); totalread += oneread){
+        for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < iter->bytes; totalread += oneread){
             int   upload_fd = physical_fd;
             off_t offset    = iter->offset + totalread;
-            oneread         = std::min(static_cast<off_t>(iter->bytes) - totalread, S3fsCurl::GetMultipartSize());
+            oneread         = std::min(iter->bytes - totalread, S3fsCurl::GetMultipartSize());
 
             // check rest size is over minimum part size
             //
