@@ -130,6 +130,7 @@ bool             S3fsCurl::requester_pays      = false;          // default
 std::string      S3fsCurl::proxy_url;
 bool             S3fsCurl::proxy_http          = false;
 std::string      S3fsCurl::proxy_userpwd;
+long             S3fsCurl::ipresolve_type      = CURL_IPRESOLVE_WHATEVER;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -1174,6 +1175,23 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
     return true;
 }
 
+bool S3fsCurl::SetIPResolveType(const char* value)
+{
+    if(!value){
+        return false;
+    }
+    if(0 == strcasecmp(value, "ipv4")){
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V4;
+    }else if(0 == strcasecmp(value, "ipv6")){
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V6;
+    }else if(0 == strcasecmp(value, "whatever")){       // = default type
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_WHATEVER;
+    }else{
+        return false;
+    }
+    return true;
+}
+
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
 // cppcheck-suppress constParameterCallback
@@ -1949,7 +1967,11 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1) && !run_once){
         S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
     }
-
+    if(CURL_IPRESOLVE_WHATEVER != S3fsCurl::ipresolve_type){    // CURL_IPRESOLVE_WHATEVER is default, so not need to set.
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_IPRESOLVE, S3fsCurl::ipresolve_type)){
+            return false;
+        }
+    }
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         // REQTYPE::IAMCRED and REQTYPE::IAMROLE are always HTTP
         if(0 == S3fsCurl::ssl_verify_hostname){

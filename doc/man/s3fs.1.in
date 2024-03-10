@@ -418,6 +418,12 @@ Username and passphrase are valid only for HTTP schema.
 If the HTTP proxy does not require authentication, this option is not required.
 Separate the username and passphrase with a ':' character and specify each as a URL-encoded string.
 .TP
+\fB\-o\fR ipresolve (default="whatever")
+Select what type of IP addresses to use when establishing a connection.
+Default('whatever') can use addresses of all IP versions(IPv4 and IPv6) that your system allows.
+If you specify 'IPv4', only IPv4 addresses are used.
+And when 'IPv6' is specified, only IPv6 addresses will be used.
+.TP
 \fB\-o\fR logfile - specify the log output file.
 s3fs outputs the log file to syslog. Alternatively, if s3fs is started with the "-f" option specified, the log will be output to the stdout/stderr.
 You can use this option to specify the log file that s3fs outputs.
