@@ -156,6 +156,7 @@ class S3fsCurl
         static std::string      proxy_url;
         static bool             proxy_http;
         static std::string      proxy_userpwd;     // load from file(<username>:<passphrase>)
+        static long             ipresolve_type;    // this value is a libcurl symbol.
 
         // variables
         CURL*                hCurl;
@@ -340,6 +341,7 @@ class S3fsCurl
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
         static bool SetProxy(const char* url);
         static bool SetProxyUserPwd(const char* userpwd);
+        static bool SetIPResolveType(const char* value);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
