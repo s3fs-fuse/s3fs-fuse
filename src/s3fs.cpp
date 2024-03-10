@@ -5434,6 +5434,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
             return 0;
         }
+        else if(is_prefix(arg, "ipresolve=")){
+            const char* pipresolve = &arg[strlen("ipresolve=")];
+            if(!S3fsCurl::SetIPResolveType(pipresolve)){
+                S3FS_PRN_EXIT("failed to ip resolve option value(%s).", pipresolve);
+                return -1;
+            }
+            return 0;
+        }
         //
         // log file option
         //
