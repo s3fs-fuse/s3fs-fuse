@@ -53,13 +53,14 @@ void ThreadPoolMan::Destroy()
     }
 }
 
-bool ThreadPoolMan::Instruct(std::unique_ptr<thpoolman_param> pparam)
+bool ThreadPoolMan::Instruct(const thpoolman_param& param)
 {
     if(!ThreadPoolMan::singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
-    return ThreadPoolMan::singleton->SetInstruction(std::move(pparam));
+    ThreadPoolMan::singleton->SetInstruction(param);
+    return true;
 }
 
 //
@@ -84,30 +85,25 @@ void* ThreadPoolMan::Worker(void* arg)
         }
 
         // get instruction
-        std::unique_ptr<thpoolman_param> pparam;
+        thpoolman_param param;
         {
             AutoLock auto_lock(&(psingleton->thread_list_lock));
 
-            if(!psingleton->instruction_list.empty()){
-                pparam = std::move(psingleton->instruction_list.front());
-                psingleton->instruction_list.pop_front();
-                if(!pparam){
-                    S3FS_PRN_WARN("Got a semaphore, but the instruction is empty.");
-                }
+            if(psingleton->instruction_list.empty()){
+                S3FS_PRN_DBG("Got a semaphore, but the instruction is empty.");
+                continue;
             }else{
-                S3FS_PRN_WARN("Got a semaphore, but there is no instruction.");
-                pparam = nullptr;
+                param = psingleton->instruction_list.front();
+                psingleton->instruction_list.pop_front();
             }
         }
 
-        if(pparam){
-            void* retval     = pparam->pfunc(pparam->args);
-            if(nullptr != retval){
-                S3FS_PRN_WARN("The instruction function returned with somthign error code(%ld).", reinterpret_cast<long>(retval));
-            }
-            if(pparam->psem){
-                pparam->psem->post();
-            }
+        void* retval = param.pfunc(param.args);
+        if(nullptr != retval){
+            S3FS_PRN_WARN("The instruction function returned with somthign error code(%ld).", reinterpret_cast<long>(retval));
+        }
+        if(param.psem){
+            param.psem->post();
         }
     }
 
@@ -235,23 +231,16 @@ bool ThreadPoolMan::StartThreads(int count)
     return true;
 }
 
-bool ThreadPoolMan::SetInstruction(std::unique_ptr<thpoolman_param> pparam)
+void ThreadPoolMan::SetInstruction(const thpoolman_param& param)
 {
-    if(!pparam){
-        S3FS_PRN_ERR("The parameter value is nullptr.");
-        return false;
-    }
-
     // set parameter to list
     {
         AutoLock auto_lock(&thread_list_lock);
-        instruction_list.push_back(std::move(pparam));
+        instruction_list.push_back(param);
     }
 
     // run thread
     thpoolman_sem.post();
-
-    return true;
 }
 
 /*
