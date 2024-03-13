@@ -449,13 +449,13 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
         thargs->petag                = petag;
 
         // make parameter for thread pool
-        std::unique_ptr<thpoolman_param> ppoolparam(new thpoolman_param);
-        ppoolparam->args             = thargs;
-        ppoolparam->psem             = &uploaded_sem;
-        ppoolparam->pfunc            = PseudoFdInfo::MultipartUploadThreadWorker;
+        thpoolman_param ppoolparam;
+        ppoolparam.args             = thargs;
+        ppoolparam.psem             = &uploaded_sem;
+        ppoolparam.pfunc            = PseudoFdInfo::MultipartUploadThreadWorker;
 
         // setup instruction
-        if(!ThreadPoolMan::Instruct(std::move(ppoolparam))){
+        if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for uploading.");
             delete thargs;
             return false;

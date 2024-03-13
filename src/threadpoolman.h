@@ -23,7 +23,6 @@
 
 #include <atomic>
 #include <list>
-#include <memory>
 #include <vector>
 
 #include "psemaphore.h"
@@ -53,7 +52,7 @@ struct thpoolman_param
     thpoolman_param() : args(nullptr), psem(nullptr), pfunc(nullptr) {}
 };
 
-typedef std::list<std::unique_ptr<thpoolman_param>> thpoolman_params_t;
+typedef std::list<thpoolman_param> thpoolman_params_t;
 
 typedef std::vector<pthread_t> thread_list_t;
 
@@ -89,12 +88,12 @@ class ThreadPoolMan
 
         bool StopThreads();
         bool StartThreads(int count);
-        bool SetInstruction(std::unique_ptr<thpoolman_param> pparam);
+        void SetInstruction(const thpoolman_param& pparam);
 
     public:
         static bool Initialize(int count);
         static void Destroy();
-        static bool Instruct(std::unique_ptr<thpoolman_param> pparam);
+        static bool Instruct(const thpoolman_param& pparam);
 };
 
 #endif // S3FS_THREADPOOLMAN_H_
