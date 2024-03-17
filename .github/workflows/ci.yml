@@ -263,6 +263,10 @@ jobs:
               echo 'CXX=clang++'                                       >> $GITHUB_ENV
               echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread" >> $GITHUB_ENV
               echo 'TSAN_OPTIONS=halt_on_error=1'                      >> $GITHUB_ENV
+              # [NOTE]
+              # Set this to avoid following error when running configure.
+              # "FATAL: ThreadSanitizer: unexpected memory mapping"
+              sysctl vm.mmap_rnd_bits=28
           elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
               echo 'CXX=clang++'                                       >> $GITHUB_ENV
               echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow" >> $GITHUB_ENV
