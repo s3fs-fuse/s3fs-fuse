@@ -110,6 +110,9 @@ class S3fsCurl
             IAMROLE
         };
 
+        // Environment name
+        static constexpr char   S3FS_SSL_PRIVKEY_PASSWORD[] = "S3FS_SSL_PRIVKEY_PASSWORD";
+
         // class variables
         static pthread_mutex_t  curl_warnings_lock;
         static bool             curl_warnings_once;  // emit older curl warnings only once
@@ -139,6 +142,11 @@ class S3fsCurl
         static bool             is_dump_body;
         static S3fsCred*        ps3fscred;
         static long             ssl_verify_hostname;
+        static std::string      client_cert;
+        static std::string      client_cert_type;
+        static std::string      client_priv_key;
+        static std::string      client_priv_key_type;
+        static std::string      client_key_password;
         static curltime_t       curl_times;
         static curlprogress_t   curl_progress;
         static std::string      curl_ca_bundle;
@@ -317,6 +325,7 @@ class S3fsCurl
         static bool IsDumpBody() { return S3fsCurl::is_dump_body; }
         static long SetSslVerifyHostname(long value);
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
+        static bool SetSSLClientCertOptions(const std::string& values);
         static void ResetOffset(S3fsCurl* pCurl);
         // maximum parallel GET and PUT requests
         static int SetMaxParallelCount(int value);

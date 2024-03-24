@@ -179,6 +179,18 @@ server certificate won't be checked against the available certificate authoritie
 \fB\-o\fR ssl_verify_hostname (default="2")
 When 0, do not verify the SSL certificate against the hostname.
 .TP
+\fB\-o\fR ssl_client_cert (default="")
+Specify an SSL client certificate.
+Specify this optional parameter in the following format:
+ "<SSL Cert>[:<Cert Type>[:<Private Key>[:<Key Type>
+                                        [:<Password>]]]]"
+ <SSL Cert>: Client certificate.
+             Specify the file path or NickName(for NSS, etc.).
+ <Cert Type>: Type of certificate, default is "PEM"(optional).
+ <Private Key>: Certificate's private key file(optional).
+ <Key Type>: Type of private key, default is "PEM"(optional).
+ <Password>: Passphrase of the private key(optional). It is also possible to omit this value and specify it using the environment variable "S3FS_SSL_PRIVKEY_PASSWORD".
+.TP
 \fB\-o\fR nodnscache - disable DNS cache.
 s3fs is always using DNS cache, this option make DNS cache disable.
 .TP
