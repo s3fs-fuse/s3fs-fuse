@@ -2582,6 +2582,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         result = -ENOTSUP;
                         break;
 
+                    case 429:
                     case 500:
                     case 503: {
                         S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
