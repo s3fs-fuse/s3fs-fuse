@@ -59,8 +59,8 @@ jobs:
           - rockylinux:9
           - rockylinux:8
           - centos:centos7
+          - fedora:40
           - fedora:39
-          - fedora:38
           - opensuse/leap:15
           - alpine:3.19
 
@@ -225,7 +225,7 @@ jobs:
           - valgrind
 
     container:
-      image: fedora:39
+      image: fedora:40
 
       options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
 
@@ -235,7 +235,7 @@ jobs:
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:39
+          .github/workflows/linux-ci-helper.sh fedora:40
 
       - name: Install clang
         run: |
