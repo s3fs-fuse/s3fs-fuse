@@ -775,7 +775,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
     return false;
 }
 
-bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
+bool FdManager::ChangeEntityToTempPath(const FdEntity* ent, const char* path)
 {
     AutoLock auto_lock(&FdManager::fd_manager_lock);
 
@@ -783,8 +783,10 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
         if(iter->second.get() == ent){
             std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
-            iter->second.reset(ent);
-            break;
+            // Move the entry to the new key
+            fent[tmppath] = std::move(iter->second);
+            iter = fent.erase(iter);
+            return true;
         }else{
             ++iter;
         }
