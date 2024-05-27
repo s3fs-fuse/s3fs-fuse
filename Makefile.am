@@ -46,6 +46,7 @@ cppcheck:
             --suppress=unmatchedSuppression \
             --suppress=useStlAlgorithm \
             --suppress=checkLevelNormal \
+            --suppress=normalCheckLevelMaxBranches \
             src/ test/
 
 #
