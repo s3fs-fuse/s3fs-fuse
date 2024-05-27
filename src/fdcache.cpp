@@ -235,7 +235,7 @@ bool FdManager::CheckCacheDirExist()
     if(FdManager::cache_dir.empty()){
         return true;
     }
-    return IsDir(&cache_dir);
+    return IsDir(cache_dir);
 }
 
 off_t FdManager::GetEnsureFreeDiskSpace()
@@ -385,16 +385,16 @@ bool FdManager::SetTmpDir(const char *dir)
     return true;
 }
 
-bool FdManager::IsDir(const std::string* dir)
+bool FdManager::IsDir(const std::string& dir)
 {
     // check the directory
     struct stat st;
-    if(0 != stat(dir->c_str(), &st)){
-        S3FS_PRN_ERR("could not stat() directory %s by errno(%d).", dir->c_str(), errno);
+    if(0 != stat(dir.c_str(), &st)){
+        S3FS_PRN_ERR("could not stat() directory %s by errno(%d).", dir.c_str(), errno);
         return false;
     }
     if(!S_ISDIR(st.st_mode)){
-        S3FS_PRN_ERR("the directory %s is not a directory.", dir->c_str());
+        S3FS_PRN_ERR("the directory %s is not a directory.", dir.c_str());
         return false;
     }
     return true;
@@ -405,7 +405,7 @@ bool FdManager::CheckTmpDirExist()
     if(FdManager::tmp_dir.empty()){
         return true;
     }
-    return IsDir(&tmp_dir);
+    return IsDir(tmp_dir);
 }
 
 FILE* FdManager::MakeTempFile() {

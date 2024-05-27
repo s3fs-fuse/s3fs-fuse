@@ -391,8 +391,8 @@ class S3fsCurl
         const std::string& GetUrl() const { return url; }
         const std::string& GetOp() const { return op; }
         const headers_t* GetResponseHeaders() const { return &responseHeaders; }
-        const std::string* GetBodyData() const { return &bodydata; }
-        const std::string* GetHeadData() const { return &headdata; }
+        const std::string& GetBodyData() const { return bodydata; }
+        const std::string& GetHeadData() const { return headdata; }
         CURLcode GetCurlCode() const { return curlCode; }
         long GetLastResponseCode() const { return LastResponseCode; }
         bool SetUseAhbe(bool ahbe);
