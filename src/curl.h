@@ -385,11 +385,11 @@ class S3fsCurl
 
         // methods(variables)
         CURL* GetCurlHandle() const { return hCurl; }
-        std::string GetPath() const { return path; }
-        std::string GetBasePath() const { return base_path; }
-        std::string GetSpecialSavedPath() const { return saved_path; }
-        std::string GetUrl() const { return url; }
-        std::string GetOp() const { return op; }
+        const std::string& GetPath() const { return path; }
+        const std::string& GetBasePath() const { return base_path; }
+        const std::string& GetSpecialSavedPath() const { return saved_path; }
+        const std::string& GetUrl() const { return url; }
+        const std::string& GetOp() const { return op; }
         const headers_t* GetResponseHeaders() const { return &responseHeaders; }
         const std::string* GetBodyData() const { return &bodydata; }
         const std::string* GetHeadData() const { return &headdata; }

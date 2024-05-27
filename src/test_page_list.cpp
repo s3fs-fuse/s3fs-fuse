@@ -72,7 +72,7 @@ void test_compress()
   ASSERT_EQUALS(off_t(36), size);
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
   test_compress();
   return 0;
