@@ -197,7 +197,7 @@ void test_cr_encoding()
     ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crper2.c_str()).c_str()), base_mid_crper2);
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
 
