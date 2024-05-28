@@ -3508,14 +3508,14 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             S3FS_PRN_ERR("ListBucketRequest returns with error.");
             return result;
         }
-        const std::string* body = s3fscurl.GetBodyData();
+        const std::string& body = s3fscurl.GetBodyData();
 
         // [NOTE]
         // CR code(\r) is replaced with LF(\n) by xmlReadMemory() function.
         // To prevent that, only CR code is encoded by following function.
         // The encoded CR code is decoded with append_objects_from_xml(_ex).
         //
-        std::string encbody = get_encoded_cr_code(body->c_str());
+        std::string encbody = get_encoded_cr_code(body.c_str());
 
         // xmlDocPtr
         std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0), xmlFreeDoc);
@@ -4465,12 +4465,12 @@ static int s3fs_check_service()
         if(300 <= responseCode && responseCode < 500){
 
             // check region error(for putting message or retrying)
-            const std::string* body = s3fscurl.GetBodyData();
+            const std::string& body = s3fscurl.GetBodyData();
             std::string expectregion;
             std::string expectendpoint;
 
             // Check if any case can be retried
-            if(check_region_error(body->c_str(), body->size(), expectregion)){
+            if(check_region_error(body.c_str(), body.size(), expectregion)){
                 // [NOTE]
                 // If endpoint is not specified(using us-east-1 region) and
                 // an error is encountered accessing a different region, we
@@ -4511,7 +4511,7 @@ static int s3fs_check_service()
                     S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
                 }
 
-            }else if(check_endpoint_error(body->c_str(), body->size(), expectendpoint)){
+            }else if(check_endpoint_error(body.c_str(), body.size(), expectendpoint)){
                 // redirect error
                 if(pathrequeststyle){
                     S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
@@ -4520,7 +4520,7 @@ static int s3fs_check_service()
                 }
                 return EXIT_FAILURE;
 
-            }else if(check_invalid_sse_arg_error(body->c_str(), body->size())){
+            }else if(check_invalid_sse_arg_error(body.c_str(), body.size())){
                 // SSE argument error, so retry it without SSE
                 S3FS_PRN_CRIT("S3 service returned InvalidArgument(x-amz-server-side-encryption), so retry without adding x-amz-server-side-encryption.");
 
@@ -4551,8 +4551,8 @@ static int s3fs_check_service()
         if(!do_retry && responseCode != 200 && responseCode != 301){
             // parse error message if existed
             std::string errMessage;
-            const std::string* body = s3fscurl.GetBodyData();
-            check_error_message(body->c_str(), body->size(), errMessage);
+            const std::string& body = s3fscurl.GetBodyData();
+            check_error_message(body.c_str(), body.size(), errMessage);
 
             if(responseCode == 400){
                 S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
