@@ -48,7 +48,7 @@ class FdManager
   private:
       static off_t GetFreeDiskSpace(const char* path);
       static off_t GetTotalDiskSpace(const char* path);
-      static bool IsDir(const std::string* dir);
+      static bool IsDir(const std::string& dir);
       static int GetVfsStat(const char* path, struct statvfs* vfsbuf);
 
       int GetPseudoFdCount(const char* path);
