@@ -35,7 +35,7 @@ static constexpr char SPACES[] = " \t\r\n";
 //-------------------------------------------------------------------
 // Inline functions
 //-------------------------------------------------------------------
-static inline int is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
+static inline bool is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
 static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
