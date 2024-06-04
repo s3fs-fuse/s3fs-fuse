@@ -1361,7 +1361,7 @@ static int s3fs_rmdir(const char* _path)
     S3fsCurl s3fscurl;
     result = s3fscurl.DeleteRequest(strpath.c_str());
     s3fscurl.DestroyCurlHandle();
-    StatCache::getStatCacheData()->DelStat(strpath.c_str());
+    StatCache::getStatCacheData()->DelStat(strpath);
 
     // double check for old version(before 1.63)
     // The old version makes "dir" object, newer version makes "dir/".
@@ -1376,7 +1376,7 @@ static int s3fs_rmdir(const char* _path)
             // Found "dir" object.
             result = s3fscurl.DeleteRequest(strpath.c_str());
             s3fscurl.DestroyCurlHandle();
-            StatCache::getStatCacheData()->DelStat(strpath.c_str());
+            StatCache::getStatCacheData()->DelStat(strpath);
         }
     }
     // If there is no "dir" and "dir/" object(this case is made by s3cmd/s3sync),
