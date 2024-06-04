@@ -112,9 +112,9 @@ class StatCache
         void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
         // Truncate stat cache
-        bool TruncateCache(AutoLock::Type locktype = AutoLock::NONE);
+        bool TruncateCache() REQUIRES(StatCache::stat_cache_lock);
         // Truncate symbolic link cache
-        bool TruncateSymlink(AutoLock::Type locktype = AutoLock::NONE);
+        bool TruncateSymlink() REQUIRES(StatCache::stat_cache_lock);
 
         bool AddNotruncateCache(const std::string& key);
         bool DelNotruncateCache(const std::string& key);
@@ -186,12 +186,21 @@ class StatCache
         void ChangeNoTruncateFlag(const std::string& key, bool no_truncate);
 
         // Delete stat cache
-        bool DelStat(const std::string& key, AutoLock::Type locktype = AutoLock::NONE);
+        bool DelStat(const std::string& key)
+        {
+            AutoLock lock(&StatCache::stat_cache_lock);
+            return DelStatHasLock(key);
+        }
+        bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
 
         // Cache for symbolic link
         bool GetSymlink(const std::string& key, std::string& value);
         bool AddSymlink(const std::string& key, const std::string& value);
-        bool DelSymlink(const std::string& key, AutoLock::Type locktype = AutoLock::NONE);
+        bool DelSymlink(const std::string& key) {
+            AutoLock lock(&StatCache::stat_cache_lock);
+            return DelSymlinkHasLock(key);
+        }
+        bool DelSymlinkHasLock(const std::string& key);
 
         // Cache for Notruncate file
         bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);

@@ -102,24 +102,24 @@ class S3fsCred
         bool SetAwsProfileName(const char* profile_name);
         bool SetIAMRoleMetadataType(bool flag);
 
-        bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey, AutoLock::Type type);
-        bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken, AutoLock::Type type);
-        bool IsSetAccessKeys(AutoLock::Type type) const;
+        bool SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey) REQUIRES(S3fsCred::token_lock);
+        bool SetAccessKeyWithSessionToken(const char* AccessKeyId, const char* SecretAccessKey, const char * SessionToken) REQUIRES(S3fsCred::token_lock);
+        bool IsSetAccessKeys() const REQUIRES(S3fsCred::token_lock);
 
         bool SetIsECS(bool flag);
         bool SetIsUseSessionToken(bool flag);
 
         bool SetIsIBMIAMAuth(bool flag);
 
-        int SetIMDSVersion(int version, AutoLock::Type type);
-        int GetIMDSVersion(AutoLock::Type type) const;
+        int SetIMDSVersion(int version) REQUIRES(S3fsCred::token_lock);
+        int GetIMDSVersion() const REQUIRES(S3fsCred::token_lock);
 
-        bool SetIAMv2APIToken(const std::string& token, AutoLock::Type type);
-        std::string GetIAMv2APIToken(AutoLock::Type type) const;
+        bool SetIAMv2APIToken(const std::string& token) REQUIRES(S3fsCred::token_lock);
+        const std::string& GetIAMv2APIToken() const REQUIRES(S3fsCred::token_lock);
 
-        bool SetIAMRole(const char* role, AutoLock::Type type);
-        std::string GetIAMRole(AutoLock::Type type) const;
-        bool IsSetIAMRole(AutoLock::Type type) const;
+        bool SetIAMRole(const char* role) REQUIRES(S3fsCred::token_lock);
+        const std::string& GetIAMRole() const REQUIRES(S3fsCred::token_lock);
+        bool IsSetIAMRole() const REQUIRES(S3fsCred::token_lock);
         size_t SetIAMFieldCount(size_t field_count);
         std::string SetIAMCredentialsURL(const char* url);
         std::string SetIAMTokenField(const char* token_field);
@@ -128,18 +128,18 @@ class S3fsCred
         bool IsReadableS3fsPasswdFile() const;
         bool CheckS3fsPasswdFilePerms();
         bool ParseS3fsPasswdFile(bucketkvmap_t& resmap);
-        bool ReadS3fsPasswdFile(AutoLock::Type type);
+        bool ReadS3fsPasswdFile() REQUIRES(S3fsCred::token_lock);
 
         static int CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& access_key_id, std::string& secret_access_key);
-        bool ReadAwsCredentialFile(const std::string &filename, AutoLock::Type type);
+        bool ReadAwsCredentialFile(const std::string &filename) REQUIRES(S3fsCred::token_lock);
 
-        bool InitialS3fsCredentials();
+        bool InitialS3fsCredentials() REQUIRES(S3fsCred::token_lock);
         bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
 
-        bool GetIAMCredentialsURL(std::string& url, bool check_iam_role, AutoLock::Type type);
-        bool LoadIAMCredentials(AutoLock::Type type);
-        bool SetIAMCredentials(const char* response, AutoLock::Type type);
-        bool SetIAMRoleFromMetaData(const char* response, AutoLock::Type type);
+        bool GetIAMCredentialsURL(std::string& url, bool check_iam_role) REQUIRES(S3fsCred::token_lock);
+        bool LoadIAMCredentials() REQUIRES(S3fsCred::token_lock);
+        bool SetIAMCredentials(const char* response) REQUIRES(S3fsCred::token_lock);
+        bool SetIAMRoleFromMetaData(const char* response) REQUIRES(S3fsCred::token_lock);
 
         bool SetExtCredLib(const char* arg);
         bool IsSetExtCredLib() const;
@@ -149,7 +149,7 @@ class S3fsCred
         bool InitExtCredLib();
         bool LoadExtCredLib();
         bool UnloadExtCredLib();
-        bool UpdateExtCredentials(AutoLock::Type type);
+        bool UpdateExtCredentials() REQUIRES(S3fsCred::token_lock);
 
         static bool CheckForbiddenBucketParams();
 

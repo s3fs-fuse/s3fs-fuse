@@ -79,12 +79,12 @@ class PseudoFdInfo
 
         bool Clear();
         void CloseUploadFd();
-        bool OpenUploadFd(AutoLock::Type type = AutoLock::NONE);
-        bool ResetUploadInfo(AutoLock::Type type);
-        bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp, AutoLock::Type type);
-        bool CompleteInstruction(int result, AutoLock::Type type = AutoLock::NONE);
-        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, AutoLock::Type type = AutoLock::NONE);
-        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type = AutoLock::NONE);
+        bool OpenUploadFd() REQUIRES(PseudoFdInfo::upload_list_lock);
+        bool ResetUploadInfo() REQUIRES(PseudoFdInfo::upload_list_lock);
+        bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
+        bool CompleteInstruction(int result) REQUIRES(S3fsCurl::curl_handles_lock);
+        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(PseudoFdInfo::upload_list_lock);
+        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(PseudoFdInfo::upload_list_lock);
         bool CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 
@@ -104,7 +104,7 @@ class PseudoFdInfo
 
         bool Set(int fd, int open_flags);
         bool ClearUploadInfo(bool is_cancel_mp = false);
-        bool InitialUploadInfo(const std::string& id){ return RowInitialUploadInfo(id, true, AutoLock::NONE); }
+        bool InitialUploadInfo(const std::string& id){ return RowInitialUploadInfo(id, true); }
 
         bool IsUploading() const { return !upload_id.empty(); }
         bool GetUploadId(std::string& id) const;

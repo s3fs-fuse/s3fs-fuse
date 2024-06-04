@@ -77,8 +77,8 @@ class FdEntity
         ino_t GetInode() const;
         int OpenMirrorFile();
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0);  // size=0 means loading to end
-        PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type locktype = AutoLock::NONE);
-        bool IsUploading(AutoLock::Type locktype = AutoLock::NONE);
+        PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
+        bool IsUploading() REQUIRES(FdEntity::fdent_lock);
         bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
         bool SetAllStatusUnloaded() { return SetAllStatus(false); }
         int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
@@ -113,43 +113,97 @@ class FdEntity
         FdEntity& operator=(FdEntity&&) = delete;
 
         void Close(int fd);
+        // TODO: should this require a lock?
         bool IsOpen() const { return (-1 != physical_fd); }
-        bool FindPseudoFd(int fd, AutoLock::Type locktype = AutoLock::NONE) const;
-        int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type);
+        bool FindPseudoFd(int fd) const {
+            AutoLock lock(&fdent_lock);
+            return FindPseudoFdWithLock(fd);
+        }
+        bool FindPseudoFdWithLock(int fd) const REQUIRES(FdEntity::fdent_lock);
+        int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags) REQUIRES(FdEntity::fdent_lock);
         bool LoadAll(int fd, headers_t* pmeta = nullptr, off_t* size = nullptr, bool force_load = false);
-        int Dup(int fd, AutoLock::Type locktype = AutoLock::NONE);
-        int OpenPseudoFd(int flags = O_RDONLY, AutoLock::Type locktype = AutoLock::NONE);
-        int GetOpenCount(AutoLock::Type locktype = AutoLock::NONE) const;
+        int Dup(int fd) {
+            AutoLock lock(&fdent_lock);
+            return DupWithLock(fd);
+        }
+        int DupWithLock(int fd) REQUIRES(FdEntity::fdent_lock);
+        int OpenPseudoFd(int flags = O_RDONLY);
+        int GetOpenCount() const {
+            AutoLock lock(&fdent_lock);
+            return GetOpenCountHasLock();
+        }
+        int GetOpenCountHasLock() const REQUIRES(FdEntity::fdent_lock);
+        // TODO: should thsi require a lock?
         const std::string& GetPath() const { return path; }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
-        int UploadPending(int fd, AutoLock::Type type);
+        int UploadPending(int fd) {
+            AutoLock auto_lock(&fdent_lock);
+            return UploadPendingHasLock(fd);
+        }
+        int UploadPendingHasLock(int fd) REQUIRES(FdEntity::fdent_lock);
 
-        bool GetStats(struct stat& st, AutoLock::Type locktype = AutoLock::NONE) const;
-        int SetCtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
-        int SetAtime(struct timespec time, AutoLock::Type locktype = AutoLock::NONE);
-        int SetMCtime(struct timespec mtime, struct timespec ctime, AutoLock::Type locktype = AutoLock::NONE);
+        bool GetStats(struct stat& st) const {
+            AutoLock lock(&fdent_lock);
+            return GetStatsHasLock(st);
+        }
+        bool GetStatsHasLock(struct stat& st) const REQUIRES(FdEntity::fdent_lock);
+        int SetCtime(struct timespec time) {
+            AutoLock lock(&fdent_lock);
+            return SetCtimeHasLock(time);
+        }
+        int SetCtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock);
+        int SetAtime(struct timespec time) {
+            AutoLock lock(&fdent_lock);
+            return SetAtimeHasLock(time);
+        }
+        int SetAtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock);
+        int SetMCtime(struct timespec mtime, struct timespec ctime) {
+            AutoLock lock(&fdent_lock);
+            return SetMCtimeHasLock(mtime, ctime);
+        }
+        int SetMCtimeHasLock(struct timespec mtime, struct timespec ctime) REQUIRES(FdEntity::fdent_lock);
         bool UpdateCtime();
         bool UpdateAtime();
         bool UpdateMtime(bool clear_holding_mtime = false);
         bool UpdateMCtime();
-        bool SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype = AutoLock::NONE);
-        bool ClearHoldingMtime(AutoLock::Type locktype = AutoLock::NONE);
+        bool SetHoldingMtime(struct timespec mtime);
+        bool ClearHoldingMtime() REQUIRES(FdEntity::fdent_lock);
         bool GetSize(off_t& size) const;
         bool GetXattr(std::string& xattr) const;
         bool SetXattr(const std::string& xattr);
-        bool SetMode(mode_t mode);
-        bool SetUId(uid_t uid);
-        bool SetGId(gid_t gid);
+        bool SetMode(mode_t mode) {
+            AutoLock lock(&fdent_lock);
+            return SetModeHasLock(mode);
+        }
+        bool SetModeHasLock(mode_t mode) REQUIRES(FdEntity::fdent_lock);
+        bool SetUId(uid_t uid) {
+            AutoLock lock(&fdent_lock);
+            return SetUIdHasLock(uid);
+        }
+        bool SetUIdHasLock(uid_t uid) REQUIRES(FdEntity::fdent_lock);
+        bool SetGId(gid_t gid) {
+            AutoLock lock(&fdent_lock);
+            return SetGIdHasLock(gid);
+        }
+        bool SetGIdHasLock(gid_t gid) REQUIRES(FdEntity::fdent_lock);
         bool SetContentType(const char* path);
 
-        int Load(off_t start, off_t size, AutoLock::Type type, bool is_modified_flag = false);  // size=0 means loading to end
+        int Load(off_t start, off_t size, bool is_modified_flag = false) REQUIRES(FdEntity::fdent_lock, FdEntity::&fdent_data_lock);  // size=0 means loading to end
 
         off_t BytesModified();
-        int RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync = false);
-        int Flush(int fd, AutoLock::Type type, bool force_sync = false) { return RowFlush(fd, nullptr, type, force_sync); }
+        int RowFlush(int fd, const char* tpath, bool force_sync = false) {
+            AutoLock lock(&fdent_lock);
+            return RowFlushHasLock(fd, tpath, force_sync);
+        }
+        int RowFlushHasLock(int fd, const char* tpath, bool force_sync = false) REQUIRES(FdEntity::fdent_lock);
+        int Flush(int fd, bool force_sync = false) {
+            AutoLock lock(&fdent_lock);
+            return FlushHasLock(fd, force_sync);
+        }
+        int FlushHasLock(int fd, bool force_sync = false) REQUIRES(FdEntity::fdent_lock) { return RowFlushHasLock(fd, nullptr, force_sync); }
 
         ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
         ssize_t Write(int fd, const char* bytes, off_t start, size_t size);
