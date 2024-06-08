@@ -21,6 +21,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <future>
+#include <thread>
 
 #include "s3fs_logger.h"
 #include "threadpoolman.h"
@@ -64,13 +66,12 @@ bool ThreadPoolMan::Instruct(const thpoolman_param& param)
 //
 // Thread worker
 //
-void* ThreadPoolMan::Worker(void* arg)
+void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
 {
-    ThreadPoolMan* psingleton = static_cast<ThreadPoolMan*>(arg);
-
     if(!psingleton){
         S3FS_PRN_ERR("The parameter for worker thread is invalid.");
-        return reinterpret_cast<void*>(-EIO);
+        promise.set_value(-EIO);
+        return;
     }
     S3FS_PRN_INFO3("Start worker thread in ThreadPoolMan.");
 
@@ -105,7 +106,7 @@ void* ThreadPoolMan::Worker(void* arg)
         }
     }
 
-    return nullptr;
+    promise.set_value(0);
 }
 
 //------------------------------------------------
@@ -158,14 +159,10 @@ bool ThreadPoolMan::StopThreads()
     }
 
     // wait for threads exiting
-    for(thread_list_t::const_iterator iter = thread_list.begin(); iter != thread_list.end(); ++iter){
-        void* retval = nullptr;
-        int   result = pthread_join(*iter, &retval);
-        if(result){
-            S3FS_PRN_ERR("failed pthread_join - result(%d)", result);
-        }else{
-            S3FS_PRN_DBG("succeed pthread_join - return code(%ld)", reinterpret_cast<long>(retval));
-        }
+    for(auto& pair : thread_list){
+        pair.first.join();
+        long retval = pair.second.get();
+        S3FS_PRN_DBG("join succeeded - return code(%ld)", reinterpret_cast<long>(retval));
     }
     thread_list.clear();
 
@@ -195,14 +192,10 @@ bool ThreadPoolMan::StartThreads(int count)
     SetExitFlag(false);
     for(int cnt = 0; cnt < count; ++cnt){
         // run thread
-        pthread_t thread;
-        int       result;
-        if(0 != (result = pthread_create(&thread, nullptr, ThreadPoolMan::Worker, static_cast<void*>(this)))){
-            S3FS_PRN_ERR("failed pthread_create with return code(%d)", result);
-            StopThreads();        // if possible, stop all threads
-            return false;
-        }
-        thread_list.push_back(thread);
+        std::promise<int> promise;
+        std::future<int> future = promise.get_future();
+        std::thread thread(ThreadPoolMan::Worker, this, std::move(promise));
+        thread_list.emplace_back(std::move(thread), std::move(future));
     }
     return true;
 }
