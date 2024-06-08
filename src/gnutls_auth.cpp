@@ -22,7 +22,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <pthread.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <sys/types.h>
