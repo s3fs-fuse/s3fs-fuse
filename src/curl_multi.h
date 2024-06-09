@@ -65,6 +65,10 @@ class S3fsMultiCurl
     public:
         explicit S3fsMultiCurl(int maxParallelism, bool not_abort = false);
         ~S3fsMultiCurl();
+        S3fsMultiCurl(const S3fsMultiCurl&) = delete;
+        S3fsMultiCurl(S3fsMultiCurl&&) = delete;
+        S3fsMultiCurl& operator=(const S3fsMultiCurl&) = delete;
+        S3fsMultiCurl& operator=(S3fsMultiCurl&&) = delete;
 
         int GetMaxParallelism() const { return maxParallelism; }
 
