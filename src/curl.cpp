@@ -885,17 +885,17 @@ bool S3fsCurl::FinalCheckSse()
 {
     switch(S3fsCurl::ssetype){
         case sse_type_t::SSE_DISABLE:
-            S3fsCurl::ssekmsid.erase();
+            S3fsCurl::ssekmsid.clear();
             return true;
         case sse_type_t::SSE_S3:
-            S3fsCurl::ssekmsid.erase();
+            S3fsCurl::ssekmsid.clear();
             return true;
         case sse_type_t::SSE_C:
             if(S3fsCurl::sseckeys.empty()){
                 S3FS_PRN_ERR("sse type is SSE-C, but there is no custom key.");
                 return false;
             }
-            S3fsCurl::ssekmsid.erase();
+            S3fsCurl::ssekmsid.clear();
             return true;
         case sse_type_t::SSE_KMS:
             if(S3fsCurl::ssekmsid.empty()){
@@ -3091,7 +3091,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
         S3FS_PRN_ERR("IAMv2 token url(%s) or ttl_hdr(%s) parameter are wrong.", token_url ? token_url : "null", token_ttl_hdr ? token_ttl_hdr : "null");
         return -EIO;
     }
-    response.erase();
+    response.clear();
     url = token_url;
     if(!CreateCurlHandle()){
         return -EIO;
@@ -3154,7 +3154,7 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
         return false;
     }
     url = cred_url;
-    response.erase();
+    response.clear();
 
     // at first set type for handle
     type = REQTYPE::IAMCRED;
@@ -3240,7 +3240,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
         return false;
     }
     url = cred_url;
-    token.erase();
+    token.clear();
 
     S3FS_PRN_INFO3("Get IAM Role name");
 

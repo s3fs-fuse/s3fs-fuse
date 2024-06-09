@@ -109,7 +109,7 @@ static bool parse_string(const char* pstr, char delim, strlist_t& strlist)
             strAll = strAll.substr(pos + 1);
         }else{
             strlist.push_back(strAll);
-            strAll.erase();
+            strAll.clear();
         }
     }
     return true;
