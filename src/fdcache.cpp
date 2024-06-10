@@ -105,7 +105,7 @@ bool FdManager::SetCacheDir(const char* dir)
 bool FdManager::SetCacheCheckOutput(const char* path)
 {
     if(!path || '\0' == path[0]){
-        check_cache_output.erase();
+        check_cache_output.clear();
     }else{
         check_cache_output = path;
     }

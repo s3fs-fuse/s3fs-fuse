@@ -251,7 +251,7 @@ bool PseudoFdInfo::ResetUploadInfo(AutoLock::Type type)
 {
     AutoLock auto_lock(&upload_list_lock, type);
 
-    upload_id.erase();
+    upload_id.clear();
     upload_list.clear();
     instruct_count  = 0;
     completed_count = 0;

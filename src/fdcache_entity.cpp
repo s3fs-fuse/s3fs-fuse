@@ -180,7 +180,7 @@ void FdEntity::Clear()
             if(-1 == unlink(mirrorpath.c_str())){
                 S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
             }
-            mirrorpath.erase();
+            mirrorpath.clear();
         }
     }
     pagelist.Init(0, false, false);
@@ -250,7 +250,7 @@ void FdEntity::Close(int fd)
             if(-1 == unlink(mirrorpath.c_str())){
                 S3FS_PRN_WARN("failed to remove mirror cache file(%s) by errno(%d).", mirrorpath.c_str(), errno);
             }
-            mirrorpath.erase();
+            mirrorpath.clear();
         }
     }
 }
@@ -764,7 +764,7 @@ bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 
     }else{
         // does not have cache path
-        fentmapkey.erase();
+        fentmapkey.clear();
         FdManager::MakeRandomTempPath(newpath.c_str(), fentmapkey);
     }
     // set new path
@@ -1156,8 +1156,8 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
         // remove cache files(and cache stat file)
         FdManager::DeleteCacheFile(path.c_str());
         // cache file path does not use no more.
-        cachepath.erase();
-        mirrorpath.erase();
+        cachepath.clear();
+        mirrorpath.clear();
     }
 
     // Change entity key in manager mapping
