@@ -110,6 +110,9 @@ class S3fsCurl
             IAMROLE
         };
 
+        // Environment name
+        static constexpr char   S3FS_SSL_PRIVKEY_PASSWORD[] = "S3FS_SSL_PRIVKEY_PASSWORD";
+
         // class variables
         static pthread_mutex_t  curl_warnings_lock;
         static bool             curl_warnings_once;  // emit older curl warnings only once
@@ -139,6 +142,11 @@ class S3fsCurl
         static bool             is_dump_body;
         static S3fsCred*        ps3fscred;
         static long             ssl_verify_hostname;
+        static std::string      client_cert;
+        static std::string      client_cert_type;
+        static std::string      client_priv_key;
+        static std::string      client_priv_key_type;
+        static std::string      client_key_password;
         static curltime_t       curl_times;
         static curlprogress_t   curl_progress;
         static std::string      curl_ca_bundle;
@@ -156,6 +164,7 @@ class S3fsCurl
         static std::string      proxy_url;
         static bool             proxy_http;
         static std::string      proxy_userpwd;     // load from file(<username>:<passphrase>)
+        static long             ipresolve_type;    // this value is a libcurl symbol.
 
         // variables
         CURL*                hCurl;
@@ -316,6 +325,7 @@ class S3fsCurl
         static bool IsDumpBody() { return S3fsCurl::is_dump_body; }
         static long SetSslVerifyHostname(long value);
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
+        static bool SetSSLClientCertOptions(const std::string& values);
         static void ResetOffset(S3fsCurl* pCurl);
         // maximum parallel GET and PUT requests
         static int SetMaxParallelCount(int value);
@@ -340,6 +350,7 @@ class S3fsCurl
         static bool IsRequesterPays() { return S3fsCurl::requester_pays; }
         static bool SetProxy(const char* url);
         static bool SetProxyUserPwd(const char* userpwd);
+        static bool SetIPResolveType(const char* value);
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
@@ -374,14 +385,14 @@ class S3fsCurl
 
         // methods(variables)
         CURL* GetCurlHandle() const { return hCurl; }
-        std::string GetPath() const { return path; }
-        std::string GetBasePath() const { return base_path; }
-        std::string GetSpecialSavedPath() const { return saved_path; }
-        std::string GetUrl() const { return url; }
-        std::string GetOp() const { return op; }
+        const std::string& GetPath() const { return path; }
+        const std::string& GetBasePath() const { return base_path; }
+        const std::string& GetSpecialSavedPath() const { return saved_path; }
+        const std::string& GetUrl() const { return url; }
+        const std::string& GetOp() const { return op; }
         const headers_t* GetResponseHeaders() const { return &responseHeaders; }
-        const std::string* GetBodyData() const { return &bodydata; }
-        const std::string* GetHeadData() const { return &headdata; }
+        const std::string& GetBodyData() const { return bodydata; }
+        const std::string& GetHeadData() const { return headdata; }
         CURLcode GetCurlCode() const { return curlCode; }
         long GetLastResponseCode() const { return LastResponseCode; }
         bool SetUseAhbe(bool ahbe);

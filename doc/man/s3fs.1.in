@@ -179,6 +179,18 @@ server certificate won't be checked against the available certificate authoritie
 \fB\-o\fR ssl_verify_hostname (default="2")
 When 0, do not verify the SSL certificate against the hostname.
 .TP
+\fB\-o\fR ssl_client_cert (default="")
+Specify an SSL client certificate.
+Specify this optional parameter in the following format:
+ "<SSL Cert>[:<Cert Type>[:<Private Key>[:<Key Type>
+                                        [:<Password>]]]]"
+ <SSL Cert>: Client certificate.
+             Specify the file path or NickName(for NSS, etc.).
+ <Cert Type>: Type of certificate, default is "PEM"(optional).
+ <Private Key>: Certificate's private key file(optional).
+ <Key Type>: Type of private key, default is "PEM"(optional).
+ <Password>: Passphrase of the private key(optional). It is also possible to omit this value and specify it using the environment variable "S3FS_SSL_PRIVKEY_PASSWORD".
+.TP
 \fB\-o\fR nodnscache - disable DNS cache.
 s3fs is always using DNS cache, this option make DNS cache disable.
 .TP
@@ -417,6 +429,12 @@ This option specifies the file that describes the username and passphrase for au
 Username and passphrase are valid only for HTTP schema.
 If the HTTP proxy does not require authentication, this option is not required.
 Separate the username and passphrase with a ':' character and specify each as a URL-encoded string.
+.TP
+\fB\-o\fR ipresolve (default="whatever")
+Select what type of IP addresses to use when establishing a connection.
+Default('whatever') can use addresses of all IP versions(IPv4 and IPv6) that your system allows.
+If you specify 'IPv4', only IPv4 addresses are used.
+And when 'IPv6' is specified, only IPv6 addresses will be used.
 .TP
 \fB\-o\fR logfile - specify the log output file.
 s3fs outputs the log file to syslog. Alternatively, if s3fs is started with the "-f" option specified, the log will be output to the stdout/stderr.

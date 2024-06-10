@@ -6,7 +6,9 @@ If you want specific instructions for some distributions, check the [wiki](https
 
 Keep in mind using the pre-built packages when available.
 
-1. Ensure your system satisfies build and runtime dependencies for:
+## Compilation on Linux
+
+### Ensure your system satisfies build and runtime dependencies for:
 
 * fuse >= 2.8.4
 * automake
@@ -14,7 +16,10 @@ Keep in mind using the pre-built packages when available.
 * make
 * libcurl
 * libxml2
-* openssl
+* openssl/gnutls/nss
+    * Please prepare the library according to the OS on which you will compile.
+    * It is necessary to match the library used by libcurl.
+    * Install the OpenSSL, GnuTLS or NSS devel package.
 * mime.types (the package providing depends on the OS)
 	* s3fs tries to detect `/etc/mime.types` as default regardless of the OS
 	* Else s3fs tries to detect `/etc/apache2/mime.types` if OS is macOS
@@ -22,16 +27,38 @@ Keep in mind using the pre-built packages when available.
 	* Alternatively, you can set mime.types file path with `mime` option without detecting these default files
 * pkg-config (or your OS equivalent)
 
-2. Then compile from master via the following commands:
+* NOTE  
+    If you have any trouble about details on required packages, see `INSTALL_PACKAGES` in [linux-ci-helper.sh](https://github.com/s3fs-fuse/s3fs-fuse/blob/master/.github/workflows/linux-ci-helper.sh).
 
-```
-git clone https://github.com/s3fs-fuse/s3fs-fuse.git
-cd s3fs-fuse
-./autogen.sh
-./configure
-make
-sudo make install
-```
+### Then compile from master via the following commands:
+1. Clone the source code:
+    ```sh
+    git clone https://github.com/s3fs-fuse/s3fs-fuse.git
+    ```
+2. Configuration:
+    ```sh
+    cd s3fs-fuse
+    ./autogen.sh
+    ./configure
+    ```
+    Depending on the TLS library (OpenSSL/GnuTLS/NSS), add `--with-openssl`, `--with-gnutls` or `--with-nss` when executing `configure`. (If omitted, it is equivalent to `--with-openssl`.)
+3. Bulding:
+    ```sh
+    make
+    ```
+4. Installing:
+    ```sh
+    sudo make install
+    ```
+
+### NOTE - The required libraries/components required to run s3fs are:
+
+* fuse >= 2.8.4
+* libcurl
+* libxml2
+* openssl/gnutls/nss
+* mime.types (the package providing depends on the OS)
+
 
 ## Compilation on Windows (using MSYS2)
 

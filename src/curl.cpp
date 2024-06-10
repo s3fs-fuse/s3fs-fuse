@@ -83,6 +83,7 @@ static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.typ
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
+constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
 pthread_mutex_t  S3fsCurl::curl_warnings_lock;
 pthread_mutex_t  S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
@@ -107,6 +108,12 @@ bool             S3fsCurl::is_verbose          = false;
 bool             S3fsCurl::is_dump_body        = false;
 S3fsCred*        S3fsCurl::ps3fscred           = nullptr;
 long             S3fsCurl::ssl_verify_hostname = 1;    // default(original code...)
+// SSL client cert options
+std::string      S3fsCurl::client_cert;
+std::string      S3fsCurl::client_cert_type;
+std::string      S3fsCurl::client_priv_key;
+std::string      S3fsCurl::client_priv_key_type;
+std::string      S3fsCurl::client_key_password;
 
 // protected by curl_warnings_lock
 bool             S3fsCurl::curl_warnings_once = false;
@@ -130,6 +137,7 @@ bool             S3fsCurl::requester_pays      = false;          // default
 std::string      S3fsCurl::proxy_url;
 bool             S3fsCurl::proxy_http          = false;
 std::string      S3fsCurl::proxy_userpwd;
+long             S3fsCurl::ipresolve_type      = CURL_IPRESOLVE_WHATEVER;
 
 //-------------------------------------------------------------------
 // Class methods for S3fsCurl
@@ -1012,6 +1020,75 @@ long S3fsCurl::SetSslVerifyHostname(long value)
     return old;
 }
 
+bool S3fsCurl::SetSSLClientCertOptions(const std::string& values)
+{
+    // Parse values:
+    //   <values> = "<SSL Client Cert>:<SSL Cert Type>:<SSL Cert Private Key>:<SSL Cert Private Type>:<Key Password>"
+    //
+    if(values.empty()){
+        return false;
+    }
+
+    std::list<std::string> valarr;
+    std::string::size_type   start_pos = 0;
+    std::string::size_type   pos;
+    do{
+        if(std::string::npos == (pos = values.find(':', start_pos))){
+            valarr.push_back(values.substr(start_pos));
+            start_pos = pos;
+        }else{
+            if(0 < (pos - start_pos)){
+                valarr.push_back(values.substr(start_pos, (pos - start_pos)));
+            }else{
+                valarr.emplace_back("");
+            }
+            start_pos = ++pos;
+        }
+    }while(std::string::npos != start_pos);
+
+    // set client cert
+    if(!valarr.empty() && !valarr.front().empty()){
+        S3fsCurl::client_cert = valarr.front();
+        valarr.pop_front();
+
+        // set client cert type
+        if(!valarr.empty()){
+            S3fsCurl::client_cert_type = valarr.front();                // allow empty(default: PEM)
+            valarr.pop_front();
+
+            // set client private key
+            if(!valarr.empty()){
+                S3fsCurl::client_priv_key = valarr.front();             // allow empty
+                valarr.pop_front();
+
+                // set client private key type
+                if(!valarr.empty()){
+                    S3fsCurl::client_priv_key_type = valarr.front();    // allow empty(default: PEM)
+                    valarr.pop_front();
+
+                    // set key password
+                    if(!valarr.empty()){
+                        S3fsCurl::client_key_password = valarr.front(); // allow empty
+                    }
+                }
+            }
+        }
+    }
+
+    // [NOTE]
+    // If the private key is set but the password is not set,
+    // check the environment variables.
+    //
+    if(!S3fsCurl::client_priv_key.empty() && S3fsCurl::client_key_password.empty()){
+        const char* pass = std::getenv(S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD);
+        if(pass != nullptr){
+            S3fsCurl::client_key_password = pass;
+        }
+    }
+
+    return true;
+}
+
 bool S3fsCurl::SetMultipartSize(off_t size)
 {
     size = size * 1024 * 1024;
@@ -1171,6 +1248,23 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
     }
 
     S3fsCurl::proxy_userpwd = userpwd;
+    return true;
+}
+
+bool S3fsCurl::SetIPResolveType(const char* value)
+{
+    if(!value){
+        return false;
+    }
+    if(0 == strcasecmp(value, "ipv4")){
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V4;
+    }else if(0 == strcasecmp(value, "ipv6")){
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V6;
+    }else if(0 == strcasecmp(value, "whatever")){       // = default type
+        S3fsCurl::ipresolve_type = CURL_IPRESOLVE_WHATEVER;
+    }else{
+        return false;
+    }
     return true;
 }
 
@@ -1949,7 +2043,11 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
     if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1) && !run_once){
         S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
     }
-
+    if(CURL_IPRESOLVE_WHATEVER != S3fsCurl::ipresolve_type){    // CURL_IPRESOLVE_WHATEVER is default, so not need to set.
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_IPRESOLVE, S3fsCurl::ipresolve_type)){
+            return false;
+        }
+    }
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         // REQTYPE::IAMCRED and REQTYPE::IAMROLE are always HTTP
         if(0 == S3fsCurl::ssl_verify_hostname){
@@ -1963,6 +2061,36 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
             }
         }
     }
+    // SSL Client Cert
+    if(!S3fsCurl::client_cert.empty()){
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLCERT, S3fsCurl::client_cert.c_str())){
+            return false;
+        }
+        if(!S3fsCurl::client_cert_type.empty() && 0 != strcasecmp(S3fsCurl::client_cert_type.c_str(), "PEM")){              // "PEM" is default
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLCERTTYPE, S3fsCurl::client_cert_type.c_str())){
+                return false;
+            }
+        }
+
+        // Private key
+        if(!S3fsCurl::client_priv_key.empty()){
+            if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLKEY, S3fsCurl::client_priv_key.c_str())){
+                return false;
+            }
+            if(!S3fsCurl::client_priv_key_type.empty() && 0 != strcasecmp(S3fsCurl::client_priv_key_type.c_str(), "PEM")){  // "PEM" is default
+                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLKEYTYPE, S3fsCurl::client_priv_key_type.c_str())){
+                    return false;
+                }
+            }
+            // Password
+            if(!S3fsCurl::client_key_password.empty()){
+                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_KEYPASSWD, S3fsCurl::client_key_password.c_str())){
+                    return false;
+                }
+            }
+        }
+    }
+
     if((S3fsCurl::is_dns_cache || S3fsCurl::is_ssl_session_cache) && S3fsCurl::hCurlShare){
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare)){
             return false;
@@ -2560,6 +2688,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         result = -ENOTSUP;
                         break;
 
+                    case 429:
                     case 500:
                     case 503: {
                         S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);

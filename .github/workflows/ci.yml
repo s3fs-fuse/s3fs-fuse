@@ -50,7 +50,7 @@ jobs:
       #
       matrix:
         container:
-          - ubuntu:23.10
+          - ubuntu:24.04
           - ubuntu:22.04
           - ubuntu:20.04
           - debian:bookworm
@@ -59,8 +59,8 @@ jobs:
           - rockylinux:9
           - rockylinux:8
           - centos:centos7
+          - fedora:40
           - fedora:39
-          - fedora:38
           - opensuse/leap:15
           - alpine:3.19
 
@@ -225,7 +225,7 @@ jobs:
           - valgrind
 
     container:
-      image: fedora:39
+      image: fedora:40
 
       options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
 
@@ -235,7 +235,7 @@ jobs:
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:39
+          .github/workflows/linux-ci-helper.sh fedora:40
 
       - name: Install clang
         run: |
@@ -263,6 +263,10 @@ jobs:
               echo 'CXX=clang++'                                       >> $GITHUB_ENV
               echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread" >> $GITHUB_ENV
               echo 'TSAN_OPTIONS=halt_on_error=1'                      >> $GITHUB_ENV
+              # [NOTE]
+              # Set this to avoid following error when running configure.
+              # "FATAL: ThreadSanitizer: unexpected memory mapping"
+              sysctl vm.mmap_rnd_bits=28
           elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
               echo 'CXX=clang++'                                       >> $GITHUB_ENV
               echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow" >> $GITHUB_ENV

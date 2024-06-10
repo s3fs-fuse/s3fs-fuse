@@ -150,7 +150,7 @@ void test_slist_remove()
     curl_slist_free_all(list);
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     test_sort_insert();
     test_slist_remove();

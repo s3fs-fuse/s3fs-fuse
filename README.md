@@ -4,8 +4,10 @@ s3fs allows Linux, macOS, and FreeBSD to mount an S3 bucket via [FUSE(Filesystem
 s3fs makes you operate files and directories in S3 bucket like a local file system.  
 s3fs preserves the native object format for files, allowing use of other tools like [AWS CLI](https://github.com/aws/aws-cli).  
 
-[![s3fs-fuse CI](https://github.com/s3fs-fuse/s3fs-fuse/workflows/s3fs-fuse%20CI/badge.svg)](https://github.com/s3fs-fuse/s3fs-fuse/actions)
+[![s3fs-fuse CI](https://github.com/s3fs-fuse/s3fs-fuse/actions/workflows/ci.yml/badge.svg)](https://github.com/s3fs-fuse/s3fs-fuse/actions/workflows/ci.yml)
 [![Twitter Follow](https://img.shields.io/twitter/follow/s3fsfuse.svg?style=social&label=Follow)](https://twitter.com/s3fsfuse)
+
+![s3fs-fuse](https://github.com/ggtakec/s3fs-fuse-images/blob/master/images/s3fslogo.png)
 
 ## Features
 
