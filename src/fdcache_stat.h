@@ -46,6 +46,10 @@ class CacheFileStat
 
         explicit CacheFileStat(const char* tpath = nullptr);
         ~CacheFileStat();
+        CacheFileStat(const CacheFileStat&) = delete;
+        CacheFileStat(CacheFileStat&&) = delete;
+        CacheFileStat& operator=(const CacheFileStat&) = delete;
+        CacheFileStat& operator=(CacheFileStat&&) = delete;
 
         bool Open();
         bool ReadOnlyOpen();
