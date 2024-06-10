@@ -902,7 +902,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
     }
 
     ssetype = sse_type_t::SSE_DISABLE;
-    ssevalue.erase();
+    ssevalue.clear();
     for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
         std::string key = (*iter).first;
         if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
@@ -3601,7 +3601,7 @@ static bool get_meta_xattr_value(const char* path, std::string& rawvalue)
     }
     S3FS_PRN_DBG("[path=%s]", path);
 
-    rawvalue.erase();
+    rawvalue.clear();
 
     headers_t meta;
     if(0 != get_object_attribute(path, nullptr, &meta)){
@@ -3634,7 +3634,7 @@ static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue)
 
 static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key)
 {
-    xattrvalue.erase();
+    xattrvalue.clear();
 
     std::string rawvalue;
     if(!get_meta_xattr_value(path, rawvalue)){
@@ -3673,7 +3673,7 @@ static bool build_inherited_xattr_value(const char* path, std::string& xattrvalu
 {
     S3FS_PRN_DBG("[path=%s]", path);
 
-    xattrvalue.erase();
+    xattrvalue.clear();
 
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
         // path is mount point, thus does not have parent.

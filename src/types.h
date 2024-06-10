@@ -149,7 +149,7 @@ struct etagpair
 
     void clear()
     {
-        etag.erase();
+        etag.clear();
         part_num = -1;
     }
 };

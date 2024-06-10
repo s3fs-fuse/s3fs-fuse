@@ -80,7 +80,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
     // Add object
     if(objects.end() != (iter = objects.find(newname))){
         // Found same object --> update information.
-        (*iter).second.normalname.erase();
+        (*iter).second.normalname.clear();
         (*iter).second.orgname = orgname;
         (*iter).second.is_dir  = is_dir;
         if(etag){
@@ -113,8 +113,8 @@ bool S3ObjList::insert_normalized(const char* name, const char* normalized, bool
     s3obj_t::iterator iter;
     if(objects.end() != (iter = objects.find(name))){
         // found name --> over write
-        iter->second.orgname.erase();
-        iter->second.etag.erase();
+        iter->second.orgname.clear();
+        iter->second.etag.clear();
         iter->second.normalname = normalized;
         iter->second.is_dir     = is_dir;
     }else{
