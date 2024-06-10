@@ -99,7 +99,9 @@ class PageList
 
         explicit PageList(off_t size = 0, bool is_loaded = false, bool is_modified = false, bool shrinked = false);
         PageList(const PageList&) = delete;
+        PageList(PageList&&) = delete;
         PageList& operator=(const PageList&) = delete;
+        PageList& operator=(PageList&&) = delete;
         ~PageList();
 
         bool Init(off_t size, bool is_loaded, bool is_modified);

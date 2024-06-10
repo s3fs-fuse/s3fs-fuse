@@ -58,6 +58,10 @@ class FdManager
   public:
       FdManager();
       ~FdManager();
+      FdManager(const FdManager&) = delete;
+      FdManager(FdManager&&) = delete;
+      FdManager& operator=(const FdManager&) = delete;
+      FdManager& operator=(FdManager&&) = delete;
 
       // Reference singleton
       static FdManager* get() { return &singleton; }
