@@ -32,9 +32,7 @@ struct s3obj_entry{
     std::string normalname; // normalized name: if empty, object is normalized name.
     std::string orgname;    // original name: if empty, object is original name.
     std::string etag;
-    bool        is_dir;
-
-    s3obj_entry() : is_dir(false) {}
+    bool        is_dir = false;
 };
 
 typedef std::map<std::string, struct s3obj_entry> s3obj_t;
@@ -47,10 +45,8 @@ class S3ObjList
 {
     private:
         s3obj_t objects;
-    public:
         std::vector<std::string> common_prefixes;
 
-    private:
         bool insert_normalized(const char* name, const char* normalized, bool is_dir);
         const s3obj_entry* GetS3Obj(const char* name) const;
 
@@ -58,14 +54,13 @@ class S3ObjList
         s3obj_t::const_iterator end() const { return objects.end(); }
 
     public:
-        S3ObjList() {}
-        ~S3ObjList() {}
-
         bool IsEmpty() const { return objects.empty(); }
         bool insert(const char* name, const char* etag = nullptr, bool is_dir = false);
         std::string GetOrgName(const char* name) const;
         std::string GetNormalizedName(const char* name) const;
         std::string GetETag(const char* name) const;
+        const std::vector<std::string>& GetCommonPrefixes() const { return common_prefixes; }
+        void AddCommonPrefix(std::string prefix) { common_prefixes.push_back(std::move(prefix)); }
         bool IsDir(const char* name) const;
         bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetLastName(std::string& lastname) const;

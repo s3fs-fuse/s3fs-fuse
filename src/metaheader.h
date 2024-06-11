@@ -21,9 +21,10 @@
 #ifndef S3FS_METAHEADER_H_
 #define S3FS_METAHEADER_H_
 
+#include <map>
 #include <string>
 #include <strings.h>
-#include <map>
+#include <sys/stat.h>
 
 //-------------------------------------------------------------------
 // headers_t

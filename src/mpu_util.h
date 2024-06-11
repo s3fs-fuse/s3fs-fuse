@@ -21,6 +21,8 @@
 #ifndef S3FS_MPU_UTIL_H_
 #define S3FS_MPU_UTIL_H_
 
+#include <cstdint>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -39,7 +41,7 @@ typedef std::vector<INCOMP_MPU_INFO> incomp_mpu_list_t;
 //-------------------------------------------------------------------
 // enum for utility process mode
 //-------------------------------------------------------------------
-enum class utility_incomp_type{
+enum class utility_incomp_type : uint8_t {
     NO_UTILITY_MODE = 0,      // not utility mode
     INCOMP_TYPE_LIST,         // list of incomplete mpu
     INCOMP_TYPE_ABORT         // delete incomplete mpu

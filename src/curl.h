@@ -21,14 +21,17 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
+#include <cstdint>
 #include <curl/curl.h>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "autolock.h"
-#include "metaheader.h"
 #include "fdcache_page.h"
+#include "metaheader.h"
+#include "types.h"
 
 //----------------------------------------------
 // Avoid dependency on libcurl version
@@ -91,7 +94,7 @@ class S3fsCurl
     friend class S3fsMultiCurl;
 
     private:
-        enum class REQTYPE {
+        enum class REQTYPE : int8_t {
             UNSET  = -1,
             DELETE = 0,
             HEAD,

@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
+#include <sys/stat.h>
 #include <vector>
 
 #include "s3fs.h"

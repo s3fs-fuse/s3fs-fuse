@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <list>
+#include <pthread.h>
 #include <vector>
 
 #include "psemaphore.h"
@@ -45,11 +46,9 @@ typedef void* (*thpoolman_worker)(void*);               // same as start_routine
 //
 struct thpoolman_param
 {
-    void*            args;
-    Semaphore*       psem;
-    thpoolman_worker pfunc;
-
-    thpoolman_param() : args(nullptr), psem(nullptr), pfunc(nullptr) {}
+    void*            args = nullptr;
+    Semaphore*       psem = nullptr;
+    thpoolman_worker pfunc = nullptr;
 };
 
 typedef std::list<thpoolman_param> thpoolman_params_t;

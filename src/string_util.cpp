@@ -37,7 +37,7 @@
 // Functions
 //-------------------------------------------------------------------
 
-std::string str(const struct timespec value)
+std::string str(const struct timespec& value)
 {
     std::ostringstream s;
     s << value.tv_sec;

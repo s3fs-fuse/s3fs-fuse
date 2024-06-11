@@ -22,6 +22,10 @@
 #define S3FS_CACHE_H_
 
 #include <cstring>
+#include <map>
+#include <string>
+#include <sys/stat.h>
+#include <vector>
 
 #include "autolock.h"
 #include "metaheader.h"
@@ -34,19 +38,16 @@
 //
 struct stat_cache_entry {
     struct stat       stbuf;
-    unsigned long     hit_count;
-    struct timespec   cache_date;
+    unsigned long     hit_count = 0;
+    struct timespec   cache_date = {0, 0};
     headers_t         meta;
-    bool              isforce;
-    bool              noobjcache;  // Flag: cache is no object for no listing.
-    unsigned long     notruncate;  // 0<:   not remove automatically at checking truncate
+    bool              isforce = false;
+    bool              noobjcache = false;  // Flag: cache is no object for no listing.
+    unsigned long     notruncate = 0L;  // 0<:   not remove automatically at checking truncate
 
-    stat_cache_entry() : hit_count(0), isforce(false), noobjcache(false), notruncate(0L)
+    stat_cache_entry()
     {
-        memset(&stbuf, 0, sizeof(struct stat));
-        cache_date.tv_sec  = 0;
-        cache_date.tv_nsec = 0;
-        meta.clear();
+        memset(&stbuf, 0, sizeof(stbuf));
     }
 };
 
@@ -57,14 +58,8 @@ typedef std::map<std::string, stat_cache_entry> stat_cache_t; // key=path
 //
 struct symlink_cache_entry {
     std::string       link;
-    unsigned long     hit_count;
-    struct timespec   cache_date;  // The function that operates timespec uses the same as Stats
-
-    symlink_cache_entry() : link(""), hit_count(0)
-    {
-      cache_date.tv_sec  = 0;
-      cache_date.tv_nsec = 0;
-    }
+    unsigned long     hit_count = 0;
+    struct timespec   cache_date = {0, 0};  // The function that operates timespec uses the same as Stats
 };
 
 typedef std::map<std::string, symlink_cache_entry> symlink_cache_t;
