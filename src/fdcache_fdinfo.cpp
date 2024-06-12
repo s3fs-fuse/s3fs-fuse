@@ -129,7 +129,7 @@ PseudoFdInfo::PseudoFdInfo(int fd, int open_flags) : pseudo_fd(-1), physical_fd(
 
 PseudoFdInfo::~PseudoFdInfo()
 {
-    Clear();        // call before destrying the mutex
+    Clear();        // call before destroying the mutex
 
     if(is_lock_init){
       int result;
@@ -686,11 +686,11 @@ bool PseudoFdInfo::CancelAllThreads()
 bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size)
 {
     if(untreated_start < 0 || untreated_size <= 0){
-        S3FS_PRN_ERR("Paramters are wrong(untreated_start=%lld, untreated_size=%lld).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size));
+        S3FS_PRN_ERR("Parameters are wrong(untreated_start=%lld, untreated_size=%lld).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size));
         return false;
     }
 
-    // Initiliaze lists
+    // Initialize lists
     to_upload_list.clear();
     cancel_upload_list.clear();
 
@@ -775,7 +775,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
 {
     AutoLock auto_lock(&upload_list_lock);
 
-    // Initiliaze lists
+    // Initialize lists
     to_upload_list.clear();
     to_copy_list.clear();
     to_download_list.clear();
@@ -843,13 +843,13 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                     // The untreated area exceeds the end of the current area
                     //
 
-                    // Ajust untreated area
+                    // Adjust untreated area
                     tmp_untreated_size  = (cur_start + cur_size) - tmp_untreated_start;
 
-                    // Add ajusted untreated area to cur_untreated_list
+                    // Add adjusted untreated area to cur_untreated_list
                     cur_untreated_list.emplace_back(tmp_untreated_start, tmp_untreated_size);
 
-                    // Remove this ajusted untreated area from the area pointed
+                    // Remove this adjusted untreated area from the area pointed
                     // to by dup_untreated_iter.
                     dup_untreated_iter->size  = (dup_untreated_iter->start + dup_untreated_iter->size) - (cur_start + cur_size);
                     dup_untreated_iter->start = tmp_untreated_start + tmp_untreated_size;
@@ -995,7 +995,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                                 ((tmp_cur_start + tmp_cur_size) - tmp_cur_untreated_iter->start) >= MIN_MULTIPART_SIZE )
                             {
                                 //
-                                // Unify to this area to previouse copy area.
+                                // Unify to this area to previous copy area.
                                 //
                                 copy_riter->size += tmp_cur_untreated_iter->start - tmp_cur_start;
                                 S3FS_PRN_DBG("Resize to copy: start=%lld, size=%lld", static_cast<long long int>(copy_riter->start), static_cast<long long int>(copy_riter->size));

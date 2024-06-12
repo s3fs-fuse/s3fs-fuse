@@ -20,7 +20,7 @@
 #
 
 #
-# This is unsupport sample deleting cache files script.
+# This is unsupported sample deleting cache files script.
 # So s3fs's local cache files(stats and objects) grow up,
 # you need to delete these.
 # This script deletes these files with total size limit

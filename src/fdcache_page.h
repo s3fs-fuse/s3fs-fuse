@@ -77,7 +77,7 @@ class PageList
 
     private:
         fdpage_list_t pages;
-        bool          is_shrink;    // [NOTE] true if it has been shrinked even once
+        bool          is_shrink;    // [NOTE] true if it has been shrunk even once
 
     public:
         enum class page_status : int8_t {
@@ -98,7 +98,7 @@ class PageList
     public:
         static void FreeList(fdpage_list_t& list);
 
-        explicit PageList(off_t size = 0, bool is_loaded = false, bool is_modified = false, bool shrinked = false);
+        explicit PageList(off_t size = 0, bool is_loaded = false, bool is_modified = false, bool shrunk = false);
         PageList(const PageList&) = delete;
         PageList(PageList&&) = delete;
         PageList& operator=(const PageList&) = delete;

@@ -359,7 +359,7 @@ static constexpr char help_string[] =
     "\n"
     "   max_thread_count (default is \"5\")\n"
     "      - Specifies the number of threads waiting for stream uploads.\n"
-    "      Note that this option and Streamm Upload are still experimental\n"
+    "      Note that this option and Stream Upload are still experimental\n"
     "      and subject to change in the future.\n"
     "      This option will be merged with \"parallel_count\" in the future.\n"
     "\n"

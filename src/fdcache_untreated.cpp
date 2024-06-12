@@ -64,7 +64,7 @@ bool UntreatedParts::empty()
 bool UntreatedParts::AddPart(off_t start, off_t size)
 {
     if(start < 0 || size <= 0){
-        S3FS_PRN_ERR("Paramter are wrong(start=%lld, size=%lld).", static_cast<long long int>(start), static_cast<long long int>(size));
+        S3FS_PRN_ERR("Parameter are wrong(start=%lld, size=%lld).", static_cast<long long int>(start), static_cast<long long int>(size));
         return false;
     }
     AutoLock auto_lock(&untreated_list_lock);
@@ -102,7 +102,7 @@ bool UntreatedParts::AddPart(off_t start, off_t size)
 bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t min_size, bool lastpart) const
 {
     if(max_size <= 0 || min_size < 0 || max_size < min_size){
-        S3FS_PRN_ERR("Paramter are wrong(max_size=%lld, min_size=%lld).", static_cast<long long int>(max_size), static_cast<long long int>(min_size));
+        S3FS_PRN_ERR("Parameter are wrong(max_size=%lld, min_size=%lld).", static_cast<long long int>(max_size), static_cast<long long int>(min_size));
         return false;
     }
     AutoLock auto_lock(&untreated_list_lock);
@@ -137,7 +137,7 @@ bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t
 bool UntreatedParts::ClearParts(off_t start, off_t size)
 {
     if(start < 0 || size < 0){
-        S3FS_PRN_ERR("Paramter are wrong(start=%lld, size=%lld).", static_cast<long long int>(start), static_cast<long long int>(size));
+        S3FS_PRN_ERR("Parameter are wrong(start=%lld, size=%lld).", static_cast<long long int>(start), static_cast<long long int>(size));
         return false;
     }
     AutoLock auto_lock(&untreated_list_lock);

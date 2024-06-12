@@ -48,7 +48,7 @@ static constexpr char DEFAULT_AWS_PROFILE_NAME[] = "default";
 //
 // detail=false   ex. "Custom AWS Credential Library - v1.0.0"
 // detail=true    ex. "Custom AWS Credential Library - v1.0.0
-//                     s3fs-fuse credential I/F library for S3 compatible strage X.
+//                     s3fs-fuse credential I/F library for S3 compatible storage X.
 //                     Copyright(C) 2022 Foo"
 //
 const char* VersionS3fsCredential(bool detail)
@@ -1119,7 +1119,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
     AutoLock auto_lock(&token_lock);
 
     if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole()){
-        if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGIN)){
+        if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGING)){
             S3FS_PRN_INFO("IAM Access Token refreshing...");
 
             // update
@@ -1579,7 +1579,7 @@ bool S3fsCred::CheckAllParams()
     // Load and Initialize external credential library
     if(IsSetExtCredLib() || IsSetExtCredLibOpts()){
         if(!IsSetExtCredLib()){
-            S3FS_PRN_EXIT("The \"credlib_opts\"(%s) is specifyed but \"credlib\" option is not specified.", credlib_opts.c_str());
+            S3FS_PRN_EXIT("The \"credlib_opts\"(%s) is specified but \"credlib\" option is not specified.", credlib_opts.c_str());
             return false;
         }
 

@@ -122,7 +122,7 @@ function test_truncate_shrink_read_file {
     # create file
     dd if=/dev/urandom of="${TEST_TEXT_FILE}" bs="${init_size}" count=1
 
-    # truncate(shrink) file and read it before flusing
+    # truncate(shrink) file and read it before flushing
     ../../truncate_read_file "${TEST_TEXT_FILE}" "${shrink_size}"
 
     # check file size
@@ -2551,9 +2551,9 @@ function test_not_boundary_writes {
     #    Part number 2:    10,485,760 - 20,971,519 (size = 10MB)
     #    Part number 3:    20,971,520 - 26,214,399 (size =  5MB)
     #
-    local BOUNDAY_TEST_FILE_SIZE; BOUNDAY_TEST_FILE_SIZE=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
+    local BOUNDARY_TEST_FILE_SIZE; BOUNDARY_TEST_FILE_SIZE=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
 
-    ../../junk_data "${BOUNDAY_TEST_FILE_SIZE}" > "${TEST_TEXT_FILE}"
+    ../../junk_data "${BOUNDARY_TEST_FILE_SIZE}" > "${TEST_TEXT_FILE}"
 
     #
     # Write in First boundary
