@@ -37,18 +37,13 @@
 // Struct for stats cache
 //
 struct stat_cache_entry {
-    struct stat       stbuf;
+    struct stat       stbuf = {};
     unsigned long     hit_count = 0;
     struct timespec   cache_date = {0, 0};
     headers_t         meta;
     bool              isforce = false;
     bool              noobjcache = false;  // Flag: cache is no object for no listing.
     unsigned long     notruncate = 0L;  // 0<:   not remove automatically at checking truncate
-
-    stat_cache_entry()
-    {
-        memset(&stbuf, 0, sizeof(stbuf));
-    }
 };
 
 typedef std::map<std::string, stat_cache_entry> stat_cache_t; // key=path

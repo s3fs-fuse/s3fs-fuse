@@ -476,8 +476,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
 
     // make new
-    stat_cache_entry ent;
-    memset(&ent.stbuf, 0, sizeof(struct stat));
+    stat_cache_entry ent{};
     ent.hit_count  = 0;
     ent.isforce    = false;
     ent.noobjcache = true;
@@ -847,7 +846,7 @@ bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat
     if(!path || !pst){
         return false;
     }
-    memset(pst, 0, sizeof(struct stat));
+    *pst = {};
 
     pst->st_nlink = 1; // see fuse FAQ
 
