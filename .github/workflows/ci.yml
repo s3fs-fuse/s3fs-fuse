@@ -24,7 +24,7 @@ on:
   push:
   pull_request:
   #
-  # CRON event is fire on every sunday(UTC).
+  # CRON event is fired on every sunday (UTC).
   #
   schedule:
     - cron: '0 0 * * 0'
@@ -66,7 +66,6 @@ jobs:
 
     container:
       image: ${{ matrix.container }}
-
       options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
 
     env:
@@ -80,8 +79,9 @@ jobs:
       # On openSUSE, tar and gzip must be installed before action/checkout.
       #
       - name: Install packages before checkout
+        if: matrix.container == 'opensuse/leap:15'
         run: |
-          if [ "${{ matrix.container }}" = "opensuse/leap:15" ]; then zypper install -y tar gzip; fi
+          zypper install -y tar gzip
 
       # [NOTE]
       # actions/checkout@v3 uses nodejs v16 and will be deprecated.
@@ -165,7 +165,9 @@ jobs:
       - name: Install brew other packages
         run: |
           S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck jq';
-          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi; done;
+          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
+            if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi
+          done
 
       - name: Install awscli2
         run: |
@@ -250,32 +252,34 @@ jobs:
       - name: Set variables
         run: |
           COMMON_CXXFLAGS='-g -Wno-cpp -DS3FS_PTHREAD_ERRORCHECK=1'
-          if [ "${{ matrix.checktype }}" = "glibc_debug" ]; then
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -D_GLIBCXX_DEBUG"  >> $GITHUB_ENV
-          elif [ "${{ matrix.checktype }}" = "sanitize_address" ]; then
-              echo 'CXX=clang++'                                       >> $GITHUB_ENV
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=address -fsanitize-address-use-after-scope" >> $GITHUB_ENV
-              echo 'ASAN_OPTIONS=detect_leaks=1,detect_stack_use_after_return=1'                           >> $GITHUB_ENV
-          elif [ "${{ matrix.checktype }}" = "sanitize_memory" ]; then
-              echo 'CXX=clang++'                                       >> $GITHUB_ENV
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=memory" >> $GITHUB_ENV
-          elif [ "${{ matrix.checktype }}" = "sanitize_thread" ]; then
-              echo 'CXX=clang++'                                       >> $GITHUB_ENV
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread" >> $GITHUB_ENV
-              echo 'TSAN_OPTIONS=halt_on_error=1'                      >> $GITHUB_ENV
-              # [NOTE]
-              # Set this to avoid following error when running configure.
-              # "FATAL: ThreadSanitizer: unexpected memory mapping"
-              sysctl vm.mmap_rnd_bits=28
-          elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
-              echo 'CXX=clang++'                                       >> $GITHUB_ENV
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow" >> $GITHUB_ENV
-          elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
-              echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"                   >> $GITHUB_ENV
-              echo 'VALGRIND=--leak-check=full'                        >> $GITHUB_ENV
-              echo 'RETRIES=100'                                       >> $GITHUB_ENV
-              echo 'S3_URL=http://127.0.0.1:8081'                      >> $GITHUB_ENV
-          fi
+          {
+            if [ "${{ matrix.checktype }}" = "glibc_debug" ]; then
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -D_GLIBCXX_DEBUG"
+            elif [ "${{ matrix.checktype }}" = "sanitize_address" ]; then
+                echo 'CXX=clang++'
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=address -fsanitize-address-use-after-scope"
+                echo 'ASAN_OPTIONS=detect_leaks=1,detect_stack_use_after_return=1'
+            elif [ "${{ matrix.checktype }}" = "sanitize_memory" ]; then
+                echo 'CXX=clang++'
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=memory"
+            elif [ "${{ matrix.checktype }}" = "sanitize_thread" ]; then
+                echo 'CXX=clang++'
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread"
+                echo 'TSAN_OPTIONS=halt_on_error=1'
+                # [NOTE]
+                # Set this to avoid following error when running configure.
+                # "FATAL: ThreadSanitizer: unexpected memory mapping"
+                sysctl vm.mmap_rnd_bits=28
+            elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
+                echo 'CXX=clang++'
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
+            elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"
+                echo 'VALGRIND=--leak-check=full'
+                echo 'RETRIES=100'
+                echo 'S3_URL=http://127.0.0.1:8081'
+            fi
+          } >> "$GITHUB_ENV"
 
       - name: Build
         run: |
