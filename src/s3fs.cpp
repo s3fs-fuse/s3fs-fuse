@@ -3859,7 +3859,9 @@ static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, s
     // parse key and value
     size_t pos;
     std::string tmpval;
-    if(std::string::npos == (pos = xattrpair.find_first_of(':'))){
+    // find last
+    //one of xattr pair("user.DosStream.com.apple.lastuseddate#PS:$DATA":"AA==") is wrong format.
+    if(std::string::npos == (pos = xattrpair.find_last_of(':'))){
         S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
         return false;
     }
