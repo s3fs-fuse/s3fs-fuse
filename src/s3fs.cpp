@@ -2720,9 +2720,7 @@ static int s3fs_truncate(const char* _path, off_t size)
 
     FUSE_CTX_INFO("[path=%s][size=%lld]", path, static_cast<long long>(size));
 
-    if(size < 0){
-        size = 0;
-    }
+    size = std::max<off_t>(size, 0);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -3185,7 +3183,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
     }
 
     // Add stat cache
-    std::string saved_path = s3fscurl->GetSpecialSavedPath();
+    const std::string& saved_path = s3fscurl->GetSpecialSavedPath();
     if(!StatCache::getStatCacheData()->AddStat(saved_path, *(s3fscurl->GetResponseHeaders()))){
         S3FS_PRN_ERR("failed adding stat cache [path=%s]", saved_path.c_str());
         return false;
@@ -3260,9 +3258,9 @@ static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
     }
 
     std::unique_ptr<S3fsCurl> newcurl(new S3fsCurl(s3fscurl->IsUseAhbe()));
-    std::string path       = s3fscurl->GetBasePath();
-    std::string base_path  = s3fscurl->GetBasePath();
-    std::string saved_path = s3fscurl->GetSpecialSavedPath();
+    const std::string& path       = s3fscurl->GetBasePath();
+    const std::string& base_path  = s3fscurl->GetBasePath();
+    const std::string& saved_path = s3fscurl->GetSpecialSavedPath();
 
     if(!newcurl->PreHeadRequest(path, base_path, saved_path, ssec_key_pos)){
         S3FS_PRN_ERR("Could not duplicate curl object(%s).", saved_path.c_str());
@@ -3380,7 +3378,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
         for(s3obj_list_t::iterator reiter = notfound_param.notfound_list.begin(); reiter != notfound_param.notfound_list.end(); ++reiter){
             int dir_result;
-            std::string dirpath = *reiter;
+            const std::string& dirpath = *reiter;
             if(-ENOTEMPTY == (dir_result = directory_empty(dirpath.c_str()))){
                 // Found objects under the path, so the path is directory.
 

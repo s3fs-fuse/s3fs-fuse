@@ -40,7 +40,7 @@ static constexpr int CHECK_CACHEFILE_PART_SIZE = 1024 * 16;    // Buffer size in
 // fdpage_list_t utility
 //------------------------------------------------
 // Inline function for repeated processing
-inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, const fdpage& orgpage, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
+static inline void raw_add_compress_fdpage_list(fdpage_list_t& pagelist, const fdpage& orgpage, bool ignore_load, bool ignore_modify, bool default_load, bool default_modify)
 {
     if(0 < orgpage.bytes){
         // [NOTE]

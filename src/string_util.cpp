@@ -402,7 +402,7 @@ std::string s3fs_base64(const unsigned char* input, size_t length)
     return result;
 }
 
-inline unsigned char char_decode64(const char ch)
+static inline unsigned char char_decode64(const char ch)
 {
     unsigned char by;
     if('A' <= ch && ch <= 'Z'){                   // A - Z
