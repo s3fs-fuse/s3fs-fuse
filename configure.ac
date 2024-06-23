@@ -367,11 +367,22 @@ AS_IF([test -d .git], [DOTGITDIR=yes], [DOTGITDIR=no])
 
 AC_MSG_CHECKING([github short commit hash])
 if test "x${GITCMD}" = "xyes" -a "x${DOTGITDIR}" = "xyes"; then
-    GITCOMMITHASH=`git rev-parse --short HEAD`
+    TMP_GITCOMMITHASH=`git rev-parse --short HEAD`
+    UNTRACKED_FILES=`git status -s --untracked-files=no`
+    if test -n "${UNTRACKED_FILES}"; then
+       GITCOMMITHASH="(commit:${TMP_GITCOMMITHASH} +untracked files)"
+    else
+       GITCOMMITHASH="(commit:${TMP_GITCOMMITHASH})"
+    fi
 elif test -f default_commit_hash; then
-    GITCOMMITHASH=`cat default_commit_hash`
+    TMP_GITCOMMITHASH=`cat default_commit_hash`
+    if test -n "${TMP_GITCOMMITHASH}"; then
+       GITCOMMITHASH="(base commit:${TMP_GITCOMMITHASH})"
+    else
+       GITCOMMITHASH=""
+    fi
 else
-    GITCOMMITHASH="unknown"
+    GITCOMMITHASH=""
 fi
 AC_MSG_RESULT([${GITCOMMITHASH}])
 

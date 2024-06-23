@@ -4270,7 +4270,7 @@ static void s3fs_exit_fuseloop(int exit_status)
 
 static void* s3fs_init(struct fuse_conn_info* conn)
 {
-    S3FS_PRN_INIT_INFO("init v%s(commit:%s) with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), ps3fscred->GetCredFuncVersion(false));
+    S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), ps3fscred->GetCredFuncVersion(false));
 
     // cache(remove cache dirs at first)
     if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
