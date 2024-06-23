@@ -653,7 +653,7 @@ void show_help()
 void show_version()
 {
     printf(
-    "Amazon Simple Storage Service File System V%s (commit:%s) with %s\n"
+    "Amazon Simple Storage Service File System V%s%s with %s\n"
     "Copyright (C) 2010 Randy Rizun <rrizun@gmail.com>\n"
     "License GPL2: GNU GPL version 2 <https://gnu.org/licenses/gpl.html>\n"
     "This is free software: you are free to change and redistribute it.\n"
@@ -663,7 +663,7 @@ void show_version()
 
 const char* short_version()
 {
-    static constexpr char short_ver[] = "s3fs version " VERSION "(" COMMIT_HASH_VAL ")";
+    static constexpr char short_ver[] = "s3fs version " VERSION "" COMMIT_HASH_VAL;
     return short_ver;
 }
 
