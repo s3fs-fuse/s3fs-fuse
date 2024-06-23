@@ -258,7 +258,7 @@ class S3fsCurl
         static int RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
         // methods
-        bool ResetHandle(AutoLock::Type locktype = AutoLock::NONE);
+        bool ResetHandle() REQUIRES(&S3fsCurl::curl_handles_lock);
         bool RemakeHandle();
         bool ClearInternalData();
         void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
@@ -354,7 +354,8 @@ class S3fsCurl
 
         // methods
         bool CreateCurlHandle(bool only_pool = false, bool remake = false);
-        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true, AutoLock::Type locktype = AutoLock::NONE);
+        bool DestroyCurlHandle(bool restore_pool = true, bool clear_internal_data = true);
+        bool DestroyCurlHandleHasLock(bool restore_pool = true, bool clear_internal_data = true) REQUIRES(S3fsCurl::curl_handles_lock);
 
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);

@@ -23,6 +23,9 @@
 
 #include <pthread.h>
 
+// empty annotation to indicate lock requirement
+#define REQUIRES(...)
+
 //-------------------------------------------------------------------
 // AutoLock Class
 //-------------------------------------------------------------------

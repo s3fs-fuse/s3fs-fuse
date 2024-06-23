@@ -2004,7 +2004,7 @@ S3fsCurl::~S3fsCurl()
     DestroyCurlHandle();
 }
 
-bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
+bool S3fsCurl::ResetHandle()
 {
     bool run_once;
     {
@@ -2131,7 +2131,6 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
         }
     }
 
-    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
     S3fsCurl::curl_times[hCurl]    = time(nullptr);
     S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
 
@@ -2143,7 +2142,7 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
     AutoLock lock(&S3fsCurl::curl_handles_lock);
 
     if(hCurl && remake){
-        if(!DestroyCurlHandle(false, true, AutoLock::ALREADY_LOCKED)){
+        if(!DestroyCurlHandleHasLock(false, true)){
             S3FS_PRN_ERR("could not destroy handle.");
             return false;
         }
@@ -2163,12 +2162,18 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
             }
         }
     }
-    ResetHandle(AutoLock::ALREADY_LOCKED);
+    ResetHandle();
 
     return true;
 }
 
-bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, AutoLock::Type locktype)
+bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data)
+{
+    AutoLock lock(&S3fsCurl::curl_handles_lock);
+    return DestroyCurlHandleHasLock(restore_pool, clear_internal_data);
+}
+
+bool S3fsCurl::DestroyCurlHandleHasLock(bool restore_pool, bool clear_internal_data)
 {
     // [NOTE]
     // If type is REQTYPE::IAMCRED or REQTYPE::IAMROLE, do not clear type.
@@ -2178,8 +2183,6 @@ bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data, Au
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         type = REQTYPE::UNSET;
     }
-
-    AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
 
     if(clear_internal_data){
         ClearInternalData();
@@ -2298,7 +2301,10 @@ bool S3fsCurl::RemakeHandle()
     partdata.size      = b_partdata_size;
 
     // reset handle
-    ResetHandle();
+    {
+        AutoLock lock(&S3fsCurl::curl_handles_lock);
+        ResetHandle();
+    }
 
     // set options
     switch(type){
