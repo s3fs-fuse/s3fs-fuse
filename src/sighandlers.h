@@ -50,10 +50,6 @@ class S3fsSignals
         static bool InitHupHandler();
 
         S3fsSignals();
-        S3fsSignals(const S3fsSignals&) = delete;
-        S3fsSignals(S3fsSignals&&) = delete;
-        S3fsSignals& operator=(const S3fsSignals&) = delete;
-        S3fsSignals& operator=(S3fsSignals&&) = delete;
 
         bool InitUsr1Handler();
         bool DestroyUsr1Handler();
@@ -61,6 +57,11 @@ class S3fsSignals
 
     public:
         ~S3fsSignals();
+        S3fsSignals(const S3fsSignals&) = delete;
+        S3fsSignals(S3fsSignals&&) = delete;
+        S3fsSignals& operator=(const S3fsSignals&) = delete;
+        S3fsSignals& operator=(S3fsSignals&&) = delete;
+
         static bool Initialize();
         static bool Destroy();
 

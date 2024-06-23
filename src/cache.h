@@ -92,13 +92,8 @@ class StatCache
         symlink_cache_t        symlink_cache;
         notruncate_dir_map_t   notruncate_file_cache;
 
-    private:
         StatCache();
         ~StatCache();
-        StatCache(const StatCache&) = delete;
-        StatCache(StatCache&&) = delete;
-        StatCache& operator=(const StatCache&) = delete;
-        StatCache& operator=(StatCache&&) = delete;
 
         void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
@@ -111,6 +106,11 @@ class StatCache
         bool DelNotruncateCache(const std::string& key);
 
     public:
+        StatCache(const StatCache&) = delete;
+        StatCache(StatCache&&) = delete;
+        StatCache& operator=(const StatCache&) = delete;
+        StatCache& operator=(StatCache&&) = delete;
+
         // Reference singleton
         static StatCache* getStatCacheData()
         {
