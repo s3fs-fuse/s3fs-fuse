@@ -40,21 +40,21 @@ class PseudoFdManager
         pseudofd_list_t pseudofd_list;
         std::mutex      pseudofd_list_lock;    // protects pseudofd_list
 
-    private:
         static PseudoFdManager& GetManager();
 
         PseudoFdManager() = default;
         ~PseudoFdManager() = default;
-        PseudoFdManager(const PseudoFdManager&) = delete;
-        PseudoFdManager(PseudoFdManager&&) = delete;
-        PseudoFdManager& operator=(const PseudoFdManager&) = delete;
-        PseudoFdManager& operator=(PseudoFdManager&&) = delete;
 
         int GetUnusedMinPseudoFd() const;
         int CreatePseudoFd();
         bool ReleasePseudoFd(int fd);
 
     public:
+        PseudoFdManager(const PseudoFdManager&) = delete;
+        PseudoFdManager(PseudoFdManager&&) = delete;
+        PseudoFdManager& operator=(const PseudoFdManager&) = delete;
+        PseudoFdManager& operator=(PseudoFdManager&&) = delete;
+
         static int Get();
         static bool Release(int fd);
 };
