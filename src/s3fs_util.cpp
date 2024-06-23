@@ -24,6 +24,7 @@
 #include <cerrno>
 #include <grp.h>
 #include <memory>
+#include <mutex>
 #include <pwd.h>
 #include <libgen.h>
 #include <dirent.h>
@@ -37,7 +38,6 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs_help.h"
-#include "autolock.h"
 
 //-------------------------------------------------------------------
 // Global variables
@@ -167,52 +167,21 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 // conflicts.
 // To avoid this, exclusive control is performed by mutex.
 //
-static pthread_mutex_t* pbasename_lock = nullptr;
+static std::mutex basename_lock;
 
 bool init_basename_lock()
 {
-    if(pbasename_lock){
-        S3FS_PRN_ERR("already initialized mutex for posix dirname/basename function.");
-        return false;
-    }
-    pbasename_lock = new pthread_mutex_t;
-
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    int result;
-    if(0 != (result = pthread_mutex_init(pbasename_lock, &attr))){
-        S3FS_PRN_ERR("failed to init pbasename_lock: %d.", result);
-        delete pbasename_lock;
-        pbasename_lock = nullptr;
-        return false;
-    }
     return true;
 }
 
 bool destroy_basename_lock()
 {
-    if(!pbasename_lock){
-        S3FS_PRN_ERR("the mutex for posix dirname/basename function is not initialized.");
-        return false;
-    }
-    int result;
-    if(0 != (result = pthread_mutex_destroy(pbasename_lock))){
-        S3FS_PRN_ERR("failed to destroy pbasename_lock: %d", result);
-        return false;
-    }
-    delete pbasename_lock;
-    pbasename_lock = nullptr;
-
     return true;
 }
 
 std::string mydirname(const std::string& path)
 {
-    AutoLock auto_lock(pbasename_lock);
+    const std::lock_guard<std::mutex> lock(basename_lock);
 
     return mydirname(path.c_str());
 }
@@ -233,7 +202,7 @@ std::string mydirname(const char* path)
 
 std::string mybasename(const std::string& path)
 {
-    AutoLock auto_lock(pbasename_lock);
+    const std::lock_guard<std::mutex> data_lock(basename_lock);
 
     return mybasename(path.c_str());
 }

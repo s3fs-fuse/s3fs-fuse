@@ -33,7 +33,6 @@
 #include "s3fs_logger.h"
 #include "s3fs_cred.h"
 #include "string_util.h"
-#include "autolock.h"
 
 //
 // The following symbols are used by FdManager::RawCheckAllCache().
@@ -76,10 +75,9 @@ static constexpr char NOCACHE_PATH_PREFIX_FORM[] = " __S3FS_UNEXISTED_PATH_%lx__
 // FdManager class variable
 //------------------------------------------------
 FdManager       FdManager::singleton;
-pthread_mutex_t FdManager::fd_manager_lock;
-pthread_mutex_t FdManager::cache_cleanup_lock;
-pthread_mutex_t FdManager::reserved_diskspace_lock;
-bool            FdManager::is_lock_init(false);
+std::mutex      FdManager::fd_manager_lock;
+std::mutex      FdManager::cache_cleanup_lock;
+std::mutex      FdManager::reserved_diskspace_lock;
 std::string     FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
@@ -240,13 +238,13 @@ bool FdManager::CheckCacheDirExist()
 
 off_t FdManager::GetEnsureFreeDiskSpace()
 {
-    AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
     return FdManager::free_disk_space;
 }
 
 off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
 {
-    AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
     off_t old = FdManager::free_disk_space;
     FdManager::free_disk_space = size;
     return old;
@@ -429,7 +427,7 @@ FILE* FdManager::MakeTempFile() {
 
 bool FdManager::HasOpenEntityFd(const char* path)
 {
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     const FdEntity* ent;
     int         fd = -1;
@@ -444,7 +442,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 //
 int FdManager::GetOpenFdCount(const char* path)
 {
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     return FdManager::singleton.GetPseudoFdCount(path);
 }
@@ -454,27 +452,7 @@ int FdManager::GetOpenFdCount(const char* path)
 //------------------------------------------------
 FdManager::FdManager()
 {
-    if(this == FdManager::get()){
-        pthread_mutexattr_t attr;
-        pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-        int result;
-        if(0 != (result = pthread_mutex_init(&FdManager::fd_manager_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init fd_manager_lock: %d", result);
-            abort();
-        }
-        if(0 != (result = pthread_mutex_init(&FdManager::cache_cleanup_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init cache_cleanup_lock: %d", result);
-            abort();
-        }
-        if(0 != (result = pthread_mutex_init(&FdManager::reserved_diskspace_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init reserved_diskspace_lock: %d", result);
-            abort();
-        }
-        FdManager::is_lock_init = true;
-    }else{
+    if(this != FdManager::get()){
         abort();
     }
 }
@@ -487,23 +465,6 @@ FdManager::~FdManager()
             S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
         }
         fent.clear();
-
-        if(FdManager::is_lock_init){
-            int result;
-            if(0 != (result = pthread_mutex_destroy(&FdManager::fd_manager_lock))){
-                S3FS_PRN_CRIT("failed to destroy fd_manager_lock: %d", result);
-                abort();
-            }
-            if(0 != (result = pthread_mutex_destroy(&FdManager::cache_cleanup_lock))){
-                S3FS_PRN_CRIT("failed to destroy cache_cleanup_lock: %d", result);
-                abort();
-            }
-            if(0 != (result = pthread_mutex_destroy(&FdManager::reserved_diskspace_lock))){
-                S3FS_PRN_CRIT("failed to destroy reserved_diskspace_lock: %d", result);
-                abort();
-            }
-            FdManager::is_lock_init = false;
-        }
     }else{
         abort();
     }
@@ -571,7 +532,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         return nullptr;
     }
 
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     // search in mapping by key(path)
     fdent_map_t::iterator iter = fent.find(path);
@@ -657,7 +618,7 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     // search from all entity.
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
@@ -708,7 +669,7 @@ int FdManager::GetPseudoFdCount(const char* path)
 
 void FdManager::Rename(const std::string &from, const std::string &to)
 {
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     fdent_map_t::iterator iter = fent.find(from);
     if(fent.end() == iter && !FdManager::IsCacheDir()){
@@ -752,7 +713,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
     if(!ent || -1 == fd){
         return true;  // returns success
     }
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
         if(iter->second.get() == ent){
@@ -778,7 +739,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
 
 bool FdManager::ChangeEntityToTempPath(const FdEntity* ent, const char* path)
 {
-    AutoLock auto_lock(&FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
         if(iter->second.get() == ent){
@@ -803,16 +764,15 @@ void FdManager::CleanupCacheDir()
         return;
     }
 
-    AutoLock auto_lock_no_wait(&FdManager::cache_cleanup_lock, AutoLock::NO_WAIT);
-
-    if(auto_lock_no_wait.isLockAcquired()){
+    if(FdManager::cache_cleanup_lock.try_lock()){
         //S3FS_PRN_DBG("cache cleanup started");
         CleanupCacheDirInternal("");
         //S3FS_PRN_DBG("cache cleanup ended");
     }else{
         // wait for other thread to finish cache cleanup
-        AutoLock auto_lock(&FdManager::cache_cleanup_lock);
+        FdManager::cache_cleanup_lock.lock();
     }
+    FdManager::cache_cleanup_lock.unlock();
 }
 
 void FdManager::CleanupCacheDirInternal(const std::string &path)
@@ -843,8 +803,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         if(S_ISDIR(st.st_mode)){
             CleanupCacheDirInternal(next_path);
         }else{
-            AutoLock auto_lock(&FdManager::fd_manager_lock, AutoLock::NO_WAIT);
-            if (!auto_lock.isLockAcquired()) {
+            if(!FdManager::fd_manager_lock.try_lock()){
                 S3FS_PRN_INFO("could not get fd_manager_lock when clean up file(%s), then skip it.", next_path.c_str());
                 continue;
             }
@@ -853,6 +812,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
                 S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
                 FdManager::DeleteCacheFile(next_path.c_str());
             }
+            FdManager::fd_manager_lock.unlock();
         }
     }
     closedir(dp);
@@ -861,7 +821,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
 bool FdManager::ReserveDiskSpace(off_t size)
 {
     if(IsSafeDiskSpace(nullptr, size)){
-        AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+        const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
         free_disk_space += size;
         return true;
     }
@@ -870,7 +830,7 @@ bool FdManager::ReserveDiskSpace(off_t size)
 
 void FdManager::FreeReservedDiskSpace(off_t size)
 {
-    AutoLock auto_lock(&FdManager::reserved_diskspace_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
     free_disk_space -= size;
 }
 
@@ -955,7 +915,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
             // check if the target file is currently in operation.
             {
-                AutoLock auto_lock(&FdManager::fd_manager_lock);
+                const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
                 fdent_map_t::iterator iter = fent.find(object_file_path);
                 if(fent.end() != iter){

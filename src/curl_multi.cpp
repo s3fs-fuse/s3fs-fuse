@@ -27,7 +27,6 @@
 #include "s3fs_logger.h"
 #include "curl_multi.h"
 #include "curl.h"
-#include "autolock.h"
 #include "psemaphore.h"
 
 //-------------------------------------------------------------------
@@ -35,25 +34,11 @@
 //-------------------------------------------------------------------
 S3fsMultiCurl::S3fsMultiCurl(int maxParallelism, bool not_abort) : maxParallelism(maxParallelism), not_abort(not_abort), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr), pSuccessCallbackParam(nullptr), pNotFoundCallbackParam(nullptr)
 {
-    int result;
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    if (0 != (result = pthread_mutex_init(&completed_tids_lock, &attr))) {
-        S3FS_PRN_ERR("could not initialize completed_tids_lock: %i", result);
-        abort();
-    }
 }
 
 S3fsMultiCurl::~S3fsMultiCurl()
 {
     Clear();
-    int result;
-    if(0 != (result = pthread_mutex_destroy(&completed_tids_lock))){
-        S3FS_PRN_ERR("could not destroy completed_tids_lock: %i", result);
-    }
 }
 
 bool S3fsMultiCurl::ClearEx(bool is_all)
@@ -143,7 +128,7 @@ int S3fsMultiCurl::MultiPerform()
         sem.wait();
 
         {
-            AutoLock lock(&completed_tids_lock);
+            const std::lock_guard<std::mutex> lock(completed_tids_lock);
             for(std::vector<pthread_t>::iterator it = completed_tids.begin(); it != completed_tids.end(); ++it){
                 void*   retval;
     
@@ -179,7 +164,7 @@ int S3fsMultiCurl::MultiPerform()
         sem.wait();
     }
 
-    AutoLock lock(&completed_tids_lock);
+    const std::lock_guard<std::mutex> lock(completed_tids_lock);
     for (std::vector<pthread_t>::iterator titer = completed_tids.begin(); titer != completed_tids.end(); ++titer) {
         void*   retval;
 
@@ -377,7 +362,7 @@ void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
         s3fscurl->DestroyCurlHandle(true, false);
     }
 
-    AutoLock  lock(s3fscurl->completed_tids_lock);
+    const std::lock_guard<std::mutex> lock(*s3fscurl->completed_tids_lock);
     s3fscurl->completed_tids->push_back(pthread_self());
     s3fscurl->sem->post();
 

@@ -54,7 +54,6 @@ s3fs_SOURCES = \
     fdcache_untreated.cpp \
     addhead.cpp \
     sighandlers.cpp \
-    autolock.cpp \
     threadpoolman.cpp \
     common_auth.cpp
 if USE_SSL_OPENSSL

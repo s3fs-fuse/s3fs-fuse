@@ -22,9 +22,10 @@
 #define S3FS_CRED_H_
 
 #include <map>
+#include <mutex>
 #include <string>
 
-#include "autolock.h"
+#include "common.h"
 #include "s3fs_extcred.h"
 #include "types.h"
 
@@ -57,8 +58,7 @@ class S3fsCred
 
         static std::string  bucket_name;
 
-        mutable pthread_mutex_t token_lock;
-        bool                is_lock_init;
+        mutable std::mutex token_lock;
 
         std::string         passwd_file;
         std::string         aws_profile;

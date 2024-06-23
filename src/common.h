@@ -51,6 +51,9 @@ extern std::string    instance_name;
 //-------------------------------------------------------------------
 #define	S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
 
+// empty annotation to indicate lock requirement
+#define REQUIRES(...)
+
 #endif // S3FS_COMMON_H_
 
 /*

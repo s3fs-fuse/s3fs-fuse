@@ -25,7 +25,6 @@
 
 #include "s3fs_logger.h"
 #include "threadpoolman.h"
-#include "autolock.h"
 
 //------------------------------------------------
 // ThreadPoolMan class variables
@@ -87,7 +86,7 @@ void* ThreadPoolMan::Worker(void* arg)
         // get instruction
         thpoolman_param param;
         {
-            AutoLock auto_lock(&(psingleton->thread_list_lock));
+            const std::lock_guard<std::mutex> lock(psingleton->thread_list_lock);
 
             if(psingleton->instruction_list.empty()){
                 S3FS_PRN_DBG("Got a semaphore, but the instruction is empty.");
@@ -113,7 +112,7 @@ void* ThreadPoolMan::Worker(void* arg)
 //------------------------------------------------
 // ThreadPoolMan methods
 //------------------------------------------------
-ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_lock_init(false)
+ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0)
 {
     if(count < 1){
         S3FS_PRN_CRIT("Failed to creating singleton for Thread Manager, because thread count(%d) is under 1.", count);
@@ -123,19 +122,6 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_l
         S3FS_PRN_CRIT("Already singleton for Thread Manager is existed.");
         abort();
     }
-
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-
-    int result;
-    if(0 != (result = pthread_mutex_init(&thread_list_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init thread_list_lock: %d", result);
-        abort();
-    }
-    is_lock_init = true;
 
     // create threads
     if(!StartThreads(count)){
@@ -147,15 +133,6 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0), is_l
 ThreadPoolMan::~ThreadPoolMan()
 {
     StopThreads();
-
-    if(is_lock_init){
-        int result;
-        if(0 != (result = pthread_mutex_destroy(&thread_list_lock))){
-            S3FS_PRN_CRIT("failed to destroy thread_list_lock: %d", result);
-            abort();
-        }
-        is_lock_init = false;
-    }
 }
 
 bool ThreadPoolMan::IsExit() const
@@ -235,7 +212,7 @@ void ThreadPoolMan::SetInstruction(const thpoolman_param& param)
 {
     // set parameter to list
     {
-        AutoLock auto_lock(&thread_list_lock);
+        const std::lock_guard<std::mutex> lock(thread_list_lock);
         instruction_list.push_back(param);
     }
 

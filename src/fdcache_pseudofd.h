@@ -21,7 +21,7 @@
 #ifndef S3FS_FDCACHE_PSEUDOFD_H_
 #define S3FS_FDCACHE_PSEUDOFD_H_
 
-#include <pthread.h>
+#include <mutex>
 #include <vector>
 
 //------------------------------------------------
@@ -38,14 +38,13 @@ class PseudoFdManager
 {
     private:
         pseudofd_list_t pseudofd_list;
-        bool            is_lock_init;
-        pthread_mutex_t pseudofd_list_lock;    // protects pseudofd_list
+        std::mutex      pseudofd_list_lock;    // protects pseudofd_list
 
     private:
         static PseudoFdManager& GetManager();
 
-        PseudoFdManager();
-        ~PseudoFdManager();
+        PseudoFdManager() = default;
+        ~PseudoFdManager() = default;
         PseudoFdManager(const PseudoFdManager&) = delete;
         PseudoFdManager(PseudoFdManager&&) = delete;
         PseudoFdManager& operator=(const PseudoFdManager&) = delete;
