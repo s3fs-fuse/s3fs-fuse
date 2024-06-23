@@ -849,8 +849,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         //
         // loading from file
         //
-        struct stat st;
-        memset(&st, 0, sizeof(struct stat));
+        struct stat st{};
         if(-1 == fstat(file.GetFd(), &st)){
             S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
             return false;

@@ -485,7 +485,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
                 pagelist.Serialize(*pcfstat, false, inode)            )
             {
                 // succeed to open cache file and to load stats data
-                memset(&st, 0, sizeof(struct stat));
+                st = {};
                 if(-1 == fstat(physical_fd, &st)){
                     S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
                     physical_fd = -1;
@@ -767,7 +767,7 @@ bool FdEntity::GetStatsHasLock(struct stat& st) const
         return false;
     }
 
-    memset(&st, 0, sizeof(struct stat)); 
+    st = {};
     if(-1 == fstat(physical_fd, &st)){
         S3FS_PRN_ERR("fstat failed. errno(%d)", errno);
         return false;
@@ -1031,8 +1031,7 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     //AutoLock auto_lock(&fdent_lock);
 
     // get file size
-    struct stat st;
-    memset(&st, 0, sizeof(struct stat));
+    struct stat st{};
     if(-1 == fstat(physical_fd, &st)){
         S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
         return false;
@@ -1481,8 +1480,7 @@ int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tp
     }
 
     // backup upload file size
-    struct stat st;
-    memset(&st, 0, sizeof(struct stat));
+    struct stat st{};
     if(-1 == fstat(physical_fd, &st)){
         S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
     }
@@ -1548,8 +1546,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             }
 
             // backup upload file size
-            struct stat st;
-            memset(&st, 0, sizeof(struct stat));
+            struct stat st{};
             if(-1 == fstat(physical_fd, &st)){
                 S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
             }
@@ -1649,8 +1646,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             FdManager::FreeReservedDiskSpace(restsize);
 
             // backup upload file size
-            struct stat st;
-            memset(&st, 0, sizeof(struct stat));
+            struct stat st{};
             if(-1 == fstat(physical_fd, &st)){
                 S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
             }
@@ -1755,8 +1751,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
 
         // backup upload file size
-        struct stat st;
-        memset(&st, 0, sizeof(struct stat));
+        struct stat st{};
         if(-1 == fstat(physical_fd, &st)){
             S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
         }

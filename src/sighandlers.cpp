@@ -131,9 +131,7 @@ void S3fsSignals::HandlerUSR2(int sig)
 
 bool S3fsSignals::InitUsr2Handler()
 {
-    struct sigaction sa;
-
-    memset(&sa, 0, sizeof(struct sigaction));
+    struct sigaction sa{};
     sa.sa_handler = S3fsSignals::HandlerUSR2;
     sa.sa_flags   = SA_RESTART;
     if(0 != sigaction(SIGUSR2, &sa, nullptr)){
@@ -153,9 +151,7 @@ void S3fsSignals::HandlerHUP(int sig)
 
 bool S3fsSignals::InitHupHandler()
 {
-    struct sigaction sa;
-
-    memset(&sa, 0, sizeof(struct sigaction));
+    struct sigaction sa{};
     sa.sa_handler = S3fsSignals::HandlerHUP;
     sa.sa_flags   = SA_RESTART;
     if(0 != sigaction(SIGHUP, &sa, nullptr)){
@@ -210,8 +206,7 @@ bool S3fsSignals::InitUsr1Handler()
     pThreadUsr1 = std::move(pThreadUsr1_tmp);
 
     // set handler
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(struct sigaction));
+    struct sigaction sa{};
     sa.sa_handler = S3fsSignals::HandlerUSR1;
     sa.sa_flags   = SA_RESTART;
     if(0 != sigaction(SIGUSR1, &sa, nullptr)){
