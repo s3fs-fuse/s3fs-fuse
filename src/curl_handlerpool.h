@@ -24,6 +24,7 @@
 #include <cassert>
 #include <curl/curl.h>
 #include <list>
+#include <mutex>
 
 //----------------------------------------------
 // Typedefs
@@ -54,7 +55,7 @@ class CurlHandlerPool
 
     private:
         int             mMaxHandlers;
-        pthread_mutex_t mLock;
+        std::mutex      mLock;
         hcurllist_t     mPool;
 };
 

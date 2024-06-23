@@ -28,7 +28,6 @@
 #include "s3fs_logger.h"
 #include "s3fs_util.h"
 #include "cache.h"
-#include "autolock.h"
 #include "string_util.h"
 
 //-------------------------------------------------------------------
@@ -118,7 +117,7 @@ struct sort_symlinkiterlist{
 // Static
 //-------------------------------------------------------------------
 StatCache       StatCache::singleton;
-pthread_mutex_t StatCache::stat_cache_lock;
+std::mutex      StatCache::stat_cache_lock;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
@@ -127,16 +126,6 @@ StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), Expire
 {
     if(this == StatCache::getStatCacheData()){
         stat_cache.clear();
-        pthread_mutexattr_t attr;
-        pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-        int result;
-        if(0 != (result = pthread_mutex_init(&StatCache::stat_cache_lock, &attr))){
-            S3FS_PRN_CRIT("failed to init stat_cache_lock: %d", result);
-            abort();
-        }
     }else{
         abort();
     }
@@ -146,11 +135,6 @@ StatCache::~StatCache()
 {
     if(this == StatCache::getStatCacheData()){
         Clear();
-        int result = pthread_mutex_destroy(&StatCache::stat_cache_lock);
-        if(result != 0){
-            S3FS_PRN_CRIT("failed to destroy stat_cache_lock: %d", result);
-            abort();
-        }
     }else{
         abort();
     }
@@ -203,7 +187,7 @@ bool StatCache::SetCacheNoObject(bool flag)
 
 void StatCache::Clear()
 {
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     stat_cache.clear();
     S3FS_MALLOCTRIM(0);
@@ -214,7 +198,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
     bool is_delete_cache = false;
     std::string strpath = key;
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     stat_cache_t::iterator iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
@@ -300,7 +284,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
         return false;
     }
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     stat_cache_t::iterator iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
@@ -339,7 +323,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     }
     S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     if(stat_cache.end() != stat_cache.find(key)){
         // found cache
@@ -416,7 +400,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
     }
     S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
     stat_cache_t::iterator iter = stat_cache.find(key);
     if(stat_cache.end() == iter){
         return true;
@@ -459,7 +443,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     }
     S3FS_PRN_INFO3("add no object cache entry[path=%s]", key.c_str());
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     if(stat_cache.end() != stat_cache.find(key)){
 		// found
@@ -496,7 +480,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
 
 void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
 {
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
     stat_cache_t::iterator iter = stat_cache.find(key);
 
     if(stat_cache.end() != iter){
@@ -608,7 +592,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     bool is_delete_cache = false;
     const std::string& strpath = key;
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     symlink_cache_t::iterator iter = symlink_cache.find(strpath);
     if(iter != symlink_cache.end()){
@@ -644,7 +628,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     }
     S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     if(symlink_cache.end() != symlink_cache.find(key)){
     	// found
@@ -819,7 +803,7 @@ bool StatCache::GetNotruncateCache(const std::string& parentdir, notruncate_file
         dirpath += '/';
     }
 
-    AutoLock lock(&StatCache::stat_cache_lock);
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(dirpath);
     if(iter == notruncate_file_cache.end()){

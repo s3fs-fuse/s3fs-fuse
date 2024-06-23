@@ -22,6 +22,7 @@
 #define S3FS_CURL_MULTI_H_
 
 #include <memory>
+#include <mutex>
 #include <vector>
 
 //----------------------------------------------
@@ -52,7 +53,7 @@ class S3fsMultiCurl
         void*                      pSuccessCallbackParam;
         void*                      pNotFoundCallbackParam;
 
-        pthread_mutex_t completed_tids_lock;
+        std::mutex completed_tids_lock;
         std::vector<pthread_t> completed_tids;
 
     private:

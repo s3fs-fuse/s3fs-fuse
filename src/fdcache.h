@@ -21,6 +21,9 @@
 #ifndef S3FS_FDCACHE_H_
 #define S3FS_FDCACHE_H_
 
+#include <mutex>
+
+#include "common.h"
 #include "fdcache_entity.h"
 
 //------------------------------------------------
@@ -30,10 +33,9 @@ class FdManager
 {
   private:
       static FdManager       singleton;
-      static pthread_mutex_t fd_manager_lock;
-      static pthread_mutex_t cache_cleanup_lock;
-      static pthread_mutex_t reserved_diskspace_lock;
-      static bool            is_lock_init;
+      static std::mutex      fd_manager_lock;
+      static std::mutex      cache_cleanup_lock;
+      static std::mutex      reserved_diskspace_lock;
       static std::string     cache_dir;
       static bool            check_cache_dir_exist;
       static off_t           free_disk_space;       // limit free disk space
@@ -95,7 +97,7 @@ class FdManager
 
       // Return FdEntity associated with path, returning nullptr on error.  This operation increments the reference count; callers must decrement via Close after use.
       FdEntity* GetFdEntity(const char* path, int& existfd, bool newfd = true) {
-          AutoLock auto_lock(&FdManager::fd_manager_lock);
+          const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
           return GetFdEntityHasLock(path, existfd, newfd);
       }
       FdEntity* GetFdEntityHasLock(const char* path, int& existfd, bool newfd = true) REQUIRES(FdManager::fd_manager_lock);

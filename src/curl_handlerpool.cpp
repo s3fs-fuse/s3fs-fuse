@@ -22,23 +22,12 @@
 
 #include "s3fs_logger.h"
 #include "curl_handlerpool.h"
-#include "autolock.h"
 
 //-------------------------------------------------------------------
 // Class CurlHandlerPool
 //-------------------------------------------------------------------
 bool CurlHandlerPool::Init()
 {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    if (0 != pthread_mutex_init(&mLock, &attr)) {
-        S3FS_PRN_ERR("Init curl handlers lock failed");
-        return false;
-    }
-
     for(int cnt = 0; cnt < mMaxHandlers; ++cnt){
         CURL* hCurl = curl_easy_init();
         if(!hCurl){
@@ -53,27 +42,21 @@ bool CurlHandlerPool::Init()
 
 bool CurlHandlerPool::Destroy()
 {
-    {
-        AutoLock lock(&mLock);
+    const std::lock_guard<std::mutex> lock(mLock);
 
-        while(!mPool.empty()){
-            CURL* hCurl = mPool.back();
-            mPool.pop_back();
-            if(hCurl){
-                curl_easy_cleanup(hCurl);
-            }
+    while(!mPool.empty()){
+        CURL* hCurl = mPool.back();
+        mPool.pop_back();
+        if(hCurl){
+            curl_easy_cleanup(hCurl);
         }
-    }
-    if (0 != pthread_mutex_destroy(&mLock)) {
-        S3FS_PRN_ERR("Destroy curl handlers lock failed");
-        return false;
     }
     return true;
 }
 
 CURL* CurlHandlerPool::GetHandler(bool only_pool)
 {
-    AutoLock lock(&mLock);
+    const std::lock_guard<std::mutex> lock(mLock);
 
     CURL* hCurl = nullptr;
 
@@ -97,7 +80,7 @@ void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
     if(!hCurl){
       return;
     }
-    AutoLock lock(&mLock);
+    const std::lock_guard<std::mutex> lock(mLock);
 
     if(restore_pool){
         S3FS_PRN_DBG("Return handler to pool");
@@ -122,7 +105,7 @@ void CurlHandlerPool::ResetHandler(CURL* hCurl)
     if(!hCurl){
       return;
     }
-    AutoLock lock(&mLock);
+    const std::lock_guard<std::mutex> lock(mLock);
 
     curl_easy_reset(hCurl);
 }

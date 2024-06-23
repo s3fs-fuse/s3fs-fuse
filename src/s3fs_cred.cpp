@@ -169,7 +169,6 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
 // Methods : Constructor / Destructor
 //-------------------------------------------------------------------
 S3fsCred::S3fsCred() :
-    is_lock_init(false),
     aws_profile(DEFAULT_AWS_PROFILE_NAME),
     load_iamrole(false),
     AWSAccessTokenExpire(0),
@@ -188,31 +187,11 @@ S3fsCred::S3fsCred() :
     pFuncCredFree(FreeS3fsCredential),
     pFuncCredUpdate(UpdateS3fsCredential)
 {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    int result;
-    if(0 != (result = pthread_mutex_init(&token_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init token_lock: %d", result);
-        abort();
-    }
-    is_lock_init = true;
 }
 
 S3fsCred::~S3fsCred()
 {
     UnloadExtCredLib();
-
-    if(is_lock_init){
-        int result;
-        if(0 != (result = pthread_mutex_destroy(&token_lock))){
-            S3FS_PRN_CRIT("failed to destroy token_lock: %d", result);
-            abort();
-        }
-        is_lock_init = false;
-    }
 }
 
 //-------------------------------------------------------------------
@@ -486,7 +465,7 @@ bool S3fsCred::LoadIAMCredentials()
 //
 bool S3fsCred::LoadIAMRoleFromMetaData()
 {
-    AutoLock auto_lock(&token_lock);
+    const std::lock_guard<std::mutex> lock(token_lock);
 
     if(load_iamrole){
         // url(not check iam role)
@@ -1116,7 +1095,7 @@ bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
 
 bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string* secret_access_key, std::string* access_token)
 {
-    AutoLock auto_lock(&token_lock);
+    const std::lock_guard<std::mutex> lock(token_lock);
 
     if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole()){
         if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGING)){
@@ -1374,7 +1353,7 @@ bool S3fsCred::UpdateExtCredentials()
 //
 int S3fsCred::DetectParam(const char* arg)
 {
-    AutoLock auto_lock(&token_lock);
+    const std::lock_guard<std::mutex> lock(token_lock);
 
     if(!arg){
         S3FS_PRN_EXIT("parameter arg is empty(null)");
@@ -1524,7 +1503,7 @@ bool S3fsCred::CheckForbiddenBucketParams()
 //
 bool S3fsCred::CheckAllParams()
 {
-    AutoLock auto_lock(&token_lock);
+    const std::lock_guard<std::mutex> lock(token_lock);
     //
     // Checking forbidden parameters for bucket
     //

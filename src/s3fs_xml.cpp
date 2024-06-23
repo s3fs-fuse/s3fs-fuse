@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <libxml/xpathInternals.h>
+#include <mutex>
 
 #include "common.h"
 #include "s3fs.h"
@@ -28,7 +29,6 @@
 #include "s3fs_xml.h"
 #include "s3fs_util.h"
 #include "s3objlist.h"
-#include "autolock.h"
 #include "string_util.h"
 
 //-------------------------------------------------------------------
@@ -39,7 +39,7 @@ static constexpr char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
 // [NOTE]
 // mutex for static variables in GetXmlNsUrl
 //
-static pthread_mutex_t* pxml_parser_mutex = nullptr;
+static std::mutex xml_parser_mutex;
 
 //-------------------------------------------------------------------
 // Functions
@@ -48,7 +48,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
 {
     bool result = false;
 
-    if(!pxml_parser_mutex || !doc){
+    if(!doc){
         return result;
     }
 
@@ -57,7 +57,7 @@ static bool GetXmlNsUrl(xmlDocPtr doc, std::string& nsurl)
         static time_t tmLast = 0;  // cache for 60 sec.
         static std::string strNs;
 
-        AutoLock lock(pxml_parser_mutex);
+        const std::lock_guard<std::mutex> lock(xml_parser_mutex);
 
         if((tmLast + 60) < time(nullptr)){
             // refresh
@@ -487,36 +487,11 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
 //-------------------------------------------------------------------
 bool init_parser_xml_lock()
 {
-    if(pxml_parser_mutex){
-        return false;
-    }
-    pxml_parser_mutex = new pthread_mutex_t;
-
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-
-    if(0 != pthread_mutex_init(pxml_parser_mutex, &attr)){
-        delete pxml_parser_mutex;
-        pxml_parser_mutex = nullptr;
-        return false;
-    }
     return true;
 }
 
 bool destroy_parser_xml_lock()
 {
-    if(!pxml_parser_mutex){
-        return false;
-    }
-    if(0 != pthread_mutex_destroy(pxml_parser_mutex)){
-        return false;
-    }
-    delete pxml_parser_mutex;
-    pxml_parser_mutex = nullptr;
-
     return true;
 }
 
