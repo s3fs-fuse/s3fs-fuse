@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_PAGE_H_
 #define S3FS_FDCACHE_PAGE_H_
 
+#include <cstdint>
 #include <sys/types.h>
 #include <vector>
 
@@ -79,7 +80,7 @@ class PageList
         bool          is_shrink;    // [NOTE] true if it has been shrinked even once
 
     public:
-        enum class page_status{
+        enum class page_status : int8_t {
             NOT_LOAD_MODIFIED = 0,
             LOADED,
             MODIFIED,

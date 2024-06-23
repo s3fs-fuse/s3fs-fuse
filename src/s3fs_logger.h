@@ -22,6 +22,7 @@
 #define S3FS_LOGGER_H_
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <syslog.h>
@@ -42,7 +43,7 @@
 class S3fsLog
 {
     public:
-        enum s3fs_log_level{
+        enum s3fs_log_level : uint8_t {
             LEVEL_CRIT = 0,          // LEVEL_CRIT
             LEVEL_ERR  = 1,          // LEVEL_ERR
             LEVEL_WARN = 3,          // LEVEL_WARNING

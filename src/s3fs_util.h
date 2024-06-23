@@ -21,7 +21,10 @@
 #ifndef S3FS_S3FS_UTIL_H_
 #define S3FS_S3FS_UTIL_H_
 
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <sys/stat.h>
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME          0
@@ -61,7 +64,7 @@ void print_launch_message(int argc, char** argv);
 //
 // Utility for nanosecond time(timespec)
 //
-enum class stat_time_type{
+enum class stat_time_type : uint8_t {
     ATIME,
     MTIME,
     CTIME

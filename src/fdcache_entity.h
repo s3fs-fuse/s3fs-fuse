@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_ENTITY_H_
 #define S3FS_FDCACHE_ENTITY_H_
 
+#include <cstdint>
 #include <fcntl.h>
 #include <memory>
 
@@ -41,7 +42,7 @@ class FdEntity
         // because the processing(request) at these updates is different.
         // Therefore, the pending state is expressed by this enum type.
         //
-        enum class pending_status_t {
+        enum class pending_status_t : uint8_t {
             NO_UPDATE_PENDING = 0,
             UPDATE_META_PENDING,        // pending meta header
             CREATE_FILE_PENDING         // pending file creation and meta header

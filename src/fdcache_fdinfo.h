@@ -38,17 +38,15 @@ class PseudoFdInfo;
 
 struct pseudofdinfo_thparam
 {
-    PseudoFdInfo* ppseudofdinfo;
+    PseudoFdInfo* ppseudofdinfo = nullptr;
     std::string   path;
     std::string   upload_id;
-    int           upload_fd;
-    off_t         start;
-    off_t         size;
-    bool          is_copy;
-    int           part_num;
-    etagpair*     petag;
-
-    pseudofdinfo_thparam() : ppseudofdinfo(nullptr), path(""), upload_id(""), upload_fd(-1), start(0), size(0), is_copy(false), part_num(-1), petag(nullptr) {}
+    int           upload_fd = -1;
+    off_t         start = 0;
+    off_t         size = 0;
+    bool          is_copy = false;
+    int           part_num = -1;
+    etagpair*     petag = nullptr;
 };
 
 //------------------------------------------------

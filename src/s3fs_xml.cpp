@@ -380,7 +380,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             free(name);
 
             if(prefix){
-                head.common_prefixes.push_back(decname);
+                head.AddCommonPrefix(decname);
             }
             if(!head.insert(decname.c_str(), (!stretag.empty() ? stretag.c_str() : nullptr), is_dir)){
                 S3FS_PRN_ERR("insert_object returns with error.");
