@@ -223,7 +223,7 @@ void FdEntity::Close(int fd)
     }
 
     // check pseudo fd count
-    if(-1 != physical_fd && 0 == GetOpenCount(AutoLock::ALREADY_LOCKED)){
+    if(-1 != physical_fd && 0 == GetOpenCountHasLock()){
         AutoLock auto_data_lock(&fdent_data_lock);
         if(!cachepath.empty()){
             // [NOTE]
@@ -255,10 +255,8 @@ void FdEntity::Close(int fd)
     }
 }
 
-int FdEntity::Dup(int fd, AutoLock::Type locktype)
+int FdEntity::DupWithLock(int fd)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), fd, physical_fd, pseudo_fd_map.size());
 
     if(-1 == physical_fd){
@@ -277,9 +275,9 @@ int FdEntity::Dup(int fd, AutoLock::Type locktype)
     return pseudo_fd;
 }
 
-int FdEntity::OpenPseudoFd(int flags, AutoLock::Type locktype)
+int FdEntity::OpenPseudoFd(int flags)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
+    AutoLock auto_lock(&fdent_lock);
 
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][pseudo fd count=%zu]", path.c_str(), physical_fd, pseudo_fd_map.size());
 
@@ -293,10 +291,8 @@ int FdEntity::OpenPseudoFd(int flags, AutoLock::Type locktype)
     return pseudo_fd;
 }
 
-int FdEntity::GetOpenCount(AutoLock::Type locktype) const
+int FdEntity::GetOpenCountHasLock() const
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     return static_cast<int>(pseudo_fd_map.size());
 }
 
@@ -358,10 +354,8 @@ int FdEntity::OpenMirrorFile()
     return mirrorfd;
 }
 
-bool FdEntity::FindPseudoFd(int fd, AutoLock::Type locktype) const
+bool FdEntity::FindPseudoFdWithLock(int fd) const
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     if(-1 == fd){
         return false;
     }
@@ -371,10 +365,8 @@ bool FdEntity::FindPseudoFd(int fd, AutoLock::Type locktype) const
     return true;
 }
 
-PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type locktype)
+PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     if(-1 == fd){
         return nullptr;
     }
@@ -394,10 +386,8 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable, AutoLock::Type
     return iter->second.get();
 }
 
-bool FdEntity::IsUploading(AutoLock::Type locktype)
+bool FdEntity::IsUploading()
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
         const PseudoFdInfo* ppseudoinfo = iter->second.get();
         if(ppseudoinfo && ppseudoinfo->IsUploading()){
@@ -417,18 +407,11 @@ bool FdEntity::IsUploading(AutoLock::Type locktype)
 // This is similar to utimens operation.
 // You can use "S3FS_OMIT_TS" global variable for UTIME_OMIT.
 //
-int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, AutoLock::Type type)
+int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags)
 {
-    AutoLock auto_lock(&fdent_lock, type);
-
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
 
-    if (!auto_lock.isLockAcquired()) {
-        // had to wait for fd lock, return
-        S3FS_PRN_ERR("Could not get lock.");
-        return -EIO;
-    }
-
+    AutoLock lock(&fdent_lock);
     AutoLock auto_data_lock(&fdent_data_lock);
 
     // [NOTE]
@@ -658,7 +641,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 
         // set mtime and ctime(set "x-amz-meta-mtime" and "x-amz-meta-ctime" in orgmeta)
         if(UTIME_OMIT != ts_mctime.tv_nsec){
-            if(0 != SetMCtime(ts_mctime, ts_mctime, AutoLock::ALREADY_LOCKED)){
+            if(0 != SetMCtimeHasLock(ts_mctime, ts_mctime)){
                 S3FS_PRN_ERR("failed to set mtime/ctime. errno(%d)", errno);
                 fclose(pfile);
                 pfile       = nullptr;
@@ -699,7 +682,7 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 
     S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
-    if(-1 == physical_fd || !FindPseudoFd(fd, AutoLock::ALREADY_LOCKED)){
+    if(-1 == physical_fd || !FindPseudoFdWithLock(fd)){
         S3FS_PRN_ERR("pseudo_fd(%d) and physical_fd(%d) for path(%s) is not opened yet", fd, physical_fd, path.c_str());
         return false;
     }
@@ -713,7 +696,7 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
     // TODO: possibly do background for delay loading
     //
     int result;
-    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
         S3FS_PRN_ERR("could not download, result(%d)", result);
         return false;
     }
@@ -780,9 +763,8 @@ bool FdEntity::IsModified() const
     return pagelist.IsModified();
 }
 
-bool FdEntity::GetStats(struct stat& st, AutoLock::Type locktype) const
+bool FdEntity::GetStatsHasLock(struct stat& st) const
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
     if(-1 == physical_fd){
         return false;
     }
@@ -795,10 +777,8 @@ bool FdEntity::GetStats(struct stat& st, AutoLock::Type locktype) const
     return true;
 }
 
-int FdEntity::SetCtime(struct timespec time, AutoLock::Type locktype)
+int FdEntity::SetCtimeHasLock(struct timespec time)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(-1 == time.tv_sec){
@@ -808,10 +788,8 @@ int FdEntity::SetCtime(struct timespec time, AutoLock::Type locktype)
     return 0;
 }
 
-int FdEntity::SetAtime(struct timespec time, AutoLock::Type locktype)
+int FdEntity::SetAtimeHasLock(struct timespec time)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(-1 == time.tv_sec){
@@ -824,10 +802,8 @@ int FdEntity::SetAtime(struct timespec time, AutoLock::Type locktype)
 // [NOTE]
 // This method updates mtime as well as ctime.
 //
-int FdEntity::SetMCtime(struct timespec mtime, struct timespec ctime, AutoLock::Type locktype)
+int FdEntity::SetMCtimeHasLock(struct timespec mtime, struct timespec ctime)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s][ctime=%s]", path.c_str(), physical_fd, str(mtime).c_str(), str(ctime).c_str());
 
     if(mtime.tv_sec < 0 || ctime.tv_sec < 0){
@@ -867,7 +843,7 @@ bool FdEntity::UpdateCtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
-    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
+    if(!GetStatsHasLock(st)){
         return false;
     }
 
@@ -880,7 +856,7 @@ bool FdEntity::UpdateAtime()
 {
     AutoLock auto_lock(&fdent_lock);
     struct stat st;
-    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
+    if(!GetStatsHasLock(st)){
         return false;
     }
 
@@ -904,7 +880,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
         // overwritten.
         //
         if(clear_holding_mtime){
-            if(!ClearHoldingMtime(AutoLock::ALREADY_LOCKED)){
+            if(!ClearHoldingMtime()){
                 return false;
             }
             // [NOTE]
@@ -917,7 +893,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
         }
     }else{
         struct stat st;
-        if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
+        if(!GetStatsHasLock(st)){
             return false;
         }
         orgmeta["x-amz-meta-mtime"] = str_stat_time(st, stat_time_type::MTIME);
@@ -925,11 +901,11 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
     return true;
 }
 
-bool FdEntity::SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype)
+bool FdEntity::SetHoldingMtime(struct timespec mtime)
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
+
+    AutoLock lock(&fdent_lock);
 
     if(mtime.tv_sec < 0){
         return false;
@@ -938,15 +914,13 @@ bool FdEntity::SetHoldingMtime(struct timespec mtime, AutoLock::Type locktype)
     return true;
 }
 
-bool FdEntity::ClearHoldingMtime(AutoLock::Type locktype)
+bool FdEntity::ClearHoldingMtime()
 {
-    AutoLock auto_lock(&fdent_lock, locktype);
-
     if(holding_mtime.tv_sec < 0){
         return false;
     }
     struct stat st;
-    if(!GetStats(st, AutoLock::ALREADY_LOCKED)){
+    if(!GetStatsHasLock(st)){
         return false;
     }
     if(-1 != physical_fd){
@@ -1017,23 +991,20 @@ bool FdEntity::SetXattr(const std::string& xattr)
     return true;
 }
 
-bool FdEntity::SetMode(mode_t mode)
+bool FdEntity::SetModeHasLock(mode_t mode)
 {
-    AutoLock auto_lock(&fdent_lock);
     orgmeta["x-amz-meta-mode"] = std::to_string(mode);
     return true;
 }
 
-bool FdEntity::SetUId(uid_t uid)
+bool FdEntity::SetUIdHasLock(uid_t uid)
 {
-    AutoLock auto_lock(&fdent_lock);
     orgmeta["x-amz-meta-uid"] = std::to_string(uid);
     return true;
 }
 
-bool FdEntity::SetGId(gid_t gid)
+bool FdEntity::SetGIdHasLock(gid_t gid)
 {
-    AutoLock auto_lock(&fdent_lock);
     orgmeta["x-amz-meta-gid"] = std::to_string(gid);
     return true;
 }
@@ -1043,7 +1014,7 @@ bool FdEntity::SetContentType(const char* path)
     if(!path){
         return false;
     }
-    AutoLock auto_lock(&fdent_lock);
+    AutoLock lock(&fdent_lock);
     orgmeta["Content-Type"] = S3fsCurl::LookupMimeType(path);
     return true;
 }
@@ -1074,16 +1045,13 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     return true;
 }
 
-int FdEntity::Load(off_t start, off_t size, AutoLock::Type type, bool is_modified_flag)
+int FdEntity::Load(off_t start, off_t size, bool is_modified_flag)
 {
-    AutoLock auto_lock(&fdent_lock, type);
-
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
 
     if(-1 == physical_fd){
         return -EBADF;
     }
-    AutoLock auto_data_lock(&fdent_data_lock, type);
 
     int result = 0;
 
@@ -1410,10 +1378,8 @@ off_t FdEntity::BytesModified()
 // Files smaller than the minimum part size will not be multipart uploaded,
 // but will be uploaded as single part(normally).
 //
-int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool force_sync)
+int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
 {
-    AutoLock auto_lock(&fdent_lock, type);
-
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), fd, physical_fd);
 
     if(-1 == physical_fd){
@@ -1446,7 +1412,7 @@ int FdEntity::RowFlush(int fd, const char* tpath, AutoLock::Type type, bool forc
         // No multipart upload
         if(!force_sync && !pagelist.IsModified()){
             // for only push pending headers
-            result = UploadPending(-1, AutoLock::ALREADY_LOCKED);
+            result = UploadPendingHasLock(-1);
         }else{
             result = RowFlushNoMultipart(pseudo_obj, tpath);
         }
@@ -1505,7 +1471,7 @@ int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tp
     FdManager::FreeReservedDiskSpace(restsize);
 
     // Always load all uninitialized area
-    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+    if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
         S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
         return result;
     }
@@ -1578,7 +1544,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             FdManager::FreeReservedDiskSpace(restsize);
 
             // Load all uninitialized area(no mix multipart uploading)
-            if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+            if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
                 S3FS_PRN_ERR("failed to upload all area(errno=%d)", result);
                 return result;
             }
@@ -1633,7 +1599,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
+        if(0 != (result = UploadPendingHasLock(-1))){
             return result;
         }
     }
@@ -1710,7 +1676,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
                 // [TODO] should use parallel downloading
                 //
                 for(fdpage_list_t::const_iterator iter = dlpages.begin(); iter != dlpages.end(); ++iter){
-                    if(0 != (result = Load(iter->offset, iter->bytes, AutoLock::ALREADY_LOCKED, /*is_modified_flag=*/ true))){  // set loaded and modified flag
+                    if(0 != (result = Load(iter->offset, iter->bytes, /*is_modified_flag=*/ true))){  // set loaded and modified flag
                         S3FS_PRN_ERR("failed to get parts(start=%lld, size=%lld) before uploading.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
                         return result;
                     }
@@ -1723,7 +1689,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
                 // normal uploading (too small part size)
 
                 // If there are unloaded pages, they are loaded at here.
-                if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+                if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
                     S3FS_PRN_ERR("failed to load parts before uploading object(%d)", result);
                     return result;
                 }
@@ -1761,7 +1727,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to truncate file(physical_fd=%d) to zero, but continue...", physical_fd);
         }
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
+        if(0 != (result = UploadPendingHasLock(-1))){
             return result;
         }
     }
@@ -1798,7 +1764,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         }
 
         // If there are unloaded pages, they are loaded at here.
-        if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0, AutoLock::ALREADY_LOCKED))){
+        if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
             S3FS_PRN_ERR("failed to load parts before uploading object(%d)", result);
             return result;
         }
@@ -1857,7 +1823,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             // Execute in parallel downloading with multiple thread.
             //
             for(mp_part_list_t::const_iterator download_iter = to_download_list.begin(); download_iter != to_download_list.end(); ++download_iter){
-                if(0 != (result = Load(download_iter->start, download_iter->size, AutoLock::ALREADY_LOCKED))){
+                if(0 != (result = Load(download_iter->start, download_iter->size))){
                     break;
                 }
             }
@@ -1969,7 +1935,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         pseudo_obj->ClearUploadInfo();         // clear multipart upload info
 
         // put pending headers or create new file
-        if(0 != (result = UploadPending(-1, AutoLock::ALREADY_LOCKED))){
+        if(0 != (result = UploadPendingHasLock(-1))){
             return result;
         }
     }
@@ -2012,12 +1978,13 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
+    AutoLock auto_lock(&fdent_lock);
+
     if(-1 == physical_fd || nullptr == CheckPseudoFdFlags(fd, false)){
         S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not readable", fd, physical_fd, path.c_str());
         return -EBADF;
     }
 
-    AutoLock auto_lock(&fdent_lock);
     AutoLock auto_lock2(&fdent_data_lock);
 
     if(force_load){
@@ -2052,7 +2019,7 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
         // Loading
         int result = 0;
         if(0 < size){
-            result = Load(start, load_size, AutoLock::ALREADY_LOCKED);
+            result = Load(start, load_size);
         }
 
         FdManager::FreeReservedDiskSpace(load_size);
@@ -2075,6 +2042,7 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
+    AutoLock auto_lock(&fdent_lock);
     PseudoFdInfo* pseudo_obj = nullptr;
     if(-1 == physical_fd || nullptr == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
         S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
@@ -2085,7 +2053,6 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     if(FdManager::IsCacheDir() && !FdManager::IsSafeDiskSpace(nullptr, size)){
         FdManager::get()->CleanupCacheDir();
     }
-    AutoLock auto_lock(&fdent_lock);
     AutoLock auto_lock2(&fdent_data_lock);
 
     // check file size
@@ -2152,7 +2119,7 @@ ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* b
 
     // Load uninitialized area which starts from 0 to (start + size) before writing.
     if(0 < start){
-        result = Load(0, start, AutoLock::ALREADY_LOCKED);
+        result = Load(0, start);
     }
 
     FdManager::FreeReservedDiskSpace(restsize);
@@ -2174,7 +2141,7 @@ ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* b
 
     // Load uninitialized area which starts from (start + size) to EOF after writing.
     if(pagelist.Size() > start + static_cast<off_t>(size)){
-        result = Load(start + size, pagelist.Size(), AutoLock::ALREADY_LOCKED);
+        result = Load(start + size, pagelist.Size());
         if(0 != result){
             S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
             return result;
@@ -2206,7 +2173,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
 
             // Load uninitialized area which starts from 0 to (start + size) before writing.
             if(0 < start){
-                result = Load(0, start, AutoLock::ALREADY_LOCKED);
+                result = Load(0, start);
             }
 
             FdManager::FreeReservedDiskSpace(restsize);
@@ -2248,7 +2215,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
 
     // Load uninitialized area which starts from (start + size) to EOF after writing.
     if(pagelist.Size() > start + static_cast<off_t>(size)){
-        result = Load(start + size, pagelist.Size(), AutoLock::ALREADY_LOCKED);
+        result = Load(start + size, pagelist.Size());
         if(0 != result){
             S3FS_PRN_ERR("failed to load uninitialized area after writing(errno=%d)", result);
             return result;
@@ -2436,14 +2403,14 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     struct timespec ctime = get_ctime(updatemeta, false);      // not overcheck
     struct timespec atime = get_atime(updatemeta, false);      // not overcheck
     if(0 <= mtime.tv_sec){
-        SetMCtime(mtime, (ctime.tv_sec < 0 ? mtime : ctime), AutoLock::ALREADY_LOCKED);
+        SetMCtimeHasLock(mtime, (ctime.tv_sec < 0 ? mtime : ctime));
     }
     if(0 <= atime.tv_sec){
-        SetAtime(atime, AutoLock::ALREADY_LOCKED);
+        SetAtimeHasLock(atime);
     }
 
     AutoLock auto_lock2(&fdent_data_lock);
-    if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading(AutoLock::ALREADY_LOCKED) || pagelist.IsModified())){
+    if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading() || pagelist.IsModified())){
         pending_status = pending_status_t::UPDATE_META_PENDING;
     }
 
@@ -2453,9 +2420,8 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 // global function in s3fs.cpp
 int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size = true);
 
-int FdEntity::UploadPending(int fd, AutoLock::Type type)
+int FdEntity::UploadPendingHasLock(int fd)
 {
-    AutoLock auto_lock(&fdent_lock, type);
     int result;
 
     if(pending_status_t::NO_UPDATE_PENDING == pending_status){
@@ -2480,7 +2446,7 @@ int FdEntity::UploadPending(int fd, AutoLock::Type type)
             S3FS_PRN_ERR("could not create a new file(%s), because fd is not specified.", path.c_str());
             result = -EBADF;
         }else{
-            result = Flush(fd, AutoLock::ALREADY_LOCKED, true);
+            result = FlushHasLock(fd, true);
             if(0 != result){
                 S3FS_PRN_ERR("failed to flush for file(%s) by(%d).", path.c_str(), result);
             }else{

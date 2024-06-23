@@ -231,7 +231,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
             if(ent->noobjcache){
                 if(!IsCacheNoObject){
                     // need to delete this cache.
-                    DelStat(strpath, AutoLock::ALREADY_LOCKED);
+                    DelStatHasLock(strpath);
                 }else{
                     // noobjcache = true means no object.
                 }
@@ -285,7 +285,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
     }
 
     if(is_delete_cache){
-        DelStat(strpath, AutoLock::ALREADY_LOCKED);
+        DelStatHasLock(strpath);
     }
     return false;
 }
@@ -326,7 +326,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
     }
 
     if(is_delete_cache){
-        DelStat(strpath, AutoLock::ALREADY_LOCKED);
+        DelStatHasLock(strpath);
     }
     return false;
 }
@@ -342,13 +342,13 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 
     if(stat_cache.end() != stat_cache.find(key)){
         // found cache
-        DelStat(key, AutoLock::ALREADY_LOCKED);
+        DelStatHasLock(key);
     }else{
         // check: need to truncate cache
         if(stat_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache(AutoLock::ALREADY_LOCKED)){
+            if(!TruncateCache()){
                 return false;
             }
         }
@@ -388,7 +388,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     if(!S_ISLNK(value.stbuf.st_mode)){
         if(symlink_cache.end() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
-            DelSymlink(key, AutoLock::ALREADY_LOCKED);
+            DelSymlinkHasLock(key);
         }
     }
 
@@ -462,13 +462,13 @@ bool StatCache::AddNoObjectCache(const std::string& key)
 
     if(stat_cache.end() != stat_cache.find(key)){
 		// found
-        DelStat(key, AutoLock::ALREADY_LOCKED);
+        DelStatHasLock(key);
     }else{
         // check: need to truncate cache
         if(stat_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache(AutoLock::ALREADY_LOCKED)){
+            if(!TruncateCache()){
                 return false;
             }
         }
@@ -489,7 +489,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     // check symbolic link cache
     if(symlink_cache.end() != symlink_cache.find(key)){
         // if symbolic link cache has key, thus remove it.
-        DelSymlink(key, AutoLock::ALREADY_LOCKED);
+        DelSymlinkHasLock(key);
     }
     return true;
 }
@@ -519,10 +519,8 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
     }
 }
 
-bool StatCache::TruncateCache(AutoLock::Type locktype)
+bool StatCache::TruncateCache()
 {
-    AutoLock lock(&StatCache::stat_cache_lock, locktype);
-
     if(stat_cache.empty()){
         return true;
     }
@@ -577,11 +575,9 @@ bool StatCache::TruncateCache(AutoLock::Type locktype)
     return true;
 }
 
-bool StatCache::DelStat(const std::string& key, AutoLock::Type locktype)
+bool StatCache::DelStatHasLock(const std::string& key)
 {
     S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key.c_str());
-
-    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     stat_cache_t::iterator iter;
     if(stat_cache.end() != (iter = stat_cache.find(key))){
@@ -636,7 +632,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     }
 
     if(is_delete_cache){
-        DelSymlink(strpath, AutoLock::ALREADY_LOCKED);
+        DelSymlinkHasLock(strpath);
     }
     return false;
 }
@@ -652,13 +648,13 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
 
     if(symlink_cache.end() != symlink_cache.find(key)){
     	// found
-        DelSymlink(key, AutoLock::ALREADY_LOCKED);
+        DelSymlinkHasLock(key);
     }else{
         // check: need to truncate cache
         if(symlink_cache.size() > CacheSize){
             // cppcheck-suppress unmatchedSuppression
             // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateSymlink(AutoLock::ALREADY_LOCKED)){
+            if(!TruncateSymlink()){
                 return false;
             }
         }
@@ -675,10 +671,8 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     return true;
 }
 
-bool StatCache::TruncateSymlink(AutoLock::Type locktype)
+bool StatCache::TruncateSymlink()
 {
-    AutoLock lock(&StatCache::stat_cache_lock, locktype);
-
     if(symlink_cache.empty()){
         return true;
     }
@@ -721,11 +715,9 @@ bool StatCache::TruncateSymlink(AutoLock::Type locktype)
     return true;
 }
 
-bool StatCache::DelSymlink(const std::string& key, AutoLock::Type locktype)
+bool StatCache::DelSymlinkHasLock(const std::string& key)
 {
     S3FS_PRN_INFO3("delete symbolic link cache entry[path=%s]", key.c_str());
-
-    AutoLock lock(&StatCache::stat_cache_lock, locktype);
 
     symlink_cache_t::iterator iter;
     if(symlink_cache.end() != (iter = symlink_cache.find(key))){

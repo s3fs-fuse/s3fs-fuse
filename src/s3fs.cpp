@@ -940,7 +940,7 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     }
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, st_mctime, flags, force_tmpfile, true, false, AutoLock::NONE))){
+    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, st_mctime, flags, force_tmpfile, true, false))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
         return -EIO;
     }
@@ -1203,7 +1203,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     AutoFdEntity autoent;
     FdEntity*    ent;
     int error = 0;
-    if(nullptr == (ent = autoent.Open(path, &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, AutoLock::NONE, &error))){
+    if(nullptr == (ent = autoent.Open(path, &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, &error))){
         StatCache::getStatCacheData()->DelStat(path);
         return error;
     }
@@ -1440,7 +1440,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(nullptr == (ent = autoent.Open(to, &headers, 0, S3FS_OMIT_TS, O_RDWR, true, true, false, AutoLock::NONE))){
+        if(nullptr == (ent = autoent.Open(to, &headers, 0, S3FS_OMIT_TS, O_RDWR, true, true, false))){
             S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
             return -errno;
         }
@@ -1458,7 +1458,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
             }
         }
         // upload
-        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
         }
     }
@@ -1553,7 +1553,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 // This does not affect the rename process, but the cache information in
                 // the "modified" state remains, making it impossible to read the file correctly.
                 //
-                ent = autoent.Open(from, &meta, buf.st_size, mtime, O_RDONLY, false, true, false, AutoLock::NONE);
+                ent = autoent.Open(from, &meta, buf.st_size, mtime, O_RDONLY, false, true, false);
             }
             if(ent){
                 ent->SetMCtime(mtime, ctime);
@@ -1616,7 +1616,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
         }
 
         // upload
-        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), to, AutoLock::NONE, true))){
+        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), to, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
             return result;
         }
@@ -1870,7 +1870,7 @@ static int s3fs_rename(const char* _from, const char* _to)
         AutoFdEntity autoent;
         FdEntity*    ent;
         if(nullptr != (ent = autoent.OpenExistFdEntity(from, O_RDWR))){
-            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
                 return result;
             }
@@ -2111,7 +2111,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         ent->SetMode(mode);
 
         // upload
-        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2334,7 +2334,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         ent->SetGId(gid);
   
         // upload
-        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2699,7 +2699,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         }
 
         // upload
-        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
             return result;
         }
@@ -2761,7 +2761,7 @@ static int s3fs_truncate(const char* _path, off_t size)
             ignore_modify = true;
         }
 
-        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, false, true, ignore_modify, AutoLock::NONE))){
+        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, false, true, ignore_modify))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -2773,7 +2773,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         // The cause is unknown now, but it can be avoided by flushing the file.
         //
         if(0 == size){
-            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+            if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
@@ -2796,11 +2796,11 @@ static int s3fs_truncate(const char* _path, off_t size)
         meta["x-amz-meta-uid"]   = std::to_string(pcxt->uid);
         meta["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
 
-        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, true, true, false, AutoLock::NONE))){
+        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, true, true, false))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
-        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), AutoLock::NONE, true))){
+        if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             return result;
         }
@@ -2883,7 +2883,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     struct timespec st_mctime;
     set_stat_to_timespec(st, stat_time_type::MTIME, st_mctime);
 
-    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, st_mctime, fi->flags, false, true, false, AutoLock::NONE))){
+    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, st_mctime, fi->flags, false, true, false))){
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
@@ -2891,9 +2891,10 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     if (needs_flush){
         struct timespec ts;
         s3fs_realtime(ts);
+
         ent->SetMCtime(ts, ts);
 
-        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), path, AutoLock::NONE, true))){
+        if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             StatCache::getStatCacheData()->DelStat(path);
             return result;
@@ -2954,7 +2955,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
         int flushres;
-        if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, AutoLock::NONE, true))){
+        if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
             StatCache::getStatCacheData()->DelStat(path);
             return flushres;
@@ -3023,7 +3024,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 
         ent->UpdateMtime(true);         // clear the flag not to update mtime.
         ent->UpdateCtime();
-        result = ent->Flush(static_cast<int>(fi->fh), AutoLock::NONE, false);
+        result = ent->Flush(static_cast<int>(fi->fh), false);
         StatCache::getStatCacheData()->DelStat(path);
 
         if(is_new_file){
@@ -3058,7 +3059,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
             ent->UpdateMtime();
             ent->UpdateCtime();
         }
-        result = ent->Flush(static_cast<int>(fi->fh), AutoLock::NONE, false);
+        result = ent->Flush(static_cast<int>(fi->fh), false);
 
         if(0 != datasync){
             // [NOTE]
@@ -3112,7 +3113,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         //
         int result;
         if(ent->IsModified()){
-            if(0 != (result = ent->Flush(static_cast<int>(fi->fh), AutoLock::NONE, false))){
+            if(0 != (result = ent->Flush(static_cast<int>(fi->fh), false))){
                 S3FS_PRN_ERR("failed to upload file contentsfor pseudo_fd(%llu) / path(%s) by result(%d)", (unsigned long long)(fi->fh), path, result);
                 return result;
             }
@@ -3135,7 +3136,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 
         bool is_new_file = ent->IsDirtyNewFile();
 
-        if(0 != (result = ent->UploadPending(static_cast<int>(fi->fh), AutoLock::NONE))){
+        if(0 != (result = ent->UploadPending(static_cast<int>(fi->fh)))){
             S3FS_PRN_ERR("could not upload pending data(meta, etc) for pseudo_fd(%llu) / path(%s)", (unsigned long long)(fi->fh), path);
             return result;
         }

@@ -433,7 +433,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 
     const FdEntity* ent;
     int         fd = -1;
-    if(nullptr == (ent = FdManager::singleton.GetFdEntity(path, fd, false, AutoLock::ALREADY_LOCKED))){
+    if(nullptr == (ent = FdManager::singleton.GetFdEntityHasLock(path, fd, false))){
         return false;
     }
     return (0 < ent->GetOpenCount());
@@ -509,14 +509,13 @@ FdManager::~FdManager()
     }
 }
 
-FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, AutoLock::Type locktype)
+FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool newfd)
 {
     S3FS_PRN_INFO3("[path=%s][pseudo_fd=%d]", SAFESTRPTR(path), existfd);
 
     if(!path || '\0' == path[0]){
         return nullptr;
     }
-    AutoLock auto_lock(&FdManager::fd_manager_lock, locktype);
 
     fdent_map_t::iterator iter = fent.find(path);
     if(fent.end() != iter && iter->second){
@@ -525,11 +524,13 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
                 existfd = iter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
             }
             return iter->second.get();
-        }else if(iter->second->FindPseudoFd(existfd)){
-            if(newfd){
-                existfd = iter->second->Dup(existfd);
+        }else{
+            if(iter->second->FindPseudoFd(existfd)){
+                if(newfd){
+                    existfd = iter->second->Dup(existfd);
+                }
+                return iter->second.get();
             }
-            return iter->second.get();
         }
     }
 
@@ -562,7 +563,7 @@ FdEntity* FdManager::GetFdEntity(const char* path, int& existfd, bool newfd, Aut
     return nullptr;
 }
 
-FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, AutoLock::Type type)
+FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify)
 {
     S3FS_PRN_DBG("[path=%s][size=%lld][ts_mctime=%s][flags=0x%x][force_tmpfile=%s][create=%s][ignore_modify=%s]", SAFESTRPTR(path), static_cast<long long>(size), str(ts_mctime).c_str(), flags, (force_tmpfile ? "yes" : "no"), (is_create ? "yes" : "no"), (ignore_modify ? "yes" : "no"));
 
@@ -606,7 +607,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         }
 
         // (re)open
-        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
+        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags))){
             S3FS_PRN_ERR("failed to (re)open and create new pseudo fd for path(%s).", path);
             return nullptr;
         }
@@ -623,7 +624,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         std::unique_ptr<FdEntity> ent(new FdEntity(path, cache_path.c_str()));
 
         // open
-        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags, type))){
+        if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags))){
             S3FS_PRN_ERR("failed to open and create new pseudo fd for path(%s) errno:%d.", path, fd);
             return nullptr;
         }
@@ -674,7 +675,7 @@ FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
     S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);
 
     // search entity by path, and create pseudo fd
-    FdEntity* ent = Open(fd, path, nullptr, -1, S3FS_OMIT_TS, flags, false, false, false, AutoLock::NONE);
+    FdEntity* ent = Open(fd, path, nullptr, -1, S3FS_OMIT_TS, flags, false, false, false);
     if(!ent){
         // Not found entity
         return nullptr;

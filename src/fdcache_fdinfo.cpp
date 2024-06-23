@@ -63,7 +63,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
         if(0 != (result = pthparam->ppseudofdinfo->last_result)){
             S3FS_PRN_DBG("Already occurred error, thus this thread worker is exiting.");
 
-            if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::ALREADY_LOCKED)){    // result will be overwritten with the same value.
+            if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){    // result will be overwritten with the same value.
                 result = -EIO;
             }
             return reinterpret_cast<void*>(result);
@@ -76,7 +76,8 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
-        if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
+        AutoLock auto_lock(&pthparam->ppseudofdinfo->upload_list_lock);
+        if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
             result = -EIO;
         }
         return reinterpret_cast<void*>(result);
@@ -95,7 +96,8 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
     s3fscurl->DestroyCurlHandle(true, false);
 
     // set result
-    if(!pthparam->ppseudofdinfo->CompleteInstruction(result, AutoLock::NONE)){
+    AutoLock auto_lock(&pthparam->ppseudofdinfo->upload_list_lock);
+    if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
         S3FS_PRN_WARN("This thread worker is about to end, so it doesn't return an EIO here and runs to the end.");
     }
 
@@ -143,8 +145,16 @@ bool PseudoFdInfo::Clear()
 {
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse
-    if(!CancelAllThreads() || !ResetUploadInfo(AutoLock::NONE)){
+    if(!CancelAllThreads()){
         return false;
+    }
+    {
+        AutoLock auto_lock(&upload_list_lock);
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
+        if(!ResetUploadInfo()){
+            return false;
+        }
     }
     CloseUploadFd();
 
@@ -166,10 +176,8 @@ void PseudoFdInfo::CloseUploadFd()
     }
 }
 
-bool PseudoFdInfo::OpenUploadFd(AutoLock::Type type)
+bool PseudoFdInfo::OpenUploadFd()
 {
-    AutoLock auto_lock(&upload_list_lock, type);
-
     if(-1 != upload_fd){
         // already initialized
         return true;
@@ -244,13 +252,13 @@ bool PseudoFdInfo::ClearUploadInfo(bool is_cancel_mp)
             return false;
         }
     }
-    return ResetUploadInfo(AutoLock::NONE);
+
+    AutoLock auto_lock(&upload_list_lock);
+    return ResetUploadInfo();
 }
 
-bool PseudoFdInfo::ResetUploadInfo(AutoLock::Type type)
+bool PseudoFdInfo::ResetUploadInfo()
 {
-    AutoLock auto_lock(&upload_list_lock, type);
-
     upload_id.clear();
     upload_list.clear();
     instruct_count  = 0;
@@ -260,13 +268,8 @@ bool PseudoFdInfo::ResetUploadInfo(AutoLock::Type type)
     return true;
 }
 
-bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp, AutoLock::Type type)
+bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp)
 {
-    if(is_cancel_mp && AutoLock::ALREADY_LOCKED == type){
-        S3FS_PRN_ERR("Internal Error: Could not call this with type=AutoLock::ALREADY_LOCKED and is_cancel_mp=true");
-        return false;
-    }
-
     if(is_cancel_mp){
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
@@ -274,22 +277,21 @@ bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp
             return false;
         }
     }else{
+        AutoLock auto_lock(&upload_list_lock);
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
-        if(!ResetUploadInfo(type)){
+        if(!ResetUploadInfo()){
             return false;
         }
     }
 
-    AutoLock auto_lock(&upload_list_lock, type);
+    AutoLock auto_lock(&upload_list_lock);
     upload_id = id;
     return true;
 }
 
-bool PseudoFdInfo::CompleteInstruction(int result, AutoLock::Type type)
+bool PseudoFdInfo::CompleteInstruction(int result)
 {
-    AutoLock auto_lock(&upload_list_lock, type);
-
     if(0 != result){
         last_result = result;
     }
@@ -382,7 +384,7 @@ static bool filepart_partnum_compare(const filepart& src1, const filepart& src2)
     return src1.get_part_number() < src2.get_part_number();
 }
 
-bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag, AutoLock::Type type)
+bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag)
 {
     //S3FS_PRN_DBG("[start=%lld][size=%lld][part_num=%d][is_copy=%s]", static_cast<long long int>(start), static_cast<long long int>(size), part_num, (is_copy ? "true" : "false"));
 
@@ -394,8 +396,6 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
         S3FS_PRN_ERR("Parameters are wrong.");
         return false;
     }
-
-    AutoLock auto_lock(&upload_list_lock, type);
 
     // insert new part
     etagpair*   petag_entity = etag_entities.add(etagpair(nullptr, part_num));
@@ -414,24 +414,22 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
 // This method only launches the upload thread.
 // Check the maximum number of threads before calling.
 //
-bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, AutoLock::Type type)
+bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy)
 {
     //S3FS_PRN_DBG("[path=%s][mplist(%zu)]", SAFESTRPTR(path), mplist.size());
-
-    AutoLock auto_lock(&upload_list_lock, type);
 
     if(mplist.empty()){
         // nothing to do
         return true;
     }
-    if(!OpenUploadFd(AutoLock::ALREADY_LOCKED)){
+    if(!OpenUploadFd()){
         return false;
     }
 
     for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
         // Insert upload part
         etagpair* petag = nullptr;
-        if(!InsertUploadPart(iter->start, iter->size, iter->part_num, is_copy, &petag, AutoLock::ALREADY_LOCKED)){
+        if(!InsertUploadPart(iter->start, iter->size, iter->part_num, is_copy, &petag)){
             S3FS_PRN_ERR("Failed to insert insert upload part(path=%s, start=%lld, size=%lld, part=%d, copy=%s) to mplist", SAFESTRPTR(path), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
             return false;
         }
@@ -471,13 +469,16 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
 
     result = 0;
 
-    if(!OpenUploadFd(AutoLock::NONE)){
-        return false;
-    }
+    {
+        AutoLock auto_lock(&upload_list_lock);
+        if(!OpenUploadFd()){
+            return false;
+        }
 
-    if(!ParallelMultipartUpload(path, to_upload_list, false, AutoLock::NONE) || !ParallelMultipartUpload(path, copy_list, true, AutoLock::NONE)){
-        S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, to_upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
-        return false;
+        if(!ParallelMultipartUpload(path, to_upload_list, false) || !ParallelMultipartUpload(path, copy_list, true)){
+            S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, to_upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
+            return false;
+        }
     }
 
     // Wait for all thread exiting
@@ -511,7 +512,6 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
         S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable, or pfdent is nullptr.", pseudo_fd, physical_fd, path);
         return -EBADF;
     }
-    AutoLock auto_lock(&upload_list_lock);
 
     //
     // Get last update untreated area
@@ -578,7 +578,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
             S3FS_PRN_ERR("failed to setup multipart upload(create upload id) by errno(%d)", result);
             return result;
         }
-        if(!RowInitialUploadInfo(tmp_upload_id, false/* not need to cancel */, AutoLock::ALREADY_LOCKED)){
+        if(!RowInitialUploadInfo(tmp_upload_id, false/* not need to cancel */)){
             S3FS_PRN_ERR("failed to setup multipart upload(set upload id to object)");
             return result;
         }
@@ -598,7 +598,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     //
     // Upload Multipart parts
     //
-    if(!ParallelMultipartUpload(path, to_upload_list, false, AutoLock::ALREADY_LOCKED)){
+    if(!ParallelMultipartUpload(path, to_upload_list, false)){
         S3FS_PRN_ERR("Failed to upload multipart parts.");
         return -EIO;
     }
