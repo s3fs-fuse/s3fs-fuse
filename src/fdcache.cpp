@@ -78,6 +78,7 @@ FdManager       FdManager::singleton;
 std::mutex      FdManager::fd_manager_lock;
 std::mutex      FdManager::cache_cleanup_lock;
 std::mutex      FdManager::reserved_diskspace_lock;
+std::mutex      FdManager::except_entmap_lock;
 std::string     FdManager::cache_dir;
 bool            FdManager::check_cache_dir_exist(false);
 off_t           FdManager::free_disk_space = 0;
@@ -465,6 +466,7 @@ FdManager::~FdManager()
             S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
         }
         fent.clear();
+        except_fent.clear();
     }else{
         abort();
     }
@@ -477,6 +479,8 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
     if(!path || '\0' == path[0]){
         return nullptr;
     }
+
+    UpdateEntityToTempPath();
 
     fdent_map_t::iterator iter = fent.find(path);
     if(fent.end() != iter && iter->second){
@@ -533,6 +537,8 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
     }
 
     const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+
+    UpdateEntityToTempPath();
 
     // search in mapping by key(path)
     fdent_map_t::iterator iter = fent.find(path);
@@ -620,6 +626,8 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 
     const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
+    UpdateEntityToTempPath();
+
     // search from all entity.
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
         if(iter->second && iter->second->FindPseudoFd(existfd)){
@@ -656,6 +664,8 @@ int FdManager::GetPseudoFdCount(const char* path)
         return 0;
     }
 
+    UpdateEntityToTempPath();
+
     // search from all entity.
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
         if(iter->second && iter->second->GetPath() == path){
@@ -670,6 +680,8 @@ int FdManager::GetPseudoFdCount(const char* path)
 void FdManager::Rename(const std::string &from, const std::string &to)
 {
     const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+
+    UpdateEntityToTempPath();
 
     fdent_map_t::iterator iter = fent.find(from);
     if(fent.end() == iter && !FdManager::IsCacheDir()){
@@ -715,6 +727,8 @@ bool FdManager::Close(FdEntity* ent, int fd)
     }
     const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
+    UpdateEntityToTempPath();
+
     for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
         if(iter->second.get() == ent){
             ent->Close(fd);
@@ -737,23 +751,46 @@ bool FdManager::Close(FdEntity* ent, int fd)
     return false;
 }
 
-bool FdManager::ChangeEntityToTempPath(const FdEntity* ent, const char* path)
+bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
 {
-    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+    const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
+    except_fent[path] = ent;
+    return true;
+}
 
-    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ){
-        if(iter->second.get() == ent){
-            std::string tmppath;
-            FdManager::MakeRandomTempPath(path, tmppath);
+// [NOTE]
+// FdManager::fd_manager_lock should be locked by the caller.
+//
+bool FdManager::UpdateEntityToTempPath()
+{
+    const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
+
+    for(fdent_direct_map_t::iterator except_iter = except_fent.begin(); except_iter != except_fent.end(); ){
+        std::string tmppath;
+        FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
+
+        fdent_map_t::iterator iter = fent.find(except_iter->first);
+        if(fent.end() != iter && iter->second.get() == except_iter->second){
             // Move the entry to the new key
             fent[tmppath] = std::move(iter->second);
-            iter = fent.erase(iter);
-            return true;
+            iter          = fent.erase(iter);
+            except_iter   = except_fent.erase(except_iter);
         }else{
-            ++iter;
+            // [NOTE]
+            // ChangeEntityToTempPath method is called and the FdEntity pointer
+            // set into except_fent is mapped into fent.
+            // And since this method is always called before manipulating fent,
+            // it will not enter here.
+            // Thus, if it enters here, a warning is output.
+            //
+            S3FS_PRN_WARN("For some reason the FdEntity pointer(for %s) is not found in the fent map. Recovery procedures are being performed, but the cause needs to be identified.", except_iter->first.c_str());
+
+            // Add the entry for recovery procedures
+            fent[tmppath] = std::unique_ptr<FdEntity>(except_iter->second);
+            except_iter   = except_fent.erase(except_iter);
         }
     }
-    return false;
+    return true;
 }
 
 void FdManager::CleanupCacheDir()
@@ -807,6 +844,8 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
                 S3FS_PRN_INFO("could not get fd_manager_lock when clean up file(%s), then skip it.", next_path.c_str());
                 continue;
             }
+            UpdateEntityToTempPath();
+
             fdent_map_t::iterator iter = fent.find(next_path);
             if(fent.end() == iter) {
                 S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
@@ -916,6 +955,8 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             // check if the target file is currently in operation.
             {
                 const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+
+                UpdateEntityToTempPath();
 
                 fdent_map_t::iterator iter = fent.find(object_file_path);
                 if(fent.end() != iter){
