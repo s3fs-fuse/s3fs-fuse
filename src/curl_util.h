@@ -21,9 +21,11 @@
 #ifndef S3FS_CURL_UTIL_H_
 #define S3FS_CURL_UTIL_H_
 
+#include <cstdint>
 #include <curl/curl.h>
+#include <string>
 
-enum class sse_type_t;
+enum class sse_type_t : uint8_t;
 
 //----------------------------------------------
 // Functions

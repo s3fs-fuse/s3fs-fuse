@@ -22,6 +22,7 @@
 #define S3FS_STRING_UTIL_H_
 
 #include <cstring>
+#include <ctime>
 #include <string>
 
 //
@@ -53,7 +54,7 @@ static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strpt
 // Utilities
 //-------------------------------------------------------------------
 // TODO: rename to to_string?
-std::string str(const struct timespec value);
+std::string str(const struct timespec& value);
 
 #ifdef __MSYS__
 //

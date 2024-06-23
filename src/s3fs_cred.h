@@ -21,8 +21,12 @@
 #ifndef S3FS_CRED_H_
 #define S3FS_CRED_H_
 
+#include <map>
+#include <string>
+
 #include "autolock.h"
 #include "s3fs_extcred.h"
+#include "types.h"
 
 //----------------------------------------------
 // Typedefs

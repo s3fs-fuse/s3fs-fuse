@@ -21,6 +21,7 @@
 #ifndef S3FS_AUTOLOCK_H_
 #define S3FS_AUTOLOCK_H_
 
+#include <cstdint>
 #include <pthread.h>
 
 // empty annotation to indicate lock requirement
@@ -32,7 +33,7 @@
 class AutoLock
 {
     public:
-      enum Type {
+      enum Type : uint8_t {
           NO_WAIT        = 1,
           ALREADY_LOCKED = 2,
           NONE           = 0

@@ -3363,7 +3363,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     // as a path, so search for objects under that path.(a case of no dir object)
     //
     if(!support_compat_dir){
-        syncfiller.SufficiencyFill(head.common_prefixes);
+        syncfiller.SufficiencyFill(head.GetCommonPrefixes());
     }
     if(support_compat_dir && !notfound_param.notfound_list.empty()){      // [NOTE] not need to lock to access this here.
         // dummy header

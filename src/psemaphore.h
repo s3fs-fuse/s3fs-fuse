@@ -59,13 +59,13 @@ class Semaphore
         int get_value() const { return value; }
 
     private:
-        const int value;
+        int value;
         dispatch_semaphore_t sem;
 };
 
 #else
 
-#include <errno.h>
+#include <cerrno>
 #include <semaphore.h>
 
 class Semaphore
@@ -93,7 +93,7 @@ class Semaphore
         int get_value() const { return value; }
 
     private:
-        const int value;
+        int value;
         sem_t mutex;
 };
 

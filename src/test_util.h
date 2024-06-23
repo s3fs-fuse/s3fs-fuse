@@ -21,13 +21,13 @@
 #ifndef S3FS_TEST_UTIL_H_
 #define S3FS_TEST_UTIL_H_
 
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <stdio.h>
 
 #include "string_util.h"
 
-template <typename T> void assert_equals(const T &x, const T &y, const char *file, int line)
+template <typename T> inline void assert_equals(const T &x, const T &y, const char *file, int line)
 {
     if (x != y) {
         std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
@@ -36,7 +36,7 @@ template <typename T> void assert_equals(const T &x, const T &y, const char *fil
     }
 }
 
-template <> void assert_equals(const std::string &x, const std::string &y, const char *file, int line)
+template <> inline void assert_equals(const std::string &x, const std::string &y, const char *file, int line)
 {
     if (x != y) {
         std::cerr << x << " != " << y << " at " << file << ":" << line << std::endl;
@@ -47,7 +47,7 @@ template <> void assert_equals(const std::string &x, const std::string &y, const
 }
 
 
-template <typename T> void assert_nequals(const T &x, const T &y, const char *file, int line)
+template <typename T> inline void assert_nequals(const T &x, const T &y, const char *file, int line)
 {
     if (x == y) {
         std::cerr << x << " == " << y << " at " << file << ":" << line << std::endl;
@@ -55,7 +55,7 @@ template <typename T> void assert_nequals(const T &x, const T &y, const char *fi
     }
 }
 
-template <> void assert_nequals(const std::string &x, const std::string &y, const char *file, int line)
+template <> inline void assert_nequals(const std::string &x, const std::string &y, const char *file, int line)
 {
     if (x == y) {
         std::cerr << x << " == " << y << " at " << file << ":" << line << std::endl;
@@ -65,7 +65,7 @@ template <> void assert_nequals(const std::string &x, const std::string &y, cons
     }
 }
 
-void assert_strequals(const char *x, const char *y, const char *file, int line)
+inline void assert_strequals(const char *x, const char *y, const char *file, int line)
 {
   if(x == nullptr && y == nullptr){
       return;
@@ -76,7 +76,7 @@ void assert_strequals(const char *x, const char *y, const char *file, int line)
   }
 }
 
-void assert_bufequals(const char *x, size_t len1, const char *y, size_t len2, const char *file, int line)
+inline void assert_bufequals(const char *x, size_t len1, const char *y, size_t len2, const char *file, int line)
 {
     if(x == nullptr && y == nullptr){
         return;

@@ -22,6 +22,7 @@
 #define S3FS_TYPES_H_
 
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <map>
@@ -53,7 +54,7 @@ typedef std::map<std::string, std::string> xattrs_t;
 //-------------------------------------------------------------------
 // acl_t
 //-------------------------------------------------------------------
-enum class acl_t{
+enum class acl_t : uint8_t {
     PRIVATE,
     PUBLIC_READ,
     PUBLIC_READ_WRITE,
@@ -116,14 +117,14 @@ inline acl_t to_acl(const char *acl)
 //-------------------------------------------------------------------
 // sse_type_t
 //-------------------------------------------------------------------
-enum class sse_type_t{
+enum class sse_type_t : uint8_t {
     SSE_DISABLE = 0,      // not use server side encrypting
     SSE_S3,               // server side encrypting by S3 key
     SSE_C,                // server side encrypting by custom key
     SSE_KMS               // server side encrypting by kms id
 };
 
-enum class signature_type_t {
+enum class signature_type_t  : uint8_t {
     V2_ONLY,
     V4_ONLY,
     V2_OR_V4
@@ -184,7 +185,7 @@ struct petagpool
 //
 struct filepart
 {
-    bool         uploaded;    // does finish uploading
+    bool         uploaded = false;  // does finish uploading
     std::string  etag;        // expected etag value
     int          fd;          // base file(temporary full file) descriptor
     off_t        startpos;    // seek fd point for uploading
@@ -192,7 +193,7 @@ struct filepart
     bool         is_copy;     // whether is copy multipart
     etagpair*    petag;       // use only parallel upload
 
-    explicit filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = nullptr) : uploaded(false), fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
+    explicit filepart(bool is_uploaded = false, int _fd = -1, off_t part_start = 0, off_t part_size = -1, bool is_copy_part = false, etagpair* petagpair = nullptr) : fd(_fd), startpos(part_start), size(part_size), is_copy(is_copy_part), petag(petagpair) {}
 
     ~filepart()
     {
@@ -215,7 +216,7 @@ struct filepart
         if(-1 == partnum){
             partnum = static_cast<int>(list.size()) + 1;
         }
-        list.push_back(etagpair(nullptr, partnum));
+        list.emplace_back(nullptr, partnum);
         petag = &list.back();
     }
 
@@ -267,7 +268,7 @@ struct untreatedpart
     // Check if the areas overlap
     // However, even if the areas do not overlap, this method returns true if areas are adjacent.
     //
-    bool check_overlap(off_t chk_start, off_t chk_size)
+    bool check_overlap(off_t chk_start, off_t chk_size) const
     {
         if(chk_start < 0 || chk_size <= 0 || start < 0 || size <= 0 || (chk_start + chk_size) < start || (start + size) < chk_start){
             return false;
