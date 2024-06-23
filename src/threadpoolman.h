@@ -76,10 +76,6 @@ class ThreadPoolMan
 
         explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
-        ThreadPoolMan(const ThreadPoolMan&) = delete;
-        ThreadPoolMan(ThreadPoolMan&&) = delete;
-        ThreadPoolMan& operator=(const ThreadPoolMan&) = delete;
-        ThreadPoolMan& operator=(ThreadPoolMan&&) = delete;
 
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);
@@ -89,6 +85,11 @@ class ThreadPoolMan
         void SetInstruction(const thpoolman_param& pparam);
 
     public:
+        ThreadPoolMan(const ThreadPoolMan&) = delete;
+        ThreadPoolMan(ThreadPoolMan&&) = delete;
+        ThreadPoolMan& operator=(const ThreadPoolMan&) = delete;
+        ThreadPoolMan& operator=(ThreadPoolMan&&) = delete;
+
         static bool Initialize(int count);
         static void Destroy();
         static bool Instruct(const thpoolman_param& pparam);

@@ -69,12 +69,13 @@ class AdditionalHeader
     protected:
         AdditionalHeader();
         ~AdditionalHeader();
+
+    public:
         AdditionalHeader(const AdditionalHeader&) = delete;
         AdditionalHeader(AdditionalHeader&&) = delete;
         AdditionalHeader& operator=(const AdditionalHeader&) = delete;
         AdditionalHeader& operator=(AdditionalHeader&&) = delete;
 
-    public:
         // Reference singleton
         static AdditionalHeader* get() { return &singleton; }
 

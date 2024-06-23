@@ -42,15 +42,13 @@ class AutoFdEntity
       FdEntity* pFdEntity;
       int       pseudo_fd;
 
-  private:
+  public:
+      AutoFdEntity();
+      ~AutoFdEntity();
       AutoFdEntity(const AutoFdEntity&) = delete;
       AutoFdEntity(AutoFdEntity&&) = delete;
       AutoFdEntity& operator=(const AutoFdEntity&) = delete;
       AutoFdEntity& operator=(AutoFdEntity&&) = delete;
-
-  public:
-      AutoFdEntity();
-      ~AutoFdEntity();
 
       bool Close();
       int Detach();
