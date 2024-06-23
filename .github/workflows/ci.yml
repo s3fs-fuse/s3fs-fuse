@@ -141,7 +141,7 @@ jobs:
   #   This product(package) is a workaround for osxfuse which required an OS reboot(macos 11 and later).
   #   see. https://github.com/macos-fuse-t/fuse-t
   # About osxfuse
-  #   This job doesn't work with Github Actions using macOS 11+ because "load_osxfuse" returns
+  #   This job doesn't work with GitHub Actions using macOS 11+ because "load_osxfuse" returns
   #   "exit code = 1".(requires OS reboot)
   #
   macos12:

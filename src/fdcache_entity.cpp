@@ -1868,7 +1868,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         // [NOTE]
         // If there is a part where has already been uploading, that part
         // is re-updated after finishing uploading, so the part of the last
-        // uploded must be canceled.
+        // uploaded must be canceled.
         // (These are cancel_uploaded_list, cancellation processing means
         // re-uploading the same area.)
         //

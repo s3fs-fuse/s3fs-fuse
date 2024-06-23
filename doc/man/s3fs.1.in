@@ -298,7 +298,7 @@ Note that this option is still experimental and may change in the future.
 .TP
 \fB\-o\fR max_thread_count (default is "5")
 Specifies the number of threads waiting for stream uploads.
-Note that this option and Streamm Upload are still experimental and subject to change in the future.
+Note that this option and Stream Upload are still experimental and subject to change in the future.
 This option will be merged with "parallel_count" in the future.
 .TP
 \fB\-o\fR enable_content_md5 (default is disable)

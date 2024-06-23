@@ -270,7 +270,7 @@ bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
 // checkpage:    This is one state of the cache file, it is loaded from the stats file.
 // sparse_list:  This is a list of the results of directly checking the cache file status(HOLE/DATA).
 //               In the HOLE area, the "loaded" flag of fdpage is false. The DATA area has it set to true.
-// fd:           opened file discriptor to target cache file.
+// fd:           opened file descriptor to target cache file.
 //
 bool PageList::CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpage_list_t& sparse_list, int fd, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list)
 {
@@ -353,7 +353,7 @@ void PageList::FreeList(fdpage_list_t& list)
     list.clear();
 }
 
-PageList::PageList(off_t size, bool is_loaded, bool is_modified, bool shrinked) : is_shrink(shrinked)
+PageList::PageList(off_t size, bool is_loaded, bool is_modified, bool shrunk) : is_shrink(shrunk)
 {
     Init(size, is_loaded, is_modified);
 }
@@ -975,7 +975,7 @@ void PageList::Dump() const
 {
     int cnt = 0;
 
-    S3FS_PRN_DBG("pages (shrinked=%s) = {", (is_shrink ? "yes" : "no"));
+    S3FS_PRN_DBG("pages (shrunk=%s) = {", (is_shrink ? "yes" : "no"));
     for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
         S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s / %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "loaded" : "unloaded", iter->modified ? "modified" : "not modified");
     }

@@ -535,7 +535,7 @@ issue #3 - Fixed local timezone was incorrectly being applied to IAM and Last-Mo
 issue #4 - Fix compilation error on MacOSX with missing const
 
 Version 1.74 -- Nov 24, 2013
-This version is initial version on Github, same as on GoogleCodes(s3fs).
+This version is initial version on GitHub, same as on GoogleCodes(s3fs).
 https://github.com/s3fs-fuse/s3fs-fuse/releases/tag/v1.74
 see more detail on googlecodes: https://code.google.com/p/s3fs/downloads/detail?name=s3fs-1.74.tar.gz
 
