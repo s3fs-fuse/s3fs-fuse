@@ -453,9 +453,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             orgmeta  = *pmeta;
             size_orgmeta = get_size(orgmeta);
         }
-        if(new_size < size_orgmeta){
-            size_orgmeta = new_size;
-        }
+        size_orgmeta = std::min(new_size, size_orgmeta);
 
     }else{
         //

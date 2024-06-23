@@ -173,9 +173,7 @@ bool S3fsCurl::InitS3fsCurl()
     // [NOTE]
     // sCurlPoolSize must be over parallel(or multireq) count.
     //
-    if(sCurlPoolSize < std::max(GetMaxParallelCount(), GetMaxMultiRequest())){
-        sCurlPoolSize = std::max(GetMaxParallelCount(), GetMaxMultiRequest());
-    }
+    sCurlPoolSize = std::max({sCurlPoolSize, GetMaxParallelCount(), GetMaxMultiRequest()});
     sCurlPool = new CurlHandlerPool(sCurlPoolSize);
     if (!sCurlPool->Init()) {
         return false;
