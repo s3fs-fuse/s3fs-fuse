@@ -21,11 +21,15 @@
 
 echo "--- Make commit hash file -------"
 
-SHORTHASH="unknown"
+SHORTHASH=""
 if command -v git > /dev/null 2>&1 && test -d .git; then
-	if RESULT=$(git rev-parse --short HEAD); then
-		SHORTHASH="${RESULT}"
-	fi
+    if SHORTHASH=$(git rev-parse --short HEAD); then
+        echo " -> Git commit hash : ${SHORTHASH}"
+    else
+        echo " -> Not get git commit hash"
+    fi
+else
+    echo " -> Not found git command or .git directory"
 fi
 echo "${SHORTHASH}" > default_commit_hash
 
