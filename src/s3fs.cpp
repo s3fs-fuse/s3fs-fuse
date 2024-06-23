@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <unistd.h>
 #include <dirent.h>
@@ -51,7 +52,6 @@
 #include "s3fs_util.h"
 #include "mpu_util.h"
 #include "threadpoolman.h"
-#include "autolock.h"
 
 //-------------------------------------------------------------------
 // Symbols
@@ -239,17 +239,16 @@ static MpStatFlag* pHasMpStat     = nullptr;
 class SyncFiller
 {
     private:
-        mutable pthread_mutex_t filler_lock;
-        bool                    is_lock_init = false;
+        mutable std::mutex      filler_lock;
         void*                   filler_buff;
         fuse_fill_dir_t         filler_func;
         std::set<std::string>   filled;
 
     public:
         explicit SyncFiller(void* buff = nullptr, fuse_fill_dir_t filler = nullptr);
+        ~SyncFiller() = default;
         SyncFiller(const SyncFiller&) = delete;
         SyncFiller(SyncFiller&&) = delete;
-        ~SyncFiller();
         SyncFiller& operator=(const SyncFiller&) = delete;
         SyncFiller& operator=(SyncFiller&&) = delete;
 
@@ -263,31 +262,6 @@ SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : filler_buff(buff), 
         S3FS_PRN_CRIT("Internal error: SyncFiller constructor parameter is critical value.");
         abort();
     }
-
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-
-    int result;
-    if(0 != (result = pthread_mutex_init(&filler_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init filler_lock: %d", result);
-        abort();
-    }
-    is_lock_init = true;
-}
-
-SyncFiller::~SyncFiller()
-{
-    if(is_lock_init){
-        int result;
-        if(0 != (result = pthread_mutex_destroy(&filler_lock))){
-            S3FS_PRN_CRIT("failed to destroy filler_lock: %d", result);
-            abort();
-        }
-        is_lock_init = false;
-    }
 }
 
 //
@@ -295,7 +269,7 @@ SyncFiller::~SyncFiller()
 //
 int SyncFiller::Fill(const char *name, const struct stat *stbuf, off_t off)
 {
-    AutoLock auto_lock(&filler_lock);
+    const std::lock_guard<std::mutex> lock(filler_lock);
 
     int result = 0;
     if(filled.insert(name).second){
@@ -306,7 +280,7 @@ int SyncFiller::Fill(const char *name, const struct stat *stbuf, off_t off)
 
 int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
 {
-    AutoLock auto_lock(&filler_lock);
+    const std::lock_guard<std::mutex> lock(filler_lock);
 
     int result = 0;
     for(std::vector<std::string>::const_iterator it = pathlist.begin(); it != pathlist.end(); ++it) {
@@ -3213,7 +3187,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
 
 struct multi_head_notfound_callback_param
 {
-    pthread_mutex_t list_lock;
+    std::mutex      list_lock;
     s3obj_list_t    notfound_list;
 };
 
@@ -3232,7 +3206,7 @@ static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
     // set path to not found list
     struct multi_head_notfound_callback_param* pcbparam = reinterpret_cast<struct multi_head_notfound_callback_param*>(param);
 
-    AutoLock auto_lock(&(pcbparam->list_lock));
+    const std::lock_guard<std::mutex> lock(pcbparam->list_lock);
     pcbparam->notfound_list.push_back(s3fscurl->GetBasePath());
 
     return true;
@@ -3295,16 +3269,6 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     // Not found Callback function parameter
     struct multi_head_notfound_callback_param notfound_param;
     if(support_compat_dir){
-        pthread_mutexattr_t attr;
-        pthread_mutexattr_init(&attr);
-        #if S3FS_PTHREAD_ERRORCHECK
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-        #endif
-
-        if(0 != (result = pthread_mutex_init(&(notfound_param.list_lock), &attr))){
-            S3FS_PRN_CRIT("failed to init notfound_param.list_lock: %d", result);
-            abort();
-        }
         curlmulti.SetNotFoundCallback(multi_head_notfound_callback);
         curlmulti.SetNotFoundCallbackParam(reinterpret_cast<void*>(&notfound_param));
     }

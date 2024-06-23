@@ -23,7 +23,7 @@
 
 #include <fcntl.h>
 
-#include "autolock.h"
+#include "common.h"
 #include "metaheader.h"
 
 class FdEntity;

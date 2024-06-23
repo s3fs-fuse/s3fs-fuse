@@ -25,10 +25,11 @@
 #include <curl/curl.h>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
-#include "autolock.h"
+#include "common.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
 #include "types.h"
@@ -117,12 +118,12 @@ class S3fsCurl
         static constexpr char   S3FS_SSL_PRIVKEY_PASSWORD[] = "S3FS_SSL_PRIVKEY_PASSWORD";
 
         // class variables
-        static pthread_mutex_t  curl_warnings_lock;
+        static std::mutex       curl_warnings_lock;
         static bool             curl_warnings_once;  // emit older curl warnings only once
-        static pthread_mutex_t  curl_handles_lock;
+        static std::mutex       curl_handles_lock;
         static struct callback_locks_t {
-            pthread_mutex_t dns;
-            pthread_mutex_t ssl_session;
+            std::mutex      dns;
+            std::mutex      ssl_session;
         } callback_locks;
         static bool             is_initglobal_done;
         static CurlHandlerPool* sCurlPool;
@@ -199,7 +200,7 @@ class S3fsCurl
         std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
         std::string          query_string;         // request query string
         Semaphore            *sem;
-        pthread_mutex_t      *completed_tids_lock;
+        std::mutex           *completed_tids_lock;
         std::vector<pthread_t> *completed_tids;
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
@@ -261,7 +262,7 @@ class S3fsCurl
         static int RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr, curl_infotype datatype);
 
         // methods
-        bool ResetHandle() REQUIRES(&S3fsCurl::curl_handles_lock);
+        bool ResetHandle() REQUIRES(S3fsCurl::curl_handles_lock);
         bool RemakeHandle();
         bool ClearInternalData();
         void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);

@@ -58,7 +58,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 
     int       result;
     {
-        AutoLock auto_lock(&(pthparam->ppseudofdinfo->upload_list_lock));
+        const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
 
         if(0 != (result = pthparam->ppseudofdinfo->last_result)){
             S3FS_PRN_DBG("Already occurred error, thus this thread worker is exiting.");
@@ -76,7 +76,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
         S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
 
         // set result for exiting
-        AutoLock auto_lock(&pthparam->ppseudofdinfo->upload_list_lock);
+        const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
         if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
             result = -EIO;
         }
@@ -96,7 +96,7 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
     s3fscurl->DestroyCurlHandle(true, false);
 
     // set result
-    AutoLock auto_lock(&pthparam->ppseudofdinfo->upload_list_lock);
+    const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
     if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
         S3FS_PRN_WARN("This thread worker is about to end, so it doesn't return an EIO here and runs to the end.");
     }
@@ -109,18 +109,6 @@ void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
 //------------------------------------------------
 PseudoFdInfo::PseudoFdInfo(int fd, int open_flags) : pseudo_fd(-1), physical_fd(fd), flags(0), upload_fd(-1), uploaded_sem(0), instruct_count(0), completed_count(0), last_result(0)
 {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    int result;
-    if(0 != (result = pthread_mutex_init(&upload_list_lock, &attr))){
-        S3FS_PRN_CRIT("failed to init upload_list_lock: %d", result);
-        abort();
-    }
-    is_lock_init = true;
-
     if(-1 != physical_fd){
         pseudo_fd = PseudoFdManager::Get();
         flags     = open_flags;
@@ -130,15 +118,6 @@ PseudoFdInfo::PseudoFdInfo(int fd, int open_flags) : pseudo_fd(-1), physical_fd(
 PseudoFdInfo::~PseudoFdInfo()
 {
     Clear();        // call before destroying the mutex
-
-    if(is_lock_init){
-      int result;
-      if(0 != (result = pthread_mutex_destroy(&upload_list_lock))){
-          S3FS_PRN_CRIT("failed to destroy upload_list_lock: %d", result);
-          abort();
-      }
-      is_lock_init = false;
-    }
 }
 
 bool PseudoFdInfo::Clear()
@@ -149,7 +128,7 @@ bool PseudoFdInfo::Clear()
         return false;
     }
     {
-        AutoLock auto_lock(&upload_list_lock);
+        const std::lock_guard<std::mutex> lock(upload_list_lock);
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
         if(!ResetUploadInfo()){
@@ -169,7 +148,7 @@ bool PseudoFdInfo::Clear()
 
 void PseudoFdInfo::CloseUploadFd()
 {
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
 
     if(-1 != upload_fd){
         close(upload_fd);
@@ -253,7 +232,7 @@ bool PseudoFdInfo::ClearUploadInfo(bool is_cancel_mp)
         }
     }
 
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
     return ResetUploadInfo();
 }
 
@@ -277,7 +256,7 @@ bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp
             return false;
         }
     }else{
-        AutoLock auto_lock(&upload_list_lock);
+        const std::lock_guard<std::mutex> lock(upload_list_lock);
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
         if(!ResetUploadInfo()){
@@ -285,7 +264,7 @@ bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp
         }
     }
 
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
     upload_id = id;
     return true;
 }
@@ -323,7 +302,7 @@ bool PseudoFdInfo::GetEtaglist(etaglist_t& list) const
         return false;
     }
 
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
 
     list.clear();
     for(filepart_list_t::const_iterator iter = upload_list.begin(); iter != upload_list.end(); ++iter){
@@ -351,7 +330,7 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
         return false;
     }
 
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
     off_t    next_start_pos = 0;
     if(!upload_list.empty()){
         next_start_pos = upload_list.back().startpos + upload_list.back().size;
@@ -470,7 +449,7 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
     result = 0;
 
     {
-        AutoLock auto_lock(&upload_list_lock);
+        const std::lock_guard<std::mutex> lock(upload_list_lock);
         if(!OpenUploadFd()){
             return false;
         }
@@ -621,7 +600,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
     int  result;
     bool is_loop = true;
     {
-        AutoLock auto_lock(&upload_list_lock);
+        const std::lock_guard<std::mutex> lock(upload_list_lock);
         if(0 == instruct_count && 0 == completed_count){
             result  = last_result;
             is_loop = false;
@@ -632,7 +611,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
         // need to wait the worker exiting
         uploaded_sem.wait();
         {
-            AutoLock auto_lock(&upload_list_lock);
+            const std::lock_guard<std::mutex> lock(upload_list_lock);
             if(0 < completed_count){
                 --completed_count;
             }
@@ -651,7 +630,7 @@ bool PseudoFdInfo::CancelAllThreads()
 {
     bool need_cancel = false;
     {
-        AutoLock auto_lock(&upload_list_lock);
+        const std::lock_guard<std::mutex> lock(upload_list_lock);
         if(0 < instruct_count && 0 < completed_count){
             S3FS_PRN_INFO("The upload thread is running, so cancel them and wait for the end.");
             need_cancel = true;
@@ -773,7 +752,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(const off_t& untreated_st
 //
 bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy)
 {
-    AutoLock auto_lock(&upload_list_lock);
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
 
     // Initialize lists
     to_upload_list.clear();

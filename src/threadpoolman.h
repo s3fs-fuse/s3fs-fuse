@@ -23,7 +23,7 @@
 
 #include <atomic>
 #include <list>
-#include <pthread.h>
+#include <mutex>
 #include <vector>
 
 #include "psemaphore.h"
@@ -66,8 +66,7 @@ class ThreadPoolMan
         std::atomic<bool>     is_exit;
         Semaphore             thpoolman_sem;
 
-        bool                  is_lock_init;
-        pthread_mutex_t       thread_list_lock;
+        std::mutex            thread_list_lock;
         thread_list_t         thread_list;
 
         thpoolman_params_t    instruction_list;

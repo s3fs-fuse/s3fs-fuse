@@ -22,10 +22,11 @@
 #define S3FS_FDCACHE_FDINFO_H_
 
 #include <memory>
+#include <mutex>
 
+#include "common.h"
 #include "psemaphore.h"
 #include "metaheader.h"
-#include "autolock.h"
 #include "types.h"
 
 class FdEntity;
@@ -65,8 +66,7 @@ class PseudoFdInfo
         int                     upload_fd;          // duplicated fd for uploading
         filepart_list_t         upload_list;
         petagpool               etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
-        bool                    is_lock_init;
-        mutable pthread_mutex_t upload_list_lock;   // protects upload_id and upload_list
+        mutable std::mutex      upload_list_lock;   // protects upload_id and upload_list
         Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
         int                     instruct_count;     // number of instructions for processing by threads
         int                     completed_count;    // number of completed processes by thread
@@ -77,12 +77,12 @@ class PseudoFdInfo
 
         bool Clear();
         void CloseUploadFd();
-        bool OpenUploadFd() REQUIRES(PseudoFdInfo::upload_list_lock);
-        bool ResetUploadInfo() REQUIRES(PseudoFdInfo::upload_list_lock);
+        bool OpenUploadFd() REQUIRES(upload_list_lock);
+        bool ResetUploadInfo() REQUIRES(upload_list_lock);
         bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
         bool CompleteInstruction(int result) REQUIRES(S3fsCurl::curl_handles_lock);
-        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(PseudoFdInfo::upload_list_lock);
-        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(PseudoFdInfo::upload_list_lock);
+        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(upload_list_lock);
+        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(upload_list_lock);
         bool CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
 

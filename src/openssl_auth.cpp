@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <mutex>
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -80,26 +81,19 @@ bool s3fs_destroy_global_ssl()
 // internal use struct for openssl
 struct CRYPTO_dynlock_value
 {
-    pthread_mutex_t dyn_mutex;
+    std::mutex dyn_mutex;
 };
 
-static pthread_mutex_t* s3fs_crypt_mutex = nullptr;
+static std::mutex* s3fs_crypt_mutex = nullptr;
 
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused));
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 {
     if(s3fs_crypt_mutex){
-        int result;
         if(mode & CRYPTO_LOCK){
-            if(0 != (result = pthread_mutex_lock(&s3fs_crypt_mutex[pos]))){
-                S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
-                abort();
-            }
+            s3fs_crypt_mutex[pos].lock();
         }else{
-            if(0 != (result = pthread_mutex_unlock(&s3fs_crypt_mutex[pos]))){
-                S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", result);
-                abort();
-            }
+            s3fs_crypt_mutex[pos].unlock();
         }
     }
 }
@@ -116,16 +110,6 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
     struct CRYPTO_dynlock_value* dyndata = new CRYPTO_dynlock_value();
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    int result;
-    if(0 != (result = pthread_mutex_init(&(dyndata->dyn_mutex), &attr))){
-        S3FS_PRN_CRIT("pthread_mutex_init returned: %d", result);
-        return nullptr;
-    }
     return dyndata;
 }
 
@@ -133,17 +117,10 @@ static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyn
 static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
     if(dyndata){
-        int result;
         if(mode & CRYPTO_LOCK){
-            if(0 != (result = pthread_mutex_lock(&(dyndata->dyn_mutex)))){
-                S3FS_PRN_CRIT("pthread_mutex_lock returned: %d", result);
-                abort();
-            }
+            dyndata->dyn_mutex.lock();
         }else{
-            if(0 != (result = pthread_mutex_unlock(&(dyndata->dyn_mutex)))){
-                S3FS_PRN_CRIT("pthread_mutex_unlock returned: %d", result);
-                abort();
-            }
+            dyndata->dyn_mutex.unlock();
         }
     }
 }
@@ -151,14 +128,7 @@ static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyn
 static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused));
 static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
-    if(dyndata){
-      int result = pthread_mutex_destroy(&(dyndata->dyn_mutex));
-      if(result != 0){
-          S3FS_PRN_CRIT("failed to destroy dyn_mutex");
-          abort();
-      }
-      delete dyndata;
-    }
+    delete dyndata;
 }
 
 bool s3fs_init_crypt_mutex()
@@ -173,19 +143,7 @@ bool s3fs_init_crypt_mutex()
             return false;
         }
     }
-    s3fs_crypt_mutex = new pthread_mutex_t[CRYPTO_num_locks()];
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-#if S3FS_PTHREAD_ERRORCHECK
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#endif
-    for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-        int result = pthread_mutex_init(&s3fs_crypt_mutex[cnt], &attr);
-        if(result != 0){
-            S3FS_PRN_CRIT("pthread_mutex_init returned: %d", result);
-            return false;
-        }
-    }
+    s3fs_crypt_mutex = new std::mutex[CRYPTO_num_locks()];
     // static lock
     CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
     CRYPTO_set_id_callback(s3fs_crypt_get_threadid);
@@ -209,13 +167,6 @@ bool s3fs_destroy_crypt_mutex()
     CRYPTO_set_id_callback(nullptr);
     CRYPTO_set_locking_callback(nullptr);
 
-    for(int cnt = 0; cnt < CRYPTO_num_locks(); cnt++){
-        int result = pthread_mutex_destroy(&s3fs_crypt_mutex[cnt]);
-        if(result != 0){
-            S3FS_PRN_CRIT("failed to destroy s3fs_crypt_mutex[%d]", cnt);
-            abort();
-        }
-    }
     CRYPTO_cleanup_all_ex_data();
     delete[] s3fs_crypt_mutex;
     s3fs_crypt_mutex = nullptr;
