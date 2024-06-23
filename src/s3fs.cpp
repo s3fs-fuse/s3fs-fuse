@@ -519,7 +519,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         return -ENOENT;
     }
 
-    memset(pstat, 0, sizeof(struct stat));
+    *pstat = {};
 
     // check mount point
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
@@ -4805,7 +4805,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
 // In MSYS2 environment with WinFsp, it is not needed to create the mount point before mounting.
 // Also it causes a conflict with WinFsp's validation, so disabling it.
 #ifdef __MSYS__
-            memset(&stbuf, 0, sizeof stbuf);
+            stbuf = {};
             set_mountpoint_attribute(stbuf);
 #else
             if(stat(arg, &stbuf) == -1){
@@ -5581,7 +5581,7 @@ int main(int argc, char* argv[])
     int ch;
     int fuse_res;
     int option_index = 0; 
-    struct fuse_operations s3fs_oper;
+    struct fuse_operations s3fs_oper{};
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
 
@@ -5726,9 +5726,6 @@ int main(int argc, char* argv[])
         destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
-
-    // clear this structure
-    memset(&s3fs_oper, 0, sizeof(s3fs_oper));
 
     // This is the fuse-style parser for the arguments
     // after which the bucket name and mountpoint names

@@ -250,22 +250,20 @@ blkcnt_t get_blocks(off_t size)
 
 time_t cvtIAMExpireStringToTime(const char* s)
 {
-    struct tm tm;
+    struct tm tm{};
     if(!s){
         return 0L;
     }
-    memset(&tm, 0, sizeof(struct tm));
     strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
     return timegm(&tm); // GMT
 }
 
 time_t get_lastmodified(const char* s)
 {
-    struct tm tm;
+    struct tm tm{};
     if(!s){
         return -1;
     }
-    memset(&tm, 0, sizeof(struct tm));
     strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
     return timegm(&tm); // GMT
 }
