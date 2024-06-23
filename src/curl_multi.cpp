@@ -252,7 +252,7 @@ int S3fsMultiCurl::MultiRead()
             }
         }else{
             S3FS_PRN_ERR("failed a request(Unknown response code: %s)", s3fscurl->url.c_str());
-            // Reuse partical file
+            // Reuse particular file
             switch(curlCode){
                 case CURLE_OPERATION_TIMEDOUT:
                     isRetry = true;

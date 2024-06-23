@@ -2743,7 +2743,7 @@ static int s3fs_truncate(const char* _path, off_t size)
         //
         // [NOTICE]
         // FdManager::Open() ignores changes that reduce the file size for the
-        // file you are editing. However, if user opens only onece, edit it,
+        // file you are editing. However, if user opens only once, edit it,
         // and then shrink the file, it should be done.
         // When this function is called, the file is already open by FUSE or
         // some other operation. Therefore, if the number of open files is 1,
@@ -3151,7 +3151,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
     // check - for debug
     if(S3fsLog::IsS3fsLogDbg()){
         if(FdManager::HasOpenEntityFd(path)){
-            S3FS_PRN_DBG("file(%s) is still opened(another pseudo fd is opend).", path);
+            S3FS_PRN_DBG("file(%s) is still opened(another pseudo fd is opened).", path);
         }
     }
     S3FS_MALLOCTRIM(0);

@@ -134,7 +134,7 @@ class FdEntity
             return GetOpenCountHasLock();
         }
         int GetOpenCountHasLock() const REQUIRES(FdEntity::fdent_lock);
-        // TODO: should thsi require a lock?
+        // TODO: should this require a lock?
         const std::string& GetPath() const { return path; }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const { return physical_fd; }

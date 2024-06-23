@@ -42,7 +42,7 @@ Keep in mind using the pre-built packages when available.
     ./configure
     ```
     Depending on the TLS library (OpenSSL/GnuTLS/NSS), add `--with-openssl`, `--with-gnutls` or `--with-nss` when executing `configure`. (If omitted, it is equivalent to `--with-openssl`.)
-3. Bulding:
+3. Building:
     ```sh
     make
     ```

@@ -49,7 +49,7 @@ class S3fsCred
         static constexpr char AWS_ACCESSKEYID[] = "AWSAccessKeyId";
         static constexpr char AWS_SECRETKEY[] = "AWSSecretKey";
 
-        static constexpr int IAM_EXPIRE_MERGIN = 20 * 60;  // update timing
+        static constexpr int IAM_EXPIRE_MERGING = 20 * 60;  // update timing
         static constexpr char ECS_IAM_ENV_VAR[] = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
         static constexpr char IAMCRED_ACCESSKEYID[] = "AccessKeyId";
         static constexpr char IAMCRED_SECRETACCESSKEY[] = "SecretAccessKey";
