@@ -22,7 +22,6 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dlfcn.h>
 #include <fstream>
 #include <sstream>

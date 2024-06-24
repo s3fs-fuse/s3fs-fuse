@@ -22,7 +22,6 @@
 #include <cstdlib>
 #include <vector>
 
-#include "s3fs_logger.h"
 #include "fdcache_pseudofd.h"
 
 //------------------------------------------------
