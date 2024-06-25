@@ -21,10 +21,10 @@
 #ifndef S3FS_COMMON_H_
 #define S3FS_COMMON_H_
 
+#include <string>
 #include <sys/types.h>
 
 #include "../config.h"
-#include "types.h"
 
 //-------------------------------------------------------------------
 // Global variables

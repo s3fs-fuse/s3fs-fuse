@@ -32,10 +32,8 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
-#include <openssl/sha.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
-#include <string>
 
 #include "s3fs_auth.h"
 #include "s3fs_logger.h"

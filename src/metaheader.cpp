@@ -21,7 +21,6 @@
 #include <ctime>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
 #include "common.h"
 #include "metaheader.h"
