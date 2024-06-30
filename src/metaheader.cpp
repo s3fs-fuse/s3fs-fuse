@@ -254,7 +254,7 @@ time_t cvtIAMExpireStringToTime(const char* s)
     if(!s){
         return 0L;
     }
-    strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
+    s3fs_strptime(s, "%Y-%m-%dT%H:%M:%S", &tm);
     return timegm(&tm); // GMT
 }
 
@@ -264,7 +264,7 @@ time_t get_lastmodified(const char* s)
     if(!s){
         return -1;
     }
-    strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    s3fs_strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
     return timegm(&tm); // GMT
 }
 
