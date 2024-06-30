@@ -47,15 +47,11 @@ std::string str(const struct timespec& value)
     return s.str();
 }
 
-#ifdef __MSYS__
-/*
- * Polyfill for strptime function
- *
- * This source code is from https://gist.github.com/jeremyfromearth/5694aa3a66714254752179ecf3c95582 .
- */
-char* strptime(const char* s, const char* f, struct tm* tm)
+// This source code is from https://gist.github.com/jeremyfromearth/5694aa3a66714254752179ecf3c95582 .
+char* s3fs_strptime(const char* s, const char* f, struct tm* tm)
 {
     std::istringstream input(s);
+    // TODO: call to setlocale required?
     input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
     input >> std::get_time(tm, f);
     if (input.fail()) {
@@ -63,7 +59,6 @@ char* strptime(const char* s, const char* f, struct tm* tm)
     }
     return (char*)(s + input.tellg());
 }
-#endif
 
 bool s3fs_strtoofft(off_t* value, const char* str, int base)
 {
@@ -296,7 +291,7 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
     }
 
     struct tm tm;
-    const char* prest = strptime(pdate, "%Y-%m-%dT%T", &tm);
+    const char* prest = s3fs_strptime(pdate, "%Y-%m-%dT%T", &tm);
     if(prest == pdate){
         // wrong format
         return false;

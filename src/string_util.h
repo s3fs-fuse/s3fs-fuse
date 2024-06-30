@@ -56,12 +56,10 @@ static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strpt
 // TODO: rename to to_string?
 std::string str(const struct timespec& value);
 
-#ifdef __MSYS__
 //
-// Polyfill for strptime function.
+// Cross-platform strptime
 //
-char* strptime(const char* s, const char* f, struct tm* tm);
-#endif
+char* s3fs_strptime(const char* s, const char* f, struct tm* tm);
 //
 // Convert string to off_t.  Returns false on bad input.
 // Replacement for C++11 std::stoll.
