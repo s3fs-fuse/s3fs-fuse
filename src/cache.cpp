@@ -33,7 +33,7 @@
 //-------------------------------------------------------------------
 // Utility
 //-------------------------------------------------------------------
-static inline void SetStatCacheTime(struct timespec& ts)
+static void SetStatCacheTime(struct timespec& ts)
 {
     if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &ts)){
         S3FS_PRN_CRIT("clock_gettime failed: %d", errno);
@@ -41,13 +41,7 @@ static inline void SetStatCacheTime(struct timespec& ts)
     }
 }
 
-static inline void InitStatCacheTime(struct timespec& ts)
-{
-    ts.tv_sec  = 0;
-    ts.tv_nsec = 0;
-}
-
-static inline int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
+static int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
 {
     // return -1:  ts1 < ts2
     //         0:  ts1 == ts2
@@ -66,7 +60,7 @@ static inline int CompareStatCacheTime(const struct timespec& ts1, const struct 
     return 0;
 }
 
-static inline bool IsExpireStatCacheTime(const struct timespec& ts, const time_t& expire)
+static bool IsExpireStatCacheTime(const struct timespec& ts, time_t expire)
 {
     struct timespec nowts;
     SetStatCacheTime(nowts);
