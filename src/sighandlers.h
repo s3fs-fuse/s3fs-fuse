@@ -22,6 +22,7 @@
 #define S3FS_SIGHANDLERS_H_
 
 #include <memory>
+#include <thread>
 
 class Semaphore;
 
@@ -34,14 +35,14 @@ class S3fsSignals
         static std::unique_ptr<S3fsSignals> pSingleton;
         static bool         enableUsr1;
 
-        std::unique_ptr<pthread_t> pThreadUsr1;
+        std::unique_ptr<std::thread> pThreadUsr1;
         std::unique_ptr<Semaphore> pSemUsr1;
 
     protected:
         static S3fsSignals* get() { return pSingleton.get(); }
 
         static void HandlerUSR1(int sig);
-        static void* CheckCacheWorker(void* arg);
+        static void CheckCacheWorker(Semaphore* pSem);
 
         static void HandlerUSR2(int sig);
         static bool InitUsr2Handler();

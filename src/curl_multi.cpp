@@ -21,6 +21,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <future>
+#include <thread>
 #include <vector>
 
 #include "s3fs.h"
@@ -112,14 +114,12 @@ bool S3fsMultiCurl::SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl)
 
 int S3fsMultiCurl::MultiPerform()
 {
-    std::vector<pthread_t>   threads;
+    std::map<std::thread::id, std::pair<std::thread, std::future<int>>> threads;
     bool                     success = true;
     bool                     isMultiHead = false;
     Semaphore                sem(GetMaxParallelism());
-    int                      rc;
 
     for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ++iter) {
-        pthread_t   thread;
         S3fsCurl*   s3fscurl = iter->get();
         if(!s3fscurl){
             continue;
@@ -129,19 +129,14 @@ int S3fsMultiCurl::MultiPerform()
 
         {
             const std::lock_guard<std::mutex> lock(completed_tids_lock);
-            for(std::vector<pthread_t>::iterator it = completed_tids.begin(); it != completed_tids.end(); ++it){
-                void*   retval;
-    
-                rc = pthread_join(*it, &retval);
-                if (rc) {
-                    success = false;
-                    S3FS_PRN_ERR("failed pthread_join - rc(%d) %s", rc, strerror(rc));
-                } else {
-                    long int_retval = reinterpret_cast<long>(retval);
-                    if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                        S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
-                    }
+            for(const auto &thread_id : completed_tids){
+                auto it = threads.find(thread_id);
+                it->second.first.join();
+                long int int_retval = it->second.second.get();
+                if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
+                    S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
                 }
+                threads.erase(it);
             }
             completed_tids.clear();
         }
@@ -151,13 +146,11 @@ int S3fsMultiCurl::MultiPerform()
 
         isMultiHead |= s3fscurl->GetOp() == "HEAD";
 
-        rc = pthread_create(&thread, nullptr, S3fsMultiCurl::RequestPerformWrapper, static_cast<void*>(s3fscurl));
-        if (rc != 0) {
-            success = false;
-            S3FS_PRN_ERR("failed pthread_create - rc(%d)", rc);
-            break;
-        }
-        threads.push_back(thread);
+        std::promise<int> promise;
+        std::future<int> future = promise.get_future();
+        std::thread thread(S3fsMultiCurl::RequestPerformWrapper, s3fscurl, std::move(promise));
+        auto thread_id = thread.get_id();
+        threads.emplace(std::piecewise_construct, std::forward_as_tuple(thread_id), std::forward_as_tuple(std::move(thread), std::move(future)));
     }
 
     for(int i = 0; i < sem.get_value(); ++i){
@@ -165,19 +158,14 @@ int S3fsMultiCurl::MultiPerform()
     }
 
     const std::lock_guard<std::mutex> lock(completed_tids_lock);
-    for (std::vector<pthread_t>::iterator titer = completed_tids.begin(); titer != completed_tids.end(); ++titer) {
-        void*   retval;
-
-        rc = pthread_join(*titer, &retval);
-        if (rc) {
-            success = false;
-            S3FS_PRN_ERR("failed pthread_join - rc(%d)", rc);
-        } else {
-            long int_retval = reinterpret_cast<long>(retval);
-            if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-                S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
-            }
+    for(const auto &thread_id : completed_tids){
+        auto it = threads.find(thread_id);
+        it->second.first.join();
+        long int int_retval = it->second.second.get();
+        if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
+            S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
         }
+        threads.erase(it);
     }
     completed_tids.clear();
 
@@ -343,30 +331,31 @@ int S3fsMultiCurl::Request()
 //
 // thread function for performing an S3fsCurl request
 //
-void* S3fsMultiCurl::RequestPerformWrapper(void* arg)
+void S3fsMultiCurl::RequestPerformWrapper(S3fsCurl* s3fscurl, std::promise<int> promise)
 {
-    S3fsCurl* s3fscurl= static_cast<S3fsCurl*>(arg);
-    void*     result  = nullptr;
+    int result = 0;
     if(!s3fscurl){
-        return reinterpret_cast<void*>(static_cast<intptr_t>(-EIO));
+        // this doesn't signal completion but also never happens
+        promise.set_value(-EIO);
+        return;
     }
     if(s3fscurl->fpLazySetup){
         if(!s3fscurl->fpLazySetup(s3fscurl)){
             S3FS_PRN_ERR("Failed to lazy setup, then respond EIO.");
-            result  = reinterpret_cast<void*>(static_cast<intptr_t>(-EIO));
+            result = -EIO;
         }
     }
 
     if(!result){
-        result = reinterpret_cast<void*>(static_cast<intptr_t>(s3fscurl->RequestPerform()));
+        result = s3fscurl->RequestPerform();
         s3fscurl->DestroyCurlHandle(true, false);
     }
 
     const std::lock_guard<std::mutex> lock(*s3fscurl->completed_tids_lock);
-    s3fscurl->completed_tids->push_back(pthread_self());
+    s3fscurl->completed_tids->push_back(std::this_thread::get_id());
     s3fscurl->sem->post();
 
-    return result;
+    promise.set_value(result);
 }
 
 /*

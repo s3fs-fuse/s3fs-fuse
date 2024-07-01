@@ -21,8 +21,10 @@
 #ifndef S3FS_CURL_MULTI_H_
 #define S3FS_CURL_MULTI_H_
 
+#include <future>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 //----------------------------------------------
@@ -54,14 +56,14 @@ class S3fsMultiCurl
         void*                      pNotFoundCallbackParam;
 
         std::mutex completed_tids_lock;
-        std::vector<pthread_t> completed_tids;
+        std::vector<std::thread::id> completed_tids;
 
     private:
         bool ClearEx(bool is_all);
         int MultiPerform();
         int MultiRead();
 
-        static void* RequestPerformWrapper(void* arg);
+        static void RequestPerformWrapper(S3fsCurl* s3fscurl, std::promise<int> promise);
 
     public:
         explicit S3fsMultiCurl(int maxParallelism, bool not_abort = false);

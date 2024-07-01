@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <cerrno>
 #include <mutex>
-#include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <openssl/evp.h>
@@ -96,14 +95,6 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
     }
 }
 
-static unsigned long s3fs_crypt_get_threadid() __attribute__ ((unused));
-static unsigned long s3fs_crypt_get_threadid()
-{
-    // For FreeBSD etc, some system's pthread_t is structure pointer.
-    // Then we use cast like C style(not C++) instead of ifdef.
-    return (unsigned long)(pthread_self());
-}
-
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line) __attribute__ ((unused));
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
@@ -144,7 +135,6 @@ bool s3fs_init_crypt_mutex()
     s3fs_crypt_mutex = new std::mutex[CRYPTO_num_locks()];
     // static lock
     CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
-    CRYPTO_set_id_callback(s3fs_crypt_get_threadid);
     // dynamic lock
     CRYPTO_set_dynlock_create_callback(s3fs_dyn_crypt_mutex);
     CRYPTO_set_dynlock_lock_callback(s3fs_dyn_crypt_mutex_lock);
@@ -162,7 +152,6 @@ bool s3fs_destroy_crypt_mutex()
     CRYPTO_set_dynlock_destroy_callback(nullptr);
     CRYPTO_set_dynlock_lock_callback(nullptr);
     CRYPTO_set_dynlock_create_callback(nullptr);
-    CRYPTO_set_id_callback(nullptr);
     CRYPTO_set_locking_callback(nullptr);
 
     CRYPTO_cleanup_all_ex_data();
