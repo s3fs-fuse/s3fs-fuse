@@ -125,15 +125,6 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "debian:buster" ]; then
-    PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    INSTALL_PACKAGES="autoconf autotools-dev default-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
-    INSTALL_CHECKER_PKGS="cppcheck shellcheck"
-    INSTALL_CHECKER_PKG_OPTIONS=""
-
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
@@ -168,20 +159,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     # For RockyLinux, ShellCheck is downloaded from the github archive and installed.
     #
     SHELLCHECK_DIRECT_INSTALL=1
-
-elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
-    PACKAGE_MANAGER_BIN="yum"
-    PACKAGE_UPDATE_OPTIONS="update -y"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    # [NOTE]
-    # ShellCheck version(0.3.8) is too low to check.
-    # And in this version, it cannot be passed due to following error.
-    # "shellcheck: ./test/integration-test-main.sh: hGetContents: invalid argument (invalid byte sequence)"
-    #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel llvm-toolset-7-clang-tools-extra gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl openssl-devel attr curl python3 epel-release unzip"
-    INSTALL_CHECKER_PKGS="cppcheck jq"
-    INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     PACKAGE_MANAGER_BIN="dnf"
