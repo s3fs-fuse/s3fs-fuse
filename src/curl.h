@@ -70,9 +70,11 @@
 //----------------------------------------------
 // Structure / Typedefs
 //----------------------------------------------
-typedef std::pair<double, double>   progress_t;
-typedef std::map<CURL*, time_t>     curltime_t;
-typedef std::map<CURL*, progress_t> curlprogress_t;
+struct curlprogress {
+    time_t time;
+    double dl_progress;
+    double ul_progress;
+};
 
 //----------------------------------------------
 // class S3fsCurl
@@ -151,8 +153,7 @@ class S3fsCurl
         static std::string      client_priv_key;
         static std::string      client_priv_key_type;
         static std::string      client_key_password;
-        static curltime_t       curl_times;
-        static curlprogress_t   curl_progress;
+        static std::map<const CURL*, curlprogress> curl_progress;
         static std::string      curl_ca_bundle;
         static mimes_t          mimeTypes;
         static std::string      userAgent;
