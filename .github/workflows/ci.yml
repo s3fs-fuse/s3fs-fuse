@@ -60,7 +60,7 @@ jobs:
           - fedora:40
           - fedora:39
           - opensuse/leap:15
-          - alpine:3.19
+          - alpine:3.20
 
     container:
       image: ${{ matrix.container }}
