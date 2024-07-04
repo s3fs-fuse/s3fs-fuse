@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -1261,7 +1262,6 @@ std::unique_ptr<S3fsCurl> S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s
     std::string upload_id;
     std::string part_num_str;
     int part_num;
-    off_t  tmp_part_num = 0;
     if(!get_keyword_value(s3fscurl->url, "uploadId", upload_id)){
         return nullptr;
     }
@@ -1269,10 +1269,10 @@ std::unique_ptr<S3fsCurl> S3fsCurl::UploadMultipartPostRetryCallback(S3fsCurl* s
     if(!get_keyword_value(s3fscurl->url, "partNumber", part_num_str)){
         return nullptr;
     }
-    if(!s3fs_strtoofft(&tmp_part_num, part_num_str.c_str(), /*base=*/ 10)){
+    // TODO: create wrapper for std::string_view?
+    if(auto [ptr, ec] = std::from_chars(part_num_str.c_str(), part_num_str.c_str() + part_num_str.length(), part_num, /*base=*/ 10); ec != std::errc{}){
         return nullptr;
     }
-    part_num = static_cast<int>(tmp_part_num);
 
     if(s3fscurl->retry_count >= S3fsCurl::retries){
         S3FS_PRN_ERR("Over retry count(%d) limit(%s:%d).", s3fscurl->retry_count, s3fscurl->path.c_str(), part_num);

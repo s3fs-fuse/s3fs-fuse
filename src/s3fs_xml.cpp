@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <libxml/xpathInternals.h>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "common.h"
@@ -234,12 +235,13 @@ static unique_ptr_xmlChar get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ct
     return exp_value;
 }
 
-bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
+std::optional<incomp_mpu_list_t> get_incomp_mpu_list(xmlDocPtr doc)
 {
     if(!doc){
-        return false;
+        return std::nullopt;
     }
 
+    incomp_mpu_list_t list;
     unique_ptr_xmlXPathContext ctx(xmlXPathNewContext(doc), xmlXPathFreeContext);
 
     std::string xmlnsurl;
@@ -264,17 +266,16 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
     unique_ptr_xmlXPathObject upload_xp(xmlXPathEvalExpression(reinterpret_cast<const xmlChar*>(ex_upload.c_str()), ctx.get()), xmlXPathFreeObject);
     if(nullptr == upload_xp){
         S3FS_PRN_ERR("xmlXPathEvalExpression returns null.");
-        return false;
+        return std::nullopt;
     }
     if(xmlXPathNodeSetIsEmpty(upload_xp->nodesetval)){
         S3FS_PRN_INFO("upload_xp->nodesetval is empty.");
-        return true;
+        return list;
     }
 
     // Make list
     int           cnt;
     xmlNodeSetPtr upload_nodes;
-    list.clear();
     for(cnt = 0, upload_nodes = upload_xp->nodesetval; cnt < upload_nodes->nodeNr; cnt++){
         ctx->node = upload_nodes->nodeTab[cnt];
 
@@ -307,7 +308,7 @@ bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list)
         list.push_back(part);
     }
 
-    return true;
+    return list;
 }
 
 bool is_truncated(xmlDocPtr doc)
