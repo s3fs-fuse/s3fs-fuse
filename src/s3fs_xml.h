@@ -24,6 +24,7 @@
 #include <libxml/xpath.h>
 #include <libxml/parser.h>  // [NOTE] nessetially include this header in some environments
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "mpu_util.h"
@@ -43,7 +44,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
 int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
 unique_ptr_xmlChar get_next_continuation_token(xmlDocPtr doc);
 unique_ptr_xmlChar get_next_marker(xmlDocPtr doc);
-bool get_incomp_mpu_list(xmlDocPtr doc, incomp_mpu_list_t& list);
+std::optional<incomp_mpu_list_t> get_incomp_mpu_list(xmlDocPtr doc);
 
 bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value);
 

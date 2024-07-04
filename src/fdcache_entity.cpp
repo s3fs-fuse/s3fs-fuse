@@ -241,7 +241,7 @@ int FdEntity::DupWithLock(int fd)
     const PseudoFdInfo* org_pseudoinfo = iter->second.get();
     std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0)));
     int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]       = std::move(ppseudoinfo);
+    pseudo_fd_map.insert_or_assign(pseudo_fd, std::move(ppseudoinfo));
 
     return pseudo_fd;
 }
