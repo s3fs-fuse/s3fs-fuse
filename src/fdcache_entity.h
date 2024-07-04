@@ -85,12 +85,12 @@ class FdEntity
         int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
         int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size);
         int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj);
-        int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath);
-        int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
-        int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
-        int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath);
-        ssize_t WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
-        ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
+        int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(fdent_lock, fdent_data_lock);
+        int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(fdent_lock, fdent_data_lock);
+        int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(fdent_lock, fdent_data_lock);
+        int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(fdent_lock, fdent_data_lock);
+        ssize_t WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(fdent_lock, fdent_data_lock);
+        ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(fdent_lock, fdent_data_lock);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
         ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
 
@@ -121,7 +121,7 @@ class FdEntity
             return FindPseudoFdWithLock(fd);
         }
         bool FindPseudoFdWithLock(int fd) const REQUIRES(FdEntity::fdent_lock);
-        int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags) REQUIRES(FdEntity::fdent_lock);
+        int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags);
         bool LoadAll(int fd, headers_t* pmeta = nullptr, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
