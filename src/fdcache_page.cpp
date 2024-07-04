@@ -646,8 +646,11 @@ size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off
 // This method checks the current PageList status and returns the area that needs
 // to be downloaded so that each part is at least 5 MB.
 //
-bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize)
+std::pair<fdpage_list_t, fdpage_list_t> PageList::GetPageListsForMultipartUpload(off_t max_partsize)
 {
+    fdpage_list_t dlpages;
+    fdpage_list_t mixuppages;
+
     // compress before this processing
     Compress();         // always true
 
@@ -744,7 +747,7 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     dlpages    = parse_partsize_fdpage_list(dlpages, max_partsize);
     mixuppages = parse_partsize_fdpage_list(mixuppages, max_partsize);
 
-    return true;
+    return {dlpages, mixuppages};
 }
 
 bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size_t size)
