@@ -380,10 +380,10 @@ bool FdEntity::IsUploading()
 //
 int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags)
 {
-    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
 
     // [NOTE]
     // When the file size is incremental by truncating, it must be keeped
@@ -690,6 +690,9 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 //
 bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 {
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
     if(!cachepath.empty()){
         // has cache path
 
@@ -837,6 +840,7 @@ bool FdEntity::UpdateAtime()
 bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(0 <= holding_mtime.tv_sec){
         // [NOTE]
@@ -872,9 +876,10 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 
 bool FdEntity::SetHoldingMtime(struct timespec mtime)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
     if(mtime.tv_sec < 0){
         return false;
@@ -1251,7 +1256,10 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     s3fscurl.DestroyCurlHandle();
 
     // Clear the dirty flag, because the meta data is updated.
-    pending_status = pending_status_t::NO_UPDATE_PENDING;
+    {
+        const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
+    }
 
     // reset upload_id
     if(!pseudo_obj->InitialUploadInfo(upload_id)){
@@ -1284,6 +1292,9 @@ int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t sta
     }
 
     S3fsCurl s3fscurl(true);
+
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+
     return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, petagpair);
 }
 
@@ -1940,9 +1951,9 @@ bool FdEntity::ReserveDiskSpace(off_t size)
 
 ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force_load)
 {
-    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
+
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
     if(-1 == physical_fd || nullptr == CheckPseudoFdFlags(fd, false)){
         S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not readable", fd, physical_fd, path.c_str());
@@ -2004,9 +2015,10 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
 
 ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 {
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    const std::lock_guard<std::mutex> lock(fdent_lock);
     PseudoFdInfo* pseudo_obj = nullptr;
     if(-1 == physical_fd || nullptr == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
         S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
@@ -2348,6 +2360,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
 bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     merge_headers(orgmeta, updatemeta, true);      // overwrite all keys
     // [NOTE]
@@ -2373,7 +2386,6 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         SetAtimeHasLock(atime);
     }
 
-    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
     if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading() || pagelist.IsModified())){
         pending_status = pending_status_t::UPDATE_META_PENDING;
     }
@@ -2456,10 +2468,10 @@ static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 // 
 bool FdEntity::PunchHole(off_t start, size_t size)
 {
-    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
     if(-1 == physical_fd){
         return false;
@@ -2510,7 +2522,7 @@ void FdEntity::MarkDirtyNewFile()
 
 bool FdEntity::IsDirtyNewFile() const
 {
-    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> lock(fdent_data_lock);
 
     return (pending_status_t::CREATE_FILE_PENDING == pending_status);
 }
