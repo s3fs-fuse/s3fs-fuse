@@ -118,8 +118,7 @@ std::string      S3fsCurl::client_key_password;
 bool             S3fsCurl::curl_warnings_once = false;
 
 // protected by curl_handles_lock
-curltime_t       S3fsCurl::curl_times;
-curlprogress_t   S3fsCurl::curl_progress;
+std::map<const CURL*, curlprogress> S3fsCurl::curl_progress;
 
 std::string      S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
@@ -313,20 +312,19 @@ int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double u
 {
     CURL*      curl = static_cast<CURL*>(clientp);
     time_t     now = time(nullptr);
-    progress_t p(dlnow, ulnow);
 
     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
 
     // any progress?
-    if(p != S3fsCurl::curl_progress[curl]){
+    auto& value = S3fsCurl::curl_progress[curl];
+    if(value.dl_progress != dlnow || value.ul_progress != ulnow){
         // yes!
-        S3fsCurl::curl_times[curl]    = now;
-        S3fsCurl::curl_progress[curl] = p;
+        value = {now, dlnow, ulnow};
     }else{
         // timeout?
-        if(now - S3fsCurl::curl_times[curl] > readwrite_timeout){
+        if(now - value.time > readwrite_timeout){
             S3FS_PRN_ERR("timeout now: %lld, curl_times[curl]: %lld, readwrite_timeout: %lld",
-                          static_cast<long long>(now), static_cast<long long>((S3fsCurl::curl_times[curl])), static_cast<long long>(readwrite_timeout));
+                          static_cast<long long>(now), static_cast<long long>((value.time)), static_cast<long long>(readwrite_timeout));
             return CURLE_ABORTED_BY_CALLBACK;
         }
     }
@@ -2085,8 +2083,7 @@ bool S3fsCurl::ResetHandle()
         }
     }
 
-    S3fsCurl::curl_times[hCurl]    = time(nullptr);
-    S3fsCurl::curl_progress[hCurl] = progress_t(-1, -1);
+    S3fsCurl::curl_progress[hCurl] = {time(nullptr), -1, -1};
 
     return true;
 }
@@ -2143,7 +2140,6 @@ bool S3fsCurl::DestroyCurlHandleHasLock(bool restore_pool, bool clear_internal_d
     }
 
     if(hCurl){
-        S3fsCurl::curl_times.erase(hCurl);
         S3fsCurl::curl_progress.erase(hCurl);
         sCurlPool->ReturnHandler(hCurl, restore_pool);
         hCurl = nullptr;
@@ -2695,7 +2691,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 sleep(4);
                 {
                     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
-                    S3fsCurl::curl_times[hCurl] = time(nullptr);
+                    S3fsCurl::curl_progress[hCurl] = {time(nullptr), -1, -1};
                 }
                 break; 
 
