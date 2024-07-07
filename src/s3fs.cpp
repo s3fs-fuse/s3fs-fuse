@@ -1502,15 +1502,15 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 ent->SetAtime(atime);
             }
         }
-
-        // copy
-        if(0 != (result = put_headers(to, meta, true, /* use_st_size= */ false))){
-            return result;
-        }
-
-        // rename
-        FdManager::get()->Rename(from, to);
     }
+
+    // copy
+    if(0 != (result = put_headers(to, meta, true, /* use_st_size= */ false))){
+        return result;
+    }
+
+    // rename
+    FdManager::get()->Rename(from, to);
 
     // Remove file
     result = s3fs_unlink(from);
@@ -1562,8 +1562,8 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
             S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
             return result;
         }
-        FdManager::get()->Rename(from, to);
     }
+    FdManager::get()->Rename(from, to);
 
     // Remove file
     result = s3fs_unlink(from);
