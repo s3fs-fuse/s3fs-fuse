@@ -691,6 +691,9 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 //
 bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 {
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
     if(!cachepath.empty()){
         // has cache path
 
@@ -838,6 +841,7 @@ bool FdEntity::UpdateAtime()
 bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(0 <= holding_mtime.tv_sec){
         // [NOTE]
@@ -874,6 +878,7 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 bool FdEntity::SetHoldingMtime(struct timespec mtime)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
@@ -1365,8 +1370,6 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
         return 0;
     }
     PseudoFdInfo* pseudo_obj = miter->second.get();
-
-    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     int result;
     if(!force_sync && !pagelist.IsModified() && !IsDirtyMetadata()){
@@ -2350,6 +2353,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
 bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     merge_headers(orgmeta, updatemeta, true);      // overwrite all keys
     // [NOTE]
@@ -2375,7 +2379,6 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         SetAtimeHasLock(atime);
     }
 
-    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
     if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading() || pagelist.IsModified())){
         pending_status = pending_status_t::UPDATE_META_PENDING;
     }
@@ -2412,7 +2415,7 @@ int FdEntity::UploadPendingHasLock(int fd)
             S3FS_PRN_ERR("could not create a new file(%s), because fd is not specified.", path.c_str());
             result = -EBADF;
         }else{
-            result = FlushHasLock(fd, true);
+            result = RowFlushHasLock(fd, nullptr, true);
             if(0 != result){
                 S3FS_PRN_ERR("failed to flush for file(%s) by(%d).", path.c_str(), result);
             }else{
@@ -2512,7 +2515,7 @@ void FdEntity::MarkDirtyNewFile()
 
 bool FdEntity::IsDirtyNewFile() const
 {
-    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> lock(fdent_data_lock);
 
     return (pending_status_t::CREATE_FILE_PENDING == pending_status);
 }
@@ -2552,6 +2555,11 @@ bool FdEntity::AddUntreated(off_t start, off_t size)
     return result;
 }
 
+// [NOTE]
+// An object that has already been locked with fdent_lock is passed to
+// UploadBoundaryLastUntreatedArea(), which calls this method.
+// Therefore, there is no need to lock fdent_lock in this method.
+//
 bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size) const
 {
     // Get last untreated area
@@ -2561,6 +2569,11 @@ bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size) const
     return true;
 }
 
+// [NOTE]
+// An object that has already been locked with fdent_lock is passed to
+// UploadBoundaryLastUntreatedArea(), which calls this method.
+// Therefore, there is no need to lock fdent_lock in this method.
+//
 bool FdEntity::ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size)
 {
     if(0 < front_size){

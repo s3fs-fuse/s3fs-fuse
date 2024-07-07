@@ -53,52 +53,62 @@ class FdEntity
         static bool     streamupload;   // whether stream uploading.
 
         mutable std::mutex fdent_lock;
-        std::string     path;           // object path
-        int             physical_fd;    // physical file(cache or temporary file) descriptor
-        UntreatedParts  untreated_list; // list of untreated parts that have been written and not yet uploaded(for streamupload)
-        fdinfo_map_t    pseudo_fd_map;  // pseudo file descriptor information map
-        FILE*           pfile;          // file pointer(tmp file or cache file)
-        ino_t           inode;          // inode number for cache file
-        headers_t       orgmeta;        // original headers at opening
-        off_t           size_orgmeta;   // original file size in original headers
+        std::string     path            GUARDED_BY(fdent_lock);       // object path
+        int             physical_fd     GUARDED_BY(fdent_lock);       // physical file(cache or temporary file) descriptor
 
-        mutable std::mutex fdent_data_lock;// protects the following members
-        PageList        pagelist;
-        std::string     cachepath;      // local cache file path
-                                        // (if this is empty, does not load/save pagelist.)
-        std::string     mirrorpath;     // mirror file path to local cache file path
-        pending_status_t pending_status;// status for new file creation and meta update
-        struct timespec holding_mtime;  // if mtime is updated while the file is open, it is set time_t value
+                                                                      // [FIXME]
+                                                                      // GetLastUpdateUntreatedPart and ReplaceLastUpdateUntreatedPart are called from
+                                                                      // PseudoFdInfo::UploadBoundaryLastUntreatedArea, but not sure how to write it between
+                                                                      // classes, so GUARDED_BY have beed removed for now.
+                                                                      //
+        UntreatedParts  untreated_list;                               // list of untreated parts that have been written and not yet uploaded(for streamupload)
+
+        fdinfo_map_t    pseudo_fd_map   GUARDED_BY(fdent_lock);       // pseudo file descriptor information map
+        FILE*           pfile           GUARDED_BY(fdent_lock);       // file pointer(tmp file or cache file)
+        ino_t           inode           GUARDED_BY(fdent_lock);       // inode number for cache file
+        headers_t       orgmeta         GUARDED_BY(fdent_lock);       // original headers at opening
+        off_t           size_orgmeta    GUARDED_BY(fdent_lock);       // original file size in original headers
+
+        mutable std::mutex fdent_data_lock;                           // protects the following members
+        PageList         pagelist       GUARDED_BY(fdent_data_lock);
+        std::string      cachepath      GUARDED_BY(fdent_data_lock);  // local cache file path
+                                                                      // (if this is empty, does not load/save pagelist.)
+        std::string      mirrorpath     GUARDED_BY(fdent_data_lock);  // mirror file path to local cache file path
+        pending_status_t pending_status GUARDED_BY(fdent_data_lock);  // status for new file creation and meta update
+        struct timespec  holding_mtime  GUARDED_BY(fdent_data_lock);  // if mtime is updated while the file is open, it is set time_t value
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
         static ino_t GetInode(int fd);
 
         void Clear();
-        ino_t GetInode() const;
-        int OpenMirrorFile();
-        int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0);  // size=0 means loading to end
+        ino_t GetInode() const REQUIRES(FdEntity::fdent_data_lock);
+        int OpenMirrorFile() REQUIRES(FdEntity::fdent_data_lock);
+        int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
         bool IsUploading() REQUIRES(FdEntity::fdent_lock);
-        bool SetAllStatus(bool is_loaded);                          // [NOTE] not locking
-        bool SetAllStatusUnloaded() { return SetAllStatus(false); }
-        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj);
-        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size);
-        int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj);
+        bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // [NOTE] not locking
+        bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
+        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
+        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size)  REQUIRES(FdEntity::fdent_lock);
+        int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
+        int RowFlushHasLock(int fd, const char* tpath, bool force_sync) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
-        ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size);
+        ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
-        bool ReserveDiskSpace(off_t size);
+        int UploadPendingHasLock(int fd) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
-        bool AddUntreated(off_t start, off_t size);
+        bool ReserveDiskSpace(off_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
-        bool IsDirtyMetadata() const;
+        bool AddUntreated(off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
+
+        bool IsDirtyMetadata() const REQUIRES(FdEntity::fdent_data_lock);
 
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
@@ -114,8 +124,10 @@ class FdEntity
         FdEntity& operator=(FdEntity&&) = delete;
 
         void Close(int fd);
-        // TODO: should this require a lock?
-        bool IsOpen() const { return (-1 != physical_fd); }
+        bool IsOpen() const {
+            const std::lock_guard<std::mutex> lock(fdent_lock);
+            return (-1 != physical_fd);
+        }
         bool FindPseudoFd(int fd) const {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return FindPseudoFdWithLock(fd);
@@ -134,17 +146,20 @@ class FdEntity
             return GetOpenCountHasLock();
         }
         int GetOpenCountHasLock() const REQUIRES(FdEntity::fdent_lock);
-        // TODO: should this require a lock?
-        const std::string& GetPath() const { return path; }
+        std::string GetPath() const
+        {
+            const std::lock_guard<std::mutex> lock(fdent_lock);
+            return path;
+        }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
-        int GetPhysicalFd() const { return physical_fd; }
+        int GetPhysicalFd() const REQUIRES(FdEntity::fdent_lock) { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
         int UploadPending(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
+            const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return UploadPendingHasLock(fd);
         }
-        int UploadPendingHasLock(int fd) REQUIRES(FdEntity::fdent_lock);
 
         bool GetStats(struct stat& st) const {
             const std::lock_guard<std::mutex> lock(fdent_lock);
@@ -163,15 +178,16 @@ class FdEntity
         int SetAtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock);
         int SetMCtime(struct timespec mtime, struct timespec ctime) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
+            const std::lock_guard<std::mutex> lock2(fdent_data_lock);
             return SetMCtimeHasLock(mtime, ctime);
         }
-        int SetMCtimeHasLock(struct timespec mtime, struct timespec ctime) REQUIRES(FdEntity::fdent_lock);
+        int SetMCtimeHasLock(struct timespec mtime, struct timespec ctime) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool UpdateCtime();
         bool UpdateAtime();
         bool UpdateMtime(bool clear_holding_mtime = false);
         bool UpdateMCtime();
         bool SetHoldingMtime(struct timespec mtime);
-        bool ClearHoldingMtime() REQUIRES(FdEntity::fdent_lock);
+        bool ClearHoldingMtime() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool GetSize(off_t& size) const;
         bool GetXattr(std::string& xattr) const;
         bool SetXattr(const std::string& xattr);
@@ -197,14 +213,12 @@ class FdEntity
         off_t BytesModified();
         int RowFlush(int fd, const char* tpath, bool force_sync = false) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
+            const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return RowFlushHasLock(fd, tpath, force_sync);
         }
-        int RowFlushHasLock(int fd, const char* tpath, bool force_sync = false) REQUIRES(FdEntity::fdent_lock);
         int Flush(int fd, bool force_sync = false) {
-            const std::lock_guard<std::mutex> lock(fdent_lock);
-            return FlushHasLock(fd, force_sync);
+            return RowFlush(fd, nullptr, force_sync);
         }
-        int FlushHasLock(int fd, bool force_sync = false) REQUIRES(FdEntity::fdent_lock) { return RowFlushHasLock(fd, nullptr, force_sync); }
 
         ssize_t Read(int fd, char* bytes, off_t start, size_t size, bool force_load = false);
         ssize_t Write(int fd, const char* bytes, off_t start, size_t size);
@@ -215,6 +229,10 @@ class FdEntity
         bool IsDirtyNewFile() const;
         void MarkDirtyMetadata();
 
+        // [FIXME]
+        // For these methods, REQUIRES(FdEntity::fdent_lock) should be specified, but since it is called back
+        // from PseudoFdInfo::UploadBoundaryLastUntreatedArea(), don't know how to write it.
+        //
         bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const;
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
 };
