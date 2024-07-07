@@ -1502,13 +1502,14 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 ent->SetAtime(atime);
             }
         }
-
-        // copy
-        if(0 != (result = put_headers(to, meta, true, /* use_st_size= */ false))){
-            return result;
-        }
     }
 
+    // copy
+    if(0 != (result = put_headers(to, meta, true, /* use_st_size= */ false))){
+        return result;
+    }
+
+    // rename
     FdManager::get()->Rename(from, to);
 
     // Remove file
@@ -1562,7 +1563,6 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
             return result;
         }
     }
-
     FdManager::get()->Rename(from, to);
 
     // Remove file
