@@ -80,7 +80,7 @@ class PseudoFdInfo
         bool OpenUploadFd() REQUIRES(upload_list_lock);
         bool ResetUploadInfo() REQUIRES(upload_list_lock);
         bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
-        bool CompleteInstruction(int result) REQUIRES(S3fsCurl::curl_handles_lock);
+        bool CompleteInstruction(int result) REQUIRES(upload_list_lock);
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(upload_list_lock);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(upload_list_lock);
         bool CancelAllThreads();
