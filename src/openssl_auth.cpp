@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <cerrno>
 #include <mutex>
-#include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <openssl/evp.h>
@@ -34,6 +33,7 @@
 #include <openssl/md5.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
+#include <thread>
 
 #include "s3fs_auth.h"
 #include "s3fs_logger.h"
@@ -99,9 +99,7 @@ static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 static unsigned long s3fs_crypt_get_threadid() __attribute__ ((unused));
 static unsigned long s3fs_crypt_get_threadid()
 {
-    // For FreeBSD etc, some system's pthread_t is structure pointer.
-    // Then we use cast like C style(not C++) instead of ifdef.
-    return (unsigned long)(pthread_self());
+    return static_cast<unsigned long>(std::hash<std::thread::id>()(std::this_thread::get_id()));
 }
 
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line) __attribute__ ((unused));

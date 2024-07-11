@@ -20,7 +20,7 @@
 
 #include <cstdio>
 #include <csignal>
-#include <pthread.h>
+#include <thread>
 
 #include "s3fs_logger.h"
 #include "sighandlers.h"
@@ -86,14 +86,13 @@ bool S3fsSignals::SetUsr1Handler(const char* path)
     return true;
 }
 
-void* S3fsSignals::CheckCacheWorker(void* arg)
+void S3fsSignals::CheckCacheWorker(Semaphore* pSem)
 {
-    Semaphore* pSem   = static_cast<Semaphore*>(arg);
     if(!pSem){
-        pthread_exit(nullptr);
+        return;
     }
     if(!S3fsSignals::enableUsr1){
-        pthread_exit(nullptr);
+        return;
     }
 
     // wait and loop
@@ -117,7 +116,6 @@ void* S3fsSignals::CheckCacheWorker(void* arg)
             pSem->wait();
         }
     }
-    return nullptr;
 }
 
 void S3fsSignals::HandlerUSR2(int sig)
@@ -195,15 +193,9 @@ bool S3fsSignals::InitUsr1Handler()
     }
 
     // create thread
-    int result;
     std::unique_ptr<Semaphore> pSemUsr1_tmp(new Semaphore(0));
-    std::unique_ptr<pthread_t> pThreadUsr1_tmp(new pthread_t);
-    if(0 != (result = pthread_create(pThreadUsr1.get(), nullptr, S3fsSignals::CheckCacheWorker, static_cast<void*>(pSemUsr1_tmp.get())))){
-        S3FS_PRN_ERR("Could not create thread for SIGUSR1 by %d", result);
-        return false;
-    }
+    pThreadUsr1.reset(new std::thread(S3fsSignals::CheckCacheWorker, pSemUsr1_tmp.get()));
     pSemUsr1 = std::move(pSemUsr1_tmp);
-    pThreadUsr1 = std::move(pThreadUsr1_tmp);
 
     // set handler
     struct sigaction sa{};
@@ -230,12 +222,7 @@ bool S3fsSignals::DestroyUsr1Handler()
     pSemUsr1->post();
 
     // wait for thread exiting
-    void* retval = nullptr;
-    int   result;
-    if(0 != (result = pthread_join(*pThreadUsr1, &retval))){
-        S3FS_PRN_ERR("Could not stop thread for SIGUSR1 by %d", result);
-        return false;
-    }
+    pThreadUsr1->join();
     pSemUsr1.reset();
     pThreadUsr1.reset();
 
