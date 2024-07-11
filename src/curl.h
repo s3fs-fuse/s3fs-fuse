@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "common.h"
@@ -202,7 +203,7 @@ class S3fsCurl
         std::string          query_string;         // request query string
         Semaphore            *sem;
         std::mutex           *completed_tids_lock;
-        std::vector<pthread_t> *completed_tids;
+        std::vector<std::thread::id> *completed_tids;
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
 

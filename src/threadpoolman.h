@@ -22,6 +22,7 @@
 #define S3FS_THREADPOOLMAN_H_
 
 #include <atomic>
+#include <future>
 #include <list>
 #include <mutex>
 #include <vector>
@@ -34,7 +35,7 @@
 //
 // Prototype function
 //
-typedef void* (*thpoolman_worker)(void*);               // same as start_routine for pthread_create function
+typedef void* (*thpoolman_worker)(void*);
 
 //
 // Parameter structure
@@ -53,8 +54,6 @@ struct thpoolman_param
 
 typedef std::list<thpoolman_param> thpoolman_params_t;
 
-typedef std::vector<pthread_t> thread_list_t;
-
 //------------------------------------------------
 // Class ThreadPoolMan
 //------------------------------------------------
@@ -67,12 +66,12 @@ class ThreadPoolMan
         Semaphore             thpoolman_sem;
 
         std::mutex            thread_list_lock;
-        thread_list_t         thread_list;
+        std::vector<std::pair<std::thread, std::future<int>>> thread_list;
 
         thpoolman_params_t    instruction_list;
 
     private:
-        static void* Worker(void* arg);
+        static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
 
         explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
