@@ -227,8 +227,8 @@ class S3fsCurl
         static bool DestroyGlobalCurl();
         static bool InitShareCurl();
         static bool DestroyShareCurl();
-        static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr);
-        static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr);
+        static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
+        static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
         static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
