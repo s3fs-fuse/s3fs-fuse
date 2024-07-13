@@ -51,8 +51,20 @@ extern std::string    instance_name;
 //-------------------------------------------------------------------
 #define	S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
 
-// empty annotation to indicate lock requirement
-#define REQUIRES(...)
+//-------------------------------------------------------------------
+// For clang -Wthread-safety
+//-------------------------------------------------------------------
+#if defined(__clang__)
+#define THREAD_ANNOTATION_ATTRIBUTE(x)   __attribute__((x))
+#else
+#define THREAD_ANNOTATION_ATTRIBUTE(x)   // no-op
+#endif
+
+#define GUARDED_BY(x) \
+    THREAD_ANNOTATION_ATTRIBUTE(guarded_by(x))
+
+#define REQUIRES(...) \
+    THREAD_ANNOTATION_ATTRIBUTE(requires_capability(__VA_ARGS__))
 
 #endif // S3FS_COMMON_H_
 
