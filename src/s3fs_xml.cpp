@@ -481,19 +481,6 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     return result;
 }
 
-//-------------------------------------------------------------------
-// Utility for lock
-//-------------------------------------------------------------------
-bool init_parser_xml_lock()
-{
-    return true;
-}
-
-bool destroy_parser_xml_lock()
-{
-    return true;
-}
-
 /*
 * Local variables:
 * tab-width: 4
