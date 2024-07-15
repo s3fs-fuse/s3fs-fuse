@@ -33,10 +33,12 @@
 //------------------------------------------------
 // Typedefs for functions and structures
 //------------------------------------------------
+class S3fsCurl;
+
 //
 // Prototype function
 //
-typedef void* (*thpoolman_worker)(void*);
+typedef void* (*thpoolman_worker)(S3fsCurl&, void*);
 
 //
 // Parameter structure

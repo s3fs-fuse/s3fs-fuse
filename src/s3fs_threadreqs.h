@@ -209,20 +209,20 @@ struct get_object_req_thparam
 //-------------------------------------------------------------------
 // Thread Worker functions for MultiThread Request
 //-------------------------------------------------------------------
-void* head_req_threadworker(void* arg);
-void* multi_head_req_threadworker(void* arg);
-void* delete_req_threadworker(void* arg);
-void* put_head_req_threadworker(void* arg);
-void* put_req_threadworker(void* arg);
-void* list_bucket_req_threadworker(void* arg);
-void* check_service_req_threadworker(void* arg);
-void* pre_multipart_upload_req_threadworker(void* arg);
-void* multipart_upload_part_req_threadworker(void* arg);
-void* complete_multipart_upload_threadworker(void* arg);
-void* abort_multipart_upload_req_threadworker(void* arg);
-void* multipart_put_head_req_threadworker(void* arg);
-void* parallel_get_object_req_threadworker(void* arg);
-void* get_object_req_threadworker(void* arg);
+void* head_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* delete_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* put_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* list_bucket_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* pre_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* multipart_upload_part_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* complete_multipart_upload_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* abort_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg);
+void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg);
 
 //-------------------------------------------------------------------
 // Utility functions

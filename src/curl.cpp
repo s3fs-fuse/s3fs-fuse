@@ -35,6 +35,7 @@
 #include "s3fs.h"
 #include "s3fs_logger.h"
 #include "curl.h"
+#include "curl_share.h"
 #include "curl_util.h"
 #include "s3fs_auth.h"
 #include "s3fs_cred.h"
@@ -98,10 +99,7 @@ constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
 std::mutex       S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
-CURLSH*          S3fsCurl::hCurlShare          = nullptr;
 bool             S3fsCurl::is_cert_check       = true; // default
-bool             S3fsCurl::is_dns_cache        = true; // default
-bool             S3fsCurl::is_ssl_session_cache= false;// default(This turns OFF now, but turns ON again last PR)
 long             S3fsCurl::connect_timeout     = 300;  // default
 time_t           S3fsCurl::readwrite_timeout   = 120;  // default
 int              S3fsCurl::retries             = 5;    // default
@@ -153,9 +151,6 @@ bool S3fsCurl::InitS3fsCurl()
     if(!S3fsCurl::InitGlobalCurl()){
         return false;
     }
-    if(!S3fsCurl::InitShareCurl()){
-        return false;
-    }
     if(!S3fsCurl::InitCryptMutex()){
         return false;
     }
@@ -167,9 +162,6 @@ bool S3fsCurl::DestroyS3fsCurl()
     bool result = true;
 
     if(!S3fsCurl::DestroyCryptMutex()){
-        result = false;
-    }
-    if(!S3fsCurl::DestroyShareCurl()){
         result = false;
     }
     if(!S3fsCurl::DestroyGlobalCurl()){
@@ -199,97 +191,6 @@ bool S3fsCurl::DestroyGlobalCurl()
     curl_global_cleanup();
     S3fsCurl::is_initglobal_done = false;
     return true;
-}
-
-bool S3fsCurl::InitShareCurl()
-{
-    CURLSHcode nSHCode;
-
-    if(!S3fsCurl::is_dns_cache && !S3fsCurl::is_ssl_session_cache){
-        S3FS_PRN_INFO("Curl does not share DNS data.");
-        return true;
-    }
-    if(S3fsCurl::hCurlShare){
-        S3FS_PRN_WARN("already initiated.");
-        return false;
-    }
-    if(nullptr == (S3fsCurl::hCurlShare = curl_share_init())){
-        S3FS_PRN_ERR("curl_share_init failed");
-        return false;
-    }
-    if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_LOCKFUNC, S3fsCurl::LockCurlShare))){
-        S3FS_PRN_ERR("curl_share_setopt(LOCKFUNC) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
-        return false;
-    }
-    if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_UNLOCKFUNC, S3fsCurl::UnlockCurlShare))){
-        S3FS_PRN_ERR("curl_share_setopt(UNLOCKFUNC) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
-        return false;
-    }
-    if(S3fsCurl::is_dns_cache){
-        nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-        if(CURLSHE_OK != nSHCode && CURLSHE_BAD_OPTION != nSHCode && CURLSHE_NOT_BUILT_IN != nSHCode){
-            S3FS_PRN_ERR("curl_share_setopt(DNS) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
-            return false;
-        }else if(CURLSHE_BAD_OPTION == nSHCode || CURLSHE_NOT_BUILT_IN == nSHCode){
-            S3FS_PRN_WARN("curl_share_setopt(DNS) returns %d(%s), but continue without shared dns data.", nSHCode, curl_share_strerror(nSHCode));
-        }
-    }
-    if(S3fsCurl::is_ssl_session_cache){
-        nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-        if(CURLSHE_OK != nSHCode && CURLSHE_BAD_OPTION != nSHCode && CURLSHE_NOT_BUILT_IN != nSHCode){
-            S3FS_PRN_ERR("curl_share_setopt(SSL SESSION) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
-            return false;
-        }else if(CURLSHE_BAD_OPTION == nSHCode || CURLSHE_NOT_BUILT_IN == nSHCode){
-            S3FS_PRN_WARN("curl_share_setopt(SSL SESSION) returns %d(%s), but continue without shared ssl session data.", nSHCode, curl_share_strerror(nSHCode));
-        }
-    }
-    if(CURLSHE_OK != (nSHCode = curl_share_setopt(S3fsCurl::hCurlShare, CURLSHOPT_USERDATA, &S3fsCurl::callback_locks))){
-        S3FS_PRN_ERR("curl_share_setopt(USERDATA) returns %d(%s)", nSHCode, curl_share_strerror(nSHCode));
-        return false;
-    }
-    return true;
-}
-
-bool S3fsCurl::DestroyShareCurl()
-{
-    if(!S3fsCurl::hCurlShare){
-        if(!S3fsCurl::is_dns_cache && !S3fsCurl::is_ssl_session_cache){
-            return true;
-        }
-        S3FS_PRN_WARN("already destroy share curl.");
-        return false;
-    }
-    if(CURLSHE_OK != curl_share_cleanup(S3fsCurl::hCurlShare)){
-        return false;
-    }
-    S3fsCurl::hCurlShare = nullptr;
-    return true;
-}
-
-void S3fsCurl::LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr)
-{
-    if(!hCurlShare){
-        return;
-    }
-    auto* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
-    if(CURL_LOCK_DATA_DNS == nLockData){
-        locks->dns.lock();
-    }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-        locks->ssl_session.lock();
-    }
-}
-
-void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr)
-{
-    if(!hCurlShare){
-        return;
-    }
-    auto* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
-    if(CURL_LOCK_DATA_DNS == nLockData){
-        locks->dns.unlock();
-    }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
-        locks->ssl_session.unlock();
-    }
 }
 
 bool S3fsCurl::InitCryptMutex()
@@ -667,24 +568,10 @@ bool S3fsCurl::SetCheckCertificate(bool isCertCheck)
       return old;
 }
 
-bool S3fsCurl::SetDnsCache(bool isCache)
-{
-    bool old = S3fsCurl::is_dns_cache;
-    S3fsCurl::is_dns_cache = isCache;
-    return old;
-}
-
 void S3fsCurl::ResetOffset(S3fsCurl* pCurl)
 {
     pCurl->partdata.startpos = pCurl->b_partdata_startpos;
     pCurl->partdata.size     = pCurl->b_partdata_size;
-}
-
-bool S3fsCurl::SetSslSessionCache(bool isCache)
-{
-    bool old = S3fsCurl::is_ssl_session_cache;
-    S3fsCurl::is_ssl_session_cache = isCache;
-    return old;
 }
 
 long S3fsCurl::SetConnectTimeout(long timeout)
@@ -1583,11 +1470,10 @@ bool S3fsCurl::ResetHandle()
         }
     }
 
-    if((S3fsCurl::is_dns_cache || S3fsCurl::is_ssl_session_cache) && S3fsCurl::hCurlShare){
-        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SHARE, S3fsCurl::hCurlShare)){
-            return false;
-        }
+    if(!S3fsCurlShare::SetCurlShareHandle(hCurl.get())){
+        return false;
     }
+
     if(!S3fsCurl::is_cert_check) {
         S3FS_PRN_DBG("'no_check_certificate' option in effect.");
         S3FS_PRN_DBG("The server certificate won't be checked against the available certificate authorities.");

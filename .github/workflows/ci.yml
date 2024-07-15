@@ -246,7 +246,7 @@ jobs:
             elif [ "${{ matrix.checktype }}" = "sanitize_thread" ]; then
                 echo 'CXX=clang++'
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O0 -fsanitize=thread"
-                echo 'TSAN_OPTIONS=halt_on_error=1,suppressions=threadsanitizer_suppressions.txt'
+                echo 'TSAN_OPTIONS=halt_on_error=1'
                 # [NOTE]
                 # Set this to avoid following error when running configure.
                 # "FATAL: ThreadSanitizer: unexpected memory mapping"
@@ -269,7 +269,7 @@ jobs:
       - name: Build
         run: |
           ./autogen.sh
-          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" LDFLAGS=\"${LDFLAGS}\" TSAN_OPTIONS=\"\" ./configure --prefix=/usr --with-openssl"
+          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" LDFLAGS=\"${LDFLAGS}\" ./configure --prefix=/usr --with-openssl"
           make
 
       - name: Test suite
