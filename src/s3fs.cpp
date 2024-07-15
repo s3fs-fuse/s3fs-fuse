@@ -197,41 +197,11 @@ static int s3fs_removexattr(const char* path, const char* name);
 // Classes
 //-------------------------------------------------------------------
 //
-// A flag class indicating whether the mount point has a stat
+// A flag indicating whether the mount point has a stat
 //
 // [NOTE]
-// The flag is accessed from child threads, so This class is used for exclusive control of flags.
-// This class will be reviewed when we organize the code in the future.
-//
-class MpStatFlag
-{
-    private:
-        std::atomic<bool>       has_mp_stat;
-
-    public:
-        MpStatFlag() = default;
-        MpStatFlag(const MpStatFlag&) = delete;
-        MpStatFlag(MpStatFlag&&) = delete;
-        ~MpStatFlag() = default;
-        MpStatFlag& operator=(const MpStatFlag&) = delete;
-        MpStatFlag& operator=(MpStatFlag&&) = delete;
-
-        bool Get();
-        bool Set(bool flag);
-};
-
-bool MpStatFlag::Get()
-{
-    return has_mp_stat;
-}
-
-bool MpStatFlag::Set(bool flag)
-{
-    return has_mp_stat.exchange(flag);
-}
-
-// whether the stat information file for mount point exists
-static MpStatFlag* pHasMpStat     = nullptr;
+// The flag is accessed from child threads, so std::atomic is used for exclusive control of flags.
+static std::atomic<bool> has_mp_stat;
 
 //
 // A synchronous class that calls the fuse_fill_dir_t function that processes the readdir data
@@ -308,10 +278,8 @@ static bool IS_RMTYPEDIR(dirtype type)
 
 static bool IS_CREATE_MP_STAT(const char* path)
 {
-    // [NOTE]
-    // pHasMpStat->Get() is set in get_object_attribute()
-    //
-    return (path && 0 == strcmp(path, "/") && !pHasMpStat->Get());
+    // [NOTE] has_mp_stat is set in get_object_attribute()
+    return (path && 0 == strcmp(path, "/") && !has_mp_stat);
 }
 
 static bool is_special_name_folder_object(const char* path)
@@ -625,7 +593,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // set headers for mount point from default stat
     if(is_mountpoint){
         if(0 != result || pheader->empty()){
-            pHasMpStat->Set(false);
+            has_mp_stat = false;
 
             // [NOTE]
             // If mount point and no stat information file, create header
@@ -641,7 +609,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
             result = 0;
         }else{
-            pHasMpStat->Set(true);
+            has_mp_stat = true;
         }
     }
 
@@ -3550,7 +3518,7 @@ static int remote_mountpath_exists(const char* path, bool compat_dir)
     // as a mount point, you can avoid the error by starting with "compat_dir"
     // specified.
     //
-    if(!compat_dir && !pHasMpStat->Get()){
+    if(!compat_dir && !has_mp_stat){
         return -ENOENT;
     }
     return 0;
@@ -5865,10 +5833,6 @@ int main(int argc, char* argv[])
         }
     }
 
-    // set mp stat flag object
-    //
-    pHasMpStat = new MpStatFlag();
-
     s3fs_oper.getattr     = s3fs_getattr;
     s3fs_oper.readlink    = s3fs_readlink;
     s3fs_oper.mknod       = s3fs_mknod;
@@ -5924,7 +5888,6 @@ int main(int argc, char* argv[])
     s3fs_destroy_global_ssl();
     destroy_parser_xml_lock();
     destroy_basename_lock();
-    delete pHasMpStat;
 
     // cleanup xml2
     xmlCleanupParser();
