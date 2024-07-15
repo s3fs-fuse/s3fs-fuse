@@ -1077,7 +1077,7 @@ int FdEntity::Load(off_t start, off_t size, bool is_modified_flag)
             // download
             if(S3fsCurl::GetMultipartSize() <= need_load_size && !nomultipart){
                 // parallel request
-                result = S3fsCurl::ParallelGetObjectRequest(path.c_str(), physical_fd, iter->offset, need_load_size);
+                result = parallel_get_object_request(path, physical_fd, iter->offset, need_load_size);
             }else{
                 // single request
                 if(0 < need_load_size){

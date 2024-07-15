@@ -473,6 +473,116 @@ void* multipart_put_head_req_threadworker(void* arg)
     return reinterpret_cast<void*>(result);
 }
 
+//
+// Thread Worker function for parallel get object request
+//
+void* parallel_get_object_req_threadworker(void* arg)
+{
+    auto* pthparam = static_cast<parallel_get_object_req_thparam*>(arg);
+    if(!pthparam || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
+        return reinterpret_cast<void*>(-EIO);
+    }
+
+    // Check retry max count and print debug message
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+        S3FS_PRN_INFO3("Parallel Get Object Request [path=%s][fd=%d][start=%lld][size=%lld][ssetype=%u][ssevalue=%s]", pthparam->path.c_str(), pthparam->fd, static_cast<long long int>(pthparam->start), static_cast<long long int>(pthparam->size), static_cast<uint8_t>(pthparam->ssetype), pthparam->ssevalue.c_str());
+
+        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+            S3FS_PRN_ERR("Multipart Put Head request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
+            return reinterpret_cast<void*>(-EIO);
+        }
+    }
+
+    S3fsCurl  s3fscurl(true);
+    int       result = 0;
+    while(true){
+        // Request
+        result = s3fscurl.GetObjectRequest(pthparam->path.c_str(), pthparam->fd, pthparam->start, pthparam->size, pthparam->ssetype, pthparam->ssevalue);
+
+        // Check result
+        bool     isResetOffset= true;
+        CURLcode curlCode     = s3fscurl.GetCurlCode();
+        long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
+        s3fscurl.GetResponseCode(responseCode, false);
+
+        if(CURLE_OK == curlCode){
+            if(responseCode < 400){
+                // nothing to do
+                result = 0;
+                break;
+
+            }else if(responseCode == 400){
+                // as possibly in multipart
+                S3FS_PRN_WARN("Get Object Request(%s) got 400 response code.", pthparam->path.c_str());
+
+            }else if(responseCode == 404){
+                // set path to not found list
+                S3FS_PRN_WARN("Get Object Request(%s) got 404 response code.", pthparam->path.c_str());
+                break;
+
+            }else if(responseCode == 500){
+                // case of all other result, do retry.(11/13/2013)
+                // because it was found that s3fs got 500 error from S3, but could success
+                // to retry it.
+                S3FS_PRN_WARN("Get Object Request(%s) got 500 response code.", pthparam->path.c_str());
+
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
+            }else if(responseCode == S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET){
+                // This is a case where the processing result has not yet been updated (should be very rare).
+                S3FS_PRN_WARN("Get Object Request(%s) could not get any response code.", pthparam->path.c_str());
+
+            }else{  // including S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR
+                // Retry in other case.
+                S3FS_PRN_WARN("Get Object Request(%s) got fatal response code.", pthparam->path.c_str());
+            }
+
+        }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
+            S3FS_PRN_ERR("Get Object Request(%s) is timeouted.", pthparam->path.c_str());
+            isResetOffset= false;
+
+        }else if(CURLE_PARTIAL_FILE == curlCode){
+            S3FS_PRN_WARN("Get Object Request(%s) is recieved data does not match the given size.", pthparam->path.c_str());
+            isResetOffset= false;
+
+        }else{
+            S3FS_PRN_WARN("Get Object Request(%s) got the result code(%d: %s)", pthparam->path.c_str(), curlCode, curl_easy_strerror(curlCode));
+        }
+
+        // Check retry max count
+        {
+            const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+            ++(*(pthparam->pretrycount));
+            if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+                S3FS_PRN_ERR("Parallel Get Object Request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
+                if(0 == result){
+                    result = -EIO;
+                }
+                break;
+            }
+        }
+
+        // Setup for retry
+        if(isResetOffset){
+            S3fsCurl::ResetOffset(&s3fscurl);
+        }
+    }
+
+    // Set result code
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+        if(0 == *(pthparam->presult) && 0 != result){
+            // keep first error
+            *(pthparam->presult) = result;
+        }
+    }
+
+    return reinterpret_cast<void*>(result);
+}
+
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
@@ -880,6 +990,71 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
         return result;
     }
 
+    return 0;
+}
+
+//
+// Calls S3fsCurl::ParallelGetObjectRequest via parallel_get_object_req_threadworker
+//
+int parallel_get_object_request(const std::string& path, int fd, off_t start, off_t size)
+{
+    S3FS_PRN_INFO3("[path=%s][fd=%d][start=%lld][size=%lld]", path.c_str(), fd, static_cast<long long int>(start), static_cast<long long int>(size));
+
+    sse_type_t  ssetype = sse_type_t::SSE_DISABLE;
+    std::string ssevalue;
+    if(!get_object_sse_type(path.c_str(), ssetype, ssevalue)){
+        S3FS_PRN_WARN("Failed to get SSE type for file(%s).", path.c_str());
+    }
+
+    Semaphore    para_getobj_sem(0);
+    std::mutex   thparam_lock;
+    int          req_count  = 0;
+    int          retrycount = 0;
+    int          req_result = 0;
+
+    // cycle through open fd, pulling off 10MB chunks at a time
+    for(off_t remaining_bytes = size, chunk = 0; 0 < remaining_bytes; remaining_bytes -= chunk){
+        // chunk size
+        chunk = remaining_bytes > S3fsCurl::GetMultipartSize() ? S3fsCurl::GetMultipartSize() : remaining_bytes;
+
+        // parameter for thread worker
+        auto* thargs = new parallel_get_object_req_thparam;  // free in parallel_get_object_req_threadworker
+        thargs->path          = path;
+        thargs->fd            = fd;
+        thargs->start         = (start + size - remaining_bytes);
+        thargs->size          = chunk;
+        thargs->ssetype       = ssetype;
+        thargs->ssevalue      = ssevalue;
+        thargs->pthparam_lock = &thparam_lock;
+        thargs->pretrycount   = &retrycount;
+        thargs->presult       = &req_result;
+
+        // make parameter for thread pool
+        thpoolman_param  ppoolparam;
+        ppoolparam.args  = thargs;
+        ppoolparam.psem  = &para_getobj_sem;
+        ppoolparam.pfunc = parallel_get_object_req_threadworker;
+
+        // setup instruction
+        if(!ThreadPoolMan::Instruct(ppoolparam)){
+            S3FS_PRN_ERR("failed setup instruction for one header request.");
+            delete thargs;
+            return -EIO;
+        }
+        ++req_count;
+    }
+
+    // wait for finish all requests
+    while(req_count > 0){
+        para_getobj_sem.acquire();
+        --req_count;
+    }
+
+    // check result
+    if(0 != req_result){
+        S3FS_PRN_ERR("error occurred in parallel get object request(errno=%d).", req_result);
+        return req_result;
+    }
     return 0;
 }
 
