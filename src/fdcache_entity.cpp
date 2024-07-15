@@ -52,25 +52,6 @@
 static constexpr int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max count
 
 //------------------------------------------------
-// Structure of parameters to pass to thread
-//------------------------------------------------
-//
-// Multipart Upload Request parameter structure for Thread Pool.
-//
-// ([TODO] This is a temporary structure is moved when S3fsMultiCurl is deprecated.)
-//
-struct multipart_upload_req_thparam
-{
-    std::string path;
-    std::string upload_id;
-    int         fd        = -1;
-    off_t       start     = 0;
-    off_t       size      = 0;
-    etagpair*   petagpair = nullptr;
-    int         result    = 0;
-};
-
-//------------------------------------------------
 // FdEntity class variables
 //------------------------------------------------
 bool FdEntity::mixmultipart = true;
@@ -127,25 +108,6 @@ ino_t FdEntity::GetInode(int fd)
         return 0;
     }
     return st.st_ino;
-}
-
-//
-// Worker function for multipart upload request
-//
-// ([TODO] This is a temporary structure is moved when S3fsMultiCurl is deprecated.)
-//
-void* FdEntity::MultipartUploadThreadWorker(void* arg)
-{
-    auto* pthparam = static_cast<multipart_upload_req_thparam*>(arg);
-    if(!pthparam){
-        return reinterpret_cast<void*>(-EIO);
-    }
-    S3FS_PRN_INFO3("Multipart Upload Request [path=%s][upload id=%s][fd=%d][start=%lld][size=%lld][etagpair=%p]", pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->fd, static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->petagpair);
-
-    S3fsCurl s3fscurl(true);
-    pthparam->result = s3fscurl.MultipartUploadRequest(pthparam->upload_id, pthparam->path.c_str(), pthparam->fd, pthparam->start, pthparam->size, pthparam->petagpair);
-
-    return reinterpret_cast<void*>(pthparam->result);
 }
 
 //------------------------------------------------
@@ -1262,9 +1224,6 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     return result;
 }
 
-//
-// Common method that calls S3fsCurl::PreMultipartUploadRequest via pre_multipart_upload_request
-//
 // [NOTE]
 // If the request is successful, initialize upload_id.
 //
@@ -1275,17 +1234,9 @@ int FdEntity::PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj)
         return -EIO;
     }
 
-    // get upload_id
-    std::string upload_id;
-    int         result;
-    if(0 != (result = pre_multipart_upload_request(path, orgmeta, upload_id))){
+    int result;
+    if(0 != (result = pseudo_obj->PreMultipartUploadRequest(path, orgmeta))){
         return result;
-    }
-
-    // reset upload_id
-    if(!pseudo_obj->InitialUploadInfo(upload_id)){
-        S3FS_PRN_ERR("failed to initialize upload id(%s)", upload_id.c_str());
-        return -EIO;
     }
 
     // Clear the dirty flag, because the meta data is updated.
@@ -1320,8 +1271,6 @@ int FdEntity::NoCachePreMultipartUploadRequest(PseudoFdInfo* pseudo_obj)
 // At no disk space for caching object.
 // This method is uploading one part of multipart.
 //
-// ([TODO] This is a temporary modification till S3fsMultiCurl is deprecated.)
-//
 int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size)
 {
     if(-1 == tgfd || !pseudo_obj || !pseudo_obj->IsUploading()){
@@ -1329,40 +1278,23 @@ int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, 
         return -EIO;
     }
 
-    // parameter for thread worker
-    multipart_upload_req_thparam thargs;
-    thargs.path      = path;
-    thargs.upload_id.clear();
-    thargs.fd        = tgfd;
-    thargs.start     = start;
-    thargs.size      = size;
-    thargs.petagpair = nullptr;
-    thargs.result    = 0;
-
     // get upload id
-    if(!pseudo_obj->GetUploadId(thargs.upload_id)){
+    std::string upload_id;
+    if(!pseudo_obj->GetUploadId(upload_id)){
         return -EIO;
     }
 
     // append new part and get it's etag string pointer
-    if(!pseudo_obj->AppendUploadPart(start, size, false, &(thargs.petagpair))){
+    etagpair* petag = nullptr;
+    if(!pseudo_obj->AppendUploadPart(start, size, false, &petag)){
         return -EIO;
     }
 
-    // make parameter for thread pool
-    thpoolman_param  ppoolparam;
-    ppoolparam.args  = &thargs;
-    ppoolparam.psem  = nullptr;         // case await
-    ppoolparam.pfunc = FdEntity::MultipartUploadThreadWorker;
-
-    // send request by thread
-    if(!ThreadPoolMan::AwaitInstruct(ppoolparam)){
-        S3FS_PRN_ERR("failed to setup Get Object Request Thread Worker");
-        return -EIO;
-    }
-    if(0 != thargs.result){
-        S3FS_PRN_ERR("Multipart Upload Request(path=%s, upload_id=%s, fd=%d, start=%lld, size=%lld) returns with error(%d)", path.c_str(), thargs.upload_id.c_str(), tgfd, static_cast<long long int>(start), static_cast<long long int>(size), thargs.result);
-        return thargs.result;
+    // request to thread
+    int result;
+    if(0 != (result = await_multipart_upload_part_request(path, tgfd, start, size, petag->part_num, upload_id, petag, false))){
+        S3FS_PRN_ERR("Failed No Cache Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][fd=%d][start=%lld][size=%lld]", result, path.c_str(), upload_id.c_str(), tgfd, static_cast<long long int>(start), static_cast<long long int>(size));
+        return result;
     }
     return 0;
 }

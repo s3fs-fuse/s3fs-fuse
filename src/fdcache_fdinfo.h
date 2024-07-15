@@ -48,24 +48,19 @@ class PseudoFdInfo
         filepart_list_t         upload_list     GUARDED_BY(upload_list_lock);
         petagpool               etag_entities   GUARDED_BY(upload_list_lock);   // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
         int                     instruct_count  GUARDED_BY(upload_list_lock);   // number of instructions for processing by threads
-        int                     completed_count GUARDED_BY(upload_list_lock);   // number of completed processes by thread
         int                     last_result     GUARDED_BY(upload_list_lock);   // the result of thread processing
         Semaphore               uploaded_sem;                                   // use a semaphore to trigger an upload completion like event flag
 
     private:
-        static void* MultipartUploadThreadWorker(void* arg);
-
         bool Clear();
         void CloseUploadFd();
         bool OpenUploadFd();
         bool ResetUploadInfo() REQUIRES(upload_list_lock);
         bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
         void IncreaseInstructionCount();
-        bool CompleteInstruction(int result) REQUIRES(upload_list_lock);
         bool GetUploadInfo(std::string& id, int& fd) const;
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag);
-        bool PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta);
         bool CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(off_t untreated_start, off_t untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
         bool IsUploadingHasLock() const REQUIRES(upload_list_lock);
@@ -95,6 +90,7 @@ class PseudoFdInfo
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = nullptr);
 
         bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, int& result);
+        int PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta);
 
         int WaitAllThreadsExit();
         ssize_t UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta, FdEntity* pfdent) REQUIRES(pfdent->GetMutex());
