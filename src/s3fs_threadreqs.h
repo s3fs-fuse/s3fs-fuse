@@ -28,6 +28,7 @@
 #include "curl.h"
 #include "s3objlist.h"
 #include "syncfiller.h"
+#include "psemaphore.h"
 
 //-------------------------------------------------------------------
 // Structures for MultiThread Request
@@ -145,6 +146,22 @@ struct abort_multipart_upload_req_thparam
 };
 
 //
+// Multipart Put Head Request parameter structure for Thread Pool.
+//
+struct multipart_put_head_req_thparam
+{
+    std::string from;
+    std::string to;
+    std::string upload_id;
+    int         part_number   = 0;
+    headers_t   meta;
+    std::mutex* pthparam_lock = nullptr;
+    filepart*   ppartdata     = nullptr;
+    int*        pretrycount   = nullptr;
+    int*        presult       = nullptr;
+};
+
+//
 // Get Object Request parameter structure for Thread Pool.
 //
 struct get_object_req_thparam
@@ -169,12 +186,14 @@ void* check_service_req_threadworker(void* arg);
 void* pre_multipart_upload_req_threadworker(void* arg);
 void* complete_multipart_upload_threadworker(void* arg);
 void* abort_multipart_upload_req_threadworker(void* arg);
+void* multipart_put_head_req_threadworker(void* arg);
 void* get_object_req_threadworker(void* arg);
 
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
 int head_request(const std::string& strpath, headers_t& header);
+int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, int& result, Semaphore& sem);
 int delete_request(const std::string& strpath);
 int put_head_request(const std::string& strpath, const headers_t& meta, bool is_copy);
 int put_request(const std::string& strpath, const headers_t& meta, int fd, bool ahbe);
@@ -183,6 +202,7 @@ int check_service_request(const std::string& strpath, bool forceNoSSE, bool supp
 int pre_multipart_upload_request(const std::string& path, const headers_t& meta, std::string& upload_id);
 int complete_multipart_upload_request(const std::string& path, const std::string& upload_id, const etaglist_t& parts);
 int abort_multipart_upload_request(const std::string& path, const std::string& upload_id);
+int multipart_put_head_request(const std::string& strfrom, const std::string& strto, off_t size, const headers_t& meta);
 int get_object_request(const std::string& path, int fd, off_t start, off_t size);
 
 //-------------------------------------------------------------------

@@ -196,13 +196,13 @@ class S3fsCurl
         size_t               b_ssekey_pos;         // backup for retrying
         std::string          b_ssevalue;           // backup for retrying
         sse_type_t           b_ssetype;            // backup for retrying
-        std::string          b_from;               // backup for retrying(for copy request)
+        std::string          b_from;               // backup for retrying(for copy request) ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
         headers_t            b_meta;               // backup for retrying(for copy request)
         std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
         std::string          query_string;         // request query string
         Semaphore            *sem;
-        std::mutex           *completed_tids_lock;
-        std::vector<std::thread::id> *completed_tids PT_GUARDED_BY(*completed_tids_lock);
+        std::mutex           *completed_tids_lock;                                         // ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
+        std::vector<std::thread::id> *completed_tids PT_GUARDED_BY(*completed_tids_lock);  // ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
 
@@ -241,7 +241,6 @@ class S3fsCurl
         static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
 
         static bool MultipartUploadPartCallback(S3fsCurl* s3fscurl, void* param);
-        static bool CopyMultipartUploadCallback(S3fsCurl* s3fscurl, void* param);
         static bool MixMultipartUploadCallback(S3fsCurl* s3fscurl, void* param);
         static std::unique_ptr<S3fsCurl> MultipartUploadPartRetryCallback(S3fsCurl* s3fscurl);
         static std::unique_ptr<S3fsCurl> CopyMultipartUploadRetryCallback(S3fsCurl* s3fscurl);
@@ -280,7 +279,7 @@ class S3fsCurl
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
         int MultipartUploadPartSetup(const char* tpath, int part_num, const std::string& upload_id);
-        int CopyMultipartUploadSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
+        int CopyMultipartUploadSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
         bool MultipartUploadPartComplete();
         bool CopyMultipartUploadComplete();
         int MapPutErrorResponse(int result);
@@ -385,9 +384,8 @@ class S3fsCurl
         bool MixMultipartUploadComplete();
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
-        int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta);
+        int MultipartPutHeadRequest(const std::string& from, const std::string& to, int part_number, const std::string& upload_id, const headers_t& meta);
         int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etagpair* petagpair);
-        int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
         // methods(variables)
         const std::string& GetPath() const { return path; }

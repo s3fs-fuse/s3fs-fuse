@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <curl/curl.h>
 #include <string>
+#include "metaheader.h"
 
 enum class sse_type_t : uint8_t;
 
@@ -38,6 +39,7 @@ std::string get_header_value(const struct curl_slist* list, const std::string &k
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
+int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_st_size = true);    // implement in s3fs.cpp
 
 bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5);
 std::string url_to_host(const std::string &url);
