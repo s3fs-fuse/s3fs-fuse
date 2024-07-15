@@ -24,12 +24,13 @@
 #include <cassert>
 #include <curl/curl.h>
 #include <list>
+#include <memory>
 #include <mutex>
 
 //----------------------------------------------
 // Typedefs
 //----------------------------------------------
-typedef std::list<CURL*>            hcurllist_t;
+typedef std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> CurlUniquePtr;
 
 //----------------------------------------------
 // class CurlHandlerPool
@@ -49,14 +50,14 @@ class CurlHandlerPool
         bool Init();
         bool Destroy();
 
-        CURL* GetHandler(bool only_pool);
-        void ReturnHandler(CURL* hCurl, bool restore_pool);
+        CurlUniquePtr GetHandler(bool only_pool);
+        void ReturnHandler(CurlUniquePtr&& hCurl, bool restore_pool);
         void ResetHandler(CURL* hCurl);
 
     private:
         int             mMaxHandlers;
         std::mutex      mLock;
-        hcurllist_t     mPool;
+        std::list<CurlUniquePtr> mPool;
 };
 
 #endif // S3FS_CURL_HANDLERPOOL_H_

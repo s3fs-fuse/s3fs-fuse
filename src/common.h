@@ -66,6 +66,9 @@ extern std::string    instance_name;
 #define REQUIRES(...) \
     THREAD_ANNOTATION_ATTRIBUTE(requires_capability(__VA_ARGS__))
 
+#define NO_THREAD_SAFETY_ANALYSIS \
+    THREAD_ANNOTATION_ATTRIBUTE(no_thread_safety_analysis)
+
 #endif // S3FS_COMMON_H_
 
 /*

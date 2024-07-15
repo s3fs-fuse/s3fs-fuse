@@ -76,6 +76,7 @@ struct curlprogress {
     double dl_progress;
     double ul_progress;
 };
+typedef std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> CurlUniquePtr;
 
 //----------------------------------------------
 // class S3fsCurl
@@ -173,7 +174,7 @@ class S3fsCurl
         static long             ipresolve_type;    // this value is a libcurl symbol.
 
         // variables
-        CURL*                hCurl;
+        CurlUniquePtr        hCurl = {nullptr, curl_easy_cleanup};
         REQTYPE              type;                 // type of request
         std::string          path;                 // target object path
         std::string          base_path;            // base path (for multi curl head request)
@@ -227,8 +228,8 @@ class S3fsCurl
         static bool DestroyGlobalCurl();
         static bool InitShareCurl();
         static bool DestroyShareCurl();
-        static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr);
-        static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr);
+        static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
+        static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
         static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
@@ -256,7 +257,7 @@ class S3fsCurl
         static bool LoadEnvSseCKeys();
         static bool LoadEnvSseKmsid();
         static bool PushbackSseKeys(const std::string& onekey);
-        static bool AddUserAgent(CURL* hCurl);
+        static bool AddUserAgent(const CurlUniquePtr& hCurl);
 
         static int CurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
         static int CurlDebugBodyInFunc(const CURL* hcurl, curl_infotype type, char* data, size_t size, void* userptr);
@@ -391,7 +392,6 @@ class S3fsCurl
         int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 
         // methods(variables)
-        CURL* GetCurlHandle() const { return hCurl; }
         const std::string& GetPath() const { return path; }
         const std::string& GetBasePath() const { return base_path; }
         const std::string& GetSpecialSavedPath() const { return saved_path; }
