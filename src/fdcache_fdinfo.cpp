@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "s3fs.h"
 #include "s3fs_logger.h"
 #include "s3fs_util.h"
 #include "fdcache_fdinfo.h"

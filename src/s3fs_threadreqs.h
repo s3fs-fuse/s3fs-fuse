@@ -26,6 +26,8 @@
 #include "common.h"
 #include "metaheader.h"
 #include "curl.h"
+#include "s3objlist.h"
+#include "syncfiller.h"
 
 //-------------------------------------------------------------------
 // Structures for MultiThread Request
@@ -38,6 +40,20 @@ struct head_req_thparam
     std::string path;
     headers_t*  pmeta  = nullptr;
     int         result = 0;
+};
+
+//
+// Multi Head Request parameter structure for Thread Pool.
+//
+struct multi_head_req_thparam
+{
+    std::string   path;
+    SyncFiller*   psyncfiller    = nullptr;
+    std::mutex*   pthparam_lock  = nullptr;
+    int*          pretrycount    = nullptr;
+    s3obj_list_t* pnotfound_list = nullptr;
+    bool          use_wtf8       = false;
+    int*          presult        = nullptr;
 };
 
 //
@@ -144,6 +160,7 @@ struct get_object_req_thparam
 // Thread Worker functions for MultiThread Request
 //-------------------------------------------------------------------
 void* head_req_threadworker(void* arg);
+void* multi_head_req_threadworker(void* arg);
 void* delete_req_threadworker(void* arg);
 void* put_head_req_threadworker(void* arg);
 void* put_req_threadworker(void* arg);

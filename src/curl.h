@@ -97,6 +97,8 @@ typedef std::vector<sseckeymap_t>          sseckeylist_t;
 //
 class S3fsCurl
 {
+    // [TODO]
+    // If S3fsMultiCurl is discontinued, the following friends will be deleted.
     friend class S3fsMultiCurl;
 
     private:
@@ -175,8 +177,6 @@ class S3fsCurl
         CurlUniquePtr        hCurl PT_GUARDED_BY(curl_handles_lock) = {nullptr, curl_easy_cleanup};
         REQTYPE              type;                 // type of request
         std::string          path;                 // target object path
-        std::string          base_path;            // base path (for multi curl head request)
-        std::string          saved_path;           // saved path = cache key (for multi curl head request)
         std::string          url;                  // target object path(url)
         struct curl_slist*   requestHeaders;
         headers_t            responseHeaders;      // header data by HeaderCallback
@@ -187,7 +187,7 @@ class S3fsCurl
         off_t                postdata_remaining;   // use by post method and read callback function.
         filepart             partdata;             // use by multipart upload/get object callback
         bool                 is_use_ahbe;          // additional header by extension
-        int                  retry_count;          // retry count for multipart
+        int                  retry_count;          // retry count for multipart ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
         std::unique_ptr<FILE, decltype(&s3fs_fclose)> b_infile = {nullptr, &s3fs_fclose};  // backup for retrying
         const unsigned char* b_postdata;           // backup for retrying
         off_t                b_postdata_remaining; // backup for retrying
@@ -273,6 +273,10 @@ class S3fsCurl
         void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
         bool insertAuthHeaders();
         bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_copy);
+        bool PreHeadRequest(const char* tpath, size_t ssekey_pos = -1);
+        bool PreHeadRequest(const std::string& tpath, size_t ssekey_pos = -1) {
+            return PreHeadRequest(tpath.c_str(), ssekey_pos);
+        }
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
         int MultipartUploadPartSetup(const char* tpath, int part_num, const std::string& upload_id);
@@ -301,6 +305,7 @@ class S3fsCurl
         static time_t SetReadwriteTimeout(time_t timeout);
         static time_t GetReadwriteTimeout() { return S3fsCurl::readwrite_timeout; }
         static int SetRetries(int count);
+        static int GetRetries();
         static bool SetPublicBucket(bool flag);
         static bool IsPublicBucket() { return S3fsCurl::is_public_bucket; }
         static acl_t SetDefaultAcl(acl_t acl);
@@ -367,10 +372,6 @@ class S3fsCurl
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
-        bool PreHeadRequest(const char* tpath, const char* bpath = nullptr, const char* savedpath = nullptr, size_t ssekey_pos = -1);
-        bool PreHeadRequest(const std::string& tpath, const std::string& bpath, const std::string& savedpath, size_t ssekey_pos = -1) {
-          return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
-        }
         int HeadRequest(const char* tpath, headers_t& meta);
         int PutHeadRequest(const char* tpath, const headers_t& meta, bool is_copy);
         int PutRequest(const char* tpath, headers_t& meta, int fd);
@@ -390,8 +391,6 @@ class S3fsCurl
 
         // methods(variables)
         const std::string& GetPath() const { return path; }
-        const std::string& GetBasePath() const { return base_path; }
-        const std::string& GetSpecialSavedPath() const { return saved_path; }
         const std::string& GetUrl() const { return url; }
         const std::string& GetOp() const { return op; }
         const headers_t* GetResponseHeaders() const { return &responseHeaders; }
@@ -403,10 +402,6 @@ class S3fsCurl
         bool EnableUseAhbe() { return SetUseAhbe(true); }
         bool DisableUseAhbe() { return SetUseAhbe(false); }
         bool IsUseAhbe() const { return is_use_ahbe; }
-        int GetMultipartRetryCount() const { return retry_count; }
-        void SetMultipartRetryCount(int retrycnt) { retry_count = retrycnt; }
-        bool IsOverMultipartRetryCount() const { return (retry_count >= S3fsCurl::retries); }
-        size_t GetLastPreHeadSeecKeyPos() const { return b_ssekey_pos; }
 };
 
 #endif // S3FS_CURL_H_
