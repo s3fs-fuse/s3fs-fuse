@@ -80,6 +80,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
         static ino_t GetInode(int fd);
+        static void* MultipartUploadThreadWorker(void* arg);          // ([TODO] This is a temporary method is moved when S3fsMultiCurl is deprecated.)
 
         void Clear();
         ino_t GetInode() const REQUIRES(FdEntity::fdent_data_lock);
@@ -89,9 +90,10 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         bool IsUploading() REQUIRES(FdEntity::fdent_lock);
         bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
-        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
-        int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
+        int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
+        int NoCachePreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        int NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
+        int NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
         int RowFlushHasLock(int fd, const char* tpath, bool force_sync) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
