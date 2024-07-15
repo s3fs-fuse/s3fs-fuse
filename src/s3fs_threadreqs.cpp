@@ -946,6 +946,221 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
 }
 
 //
+// Complete sequence of Multipart Upload Requests processing
+//
+// Call the following function:
+//      pre_multipart_upload_request()
+//      multipart_upload_part_request()
+//      abort_multipart_upload_request()
+//      complete_multipart_upload_request()
+//
+int multipart_upload_request(const std::string& path, const headers_t& meta, int upload_fd)
+{
+    S3FS_PRN_INFO3("Multipart Upload Request [path=%s][upload_fd=%d]", path.c_str(), upload_fd);
+
+    // Get file stat
+    struct stat st;
+    if(-1 == fstat(upload_fd, &st)){
+        S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
+        return -errno;
+    }
+
+    // Get upload id
+    std::string upload_id;
+    int         result;
+    if(0 != (result = pre_multipart_upload_request(path, meta, upload_id))){
+        return result;
+    }
+
+    Semaphore  upload_sem(0);
+    std::mutex result_lock;         // protects last_result
+    int        last_result = 0;
+    int        req_count   = 0;     // request count(the part number will be this value +1.)
+    etaglist_t list;
+
+    // cycle through open upload_fd, pulling off 10MB chunks at a time
+    for(off_t remaining_bytes = st.st_size; 0 < remaining_bytes; ++req_count){
+        // add new etagpair to etaglist_t list
+        list.emplace_back(nullptr, (req_count + 1));
+        etagpair* petag = &list.back();
+
+        off_t     start = st.st_size - remaining_bytes;
+        off_t     chunk = std::min(remaining_bytes, S3fsCurl::GetMultipartSize());
+
+        S3FS_PRN_INFO3("Multipart Upload Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(start), static_cast<long long int>(chunk), (req_count + 1));
+
+        // setup instruction and request on another thread
+        if(0 != (result = multipart_upload_part_request(path, upload_fd, start, chunk, (req_count + 1), upload_id, petag, false, &upload_sem, &result_lock, &last_result))){
+            S3FS_PRN_ERR("failed setup instruction for Multipart Upload Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(start), static_cast<long long int>(chunk), (req_count + 1));
+
+            // [NOTE]
+            // Hold onto result until all request finish.
+            break;
+        }
+        remaining_bytes -= chunk;
+    }
+
+    // wait for finish all requests
+    while(req_count > 0){
+        upload_sem.acquire();
+        --req_count;
+    }
+
+    // check result
+    if(0 != result || 0 != last_result){
+        S3FS_PRN_ERR("Error occurred in Multipart Upload Request (errno=%d).", (0 != result ? result : last_result));
+
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(path, upload_id))){
+            S3FS_PRN_ERR("Error aborting Multipart Upload Request (errno=%d).", result2);
+        }
+        return (0 != result ? result : last_result);
+    }
+
+    // complete requests
+    if(0 != (result = complete_multipart_upload_request(path, upload_id, list))){
+        S3FS_PRN_ERR("Error occurred in Completion for Multipart Upload Request (errno=%d).", result);
+        return result;
+    }
+    return 0;
+}
+
+//
+// Complete sequence of Mix Multipart Upload Requests processing
+//
+// Call the following function:
+//      pre_multipart_upload_request()
+//      multipart_upload_part_request()
+//      abort_multipart_upload_request()
+//      complete_multipart_upload_request()
+//
+int mix_multipart_upload_request(const std::string& path, headers_t& meta, int upload_fd, const fdpage_list_t& mixuppages)
+{
+    S3FS_PRN_INFO3("Mix Multipart Upload Request [path=%s][upload_fd=%d]", path.c_str(), upload_fd);
+
+    // Get file stat
+    struct stat st;
+    if(-1 == fstat(upload_fd, &st)){
+        S3FS_PRN_ERR("Invalid file descriptor(errno=%d)", errno);
+        return -errno;
+    }
+
+    // Get upload id
+    std::string upload_id;
+    int         result;
+    if(0 != (result = pre_multipart_upload_request(path, meta, upload_id))){
+        return result;
+    }
+
+    // Prepare headers for Multipart Upload Copy
+    std::string srcresource;
+    std::string srcurl;
+    MakeUrlResource(get_realpath(path.c_str()).c_str(), srcresource, srcurl);
+    meta["Content-Type"]      = S3fsCurl::LookupMimeType(path);
+    meta["x-amz-copy-source"] = srcresource;
+
+    Semaphore  upload_sem(0);
+    std::mutex result_lock;         // protects last_result
+    int        last_result = 0;
+    int        req_count   = 0;     // request count(the part number will be this value +1.)
+    etaglist_t list;
+
+    for(auto iter = mixuppages.cbegin(); iter != mixuppages.cend(); ++iter){
+        if(iter->modified){
+            //
+            // Multipart Upload Content
+            //
+
+            // add new etagpair to etaglist_t list
+            list.emplace_back(nullptr, (req_count + 1));
+            etagpair* petag = &list.back();
+
+            S3FS_PRN_INFO3("Mix Multipart Upload Content Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), (req_count + 1));
+
+            // setup instruction and request on another thread
+            if(0 != (result = multipart_upload_part_request(path, upload_fd, iter->offset, iter->bytes, (req_count + 1), upload_id, petag, false, &upload_sem, &result_lock, &last_result))){
+                S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Content Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), (req_count + 1));
+                // [NOTE]
+                // Hold onto result until all request finish.
+                break;
+            }
+            ++req_count;
+
+        }else{
+            //
+            // Multipart Upload Copy
+            //
+            // [NOTE]
+            // Each part must be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB, then loop.
+            // This loop breaks if result is not 0.
+            //
+            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes && 0 == result; processed_bytes += request_bytes){
+                // Set temporary part sizes
+                request_bytes = std::min(S3fsCurl::GetMultipartCopySize(), (iter->bytes - processed_bytes));
+
+                // Check lastest part size
+                off_t remain_bytes = iter->bytes - processed_bytes - request_bytes;
+                if((0 < remain_bytes) && (remain_bytes < MIN_MULTIPART_SIZE)){
+                    if(FIVE_GB < (request_bytes + remain_bytes)){
+                        request_bytes = (request_bytes + remain_bytes) / 2;
+                    } else{
+                        request_bytes += remain_bytes;
+                    }
+                }
+
+                // Set headers for Multipart Upload Copy
+                std::ostringstream strrange;
+                strrange << "bytes=" << (iter->offset + processed_bytes) << "-" << (iter->offset + processed_bytes + request_bytes - 1);
+                meta["x-amz-copy-source-range"] = strrange.str();
+
+                // add new etagpair to etaglist_t list
+                list.emplace_back(nullptr, (req_count + 1));
+                etagpair* petag = &list.back();
+
+                S3FS_PRN_INFO3("Mix Multipart Upload Copy Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
+
+                // setup instruction and request on another thread
+                if(0 != (result = multipart_upload_part_request(path, upload_fd, (iter->offset + processed_bytes), request_bytes, (req_count + 1), upload_id, petag, true, &upload_sem, &result_lock, &last_result))){
+                    S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Copy Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
+                    // [NOTE]
+                    // This loop breaks because result is not 0.
+                }
+                ++req_count;
+            }
+            if(0 != result){
+                // [NOTE]
+                // Hold onto result until all request finish.
+                break;
+            }
+        }
+    }
+
+    // wait for finish all requests
+    while(req_count > 0){
+        upload_sem.acquire();
+        --req_count;
+    }
+
+    // check result
+    if(0 != result || 0 != last_result){
+        S3FS_PRN_ERR("Error occurred in Mix Multipart Upload Request (errno=%d).", (0 != result ? result : last_result));
+
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(path, upload_id))){
+            S3FS_PRN_ERR("Error aborting Mix Multipart Upload Request (errno=%d).", result2);
+        }
+        return (0 != result ? result : last_result);
+    }
+
+    // complete requests
+    if(0 != (result = complete_multipart_upload_request(path, upload_id, list))){
+        S3FS_PRN_ERR("Error occurred in Completion for Mix Multipart Upload Request (errno=%d).", result);
+        return result;
+    }
+    return 0;
+}
+
+//
 // Calls S3fsCurl::MultipartUploadComplete via complete_multipart_upload_threadworker
 //
 int complete_multipart_upload_request(const std::string& path, const std::string& upload_id, const etaglist_t& parts)

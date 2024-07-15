@@ -237,6 +237,8 @@ int check_service_request(const std::string& strpath, bool forceNoSSE, bool supp
 int pre_multipart_upload_request(const std::string& path, const headers_t& meta, std::string& upload_id);
 int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, Semaphore* psem, std::mutex* pthparam_lock, int* req_result);
 int await_multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
+int multipart_upload_request(const std::string& path, const headers_t& meta, int upload_fd);
+int mix_multipart_upload_request(const std::string& path, headers_t& meta, int upload_fd, const fdpage_list_t& mixuppages);
 int complete_multipart_upload_request(const std::string& path, const std::string& upload_id, const etaglist_t& parts);
 int abort_multipart_upload_request(const std::string& path, const std::string& upload_id);
 int multipart_put_head_request(const std::string& strfrom, const std::string& strto, off_t size, const headers_t& meta);

@@ -1551,8 +1551,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
             }else if(pagelist.Size() >= S3fsCurl::GetMultipartSize()){
                 // multipart uploading
-                result = S3fsCurl::ParallelMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, physical_fd);
-
+                result = multipart_upload_request((tpath ? std::string(tpath) : tmppath), tmporgmeta, physical_fd);
             }else{
                 // normal uploading (too small part size)
 
@@ -1694,7 +1693,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
                 }
 
                 // multipart uploading with copy api
-                result = S3fsCurl::ParallelMixMultipartUploadRequest(tpath ? tpath : tmppath.c_str(), tmporgmeta, physical_fd, mixuppages);
+                result = mix_multipart_upload_request((tpath ? std::string(tpath) : tmppath), tmporgmeta, physical_fd, mixuppages);
 
             }else{
                 // normal uploading (too small part size)
