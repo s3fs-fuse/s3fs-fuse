@@ -84,7 +84,7 @@ struct CRYPTO_dynlock_value
 
 static std::mutex* s3fs_crypt_mutex = nullptr;
 
-static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused));
+static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
 {
     if(s3fs_crypt_mutex){
@@ -109,7 +109,7 @@ static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int l
     return dyndata;
 }
 
-static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused));
+static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
 static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
 {
     if(dyndata){
