@@ -92,6 +92,7 @@ class ThreadPoolMan
         static bool Initialize(int count);
         static void Destroy();
         static bool Instruct(const thpoolman_param& pparam);
+        static bool AwaitInstruct(const thpoolman_param& param);
 };
 
 #endif // S3FS_THREADPOOLMAN_H_

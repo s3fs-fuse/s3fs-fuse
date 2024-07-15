@@ -58,7 +58,38 @@ bool ThreadPoolMan::Instruct(const thpoolman_param& param)
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
+    if(!param.psem){
+        S3FS_PRN_ERR("Thread parameter Semaphore is null.");
+        return false;
+    }
     ThreadPoolMan::singleton->SetInstruction(param);
+    return true;
+}
+
+bool ThreadPoolMan::AwaitInstruct(const thpoolman_param& param)
+{
+    if(!ThreadPoolMan::singleton){
+        S3FS_PRN_WARN("The singleton object is not initialized yet.");
+        return false;
+    }
+    if(param.psem){
+        S3FS_PRN_ERR("Thread parameter Semaphore must be null.");
+        return false;
+    }
+
+    // Setup local thpoolman_param structure with local Semaphore
+    thpoolman_param local_param;
+    Semaphore       await_sem(0);
+    local_param.args  = param.args;
+    local_param.psem  = &await_sem;
+    local_param.pfunc = param.pfunc;
+
+    // Set parameters and run thread worker
+    ThreadPoolMan::singleton->SetInstruction(local_param);
+
+    // wait until the thread is complete
+    await_sem.acquire();
+
     return true;
 }
 

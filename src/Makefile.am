@@ -43,6 +43,7 @@ s3fs_SOURCES = \
     string_util.cpp \
     s3fs_cred.cpp \
     s3fs_util.cpp \
+    s3fs_threadreqs.cpp \
     fdcache.cpp \
     fdcache_entity.cpp \
     fdcache_page.cpp \

@@ -54,6 +54,7 @@
 #include "s3fs_cred.h"
 #include "s3fs_help.h"
 #include "s3fs_util.h"
+#include "s3fs_threadreqs.h"
 #include "mpu_util.h"
 #include "threadpoolman.h"
 
@@ -303,7 +304,7 @@ static bool is_special_name_folder_object(const char* path)
     }
 
     std::string strpath = path;
-    headers_t header;
+    headers_t   header;
 
     if(std::string::npos == strpath.find("_$folder$", 0)){
         if('/' == *strpath.rbegin()){
@@ -311,12 +312,15 @@ static bool is_special_name_folder_object(const char* path)
         }
         strpath += "_$folder$";
     }
-    S3fsCurl s3fscurl;
-    if(0 != s3fscurl.HeadRequest(strpath.c_str(), header)){
+
+    // send request
+    if(0 != head_request(strpath, header)){
         return false;
     }
+
     header.clear();
     S3FS_MALLOCTRIM(0);
+
     return true;
 }
 
@@ -414,9 +418,8 @@ static int chk_dir_object_type(const char* path, std::string& newpath, std::stri
 static int remove_old_type_dir(const std::string& path, dirtype type)
 {
     if(IS_RMTYPEDIR(type)){
-        S3fsCurl s3fscurl;
-        int      result = s3fscurl.DeleteRequest(path.c_str());
-        if(0 != result && -ENOENT != result){
+        int result;
+        if(0 != (result = delete_request(path))){
             return result;
         }
         // succeed removing or not found the directory
@@ -453,7 +456,6 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     headers_t    tmpHead;
     headers_t*   pheader = pmeta ? pmeta : &tmpHead;
     std::string  strpath;
-    S3fsCurl     s3fscurl;
     bool         forcedir = false;
     bool         is_mountpoint = false;             // path is the mount point
     bool         is_bucket_mountpoint = false;      // path is the mount point which is the bucket root
@@ -519,8 +521,9 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }else{
         strpath = path;
     }
-    result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-    s3fscurl.DestroyCurlHandle();
+
+    // get headers
+    result = head_request(strpath, *pheader);
 
     // if not found target path object, do over checking
     if(-EPERM == result){
@@ -548,22 +551,26 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
                 // now path is "object", do check "object/" for over checking
                 strpath    += "/";
-                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-                s3fscurl.DestroyCurlHandle();
+
+                // re-get headers
+                result = head_request(strpath, *pheader);
             }
             if(support_compat_dir && 0 != result){
                 // now path is "object/", do check "object_$folder$" for over checking
                 strpath.erase(strpath.length() - 1);
                 strpath    += "_$folder$";
-                result      = s3fscurl.HeadRequest(strpath.c_str(), (*pheader));
-                s3fscurl.DestroyCurlHandle();
 
-              if(0 != result){
-                  // cut "_$folder$" for over checking "no dir object" after here
-                  if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
-                      strpath.erase(Pos);
-                  }
-              }
+                // re-get headers
+                result = head_request(strpath, *pheader);
+
+		        // cppcheck-suppress unmatchedSuppression
+		        // cppcheck-suppress knownConditionTrueFalse
+                if(0 != result){
+                    // cut "_$folder$" for over checking "no dir object" after here
+                    if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
+                        strpath.erase(Pos);
+                    }
+                }
             }
         }
         if(0 != result && std::string::npos == strpath.find("_$folder$", 0)){
@@ -907,7 +914,6 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
 int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_size)
 {
     int         result;
-    S3fsCurl    s3fscurl(true);
     off_t       size;
     std::string strpath;
 
@@ -932,11 +938,16 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
     }
 
     if(!nocopyapi && !nomultipart && size >= multipart_threshold){
+        // [TODO]
+        // This object will be removed after removing S3fsMultiCurl
+        //
+        S3fsCurl s3fscurl(true);
         if(0 != (result = s3fscurl.MultipartHeadRequest(strpath.c_str(), size, meta))){
             return result;
         }
     }else{
-        if(0 != (result = s3fscurl.PutHeadRequest(strpath.c_str(), meta, is_copy))){
+        // send put head request
+        if(0 != (result = put_head_request(strpath, meta, is_copy))){
             return result;
         }
     }
@@ -1060,8 +1071,11 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
     meta["x-amz-meta-ctime"] = strnow;
     meta["x-amz-meta-mtime"] = strnow;
 
-    S3fsCurl s3fscurl(true);
-    return s3fscurl.PutRequest(path, meta, -1);    // fd=-1 means for creating zero byte object.
+    int result;
+    if(0 != (result = put_request(std::string(SAFESTRPTR(path)), meta, -1, true/* ahbe */))){
+        return result;
+    }
+    return 0;
 }
 
 static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
@@ -1188,8 +1202,11 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
         meta["x-amz-meta-xattr"] = pxattrvalue;
     }
 
-    S3fsCurl s3fscurl;
-    return s3fscurl.PutRequest(tpath.c_str(), meta, -1);    // fd=-1 means for creating zero byte object.
+    int result;
+    if(0 != (result = put_request(tpath, meta, -1, false/* ahbe */))){
+        return result;
+    }
+    return 0;
 }
 
 static int s3fs_mkdir(const char* _path, mode_t mode)
@@ -1250,8 +1267,11 @@ static int s3fs_unlink(const char* _path)
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
     }
-    S3fsCurl s3fscurl;
-    result = s3fscurl.DeleteRequest(path);
+
+    if(0 != (result = delete_request(std::string(SAFESTRPTR(path))))){
+        return result;
+    }
+
     StatCache::getStatCacheData()->DelStat(path);
     StatCache::getStatCacheData()->DelSymlink(path);
     FdManager::DeleteCacheFile(path);
@@ -1304,9 +1324,10 @@ static int s3fs_rmdir(const char* _path)
     if('/' != *strpath.rbegin()){
         strpath += "/";
     }
-    S3fsCurl s3fscurl;
-    result = s3fscurl.DeleteRequest(strpath.c_str());
-    s3fscurl.DestroyCurlHandle();
+
+    // delete request
+    result = delete_request(strpath);
+
     StatCache::getStatCacheData()->DelStat(strpath);
 
     // double check for old version(before 1.63)
@@ -1320,8 +1341,9 @@ static int s3fs_rmdir(const char* _path)
     if(0 == get_object_attribute(strpath.c_str(), &stbuf, nullptr, false)){
         if(S_ISDIR(stbuf.st_mode)){
             // Found "dir" object.
-            result = s3fscurl.DeleteRequest(strpath.c_str());
-            s3fscurl.DestroyCurlHandle();
+
+            // delete request
+            result = delete_request(strpath);
             StatCache::getStatCacheData()->DelStat(strpath);
         }
     }
@@ -1332,7 +1354,9 @@ static int s3fs_rmdir(const char* _path)
     // This processing is necessary for other S3 clients compatibility.
     if(is_special_name_folder_object(strpath.c_str())){
         strpath += "_$folder$";
-        result   = s3fscurl.DeleteRequest(strpath.c_str());
+
+        // delete request
+        result = delete_request(strpath);
     }
 
     // update parent directory timestamp
@@ -1598,6 +1622,9 @@ static int rename_large_object(const char* from, const char* to)
         return result;
     }
 
+    // [TODO]
+    // This object will be removed after removing S3fsMultiCurl
+    //
     S3fsCurl s3fscurl(true);
     if(0 != (result = s3fscurl.MultipartRenameRequest(from, to, meta, buf.st_size))){
         return result;
@@ -3121,6 +3148,9 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
+// [TODO]
+// This function's argument(s3fscurl) will be checked and changed after removing S3fsMultiCurl
+//
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameterCallback
 static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
@@ -3163,6 +3193,9 @@ struct multi_head_notfound_callback_param
     s3obj_list_t    notfound_list;
 };
 
+// [TODO]
+// This function's argument(s3fscurl) will be checked and changed after removing S3fsMultiCurl
+//
 static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
 {
     if(!s3fscurl){
@@ -3184,6 +3217,9 @@ static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
     return true;
 }
 
+// [TODO]
+// This function's argument(s3fscurl) will be checked and changed after removing S3fsMultiCurl
+//
 static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
 {
     if(!s3fscurl){
@@ -3220,6 +3256,9 @@ static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
 
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
+    // [TODO]
+    // This will be checked and changed after removing S3fsMultiCurl
+    //
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest(), true);      // [NOTE] run all requests to completion even if some requests fail.
     s3obj_list_t  headlist;
     int           result = 0;
@@ -3393,7 +3432,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     std::string next_continuation_token;
     std::string next_marker;
     bool truncated = true;
-    S3fsCurl  s3fscurl;
 
     S3FS_PRN_INFO1("[path=%s]", path);
 
@@ -3420,10 +3458,13 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
     }
 
     while(truncated){
-        // append parameters to query in alphabetical order
+        int         result;
         std::string each_query;
+        std::string responseBody;
+
+        // append parameters to query in alphabetical order
         if(!next_continuation_token.empty()){
-            each_query += "continuation-token=" + urlEncodePath(next_continuation_token) + "&";
+            each_query             += "continuation-token=" + urlEncodePath(next_continuation_token) + "&";
             next_continuation_token = "";
         }
         each_query += query_delimiter;
@@ -3437,20 +3478,17 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         each_query += query_maxkey;
         each_query += query_prefix;
 
-        // request
-        int result; 
-        if(0 != (result = s3fscurl.ListBucketRequest(path, each_query.c_str()))){
-            S3FS_PRN_ERR("ListBucketRequest returns with error.");
+        // send request
+        if(0 != (result = list_bucket_request(std::string(SAFESTRPTR(path)), each_query, responseBody))){
             return result;
         }
-        const std::string& body = s3fscurl.GetBodyData();
 
         // [NOTE]
         // CR code(\r) is replaced with LF(\n) by xmlReadMemory() function.
         // To prevent that, only CR code is encoded by following function.
         // The encoded CR code is decoded with append_objects_from_xml(_ex).
         //
-        std::string encbody = get_encoded_cr_code(body.c_str());
+        std::string encbody = get_encoded_cr_code(responseBody.c_str());
 
         // xmlDocPtr
         std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0), xmlFreeDoc);
@@ -3487,9 +3525,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                 }
             }
         }
-
-        // reset(initialize) curl object
-        s3fscurl.DestroyCurlHandle();
 
         if(check_content_only){
             break;
@@ -4211,6 +4246,11 @@ static void* s3fs_init(struct fuse_conn_info* conn)
         S3FS_PRN_DBG("Could not initialize cache directory.");
     }
 
+    if(!ThreadPoolMan::Initialize(max_thread_count)){
+        S3FS_PRN_CRIT("Could not create thread pool(%d)", max_thread_count);
+        s3fs_exit_fuseloop(EXIT_FAILURE);
+    }
+
     // check loading IAM role name
     if(!ps3fscred->LoadIAMRoleFromMetaData()){
         S3FS_PRN_CRIT("could not load IAM role name from meta data.");
@@ -4236,11 +4276,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 
     if(conn->capable & FUSE_CAP_BIG_WRITES){
          conn->want |= FUSE_CAP_BIG_WRITES;
-    }
-
-    if(!ThreadPoolMan::Initialize(max_thread_count)){
-        S3FS_PRN_CRIT("Could not create thread pool(%d)", max_thread_count);
-        s3fs_exit_fuseloop(EXIT_FAILURE);
     }
 
     // Signal object
@@ -4385,124 +4420,118 @@ static int s3fs_check_service()
         return EXIT_FAILURE;
     }
 
-    S3fsCurl s3fscurl;
-    bool     force_no_sse = false;
+    bool forceNoSSE = false;        // it is not mandatory at first.
 
-    while(0 > s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir, force_no_sse)){
-        // get response code
-        bool do_retry     = false;
-        long responseCode = s3fscurl.GetLastResponseCode();
+    for(bool isLoop = true; isLoop; ){
+        long        responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
+        std::string responseBody;
+        if(0 > check_service_request(get_realpath("/"), forceNoSSE, support_compat_dir, responseCode, responseBody)){
+            // check wrong endpoint, and automatically switch endpoint
+            if(300 <= responseCode && responseCode < 500){
+                // check region error(for putting message or retrying)
+                std::string expectregion;
+                std::string expectendpoint;
 
-        // check wrong endpoint, and automatically switch endpoint
-        if(300 <= responseCode && responseCode < 500){
+                // Check if any case can be retried
+                if(check_region_error(responseBody.c_str(), responseBody.size(), expectregion)){
+                    // [NOTE]
+                    // If endpoint is not specified(using us-east-1 region) and
+                    // an error is encountered accessing a different region, we
+                    // will retry the check on the expected region.
+                    // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
+                    //
+                    if(s3host != "http://s3.amazonaws.com" && s3host != "https://s3.amazonaws.com"){
+                        // specified endpoint for specified url is wrong.
+                        if(is_specified_endpoint){
+                            S3FS_PRN_CRIT("The bucket region is not '%s'(specified) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                        }else{
+                            S3FS_PRN_CRIT("The bucket region is not '%s'(default) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                        }
+                        isLoop = false;
 
-            // check region error(for putting message or retrying)
-            const std::string& body = s3fscurl.GetBodyData();
-            std::string expectregion;
-            std::string expectendpoint;
+                    }else if(is_specified_endpoint){
+                        // specified endpoint is wrong.
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                        isLoop = false;
 
-            // Check if any case can be retried
-            if(check_region_error(body.c_str(), body.size(), expectregion)){
-                // [NOTE]
-                // If endpoint is not specified(using us-east-1 region) and
-                // an error is encountered accessing a different region, we
-                // will retry the check on the expected region.
-                // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
-                //
-                if(s3host != "http://s3.amazonaws.com" && s3host != "https://s3.amazonaws.com"){
-                    // specified endpoint for specified url is wrong.
-                    if(is_specified_endpoint){
-                        S3FS_PRN_CRIT("The bucket region is not '%s'(specified) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                    }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY || S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
+                        // current endpoint and url are default value, so try to connect to expected region.
+                        S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+
+                        // change endpoint
+                        endpoint = expectregion;
+
+                        // change url
+                        if(s3host == "http://s3.amazonaws.com"){
+                            s3host = "http://s3-" + endpoint + ".amazonaws.com";
+                        }else if(s3host == "https://s3.amazonaws.com"){
+                            s3host = "https://s3-" + endpoint + ".amazonaws.com";
+                        }
+
                     }else{
-                        S3FS_PRN_CRIT("The bucket region is not '%s'(default) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                        isLoop = false;
                     }
 
-                }else if(is_specified_endpoint){
-                    // specified endpoint is wrong.
-                    S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
-
-                }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY || S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
-                    // current endpoint and url are default value, so try to connect to expected region.
-                    S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
-
-                    // change endpoint
-                    endpoint = expectregion;
-
-                    // change url
-                    if(s3host == "http://s3.amazonaws.com"){
-                        s3host = "http://s3-" + endpoint + ".amazonaws.com";
-                    }else if(s3host == "https://s3.amazonaws.com"){
-                        s3host = "https://s3-" + endpoint + ".amazonaws.com";
+                }else if(check_endpoint_error(responseBody.c_str(), responseBody.size(), expectendpoint)){
+                    // redirect error
+                    if(pathrequeststyle){
+                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
+                    }else{
+                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and endpoint(%s)). You need to specify correct endpoint option.", expectendpoint.c_str(), s3host.c_str(), endpoint.c_str());
                     }
+                    return EXIT_FAILURE;
 
-                    // Retry with changed host
-                    s3fscurl.DestroyCurlHandle();
-                    do_retry = true;
+                }else if(check_invalid_sse_arg_error(responseBody.c_str(), responseBody.size())){
+                    // SSE argument error, so retry it without SSE
+                    S3FS_PRN_CRIT("S3 service returned InvalidArgument(x-amz-server-side-encryption), so retry without adding x-amz-server-side-encryption.");
 
-                }else{
-                    S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                    // Retry without sse parameters
+                    forceNoSSE = true;
                 }
+            }
 
-            }else if(check_endpoint_error(body.c_str(), body.size(), expectendpoint)){
-                // redirect error
-                if(pathrequeststyle){
-                    S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
+            // Try changing signature from v4 to v2
+            //
+            // [NOTE]
+            // If there is no case to retry with the previous checks, and there
+            // is a chance to retry with signature v2, prepare to retry with v2.
+            //
+            if(!isLoop && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
+                // switch sigv2
+                S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
+
+                // retry to check with sigv2
+                isLoop = true;
+                S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
+            }
+
+            // check errors(after retrying)
+            if(!isLoop && responseCode != 200 && responseCode != 301){
+                // parse error message if existed
+                std::string errMessage;
+                check_error_message(responseBody.c_str(), responseBody.size(), errMessage);
+
+                if(responseCode == 400){
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                }else if(responseCode == 403){
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Invalid Credentials(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                }else if(responseCode == 404){
+                    if(mount_prefix.empty()){
+                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory not found(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                    }else{
+                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory(%s) not found(host=%s, message=%s) - You may need to specify the compat_dir option.", mount_prefix.c_str(), s3host.c_str(), errMessage.c_str());
+                    }
                 }else{
-                    S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and endpoint(%s)). You need to specify correct endpoint option.", expectendpoint.c_str(), s3host.c_str(), endpoint.c_str());
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Unable to connect(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
                 }
                 return EXIT_FAILURE;
-
-            }else if(check_invalid_sse_arg_error(body.c_str(), body.size())){
-                // SSE argument error, so retry it without SSE
-                S3FS_PRN_CRIT("S3 service returned InvalidArgument(x-amz-server-side-encryption), so retry without adding x-amz-server-side-encryption.");
-
-                // Retry without sse parameters
-                s3fscurl.DestroyCurlHandle();
-                do_retry     = true;
-                force_no_sse = true;
             }
-        }
-
-        // Try changing signature from v4 to v2
-        //
-        // [NOTE]
-        // If there is no case to retry with the previous checks, and there
-        // is a chance to retry with signature v2, prepare to retry with v2.
-        //
-        if(!do_retry && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
-            // switch sigv2
-            S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
-
-            // retry to check with sigv2
-            s3fscurl.DestroyCurlHandle();
-            do_retry = true;
-            S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
-        }
-
-        // check errors(after retrying)
-        if(!do_retry && responseCode != 200 && responseCode != 301){
-            // parse error message if existed
-            std::string errMessage;
-            const std::string& body = s3fscurl.GetBodyData();
-            check_error_message(body.c_str(), body.size(), errMessage);
-
-            if(responseCode == 400){
-                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-            }else if(responseCode == 403){
-                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Invalid Credentials(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-            }else if(responseCode == 404){
-                if(mount_prefix.empty()){
-                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory not found(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-                }else{
-                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory(%s) not found(host=%s, message=%s) - You may need to specify the compat_dir option.", mount_prefix.c_str(), s3host.c_str(), errMessage.c_str());
-                }
-            }else{
-                S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Unable to connect(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-            }
-            return EXIT_FAILURE;
+        }else{
+            // break loop
+            isLoop = false;
         }
     }
-    s3fscurl.DestroyCurlHandle();
 
     // make sure remote mountpath exists and is a directory
     if(!mount_prefix.empty()){

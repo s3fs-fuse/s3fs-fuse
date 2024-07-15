@@ -35,6 +35,8 @@
 #include "curl.h"
 #include "string_util.h"
 #include "metaheader.h"
+#include "threadpoolman.h"
+#include "s3fs_threadreqs.h"
 
 //-------------------------------------------------------------------
 // Symbols
@@ -290,7 +292,7 @@ bool S3fsCred::SetIAMRole(const char* role)
     return true;
 }
 
-const std::string& S3fsCred::GetIAMRole() const
+const std::string& S3fsCred::GetIAMRoleHasLock() const
 {
     return IAM_role;
 }
@@ -336,7 +338,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
             S3FS_PRN_ERR("IAM role name is empty.");
             return false;
         }
-        S3FS_PRN_INFO3("[IAM role=%s]", GetIAMRole().c_str());
+        S3FS_PRN_INFO3("[IAM role=%s]", GetIAMRoleHasLock().c_str());
     }
 
     if(is_ecs){
@@ -356,15 +358,15 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
         // in the S3fsCurl::GetIAMv2ApiToken method (when retrying).
         //
         if(GetIMDSVersion() > 1){
-            S3fsCurl    s3fscurl;
             std::string token;
-            int         result = s3fscurl.GetIAMv2ApiToken(S3fsCred::IAMv2_token_url, S3fsCred::IAMv2_token_ttl, S3fsCred::IAMv2_token_ttl_hdr, token);
+            int result = get_iamv2api_token_request(std::string(S3fsCred::IAMv2_token_url), S3fsCred::IAMv2_token_ttl, std::string(S3fsCred::IAMv2_token_ttl_hdr), token);
+
             if(-ENOENT == result){
                 // If we get a 404 back when requesting the token service,
                 // then it's highly likely we're running in an environment
                 // that doesn't support the AWS IMDSv2 API, so we'll skip
                 // the token retrieval in the future.
-                SetIMDSVersion(1);
+                SetIMDSVersionHasLock(1);
 
             }else if(result != 0){
                 // If we get an unexpected error when retrieving the API
@@ -375,13 +377,13 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
 
             }else{
                 // Set token
-                if(!SetIAMv2APIToken(token)){
+                if(!SetIAMv2APITokenHasLock(token)){
                     S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", token.c_str());
                 }
             }
         }
         if(check_iam_role){
-            url = IAM_cred_url + GetIAMRole();
+            url = IAM_cred_url + GetIAMRoleHasLock();
         }else{
             url = IAM_cred_url;
         }
@@ -389,7 +391,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
     return true;
 }
 
-int S3fsCred::SetIMDSVersion(int version)
+int S3fsCred::SetIMDSVersionHasLock(int version)
 {
     int old = IAM_api_version;
     IAM_api_version = version;
@@ -401,7 +403,7 @@ int S3fsCred::GetIMDSVersion() const
     return IAM_api_version;
 }
 
-bool S3fsCred::SetIAMv2APIToken(const std::string& token)
+bool S3fsCred::SetIAMv2APITokenHasLock(const std::string& token)
 {
     S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", token.c_str());
 
@@ -427,35 +429,27 @@ const std::string& S3fsCred::GetIAMv2APIToken() const
 //
 bool S3fsCred::LoadIAMCredentials()
 {
-    // url(check iam role)
     std::string url;
+    std::string striamtoken;
+    std::string stribmsecret;
+    std::string cred;
 
+    // get parameters(check iam role)
     if(!GetIAMCredentialsURL(url, true)){
         return false;
     }
-
-    const char* iam_v2_token = nullptr;
-    std::string str_iam_v2_token;
     if(GetIMDSVersion() > 1){
-        str_iam_v2_token = GetIAMv2APIToken();
-        iam_v2_token     = str_iam_v2_token.c_str();
+        striamtoken = GetIAMv2APIToken();
     }
-
-    const char* ibm_secret_access_key = nullptr;
-    std::string str_ibm_secret_access_key;
     if(IsIBMIAMAuth()){
-        str_ibm_secret_access_key = AWSSecretAccessKey;
-        ibm_secret_access_key     = str_ibm_secret_access_key.c_str();
+        stribmsecret = AWSSecretAccessKey;
     }
 
-    S3fsCurl    s3fscurl;
-    std::string response;
-    if(!s3fscurl.GetIAMCredentials(url.c_str(), iam_v2_token, ibm_secret_access_key, response)){
-        return false;
-    }
-
-    if(!SetIAMCredentials(response.c_str())){
-        S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+    // Get IAM Credentials
+    if(0 == get_iamcred_request(url, striamtoken, stribmsecret, cred)){
+        S3FS_PRN_DBG("Succeed to set IAM credentials");
+    }else{
+        S3FS_PRN_ERR("Something error occurred, could not set IAM credentials.");
         return false;
     }
     return true;
@@ -466,40 +460,45 @@ bool S3fsCred::LoadIAMCredentials()
 //
 bool S3fsCred::LoadIAMRoleFromMetaData()
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
+    if(!load_iamrole){
+        // nothing to do
+        return true;
+    }
 
-    if(load_iamrole){
+    std::string url;
+    std::string iamtoken;
+    {
+        const std::lock_guard<std::mutex> lock(token_lock);
+
         // url(not check iam role)
-        std::string url;
-
         if(!GetIAMCredentialsURL(url, false)){
             return false;
         }
 
-        const char* iam_v2_token = nullptr;
-        std::string str_iam_v2_token;
         if(GetIMDSVersion() > 1){
-            str_iam_v2_token = GetIAMv2APIToken();
-            iam_v2_token     = str_iam_v2_token.c_str();
+            iamtoken = GetIAMv2APIToken();
         }
+    }
 
-        S3fsCurl    s3fscurl;
-        std::string token;
-        if(!s3fscurl.GetIAMRoleFromMetaData(url.c_str(), iam_v2_token, token)){
-            return false;
-        }
+    // Get IAM Role token
+    std::string token;
+    if(0 != get_iamrole_request(url, iamtoken, token)){
+        S3FS_PRN_ERR("failed to get IAM Role token from meta data.");
+        return false;
+    }
 
-        if(!SetIAMRoleFromMetaData(token.c_str())){
-            S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
-            return false;
-        }
-        S3FS_PRN_INFO("loaded IAM role name = %s", GetIAMRole().c_str());
+    // Set
+    if(!SetIAMRoleFromMetaData(token.c_str())){
+        S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+        return false;
     }
     return true;
 }
 
 bool S3fsCred::SetIAMCredentials(const char* response)
 {
+    const std::lock_guard<std::mutex> lock(token_lock);
+
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
 
     iamcredmap_t keyval;
@@ -530,6 +529,8 @@ bool S3fsCred::SetIAMCredentials(const char* response)
 
 bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
 {
+    const std::lock_guard<std::mutex> lock(token_lock);
+
     S3FS_PRN_INFO3("IAM role name response = \"%s\"", response ? response : "(null)");
 
     std::string rolename;
@@ -1372,7 +1373,7 @@ int S3fsCred::DetectParam(const char* arg)
         SetIAMTokenField("\"access_token\"");
         SetIAMExpiryField("\"expiration\"");
         SetIAMFieldCount(2);
-        SetIMDSVersion(1);
+        SetIMDSVersionHasLock(1);
         set_builtin_cred_opts = true;
         return 0;
     }
@@ -1399,7 +1400,7 @@ int S3fsCred::DetectParam(const char* arg)
     }
 
     if(0 == strcmp(arg, "imdsv1only")){
-        SetIMDSVersion(1);
+        SetIMDSVersionHasLock(1);
         set_builtin_cred_opts = true;
         return 0;
     }
@@ -1410,7 +1411,7 @@ int S3fsCred::DetectParam(const char* arg)
             return -1;
         }
         SetIsECS(true);
-        SetIMDSVersion(1);
+        SetIMDSVersionHasLock(1);
         SetIAMCredentialsURL("http://169.254.170.2");
         SetIAMFieldCount(5);
         set_builtin_cred_opts = true;

@@ -244,7 +244,7 @@ static constexpr char help_string[] =
     "\n"
     "   parallel_count (default=\"5\")\n"
     "      - number of parallel request for uploading big objects.\n"
-    "      s3fs uploads large object (over 20MB) by multipart post request, \n"
+    "      s3fs uploads large object (over 20MB) by multipart upload request, \n"
     "      and sends parallel requests.\n"
     "      This option limits parallel request count which s3fs requests \n"
     "      at once. It is necessary to set this value depending on a CPU \n"
