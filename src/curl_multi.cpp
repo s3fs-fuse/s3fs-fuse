@@ -366,7 +366,7 @@ void S3fsMultiCurl::RequestPerformWrapper(S3fsCurl* s3fscurl, std::promise<int> 
 
     if(!result){
         result = s3fscurl->RequestPerform();
-        s3fscurl->DestroyCurlHandle(true, false);
+        s3fscurl->DestroyCurlHandle(false);
     }
 
     const std::lock_guard<std::mutex> lock(*s3fscurl->completed_tids_lock);

@@ -57,9 +57,6 @@ struct pseudofdinfo_thparam
 class PseudoFdInfo
 {
     private:
-        static int              max_threads;
-        static int              opt_max_threads;    // for option value
-
         int                     pseudo_fd;
         int                     physical_fd;
         int                     flags;              // flags at open

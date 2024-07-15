@@ -38,7 +38,6 @@
 #include "curl_multi.h"
 #include "curl_util.h"
 #include "s3fs_auth.h"
-#include "curl_handlerpool.h"
 #include "s3fs_cred.h"
 #include "s3fs_util.h"
 #include "string_util.h"
@@ -99,12 +98,10 @@ constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
 std::mutex       S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
-std::unique_ptr<CurlHandlerPool> S3fsCurl::sCurlPool;
-int              S3fsCurl::sCurlPoolSize       = 32;
 CURLSH*          S3fsCurl::hCurlShare          = nullptr;
 bool             S3fsCurl::is_cert_check       = true; // default
 bool             S3fsCurl::is_dns_cache        = true; // default
-bool             S3fsCurl::is_ssl_session_cache= true; // default
+bool             S3fsCurl::is_ssl_session_cache= false;// default(This turns OFF now, but turns ON again last PR)
 long             S3fsCurl::connect_timeout     = 300;  // default
 time_t           S3fsCurl::readwrite_timeout   = 120;  // default
 int              S3fsCurl::retries             = 5;    // default
@@ -162,14 +159,6 @@ bool S3fsCurl::InitS3fsCurl()
     if(!S3fsCurl::InitCryptMutex()){
         return false;
     }
-    // [NOTE]
-    // sCurlPoolSize must be over parallel(or multireq) count.
-    //
-    sCurlPoolSize = std::max({sCurlPoolSize, GetMaxParallelCount(), GetMaxMultiRequest()});
-    sCurlPool.reset(new CurlHandlerPool(sCurlPoolSize));
-    if (!sCurlPool->Init()) {
-        return false;
-    }
     return true;
 }
 
@@ -180,10 +169,6 @@ bool S3fsCurl::DestroyS3fsCurl()
     if(!S3fsCurl::DestroyCryptMutex()){
         result = false;
     }
-    if(!sCurlPool->Destroy()){
-        result = false;
-    }
-    sCurlPool.reset();
     if(!S3fsCurl::DestroyShareCurl()){
         result = false;
     }
@@ -1974,7 +1959,7 @@ bool S3fsCurl::ResetHandle()
 {
     bool run_once = curl_warnings_once.exchange(true);
 
-    sCurlPool->ResetHandler(hCurl.get());
+    curl_easy_reset(hCurl.get());
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1)){
         return false;
@@ -2097,12 +2082,12 @@ bool S3fsCurl::ResetHandle()
     return true;
 }
 
-bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
+bool S3fsCurl::CreateCurlHandle(bool remake)
 {
     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
 
     if(hCurl && remake){
-        if(!DestroyCurlHandleHasLock(false, true)){
+        if(!DestroyCurlHandleHasLock(true)){
             S3FS_PRN_ERR("could not destroy handle.");
             return false;
         }
@@ -2110,16 +2095,10 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
     }
 
     if(!hCurl){
-        if(nullptr == (hCurl = sCurlPool->GetHandler(only_pool))){
-            if(!only_pool){
-                S3FS_PRN_ERR("Failed to create handle.");
-                return false;
-            }else{
-                // [NOTE]
-                // Further initialization processing is left to lazy processing to be executed later.
-                // (Currently we do not use only_pool=true, but this code is remained for the future)
-                return true;
-            }
+        hCurl.reset(curl_easy_init());
+        if(!hCurl){
+            S3FS_PRN_ERR("Failed to create handle.");
+            return false;
         }
     }
     ResetHandle();
@@ -2127,13 +2106,13 @@ bool S3fsCurl::CreateCurlHandle(bool only_pool, bool remake)
     return true;
 }
 
-bool S3fsCurl::DestroyCurlHandle(bool restore_pool, bool clear_internal_data)
+bool S3fsCurl::DestroyCurlHandle(bool clear_internal_data)
 {
     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
-    return DestroyCurlHandleHasLock(restore_pool, clear_internal_data);
+    return DestroyCurlHandleHasLock(clear_internal_data);
 }
 
-bool S3fsCurl::DestroyCurlHandleHasLock(bool restore_pool, bool clear_internal_data)
+bool S3fsCurl::DestroyCurlHandleHasLock(bool clear_internal_data)
 {
     // [NOTE]
     // If type is REQTYPE::IAMCRED or REQTYPE::IAMROLE, do not clear type.
@@ -2150,7 +2129,7 @@ bool S3fsCurl::DestroyCurlHandleHasLock(bool restore_pool, bool clear_internal_d
 
     if(hCurl){
         S3fsCurl::curl_progress.erase(hCurl.get());
-        sCurlPool->ReturnHandler(std::move(hCurl), restore_pool);
+        hCurl.reset();
     }else{
         return false;
     }
