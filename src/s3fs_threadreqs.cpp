@@ -19,10 +19,14 @@
  */
 
 #include "common.h"
+#include "s3fs.h"
 #include "s3fs_threadreqs.h"
 #include "threadpoolman.h"
 #include "curl_util.h"
 #include "s3fs_logger.h"
+#include "s3fs_util.h"
+#include "cache.h"
+#include "string_util.h"
 
 //-------------------------------------------------------------------
 // Thread Worker functions for MultiThread Request
@@ -42,6 +46,150 @@ void* head_req_threadworker(void* arg)
     pthparam->result = s3fscurl.HeadRequest(pthparam->path.c_str(), *(pthparam->pmeta));
 
     return reinterpret_cast<void*>(pthparam->result);
+}
+
+//
+// Thread Worker function for multi head request
+//
+void* multi_head_req_threadworker(void* arg)
+{
+    std::unique_ptr<multi_head_req_thparam> pthparam(static_cast<multi_head_req_thparam*>(arg));
+    if(!pthparam || !pthparam->psyncfiller || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->pnotfound_list || !pthparam->presult){
+        return reinterpret_cast<void*>(-EIO);
+    }
+
+    // Check retry max count and print debug message
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+        S3FS_PRN_INFO3("Multi Head Request [filler=%p][thparam_lock=%p][retrycount=%d][notfound_list=%p][wtf8=%s][path=%s]", pthparam->psyncfiller, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->pnotfound_list, pthparam->use_wtf8 ? "true" : "false", pthparam->path.c_str());
+
+        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+            S3FS_PRN_ERR("Head request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
+            return reinterpret_cast<void*>(-EIO);
+        }
+    }
+
+    // loop for head request
+    S3fsCurl  s3fscurl;
+    int       result = 0;
+    headers_t meta;         // this value is not used
+    while(true){
+        // Request
+        result = s3fscurl.HeadRequest(pthparam->path.c_str(), meta);
+
+        // Check result
+        bool     isResetOffset= true;
+        CURLcode curlCode     = s3fscurl.GetCurlCode();
+        long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
+        s3fscurl.GetResponseCode(responseCode, false);
+
+        if(CURLE_OK == curlCode){
+            if(responseCode < 400){
+                // add into stat cache
+                if(StatCache::getStatCacheData()->AddStat(pthparam->path, *(s3fscurl.GetResponseHeaders()))){
+                    // Get stats from stats cache(for converting from meta), and fill
+                    std::string bpath = mybasename(pthparam->path);
+                    if(pthparam->use_wtf8){
+                        bpath = s3fs_wtf8_decode(bpath);
+                    }
+
+                    struct stat st;
+                    if(StatCache::getStatCacheData()->GetStat(pthparam->path, &st)){
+                        pthparam->psyncfiller->Fill(bpath, &st, 0);
+                    }else{
+                        S3FS_PRN_INFO2("Could not find %s file in stat cache.", pthparam->path.c_str());
+                        pthparam->psyncfiller->Fill(bpath, nullptr, 0);
+                    }
+                    result = 0;
+                }else{
+                    S3FS_PRN_ERR("failed adding stat cache [path=%s]", pthparam->path.c_str());
+                    if(0 == result){
+                        result = -EIO;
+                    }
+                }
+                break;
+
+            }else if(responseCode == 400){
+                // as possibly in multipart
+                S3FS_PRN_WARN("Head Request(%s) got 400 response code.", pthparam->path.c_str());
+
+            }else if(responseCode == 404){
+                // set path to not found list
+                S3FS_PRN_INFO("Head Request(%s) got NotFound(404), it maybe only the path exists and the object does not exist.", pthparam->path.c_str());
+                {
+                    const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+                    pthparam->pnotfound_list->push_back(pthparam->path);
+                }
+                break;
+
+            }else if(responseCode == 500){
+                // case of all other result, do retry.(11/13/2013)
+                // because it was found that s3fs got 500 error from S3, but could success
+                // to retry it.
+                S3FS_PRN_WARN("Head Request(%s) got 500 response code.", pthparam->path.c_str());
+
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
+            }else if(responseCode == S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET){
+                // This is a case where the processing result has not yet been updated (should be very rare).
+                S3FS_PRN_WARN("Head Request(%s) could not get any response code.", pthparam->path.c_str());
+
+            }else{  // including S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR
+                // Retry in other case.
+                S3FS_PRN_WARN("Head Request(%s) got fatal response code.", pthparam->path.c_str());
+            }
+
+        }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
+            S3FS_PRN_ERR("Head Request(%s) is timeouted.", pthparam->path.c_str());
+            isResetOffset= false;
+
+        }else if(CURLE_PARTIAL_FILE == curlCode){
+            S3FS_PRN_WARN("Head Request(%s) is recieved data does not match the given size.", pthparam->path.c_str());
+            isResetOffset= false;
+
+        }else{
+            S3FS_PRN_WARN("Head Request(%s) got the result code(%d: %s)", pthparam->path.c_str(), curlCode, curl_easy_strerror(curlCode));
+        }
+
+        // Check retry max count
+        {
+            const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+            ++(*(pthparam->pretrycount));
+            if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+                S3FS_PRN_ERR("Head request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
+                if(0 == result){
+                    result = -EIO;
+                }
+                break;
+            }
+        }
+
+        // Setup for retry
+        if(isResetOffset){
+            S3fsCurl::ResetOffset(&s3fscurl);
+        }
+    }
+
+    // Set result code
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+        if(0 == *(pthparam->presult) && 0 != result){
+            // keep first error
+            *(pthparam->presult) = result;
+        }
+    }
+
+    // [NOTE]
+    // The return value of a Multi Head request thread will always be 0(nullptr).
+    // This is because the expected value of a Head request will always be a
+    // response other than 200, such as 400/404/etc.
+    // In those error cases, this function simply outputs a message. And those
+    // errors(the first one) will be set to pthparam->presult and can be referenced
+    // by the caller.
+    //
+    return nullptr;
 }
 
 //

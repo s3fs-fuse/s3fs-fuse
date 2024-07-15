@@ -31,6 +31,7 @@
 #include <utility>
 
 #include "common.h"
+#include "s3fs.h"
 #include "fdcache_entity.h"
 #include "fdcache_fdinfo.h"
 #include "fdcache_stat.h"
