@@ -233,7 +233,6 @@ class S3fsCurl
         static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
         static std::string extractURI(const std::string& url);
 
-
         static bool LocateBundle();
         static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
         static size_t WriteMemoryCallback(void *ptr, size_t blockSize, size_t numBlocks, void *data);
@@ -241,16 +240,17 @@ class S3fsCurl
         static size_t UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
         static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
 
-        static bool UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
-        static bool CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
-        static bool MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param);
-        static std::unique_ptr<S3fsCurl> UploadMultipartPostRetryCallback(S3fsCurl* s3fscurl);
-        static std::unique_ptr<S3fsCurl> CopyMultipartPostRetryCallback(S3fsCurl* s3fscurl);
-        static std::unique_ptr<S3fsCurl> MixMultipartPostRetryCallback(S3fsCurl* s3fscurl);
+        static bool MultipartUploadPartCallback(S3fsCurl* s3fscurl, void* param);
+        static bool CopyMultipartUploadCallback(S3fsCurl* s3fscurl, void* param);
+        static bool MixMultipartUploadCallback(S3fsCurl* s3fscurl, void* param);
+        static std::unique_ptr<S3fsCurl> MultipartUploadPartRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> CopyMultipartUploadRetryCallback(S3fsCurl* s3fscurl);
+        static std::unique_ptr<S3fsCurl> MixMultipartUploadRetryCallback(S3fsCurl* s3fscurl);
         static std::unique_ptr<S3fsCurl> ParallelGetObjectRetryCallback(S3fsCurl* s3fscurl);
 
         // lazy functions for set curl options
-        static bool CopyMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
+        static bool MultipartUploadPartSetCurlOpts(S3fsCurl* s3fscurl);
+        static bool CopyMultipartUploadSetCurlOpts(S3fsCurl* s3fscurl);
         static bool PreGetObjectRequestSetCurlOpts(S3fsCurl* s3fscurl);
         static bool PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl);
 
@@ -275,10 +275,10 @@ class S3fsCurl
         bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_copy);
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
-        int UploadMultipartPostSetup(const char* tpath, int part_num, const std::string& upload_id);
-        int CopyMultipartPostSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
-        bool UploadMultipartPostComplete();
-        bool CopyMultipartPostComplete();
+        int MultipartUploadPartSetup(const char* tpath, int part_num, const std::string& upload_id);
+        int CopyMultipartUploadSetup(const char* from, const char* to, int part_num, const std::string& upload_id, headers_t& meta);
+        bool MultipartUploadPartComplete();
+        bool CopyMultipartUploadComplete();
         int MapPutErrorResponse(int result);
 
     public:
@@ -288,12 +288,9 @@ class S3fsCurl
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
         static std::unique_ptr<S3fsCurl> CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result);
-        static int ParallelMultipartUploadRequest(const char* tpath, headers_t& meta, int fd);
+        static int ParallelMultipartUploadRequest(const char* tpath, const headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
         static int ParallelGetObjectRequest(const char* tpath, int fd, off_t start, off_t size);
-
-        // lazy functions for set curl options(public)
-        static bool UploadMultipartPostSetCurlOpts(S3fsCurl* s3fscurl);
 
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
@@ -375,16 +372,16 @@ class S3fsCurl
           return PreHeadRequest(tpath.c_str(), bpath.c_str(), savedpath.c_str(), ssekey_pos);
         }
         int HeadRequest(const char* tpath, headers_t& meta);
-        int PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy);
+        int PutHeadRequest(const char* tpath, const headers_t& meta, bool is_copy);
         int PutRequest(const char* tpath, headers_t& meta, int fd);
         int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
-        int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
+        int GetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
         int ListBucketRequest(const char* tpath, const char* query);
-        int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id);
-        int CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
-        int UploadMultipartPostRequest(const char* tpath, int part_num, const std::string& upload_id);
-        bool MixMultipartPostComplete();
+        int PreMultipartUploadRequest(const char* tpath, const headers_t& meta, std::string& upload_id);
+        int MultipartUploadComplete(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
+        int MultipartUploadPartRequest(const char* tpath, int part_num, const std::string& upload_id);
+        bool MixMultipartUploadComplete();
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
         int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta);
