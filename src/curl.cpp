@@ -79,6 +79,16 @@ static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.typ
 #define S3FS_CURLOPT_XFERINFOFUNCTION   CURLOPT_PROGRESSFUNCTION
 #endif
 
+// Wrappers to pass std::unique_ptr to raw pointer functions.  Undefine curl_easy_setopt to work around curl variadic argument macro.
+#undef curl_easy_setopt
+template<typename Arg> CURLcode curl_easy_setopt(const CurlUniquePtr& handle, CURLoption option, Arg arg) {
+    return curl_easy_setopt(handle.get(), option, arg);
+}
+
+template<typename Arg> CURLcode curl_easy_getinfo(const CurlUniquePtr& handle, CURLINFO info, Arg arg) {
+    return curl_easy_getinfo(handle.get(), info, arg);
+}
+
 //-------------------------------------------------------------------
 // Class S3fsCurl
 //-------------------------------------------------------------------
@@ -1842,7 +1852,7 @@ bool S3fsCurl::PreHeadRequestSetCurlOpts(S3fsCurl* s3fscurl)
     return true;
 }
 
-bool S3fsCurl::AddUserAgent(CURL* hCurl)
+bool S3fsCurl::AddUserAgent(const CurlUniquePtr& hCurl)
 {
     if(!hCurl){
         return false;
@@ -1939,7 +1949,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
 S3fsCurl::S3fsCurl(bool ahbe) : 
-    hCurl(nullptr), type(REQTYPE::UNSET), requestHeaders(nullptr),
+    type(REQTYPE::UNSET), requestHeaders(nullptr),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_infile(nullptr), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
@@ -1965,7 +1975,7 @@ bool S3fsCurl::ResetHandle()
         curl_warnings_once = true;
     }
 
-    sCurlPool->ResetHandler(hCurl);
+    sCurlPool->ResetHandler(hCurl.get());
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1)){
         return false;
@@ -1982,7 +1992,7 @@ bool S3fsCurl::ResetHandle()
     if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_XFERINFOFUNCTION, S3fsCurl::CurlProgress)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl.get())){
         return false;
     }
     // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
@@ -2083,7 +2093,7 @@ bool S3fsCurl::ResetHandle()
         }
     }
 
-    S3fsCurl::curl_progress[hCurl] = {time(nullptr), -1, -1};
+    S3fsCurl::curl_progress[hCurl.get()] = {time(nullptr), -1, -1};
 
     return true;
 }
@@ -2140,9 +2150,8 @@ bool S3fsCurl::DestroyCurlHandleHasLock(bool restore_pool, bool clear_internal_d
     }
 
     if(hCurl){
-        S3fsCurl::curl_progress.erase(hCurl);
-        sCurlPool->ReturnHandler(hCurl, restore_pool);
-        hCurl = nullptr;
+        S3fsCurl::curl_progress.erase(hCurl.get());
+        sCurlPool->ReturnHandler(std::move(hCurl), restore_pool);
     }else{
         return false;
     }
@@ -2540,7 +2549,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 {
     if(S3fsLog::IsS3fsLogDbg()){
         char* ptr_url = nullptr;
-        curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL , &ptr_url);
+        curl_easy_getinfo(hCurl, CURLINFO_EFFECTIVE_URL, &ptr_url);
         S3FS_PRN_DBG("connecting to URL %s", SAFESTRPTR(ptr_url));
     }
 
@@ -2563,7 +2572,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         }
 
         // Requests
-        curlCode = curl_easy_perform(hCurl);
+        curlCode = curl_easy_perform(hCurl.get());
 
         // Check result
         switch(curlCode){
@@ -2691,7 +2700,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 sleep(4);
                 {
                     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
-                    S3fsCurl::curl_progress[hCurl] = {time(nullptr), -1, -1};
+                    S3fsCurl::curl_progress[hCurl.get()] = {time(nullptr), -1, -1};
                 }
                 break; 
 
