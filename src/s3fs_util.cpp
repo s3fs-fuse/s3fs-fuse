@@ -169,16 +169,6 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 //
 static std::mutex basename_lock;
 
-bool init_basename_lock()
-{
-    return true;
-}
-
-bool destroy_basename_lock()
-{
-    return true;
-}
-
 std::string mydirname(const std::string& path)
 {
     const std::lock_guard<std::mutex> lock(basename_lock);
