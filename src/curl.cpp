@@ -709,6 +709,11 @@ int S3fsCurl::SetRetries(int count)
     return old;
 }
 
+int S3fsCurl::GetRetries()
+{
+    return S3fsCurl::retries;
+}
+
 bool S3fsCurl::SetPublicBucket(bool flag)
 {
     bool old = S3fsCurl::is_public_bucket;
@@ -2132,8 +2137,6 @@ bool S3fsCurl::ClearInternalData()
     //
     type        = REQTYPE::UNSET;
     path        = "";
-    base_path   = "";
-    saved_path  = "";
     url         = "";
     op          = "";
     query_string= "";
@@ -2144,7 +2147,6 @@ bool S3fsCurl::ClearInternalData()
     responseHeaders.clear();
     bodydata.clear();
     headdata.clear();
-    LastResponseCode     = S3FSCURL_RESPONSECODE_NOTSET;
     postdata             = nullptr;
     postdata_remaining   = 0;
     retry_count          = 0;
@@ -3306,14 +3308,12 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, b
 
 //
 // tpath :      target path for head request
-// bpath :      saved into base_path
-// savedpath :  saved into saved_path
 // ssekey_pos : -1    means "not" SSE-C type
 //              0 - X means SSE-C type and position for SSE-C key(0 is latest key)
 //
-bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* savedpath, size_t ssekey_pos)
+bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
 {
-    S3FS_PRN_INFO3("[tpath=%s][bpath=%s][save=%s][sseckeypos=%zu]", SAFESTRPTR(tpath), SAFESTRPTR(bpath), SAFESTRPTR(savedpath), ssekey_pos);
+    S3FS_PRN_INFO3("[tpath=%s][sseckeypos=%zu]", SAFESTRPTR(tpath), ssekey_pos);
 
     if(!tpath){
         return false;
@@ -3325,8 +3325,6 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, const char* bpath, const char* 
     // libcurl 7.17 does deep copy of url, deep copy "stable" url
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
-    base_path       = SAFESTRPTR(bpath);
-    saved_path      = SAFESTRPTR(savedpath);
     requestHeaders  = nullptr;
     responseHeaders.clear();
 
@@ -3362,7 +3360,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
             if(!DestroyCurlHandle()){
                 break;
             }
-            if(!PreHeadRequest(tpath, nullptr, nullptr, pos)){
+            if(!PreHeadRequest(tpath, pos)){
                 break;
             }
             if(!fpLazySetup || !fpLazySetup(this)){

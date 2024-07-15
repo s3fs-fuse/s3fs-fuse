@@ -126,8 +126,6 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
-static bool multi_head_callback(S3fsCurl* s3fscurl, void* param);
-static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
@@ -207,66 +205,6 @@ static int s3fs_removexattr(const char* path, const char* name);
 // [NOTE]
 // The flag is accessed from child threads, so std::atomic is used for exclusive control of flags.
 static std::atomic<bool> has_mp_stat;
-
-//
-// A synchronous class that calls the fuse_fill_dir_t function that processes the readdir data
-//
-class SyncFiller
-{
-    private:
-        mutable std::mutex      filler_lock;
-        void*                   filler_buff;
-        fuse_fill_dir_t         filler_func;
-        std::set<std::string>   filled;
-
-    public:
-        explicit SyncFiller(void* buff = nullptr, fuse_fill_dir_t filler = nullptr);
-        ~SyncFiller() = default;
-        SyncFiller(const SyncFiller&) = delete;
-        SyncFiller(SyncFiller&&) = delete;
-        SyncFiller& operator=(const SyncFiller&) = delete;
-        SyncFiller& operator=(SyncFiller&&) = delete;
-
-        int Fill(const char *name, const struct stat *stbuf, off_t off);
-        int SufficiencyFill(const std::vector<std::string>& pathlist);
-};
-
-SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : filler_buff(buff), filler_func(filler)
-{
-    if(!filler_buff || !filler_func){
-        S3FS_PRN_CRIT("Internal error: SyncFiller constructor parameter is critical value.");
-        abort();
-    }
-}
-
-//
-// See. prototype fuse_fill_dir_t in fuse.h
-//
-int SyncFiller::Fill(const char *name, const struct stat *stbuf, off_t off)
-{
-    const std::lock_guard<std::mutex> lock(filler_lock);
-
-    int result = 0;
-    if(filled.insert(name).second){
-        result = filler_func(filler_buff, name, stbuf, off);
-    }
-    return result;
-}
-
-int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
-{
-    const std::lock_guard<std::mutex> lock(filler_lock);
-
-    int result = 0;
-    for(auto it = pathlist.cbegin(); it != pathlist.cend(); ++it) {
-        if(filled.insert(*it).second){
-            if(0 != filler_func(filler_buff, it->c_str(), nullptr, 0)){
-                result = 1;
-            }
-        }
-    }
-    return result;
-}
 
 //-------------------------------------------------------------------
 // Functions
@@ -627,9 +565,9 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // [NOTE]
     // If the file is listed but not allowed access, put it in
     // the positive cache instead of the negative cache.
-    // 
+    //
     // When mount points, the following error does not occur.
-    // 
+    //
     if(0 != result && -EPERM != result){
         // finally, "path" object did not find. Add no object cache.
         strpath = path;  // reset original
@@ -1682,7 +1620,7 @@ static int rename_directory(const char* from, const char* to)
     std::string newpath;                       // should be from name(not used)
     std::string nowcache;                      // now cache path(not used)
     dirtype DirType;
-    bool normdir; 
+    bool normdir;
     std::vector<mvnode> mvnodes;
     struct stat stbuf;
     int result;
@@ -1713,7 +1651,7 @@ static int rename_directory(const char* from, const char* to)
     // (CommonPrefixes is empty, but all object is listed in Key.)
     if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
         S3FS_PRN_ERR("list_bucket returns error.");
-        return result; 
+        return result;
     }
     head.GetNameList(headlist);                                             // get name without "/".
     StatCache::getStatCacheData()->GetNotruncateCache(basepath, headlist);  // Add notruncate file name from stat cache
@@ -1748,7 +1686,7 @@ static int rename_directory(const char* from, const char* to)
             is_dir  = false;
             normdir = false;
         }
-        
+
         // push this one onto the stack
         mvnodes.emplace_back(from_name, to_name, is_dir, normdir);
     }
@@ -2091,7 +2029,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
-  
+
     return result;
 }
 
@@ -2305,7 +2243,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // Change owner
         ent->SetUId(uid);
         ent->SetGId(gid);
-  
+
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
@@ -2314,7 +2252,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         StatCache::getStatCacheData()->DelStat(nowcache);
     }
     S3FS_MALLOCTRIM(0);
-  
+
     return result;
 }
 
@@ -3148,7 +3086,6 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
-// [TODO]
 // This function's argument(s3fscurl) will be checked and changed after removing S3fsMultiCurl
 //
 // cppcheck-suppress unmatchedSuppression
@@ -3256,33 +3193,23 @@ static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl)
 
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
-    // [TODO]
-    // This will be checked and changed after removing S3fsMultiCurl
-    //
-    S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest(), true);      // [NOTE] run all requests to completion even if some requests fail.
-    s3obj_list_t  headlist;
-    int           result = 0;
-
-    S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
+    S3FS_PRN_INFO1("[path=%s][head=<%s>][filler=%p]", path, head.IsEmpty() ? "empty" : "not empty", filler);
 
     // Make base path list.
+    s3obj_list_t  headlist;
     head.GetNameList(headlist, true, false);                                        // get name with "/".
     StatCache::getStatCacheData()->GetNotruncateCache(std::string(path), headlist); // Add notruncate file name from stat cache
 
-    // Initialize S3fsMultiCurl
-    curlmulti.SetSuccessCallback(multi_head_callback);
-    curlmulti.SetRetryCallback(multi_head_retry_callback);
-
-    // Success Callback function parameter(SyncFiller object)
+    // Initialize SyncFiller object
     SyncFiller syncfiller(buf, filler);
-    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&syncfiller));
 
-    // Not found Callback function parameter
-    struct multi_head_notfound_callback_param notfound_param;
-    if(support_compat_dir){
-        curlmulti.SetNotFoundCallback(multi_head_notfound_callback);
-        curlmulti.SetNotFoundCallbackParam(reinterpret_cast<void*>(&notfound_param));
-    }
+    // common variables
+    Semaphore    multi_head_sem(0);
+    int          req_count  = 0;
+    int          req_result = 0;
+    int          retrycount = 0;
+    std::mutex   thparam_lock;
+    s3obj_list_t notfound_list;
 
     // Make single head request(with max).
     for(auto iter = headlist.cbegin(); headlist.cend() != iter; ++iter){
@@ -3298,37 +3225,44 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             if(use_wtf8){
                 bpath = s3fs_wtf8_decode(bpath);
             }
-            syncfiller.Fill(bpath.c_str(), &st, 0);
+            syncfiller.Fill(bpath, &st, 0);
             continue;
         }
 
-        // First check for directory, start checking "not SSE-C".
-        // If checking failed, retry to check with "SSE-C" by retry callback func when SSE-C mode.
-        std::unique_ptr<S3fsCurl> s3fscurl(new S3fsCurl());
-        if(!s3fscurl->PreHeadRequest(disppath, disppath, disppath)){  // target path = cache key path.(ex "dir/")
-            S3FS_PRN_WARN("Could not make curl object for head request(%s).", disppath.c_str());
-            continue;
-        }
+        // parameter for thread worker
+        auto* thargs = new multi_head_req_thparam;    // free in multi_head_req_threadworker
+        thargs->psyncfiller    = &syncfiller;
+        thargs->pthparam_lock  = &thparam_lock;                         // for pretrycount and presult member
+        thargs->pretrycount    = &retrycount;
+        thargs->pnotfound_list = &notfound_list;
+        thargs->use_wtf8       = use_wtf8;
+        thargs->path           = disppath;
+        thargs->presult        = &req_result;
 
-        if(!curlmulti.SetS3fsCurlObject(std::move(s3fscurl))){
-            S3FS_PRN_WARN("Could not make curl object into multi curl(%s).", disppath.c_str());
-            continue;
+        // make parameter for thread pool
+        thpoolman_param  ppoolparam;
+        ppoolparam.args  = thargs;
+        ppoolparam.psem  = &multi_head_sem;
+        ppoolparam.pfunc = multi_head_req_threadworker;
+
+        // setup instruction
+        if(!ThreadPoolMan::Instruct(ppoolparam)){
+            S3FS_PRN_ERR("failed setup instruction for one header request.");
+            delete thargs;
+            return -EIO;
         }
+        ++req_count;
     }
-    headlist.clear();
 
-    // Multi request
-    if(0 != (result = curlmulti.Request())){
-        // If result is -EIO, it is something error occurred.
-        // This case includes that the object is encrypting(SSE) and s3fs does not have keys.
-        // So s3fs set result to 0 in order to continue the process.
-        if(-EIO == result){
-            S3FS_PRN_WARN("error occurred in multi request(errno=%d), but continue...", result);
-            result = 0;
-        }else{
-            S3FS_PRN_ERR("error occurred in multi request(errno=%d).", result);
-            return result;
-        }
+    // wait for finish all requests
+    while(req_count > 0){
+        multi_head_sem.acquire();
+        --req_count;
+    }
+
+    // print messages
+    if(0 != req_result){
+        S3FS_PRN_DBG("Some head requests returned error, first error is %d.", req_result);
     }
 
     // [NOTE]
@@ -3338,7 +3272,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     if(!support_compat_dir){
         syncfiller.SufficiencyFill(head.GetCommonPrefixes());
     }
-    if(support_compat_dir && !notfound_param.notfound_list.empty()){      // [NOTE] not need to lock to access this here.
+    if(support_compat_dir && !notfound_list.empty()){      // [NOTE] not need to lock to access this here.
         // dummy header
         mode_t dirmask = umask(0);      // macos does not have getumask()
         umask(dirmask);
@@ -3352,7 +3286,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         dummy_header["x-amz-meta-ctime"] = "0";
         dummy_header["x-amz-meta-mtime"] = "0";
 
-        for(auto reiter = notfound_param.notfound_list.cbegin(); reiter != notfound_param.notfound_list.cend(); ++reiter){
+        for(auto reiter = notfound_list.cbegin(); reiter != notfound_list.cend(); ++reiter){
             int dir_result;
             const std::string& dirpath = *reiter;
             if(-ENOTEMPTY == (dir_result = directory_empty(dirpath.c_str()))){
@@ -3361,17 +3295,17 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
                 // Add stat cache
                 if(StatCache::getStatCacheData()->AddStat(dirpath, dummy_header, true)){    // set forcedir=true
                     // Get stats from stats cache(for converting from meta), and fill
-                    std::string base_path = mybasename(dirpath);
+                    std::string bpath = mybasename(dirpath);
                     if(use_wtf8){
-                        base_path = s3fs_wtf8_decode(base_path);
+                        bpath = s3fs_wtf8_decode(bpath);
                     }
 
                     struct stat st;
                     if(StatCache::getStatCacheData()->GetStat(dirpath, &st)){
-                        syncfiller.Fill(base_path.c_str(), &st, 0);
+                        syncfiller.Fill(bpath, &st, 0);
                     }else{
                         S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
-                        syncfiller.Fill(base_path.c_str(), nullptr, 0);
+                        syncfiller.Fill(bpath, nullptr, 0);
                     }
                 }else{
                     S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
@@ -3381,8 +3315,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             }
         }
     }
-
-    return result;
+    return 0;
 }
 
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi)
@@ -4222,10 +4155,10 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     return 0;
 }
-   
+
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
-// There's no way to pass an exit status to the high-level event loop API, so 
+// There's no way to pass an exit status to the high-level event loop API, so
 // this function stores the exit value in a global for main()
 static void s3fs_exit_fuseloop(int exit_status)
 {
@@ -4737,10 +4670,10 @@ static int print_umount_message(const std::string& mp, bool force)
 }
 
 // This is repeatedly called by the fuse option parser
-// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
+// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
 //
-// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
+// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name
 //  or the mountpoint. The bucket name will always come before the mountpoint
 //
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
@@ -5541,7 +5474,7 @@ int main(int argc, char* argv[])
 {
     int ch;
     int fuse_res;
-    int option_index = 0; 
+    int option_index = 0;
     struct fuse_operations s3fs_oper{};
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
@@ -5658,7 +5591,7 @@ int main(int argc, char* argv[])
     // call of my_fuse_opt_proc function is completed. Therefore,
     // the mime type is loaded just after calling the my_fuse_opt_proc
     // function.
-    // 
+    //
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
@@ -5756,11 +5689,11 @@ int main(int argc, char* argv[])
     // our own certificate verification logic.
     // For now, this will be unsupported unless we get a request for it to
     // be supported. In that case, we have a couple of options:
-    // - implement a command line option that bypasses the verify host 
+    // - implement a command line option that bypasses the verify host
     //   but doesn't bypass verifying the certificate
     // - write our own host verification (this might be complex)
     // See issue #128strncasecmp
-    /* 
+    /*
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){
