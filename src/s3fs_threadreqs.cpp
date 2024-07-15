@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <sstream>
+
 #include "common.h"
 #include "s3fs.h"
 #include "s3fs_threadreqs.h"
@@ -354,6 +356,123 @@ void* get_object_req_threadworker(void* arg)
     return reinterpret_cast<void*>(pthparam->result);
 }
 
+//
+// Thread Worker function for multipart put head request
+//
+void* multipart_put_head_req_threadworker(void* arg)
+{
+    auto* pthparam = static_cast<multipart_put_head_req_thparam*>(arg);
+    if(!pthparam || !pthparam->ppartdata || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
+        return reinterpret_cast<void*>(-EIO);
+    }
+
+    // Check retry max count and print debug message
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+        S3FS_PRN_INFO3("Multipart Put Head Request [from=%s][to=%s][upload_id=%s][part_number=%d][filepart=%p][thparam_lock=%p][retrycount=%d][from=%s][to=%s]", pthparam->from.c_str(), pthparam->to.c_str(), pthparam->upload_id.c_str(), pthparam->part_number, pthparam->ppartdata, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->from.c_str(), pthparam->to.c_str());
+
+        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+            S3FS_PRN_ERR("Multipart Put Head request(%s->%s) reached the maximum number of retry count(%d).", pthparam->from.c_str(), pthparam->to.c_str(), *(pthparam->pretrycount));
+            return reinterpret_cast<void*>(-EIO);
+        }
+    }
+
+    S3fsCurl  s3fscurl(true);
+    int       result = 0;
+    while(true){
+        // Request
+        result = s3fscurl.MultipartPutHeadRequest(pthparam->from, pthparam->to, pthparam->part_number, pthparam->upload_id, pthparam->meta);
+
+        // Check result
+        bool     isResetOffset= true;
+        CURLcode curlCode     = s3fscurl.GetCurlCode();
+        long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
+        s3fscurl.GetResponseCode(responseCode, false);
+
+        if(CURLE_OK == curlCode){
+            if(responseCode < 400){
+                // add into stat cache
+                {
+                    const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+                    std::string etag;
+                    pthparam->ppartdata->uploaded    = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag", etag);
+                    pthparam->ppartdata->petag->etag = peeloff(etag);
+                }
+                result = 0;
+                break;
+
+            }else if(responseCode == 400){
+                // as possibly in multipart
+                S3FS_PRN_WARN("Put Head Request(%s->%s) got 400 response code.", pthparam->from.c_str(), pthparam->to.c_str());
+
+            }else if(responseCode == 404){
+                // set path to not found list
+                S3FS_PRN_WARN("Put Head Request(%s->%s) got 404 response code.", pthparam->from.c_str(), pthparam->to.c_str());
+                break;
+
+            }else if(responseCode == 500){
+                // case of all other result, do retry.(11/13/2013)
+                // because it was found that s3fs got 500 error from S3, but could success
+                // to retry it.
+                S3FS_PRN_WARN("Put Head Request(%s->%s) got 500 response code.", pthparam->from.c_str(), pthparam->to.c_str());
+
+            // cppcheck-suppress unmatchedSuppression
+            // cppcheck-suppress knownConditionTrueFalse
+            }else if(responseCode == S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET){
+                // This is a case where the processing result has not yet been updated (should be very rare).
+                S3FS_PRN_WARN("Put Head Request(%s->%s) could not get any response code.", pthparam->from.c_str(), pthparam->to.c_str());
+
+            }else{  // including S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR
+                // Retry in other case.
+                S3FS_PRN_WARN("Put Head Request(%s->%s) got fatal response code.", pthparam->from.c_str(), pthparam->to.c_str());
+            }
+
+        }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
+            S3FS_PRN_ERR("Put Head Request(%s->%s) is timeouted.", pthparam->from.c_str(), pthparam->to.c_str());
+            isResetOffset= false;
+
+        }else if(CURLE_PARTIAL_FILE == curlCode){
+            S3FS_PRN_WARN("Put Head Request(%s->%s) is recieved data does not match the given size.", pthparam->from.c_str(), pthparam->to.c_str());
+            isResetOffset= false;
+
+        }else{
+            S3FS_PRN_WARN("Put Head Request(%s->%s) got the result code(%d: %s)", pthparam->from.c_str(), pthparam->to.c_str(), curlCode, curl_easy_strerror(curlCode));
+        }
+
+        // Check retry max count
+        {
+            const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+
+            ++(*(pthparam->pretrycount));
+            if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
+                S3FS_PRN_ERR("Put Head Request(%s->%s) reached the maximum number of retry count(%d).", pthparam->from.c_str(), pthparam->to.c_str(), *(pthparam->pretrycount));
+                if(0 == result){
+                    result = -EIO;
+                }
+                break;
+            }
+        }
+
+        // Setup for retry
+        if(isResetOffset){
+            S3fsCurl::ResetOffset(&s3fscurl);
+        }
+    }
+
+    // Set result code
+    {
+        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
+        if(0 == *(pthparam->presult) && 0 != result){
+            // keep first error
+            *(pthparam->presult) = result;
+        }
+    }
+
+    return reinterpret_cast<void*>(result);
+}
+
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
@@ -384,6 +503,36 @@ int head_request(const std::string& strpath, headers_t& header)
         return thargs.result;
     }
 
+    return 0;
+}
+
+//
+// Calls S3fsCurl::HeadRequest via multi_head_req_threadworker
+//
+int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, int& result, Semaphore& sem)
+{
+    // parameter for thread worker
+    auto* thargs           = new multi_head_req_thparam;    // free in multi_head_req_threadworker
+    thargs->path           = strpath;
+    thargs->psyncfiller    = &syncfiller;
+    thargs->pthparam_lock  = &thparam_lock;                         // for pretrycount and presult member
+    thargs->pretrycount    = &retrycount;
+    thargs->pnotfound_list = &notfound_list;
+    thargs->use_wtf8       = use_wtf8;
+    thargs->presult        = &result;
+
+    // make parameter for thread pool
+    thpoolman_param  ppoolparam;
+    ppoolparam.args  = thargs;
+    ppoolparam.psem  = &sem;
+    ppoolparam.pfunc = multi_head_req_threadworker;
+
+    // setup instruction
+    if(!ThreadPoolMan::Instruct(ppoolparam)){
+        S3FS_PRN_ERR("failed to setup Multi Head Request Thread Worker [path=%s]", strpath.c_str());
+        delete thargs;
+        return -EIO;
+    }
     return 0;
 }
 
@@ -630,6 +779,107 @@ int abort_multipart_upload_request(const std::string& path, const std::string& u
         S3FS_PRN_ERR("Abort Multipart Upload Request(path=%s) returns with error(%d)", path.c_str(), thargs.result);
         return thargs.result;
     }
+    return 0;
+}
+
+//
+// Calls S3fsCurl::MultipartPutHeadRequest via multipart_put_head_req_threadworker
+//
+int multipart_put_head_request(const std::string& strfrom, const std::string& strto, off_t size, const headers_t& meta)
+{
+    S3FS_PRN_INFO3("[from=%s][to=%s]", strfrom.c_str(), strto.c_str());
+
+    bool         is_rename = (strfrom != strto);
+    int          result;
+    std::string  upload_id;
+    off_t        chunk;
+    off_t        bytes_remaining;
+    etaglist_t   list;
+
+    // Prepare additional header information for rename
+    std::string contenttype;
+    std::string srcresource;
+    if(is_rename){
+        std::string srcurl;                                                             // this is not used
+        MakeUrlResource(get_realpath(strfrom.c_str()).c_str(), srcresource, srcurl);
+        contenttype = S3fsCurl::LookupMimeType(strto);
+    }
+
+    // get upload_id
+    if(0 != (result = pre_multipart_upload_request(strto, meta, upload_id))){
+        return result;
+    }
+
+    // common variables
+    Semaphore    multi_head_sem(0);
+    std::mutex   thparam_lock;
+    filepart     partdata;
+    int          req_count  = 0;
+    int          retrycount = 0;
+    int          req_result = 0;
+
+    for(bytes_remaining = size; 0 < bytes_remaining; bytes_remaining -= chunk){
+        chunk = bytes_remaining > S3fsCurl::GetMultipartCopySize() ? S3fsCurl::GetMultipartCopySize() : bytes_remaining;
+
+        partdata.add_etag_list(list);
+
+        // parameter for thread worker
+        auto* thargs = new multipart_put_head_req_thparam;    // free in multipart_put_head_req_threadworker
+        thargs->from          = strfrom;
+        thargs->to            = strto;
+        thargs->upload_id     = upload_id;
+        thargs->part_number   = partdata.get_part_number();
+        thargs->meta          = meta;
+        thargs->pthparam_lock = &thparam_lock;
+        thargs->ppartdata     = &partdata;
+        thargs->pretrycount   = &retrycount;
+        thargs->presult       = &req_result;
+
+        std::ostringstream strrange;
+        strrange << "bytes=" << (size - bytes_remaining) << "-" << (size - bytes_remaining + chunk - 1);
+        thargs->meta["x-amz-copy-source-range"] = strrange.str();
+
+        if(is_rename){
+            thargs->meta["Content-Type"]        = contenttype;
+            thargs->meta["x-amz-copy-source"]   = srcresource;
+        }
+
+        // make parameter for thread pool
+        thpoolman_param  ppoolparam;
+        ppoolparam.args  = thargs;
+        ppoolparam.psem  = &multi_head_sem;
+        ppoolparam.pfunc = multipart_put_head_req_threadworker;
+
+        // setup instruction
+        if(!ThreadPoolMan::Instruct(ppoolparam)){
+            S3FS_PRN_ERR("failed setup instruction for one header request.");
+            delete thargs;
+            return -EIO;
+        }
+        ++req_count;
+    }
+
+    // wait for finish all requests
+    while(req_count > 0){
+        multi_head_sem.acquire();
+        --req_count;
+    }
+
+    // check result
+    if(0 != req_result){
+        S3FS_PRN_ERR("error occurred in multi request(errno=%d).", req_result);
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(strto, upload_id))){
+            S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+        }
+        return req_result;
+    }
+
+    // completion process
+    if(0 != (result = complete_multipart_upload_request(strto, upload_id, list))){
+        return result;
+    }
+
     return 0;
 }
 
