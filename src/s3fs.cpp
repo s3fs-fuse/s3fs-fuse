@@ -5620,21 +5620,6 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    // mutex for xml
-    if(!init_parser_xml_lock()){
-        S3FS_PRN_EXIT("could not initialize mutex for xml parser.");
-        s3fs_destroy_global_ssl();
-        exit(EXIT_FAILURE);
-    }
-
-    // mutex for basename/dirname
-    if(!init_basename_lock()){
-        S3FS_PRN_EXIT("could not initialize mutex for basename/dirname.");
-        s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        exit(EXIT_FAILURE);
-    }
-
     // init curl (without mime types)
     //
     // [NOTE]
@@ -5654,8 +5639,6 @@ int main(int argc, char* argv[])
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5666,8 +5649,6 @@ int main(int argc, char* argv[])
     if(0 != fuse_opt_parse(&custom_args, nullptr, nullptr, my_fuse_opt_proc)){
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5683,16 +5664,12 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("use_sse option could not be specified with storage class reduced_redundancy.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
     if(!S3fsCurl::FinalCheckSse()){
         S3FS_PRN_EXIT("something wrong about SSE options.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5711,8 +5688,6 @@ int main(int argc, char* argv[])
     if(!ps3fscred->CheckAllParams()){
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5726,8 +5701,6 @@ int main(int argc, char* argv[])
             show_usage();
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            destroy_basename_lock();
             exit(EXIT_FAILURE);
         }
     }
@@ -5737,8 +5710,6 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("temporary directory doesn't exists.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5747,8 +5718,6 @@ int main(int argc, char* argv[])
         S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(EXIT_FAILURE);
     }
 
@@ -5795,7 +5764,6 @@ int main(int argc, char* argv[])
                 S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
                 S3fsCurl::DestroyS3fsCurl();
                 s3fs_destroy_global_ssl();
-                destroy_parser_xml_lock();
                 exit(EXIT_FAILURE);
             }
         }
@@ -5807,8 +5775,6 @@ int main(int argc, char* argv[])
 
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
-        destroy_parser_xml_lock();
-        destroy_basename_lock();
         exit(exitcode);
     }
 
@@ -5827,8 +5793,6 @@ int main(int argc, char* argv[])
         if(!FdManager::IsSafeDiskSpaceWithLog(nullptr, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
             S3fsCurl::DestroyS3fsCurl();
             s3fs_destroy_global_ssl();
-            destroy_parser_xml_lock();
-            destroy_basename_lock();
             exit(EXIT_FAILURE);
         }
     }
@@ -5886,8 +5850,6 @@ int main(int argc, char* argv[])
         S3FS_PRN_WARN("Could not release curl library.");
     }
     s3fs_destroy_global_ssl();
-    destroy_parser_xml_lock();
-    destroy_basename_lock();
 
     // cleanup xml2
     xmlCleanupParser();

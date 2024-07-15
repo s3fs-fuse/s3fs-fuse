@@ -45,8 +45,6 @@ void init_sysconf_vars();
 std::string get_username(uid_t uid);
 int is_uid_include_group(uid_t uid, gid_t gid);
 
-bool init_basename_lock();
-bool destroy_basename_lock();
 std::string mydirname(const char* path);
 std::string mydirname(const std::string& path);
 std::string mybasename(const char* path);
