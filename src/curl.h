@@ -277,10 +277,10 @@ class S3fsCurl
         }
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
-        int MultipartUploadPartSetup(const char* tpath, int part_num, const std::string& upload_id);
-        int CopyMultipartUploadSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
-        bool MultipartUploadPartComplete();
-        bool CopyMultipartUploadComplete();
+        int MultipartUploadContentPartSetup(const char* tpath, int part_num, const std::string& upload_id);
+        int MultipartUploadCopyPartSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
+        bool MultipartUploadContentPartComplete();
+        bool MultipartUploadCopyPartComplete();
         int MapPutErrorResponse(int result);
 
     public:
@@ -289,7 +289,6 @@ class S3fsCurl
         static bool InitCredentialObject(S3fsCred* pcredobj);
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
-        static std::unique_ptr<S3fsCurl> CreateParallelS3fsCurl(const char* tpath, int fd, off_t start, off_t size, int part_num, bool is_copy, etagpair* petag, const std::string& upload_id, int& result);
         static int ParallelMultipartUploadRequest(const char* tpath, const headers_t& meta, int fd);
         static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
 
@@ -377,13 +376,13 @@ class S3fsCurl
         int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
         int ListBucketRequest(const char* tpath, const char* query);
         int PreMultipartUploadRequest(const char* tpath, const headers_t& meta, std::string& upload_id);
+        int MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
         int MultipartUploadComplete(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
-        int MultipartUploadPartRequest(const char* tpath, int part_num, const std::string& upload_id);
-        bool MixMultipartUploadComplete();
+        bool MultipartUploadPartComplete();
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
         int MultipartPutHeadRequest(const std::string& from, const std::string& to, int part_number, const std::string& upload_id, const headers_t& meta);
-        int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etagpair* petagpair);
+        int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
 
         // methods(variables)
         const std::string& GetPath() const { return path; }

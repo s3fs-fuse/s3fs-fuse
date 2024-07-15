@@ -41,91 +41,9 @@
 #include "s3fs_threadreqs.h"
 
 //------------------------------------------------
-// Structure of parameters to pass to thread
-//------------------------------------------------
-// [NOTE]
-// The processing related to this is currently temporarily implemented
-// in this file, but will be moved to a separate file at a later.
-//
-struct pseudofdinfo_mpupload_thparam
-{
-    PseudoFdInfo* ppseudofdinfo = nullptr;
-    std::string   path;
-    std::string   upload_id;
-    int           upload_fd = -1;
-    off_t         start = 0;
-    off_t         size = 0;
-    bool          is_copy = false;
-    int           part_num = -1;
-    etagpair*     petag = nullptr;
-};
-
-//------------------------------------------------
-// PseudoFdInfo class methods
-//------------------------------------------------
-//
-// Thread Worker function for uploading
-//
-void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
-{
-    std::unique_ptr<pseudofdinfo_mpupload_thparam> pthparam(static_cast<pseudofdinfo_mpupload_thparam*>(arg));
-    if(!pthparam || !(pthparam->ppseudofdinfo)){
-        return reinterpret_cast<void*>(-EIO);
-    }
-    S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
-
-    int       result;
-    {
-        const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
-
-        if(0 != (result = pthparam->ppseudofdinfo->last_result)){
-            S3FS_PRN_DBG("Already occurred error, thus this thread worker is exiting.");
-
-            if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){    // result will be overwritten with the same value.
-                result = -EIO;
-            }
-            return reinterpret_cast<void*>(result);
-        }
-    }
-
-    // setup and make curl object
-    std::unique_ptr<S3fsCurl> s3fscurl(S3fsCurl::CreateParallelS3fsCurl(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->is_copy, pthparam->petag, pthparam->upload_id, result));
-    if(nullptr == s3fscurl){
-        S3FS_PRN_ERR("failed creating s3fs curl object for uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
-
-        // set result for exiting
-        const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
-        if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
-            result = -EIO;
-        }
-        return reinterpret_cast<void*>(result);
-    }
-
-    // Send request and get result
-    if(0 == (result = s3fscurl->RequestPerform())){
-        S3FS_PRN_DBG("succeed uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
-        if(!s3fscurl->MixMultipartUploadComplete()){
-            S3FS_PRN_ERR("failed completion uploading [path=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
-            result = -EIO;
-        }
-    }else{
-        S3FS_PRN_ERR("failed uploading with error(%d) [path=%s][start=%lld][size=%lld][part=%d]", result, pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
-    }
-    s3fscurl->DestroyCurlHandle(false);
-
-    // set result
-    const std::lock_guard<std::mutex> lock(pthparam->ppseudofdinfo->upload_list_lock);
-    if(!pthparam->ppseudofdinfo->CompleteInstruction(result)){
-        S3FS_PRN_WARN("This thread worker is about to end, so it doesn't return an EIO here and runs to the end.");
-    }
-
-    return reinterpret_cast<void*>(result);
-}
-
-//------------------------------------------------
 // PseudoFdInfo methods
 //------------------------------------------------
-PseudoFdInfo::PseudoFdInfo(int fd, int open_flags) : pseudo_fd(-1), physical_fd(fd), flags(0), upload_fd(-1), instruct_count(0), completed_count(0), last_result(0), uploaded_sem(0)
+PseudoFdInfo::PseudoFdInfo(int fd, int open_flags) : pseudo_fd(-1), physical_fd(fd), flags(0), upload_fd(-1), instruct_count(0), last_result(0), uploaded_sem(0)
 {
     if(-1 != physical_fd){
         pseudo_fd = PseudoFdManager::Get();
@@ -272,7 +190,6 @@ bool PseudoFdInfo::ResetUploadInfo()
     upload_id.clear();
     upload_list.clear();
     instruct_count  = 0;
-    completed_count = 0;
     last_result     = 0;
 
     return true;
@@ -304,22 +221,6 @@ void PseudoFdInfo::IncreaseInstructionCount()
 {
     const std::lock_guard<std::mutex> lock(upload_list_lock);
     ++instruct_count;
-}
-
-bool PseudoFdInfo::CompleteInstruction(int result)
-{
-    if(0 != result){
-        last_result = result;
-    }
-
-    if(0 >= instruct_count){
-        S3FS_PRN_ERR("Internal error: instruct_count caused an underflow.");
-        return false;
-    }
-    --instruct_count;
-    ++completed_count;
-
-    return true;
 }
 
 bool PseudoFdInfo::GetUploadInfo(std::string& id, int& fd) const
@@ -438,10 +339,6 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
     return true;
 }
 
-// [NOTE]
-// This method only launches the upload thread.
-// Check the maximum number of threads before calling.
-//
 bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy)
 {
     //S3FS_PRN_DBG("[path=%s][mplist(%zu)]", SAFESTRPTR(path), mplist.size());
@@ -461,39 +358,24 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
         return false;
     }
 
+    std::string strpath = SAFESTRPTR(path);
+
     for(auto iter = mplist.cbegin(); iter != mplist.cend(); ++iter){
         // Insert upload part
         etagpair* petag = nullptr;
         if(!InsertUploadPart(iter->start, iter->size, iter->part_num, is_copy, &petag)){
-            S3FS_PRN_ERR("Failed to insert insert upload part(path=%s, start=%lld, size=%lld, part=%d, copy=%s) to mplist", SAFESTRPTR(path), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
+            S3FS_PRN_ERR("Failed to insert Multipart Upload Part to mplist [path=%s][start=%lld][size=%lld][part_num=%d][is_copy=%s]", strpath.c_str(), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
             return false;
         }
 
-        // make parameter for my thread
-        auto* thargs = new pseudofdinfo_mpupload_thparam;
-        thargs->ppseudofdinfo        = this;
-        thargs->path                 = SAFESTRPTR(path);
-        thargs->upload_id            = tmp_upload_id;
-        thargs->upload_fd            = tmp_upload_fd;
-        thargs->start                = iter->start;
-        thargs->size                 = iter->size;
-        thargs->is_copy              = is_copy;
-        thargs->part_num             = iter->part_num;
-        thargs->petag                = petag;
-
-        // make parameter for thread pool
-        thpoolman_param ppoolparam;
-        ppoolparam.args             = thargs;
-        ppoolparam.psem             = &uploaded_sem;
-        ppoolparam.pfunc            = PseudoFdInfo::MultipartUploadThreadWorker;
-
-        // setup instruction
-        if(!ThreadPoolMan::Instruct(ppoolparam)){
-            S3FS_PRN_ERR("failed setup instruction for uploading.");
-            delete thargs;
+        // setup instruction and request on another thread
+        int result;
+        if(0 != (result = multipart_upload_part_request(strpath, tmp_upload_fd, iter->start, iter->size, iter->part_num, tmp_upload_id, petag, is_copy, &uploaded_sem, &upload_list_lock, &last_result))){
+            S3FS_PRN_ERR("failed setup instruction for Multipart Upload Part Request by erro(%d) [path=%s][start=%lld][size=%lld][part_num=%d][is_copy=%s]", result, strpath.c_str(), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
             return false;
         }
 
+        // Count up the number of internally managed threads
         IncreaseInstructionCount();
     }
     return true;
@@ -525,22 +407,23 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
 // [NOTE]
 // If the request is successful, initialize upload_id.
 //
-bool PseudoFdInfo::PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta)
+int PseudoFdInfo::PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta)
 {
     // get upload_id
     std::string new_upload_id;
-    if(0 != pre_multipart_upload_request(strpath, meta, new_upload_id)){
-        return false;
+    int         result;
+    if(0 != (result = pre_multipart_upload_request(strpath, meta, new_upload_id))){
+        return result;
     }
 
     // reset upload_id
     if(!RowInitialUploadInfo(new_upload_id, false/* not need to cancel */)){
         S3FS_PRN_ERR("failed to setup multipart upload(set upload id to object)");
-        return false;
+        return -EIO;
     }
     S3FS_PRN_DBG("succeed to setup multipart upload(set upload id to object)");
 
-    return true;
+    return 0;
 }
 
 //
@@ -626,8 +509,9 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     //
     if(!IsUploading()){
         std::string strpath = SAFESTRPTR(path);
-        if(!PreMultipartUploadRequest(strpath, meta)){
-            return -EIO;
+        int         result;
+        if(0 != (result = PreMultipartUploadRequest(strpath, meta))){
+            return result;
         }
     }
 
@@ -669,7 +553,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
     bool is_loop = true;
     {
         const std::lock_guard<std::mutex> lock(upload_list_lock);
-        if(0 == instruct_count && 0 == completed_count){
+        if(0 == instruct_count){
             result  = last_result;
             is_loop = false;
         }
@@ -680,10 +564,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
         uploaded_sem.acquire();
         {
             const std::lock_guard<std::mutex> lock(upload_list_lock);
-            if(0 < completed_count){
-                --completed_count;
-            }
-            if(0 == instruct_count && 0 == completed_count){
+            if(0 == --instruct_count){
                 // break loop
                 result  = last_result;
                 is_loop = false;
@@ -699,7 +580,7 @@ bool PseudoFdInfo::CancelAllThreads()
     bool need_cancel = false;
     {
         const std::lock_guard<std::mutex> lock(upload_list_lock);
-        if(0 < instruct_count && 0 < completed_count){
+        if(0 < instruct_count){
             S3FS_PRN_INFO("The upload thread is running, so cancel them and wait for the end.");
             need_cancel = true;
             last_result = -ECANCELED;   // to stop thread running

@@ -80,7 +80,6 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
         static ino_t GetInode(int fd);
-        static void* MultipartUploadThreadWorker(void* arg);          // ([TODO] This is a temporary method is moved when S3fsMultiCurl is deprecated.)
 
         void Clear();
         ino_t GetInode() const REQUIRES(FdEntity::fdent_data_lock);

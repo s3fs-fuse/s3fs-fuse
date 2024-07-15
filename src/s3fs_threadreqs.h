@@ -125,6 +125,23 @@ struct pre_multipart_upload_req_thparam
 };
 
 //
+// Multipart Upload Part Request parameter structure for Thread Pool.
+//
+struct multipart_upload_part_req_thparam
+{
+    std::string   path;
+    std::string   upload_id;
+    int           upload_fd      = -1;
+    off_t         start          = 0;
+    off_t         size           = 0;
+    bool          is_copy        = false;
+    int           part_num       = -1;
+    std::mutex*   pthparam_lock  = nullptr;
+    etagpair*     petag          = nullptr;
+    int*          presult        = nullptr;
+};
+
+//
 // Complete Multipart Upload Request parameter structure for Thread Pool.
 //
 struct complete_multipart_upload_req_thparam
@@ -200,6 +217,7 @@ void* put_req_threadworker(void* arg);
 void* list_bucket_req_threadworker(void* arg);
 void* check_service_req_threadworker(void* arg);
 void* pre_multipart_upload_req_threadworker(void* arg);
+void* multipart_upload_part_req_threadworker(void* arg);
 void* complete_multipart_upload_threadworker(void* arg);
 void* abort_multipart_upload_req_threadworker(void* arg);
 void* multipart_put_head_req_threadworker(void* arg);
@@ -217,6 +235,8 @@ int put_request(const std::string& strpath, const headers_t& meta, int fd, bool 
 int list_bucket_request(const std::string& strpath, const std::string& query, std::string& responseBody);
 int check_service_request(const std::string& strpath, bool forceNoSSE, bool support_compat_dir, long& responseCode, std::string& responseBody);
 int pre_multipart_upload_request(const std::string& path, const headers_t& meta, std::string& upload_id);
+int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, Semaphore* psem, std::mutex* pthparam_lock, int* req_result);
+int await_multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
 int complete_multipart_upload_request(const std::string& path, const std::string& upload_id, const etaglist_t& parts);
 int abort_multipart_upload_request(const std::string& path, const std::string& upload_id);
 int multipart_put_head_request(const std::string& strfrom, const std::string& strto, off_t size, const headers_t& meta);
