@@ -36,7 +36,6 @@ s3fs_SOURCES = \
     metaheader.cpp \
     mpu_util.cpp \
     curl.cpp \
-    curl_handlerpool.cpp \
     curl_multi.cpp \
     curl_util.cpp \
     s3objlist.cpp \
