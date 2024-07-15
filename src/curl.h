@@ -34,7 +34,6 @@
 #include "common.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
-#include "psemaphore.h"
 #include "s3fs_util.h"
 #include "types.h"
 
@@ -97,10 +96,6 @@ typedef std::vector<sseckeymap_t>          sseckeylist_t;
 //
 class S3fsCurl
 {
-    // [TODO]
-    // If S3fsMultiCurl is discontinued, the following friends will be deleted.
-    friend class S3fsMultiCurl;
-
     private:
         enum class REQTYPE : int8_t {
             UNSET  = -1,
@@ -187,22 +182,14 @@ class S3fsCurl
         off_t                postdata_remaining;   // use by post method and read callback function.
         filepart             partdata;             // use by multipart upload/get object callback
         bool                 is_use_ahbe;          // additional header by extension
-        int                  retry_count;          // retry count for multipart ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
+        int                  retry_count;          // retry count, this is used only sleep time before retring
         std::unique_ptr<FILE, decltype(&s3fs_fclose)> b_infile = {nullptr, &s3fs_fclose};  // backup for retrying
         const unsigned char* b_postdata;           // backup for retrying
         off_t                b_postdata_remaining; // backup for retrying
         off_t                b_partdata_startpos;  // backup for retrying
         off_t                b_partdata_size;      // backup for retrying
-        size_t               b_ssekey_pos;         // backup for retrying
-        std::string          b_ssevalue;           // backup for retrying
-        sse_type_t           b_ssetype;            // backup for retrying
-        std::string          b_from;               // backup for retrying(for copy request) ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
-        headers_t            b_meta;               // backup for retrying(for copy request)
         std::string          op;                   // the HTTP verb of the request ("PUT", "GET", etc.)
         std::string          query_string;         // request query string
-        Semaphore            *sem;
-        std::mutex           *completed_tids_lock;                                         // ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
-        std::vector<std::thread::id> *completed_tids PT_GUARDED_BY(*completed_tids_lock);  // ([TODO] If S3fsMultiCurl is discontinued, this variable will be deleted.)
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
 
@@ -239,12 +226,6 @@ class S3fsCurl
         static size_t ReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
         static size_t UploadReadCallback(void *ptr, size_t size, size_t nmemb, void *userp);
         static size_t DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp);
-
-        static bool MultipartUploadPartCallback(S3fsCurl* s3fscurl, void* param);
-        static bool MixMultipartUploadCallback(S3fsCurl* s3fscurl, void* param);
-        static std::unique_ptr<S3fsCurl> MultipartUploadPartRetryCallback(S3fsCurl* s3fscurl);
-        static std::unique_ptr<S3fsCurl> CopyMultipartUploadRetryCallback(S3fsCurl* s3fscurl);
-        static std::unique_ptr<S3fsCurl> MixMultipartUploadRetryCallback(S3fsCurl* s3fscurl);
 
         // lazy functions for set curl options
         static bool MultipartUploadPartSetCurlOpts(S3fsCurl* s3fscurl);
@@ -289,8 +270,6 @@ class S3fsCurl
         static bool InitCredentialObject(S3fsCred* pcredobj);
         static bool InitMimeType(const std::string& strFile);
         static bool DestroyS3fsCurl();
-        static int ParallelMultipartUploadRequest(const char* tpath, const headers_t& meta, int fd);
-        static int ParallelMixMultipartUploadRequest(const char* tpath, headers_t& meta, int fd, const fdpage_list_t& mixuppages);
 
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);

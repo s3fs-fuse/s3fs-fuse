@@ -43,7 +43,6 @@
 #include "fdcache_auto.h"
 #include "fdcache_stat.h"
 #include "curl.h"
-#include "curl_multi.h"
 #include "curl_util.h"
 #include "s3objlist.h"
 #include "cache.h"
