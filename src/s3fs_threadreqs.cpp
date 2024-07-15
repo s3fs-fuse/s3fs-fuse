@@ -36,7 +36,7 @@
 //
 // Thread Worker function for head request
 //
-void* head_req_threadworker(void* arg)
+void* head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<head_req_thparam*>(arg);
     if(!pthparam || !pthparam->pmeta){
@@ -44,7 +44,8 @@ void* head_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Head Request [path=%s][pmeta=%p]", pthparam->path.c_str(), pthparam->pmeta);
 
-    S3fsCurl s3fscurl;
+    s3fscurl.SetUseAhbe(false);
+
     pthparam->result = s3fscurl.HeadRequest(pthparam->path.c_str(), *(pthparam->pmeta));
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -53,7 +54,7 @@ void* head_req_threadworker(void* arg)
 //
 // Thread Worker function for multi head request
 //
-void* multi_head_req_threadworker(void* arg)
+void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     std::unique_ptr<multi_head_req_thparam> pthparam(static_cast<multi_head_req_thparam*>(arg));
     if(!pthparam || !pthparam->psyncfiller || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->pnotfound_list || !pthparam->presult){
@@ -72,8 +73,9 @@ void* multi_head_req_threadworker(void* arg)
         }
     }
 
+    s3fscurl.SetUseAhbe(false);
+
     // loop for head request
-    S3fsCurl  s3fscurl;
     int       result = 0;
     headers_t meta;         // this value is not used
     while(true){
@@ -197,7 +199,7 @@ void* multi_head_req_threadworker(void* arg)
 //
 // Thread Worker function for delete request
 //
-void* delete_req_threadworker(void* arg)
+void* delete_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<delete_req_thparam*>(arg);
     if(!pthparam){
@@ -205,7 +207,8 @@ void* delete_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Delete Request [path=%s]", pthparam->path.c_str());
 
-    S3fsCurl s3fscurl;
+    s3fscurl.SetUseAhbe(false);
+
     pthparam->result = s3fscurl.DeleteRequest(pthparam->path.c_str());
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -214,7 +217,7 @@ void* delete_req_threadworker(void* arg)
 //
 // Thread Worker function for put head request
 //
-void* put_head_req_threadworker(void* arg)
+void* put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<put_head_req_thparam*>(arg);
     if(!pthparam){
@@ -222,7 +225,8 @@ void* put_head_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Put Head Request [path=%s][meta count=%lu][is copy=%s]", pthparam->path.c_str(), pthparam->meta.size(), (pthparam->isCopy ? "true" : "false"));
 
-    S3fsCurl s3fscurl(true);
+    s3fscurl.SetUseAhbe(true);
+
     pthparam->result = s3fscurl.PutHeadRequest(pthparam->path.c_str(), pthparam->meta, pthparam->isCopy);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -231,7 +235,7 @@ void* put_head_req_threadworker(void* arg)
 //
 // Thread Worker function for put request
 //
-void* put_req_threadworker(void* arg)
+void* put_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<put_req_thparam*>(arg);
     if(!pthparam){
@@ -239,7 +243,8 @@ void* put_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Put Request [path=%s][meta count=%lu][fd=%d][use_ahbe=%s]", pthparam->path.c_str(), pthparam->meta.size(), pthparam->fd, (pthparam->ahbe ? "true" : "false"));
 
-    S3fsCurl s3fscurl(pthparam->ahbe);
+    s3fscurl.SetUseAhbe(pthparam->ahbe);
+
     pthparam->result = s3fscurl.PutRequest(pthparam->path.c_str(), pthparam->meta, pthparam->fd);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -248,7 +253,7 @@ void* put_req_threadworker(void* arg)
 //
 // Thread Worker function for list bucket request
 //
-void* list_bucket_req_threadworker(void* arg)
+void* list_bucket_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<list_bucket_req_thparam*>(arg);
     if(!pthparam || !(pthparam->presponseBody)){
@@ -256,7 +261,8 @@ void* list_bucket_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("List Bucket Request [path=%s][query=%s]", pthparam->path.c_str(), pthparam->query.c_str());
 
-    S3fsCurl s3fscurl;
+    s3fscurl.SetUseAhbe(false);
+
     if(0 == (pthparam->result = s3fscurl.ListBucketRequest(pthparam->path.c_str(), pthparam->query.c_str()))){
         *(pthparam->presponseBody) = s3fscurl.GetBodyData();
     }
@@ -266,7 +272,7 @@ void* list_bucket_req_threadworker(void* arg)
 //
 // Thread Worker function for check service request
 //
-void* check_service_req_threadworker(void* arg)
+void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<check_service_req_thparam*>(arg);
     if(!pthparam || !(pthparam->presponseCode) || !(pthparam->presponseBody)){
@@ -274,7 +280,8 @@ void* check_service_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Check Service Request [path=%s][support compat dir=%s][force No SSE=%s]", pthparam->path.c_str(), (pthparam->support_compat_dir ? "true" : "false"), (pthparam->forceNoSSE ? "true" : "false"));
 
-    S3fsCurl s3fscurl;
+    s3fscurl.SetUseAhbe(false);
+
     if(0 == (pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE))){
         *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
         *(pthparam->presponseBody) = s3fscurl.GetBodyData();
@@ -285,7 +292,7 @@ void* check_service_req_threadworker(void* arg)
 //
 // Worker function for pre multipart upload request
 //
-void* pre_multipart_upload_req_threadworker(void* arg)
+void* pre_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<pre_multipart_upload_req_thparam*>(arg);
     if(!pthparam){
@@ -293,7 +300,8 @@ void* pre_multipart_upload_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Pre Multipart Upload Request [path=%s][meta count=%lu]", pthparam->path.c_str(), pthparam->meta.size());
 
-    S3fsCurl s3fscurl(true);
+    s3fscurl.SetUseAhbe(true);
+
     pthparam->result = s3fscurl.PreMultipartUploadRequest(pthparam->path.c_str(), pthparam->meta, pthparam->upload_id);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -302,7 +310,7 @@ void* pre_multipart_upload_req_threadworker(void* arg)
 //
 // Worker function for pre multipart upload part request
 //
-void* multipart_upload_part_req_threadworker(void* arg)
+void* multipart_upload_part_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<multipart_upload_part_req_thparam*>(arg);
     if(!pthparam || !pthparam->pthparam_lock || !pthparam->petag || !pthparam->presult){
@@ -321,11 +329,12 @@ void* multipart_upload_part_req_threadworker(void* arg)
         }
     }
 
+    s3fscurl.SetUseAhbe(true);
+
     //
     // Request
     //
-    S3fsCurl  s3fscurl(true);
-    int       result;
+    int result;
     if(0 != (result = s3fscurl.MultipartUploadPartRequest(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->upload_id, pthparam->petag, pthparam->is_copy))){
         S3FS_PRN_ERR("Failed Multipart Upload Part Worker with error(%d) [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", result, pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->upload_fd, static_cast<long long int>(pthparam->start), static_cast<long long int>(pthparam->size), (pthparam->is_copy ? "true" : "false"), pthparam->part_num);
     }
@@ -342,7 +351,7 @@ void* multipart_upload_part_req_threadworker(void* arg)
 //
 // Worker function for complete multipart upload request
 //
-void* complete_multipart_upload_threadworker(void* arg)
+void* complete_multipart_upload_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<complete_multipart_upload_req_thparam*>(arg);
     if(!pthparam){
@@ -350,7 +359,8 @@ void* complete_multipart_upload_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Complete Multipart Upload Request [path=%s][upload id=%s][etaglist=%lu]", pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->etaglist.size());
 
-    S3fsCurl s3fscurl(true);
+    s3fscurl.SetUseAhbe(true);
+
     pthparam->result = s3fscurl.MultipartUploadComplete(pthparam->path.c_str(), pthparam->upload_id, pthparam->etaglist);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -359,7 +369,7 @@ void* complete_multipart_upload_threadworker(void* arg)
 //
 // Worker function for abort multipart upload request
 //
-void* abort_multipart_upload_req_threadworker(void* arg)
+void* abort_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<abort_multipart_upload_req_thparam*>(arg);
     if(!pthparam){
@@ -367,7 +377,8 @@ void* abort_multipart_upload_req_threadworker(void* arg)
     }
     S3FS_PRN_INFO3("Abort Multipart Upload Request [path=%s][upload id=%s]", pthparam->path.c_str(), pthparam->upload_id.c_str());
 
-    S3fsCurl s3fscurl(true);
+    s3fscurl.SetUseAhbe(true);
+
     pthparam->result = s3fscurl.AbortMultipartUpload(pthparam->path.c_str(), pthparam->upload_id);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -376,7 +387,7 @@ void* abort_multipart_upload_req_threadworker(void* arg)
 //
 // Thread Worker function for get object request
 //
-void* get_object_req_threadworker(void* arg)
+void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<get_object_req_thparam*>(arg);
     if(!pthparam){
@@ -390,7 +401,8 @@ void* get_object_req_threadworker(void* arg)
         S3FS_PRN_WARN("Failed to get SSE type for file(%s).", pthparam->path.c_str());
     }
 
-    S3fsCurl    s3fscurl;
+    s3fscurl.SetUseAhbe(false);
+
     pthparam->result = s3fscurl.GetObjectRequest(pthparam->path.c_str(), pthparam->fd, pthparam->start, pthparam->size, ssetype, ssevalue);
 
     return reinterpret_cast<void*>(pthparam->result);
@@ -399,7 +411,7 @@ void* get_object_req_threadworker(void* arg)
 //
 // Thread Worker function for multipart put head request
 //
-void* multipart_put_head_req_threadworker(void* arg)
+void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<multipart_put_head_req_thparam*>(arg);
     if(!pthparam || !pthparam->ppartdata || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
@@ -418,8 +430,9 @@ void* multipart_put_head_req_threadworker(void* arg)
         }
     }
 
-    S3fsCurl  s3fscurl(true);
-    int       result = 0;
+    s3fscurl.SetUseAhbe(true);
+
+    int result = 0;
     while(true){
         // Request
         result = s3fscurl.MultipartPutHeadRequest(pthparam->from, pthparam->to, pthparam->part_number, pthparam->upload_id, pthparam->meta);
@@ -516,7 +529,7 @@ void* multipart_put_head_req_threadworker(void* arg)
 //
 // Thread Worker function for parallel get object request
 //
-void* parallel_get_object_req_threadworker(void* arg)
+void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<parallel_get_object_req_thparam*>(arg);
     if(!pthparam || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
@@ -535,8 +548,9 @@ void* parallel_get_object_req_threadworker(void* arg)
         }
     }
 
-    S3fsCurl  s3fscurl(true);
-    int       result = 0;
+    s3fscurl.SetUseAhbe(true);
+
+    int result = 0;
     while(true){
         // Request
         result = s3fscurl.GetObjectRequest(pthparam->path.c_str(), pthparam->fd, pthparam->start, pthparam->size, pthparam->ssetype, pthparam->ssevalue);

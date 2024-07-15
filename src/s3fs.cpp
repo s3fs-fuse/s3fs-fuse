@@ -43,6 +43,7 @@
 #include "fdcache_auto.h"
 #include "fdcache_stat.h"
 #include "curl.h"
+#include "curl_share.h"
 #include "curl_util.h"
 #include "s3objlist.h"
 #include "cache.h"
@@ -4933,11 +4934,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(0 == strcmp(arg, "nodnscache")){
-            S3fsCurl::SetDnsCache(false);
+            S3fsCurlShare::SetDnsCache(false);
             return 0;
         }
         else if(0 == strcmp(arg, "nosscache")){
-            S3fsCurl::SetSslSessionCache(false);
+            S3fsCurlShare::SetSslSessionCache(false);
             return 0;
         }
         else if(is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){

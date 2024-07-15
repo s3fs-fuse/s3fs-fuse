@@ -127,10 +127,7 @@ class S3fsCurl
             std::mutex      ssl_session;
         } callback_locks;
         static bool             is_initglobal_done;
-        static CURLSH*          hCurlShare;
         static bool             is_cert_check;
-        static bool             is_dns_cache;
-        static bool             is_ssl_session_cache;
         static long             connect_timeout;
         static time_t           readwrite_timeout;
         static int              retries;
@@ -211,10 +208,6 @@ class S3fsCurl
         // class methods
         static bool InitGlobalCurl();
         static bool DestroyGlobalCurl();
-        static bool InitShareCurl();
-        static bool DestroyShareCurl();
-        static void LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_access laccess, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
-        static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
         static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
@@ -274,8 +267,6 @@ class S3fsCurl
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
         static bool SetCheckCertificate(bool isCertCheck);
-        static bool SetDnsCache(bool isCache);
-        static bool SetSslSessionCache(bool isCache);
         static long SetConnectTimeout(long timeout);
         static time_t SetReadwriteTimeout(time_t timeout);
         static time_t GetReadwriteTimeout() { return S3fsCurl::readwrite_timeout; }

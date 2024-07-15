@@ -28,6 +28,8 @@
 
 #include "s3fs_logger.h"
 #include "threadpoolman.h"
+#include "curl.h"
+#include "curl_share.h"
 
 //------------------------------------------------
 // ThreadPoolMan class variables
@@ -105,11 +107,20 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
     }
     S3FS_PRN_INFO3("Start worker thread in ThreadPoolMan.");
 
+    // The only object in this thread worker
+    S3fsCurl s3fscurl(true);
+
     while(!psingleton->IsExit()){
         // wait
         psingleton->thpoolman_sem.acquire();
 
         if(psingleton->IsExit()){
+            break;
+        }
+
+        // reset curl handle
+        if(!s3fscurl.CreateCurlHandle(true)){
+            S3FS_PRN_ERR("Failed to re-create curl handle.");
             break;
         }
 
@@ -127,13 +138,18 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
             }
         }
 
-        void* retval = param.pfunc(param.args);
-        if(nullptr != retval){
+        // run function
+        void* retval;
+        if(nullptr != (retval = param.pfunc(s3fscurl, param.args))){
             S3FS_PRN_WARN("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
         }
         if(param.psem){
             param.psem->release();
         }
+    }
+
+    if(!S3fsCurlShare::DestroyCurlShareHandleForThread()){
+        S3FS_PRN_WARN("Failed to destory curl share handle for this thread, but continue...");
     }
 
     promise.set_value(0);
