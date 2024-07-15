@@ -29,13 +29,13 @@
 bool CurlHandlerPool::Init()
 {
     for(int cnt = 0; cnt < mMaxHandlers; ++cnt){
-        CURL* hCurl = curl_easy_init();
+        CurlUniquePtr hCurl(curl_easy_init(), &curl_easy_cleanup);
         if(!hCurl){
             S3FS_PRN_ERR("Init curl handlers pool failed");
             Destroy();
             return false;
         }
-        mPool.push_back(hCurl);
+        mPool.push_back(std::move(hCurl));
     }
     return true;
 }
@@ -45,23 +45,19 @@ bool CurlHandlerPool::Destroy()
     const std::lock_guard<std::mutex> lock(mLock);
 
     while(!mPool.empty()){
-        CURL* hCurl = mPool.back();
         mPool.pop_back();
-        if(hCurl){
-            curl_easy_cleanup(hCurl);
-        }
     }
     return true;
 }
 
-CURL* CurlHandlerPool::GetHandler(bool only_pool)
+CurlUniquePtr CurlHandlerPool::GetHandler(bool only_pool)
 {
     const std::lock_guard<std::mutex> lock(mLock);
 
-    CURL* hCurl = nullptr;
+    CurlUniquePtr hCurl(nullptr, curl_easy_cleanup);
 
     if(!mPool.empty()){
-        hCurl = mPool.back();
+        hCurl = std::move(mPool.back());
         mPool.pop_back();
         S3FS_PRN_DBG("Get handler from pool: rest = %d", static_cast<int>(mPool.size()));
     }
@@ -70,12 +66,12 @@ CURL* CurlHandlerPool::GetHandler(bool only_pool)
     }
     if(!hCurl){
         S3FS_PRN_INFO("Pool empty: force to create new handler");
-        hCurl = curl_easy_init();
+        hCurl.reset(curl_easy_init());
     }
     return hCurl;
 }
 
-void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
+void CurlHandlerPool::ReturnHandler(CurlUniquePtr&& hCurl, bool restore_pool)
 {
     if(!hCurl){
       return;
@@ -84,19 +80,14 @@ void CurlHandlerPool::ReturnHandler(CURL* hCurl, bool restore_pool)
 
     if(restore_pool){
         S3FS_PRN_DBG("Return handler to pool");
-        mPool.push_back(hCurl);
+        mPool.push_back(std::move(hCurl));
 
         while(mMaxHandlers < static_cast<int>(mPool.size())){
-            CURL* hOldCurl = mPool.front();
+            S3FS_PRN_INFO("Pool full: destroy the oldest handler");
             mPool.pop_front();
-            if(hOldCurl){
-                S3FS_PRN_INFO("Pool full: destroy the oldest handler");
-                curl_easy_cleanup(hOldCurl);
-            }
         }
     }else{
         S3FS_PRN_INFO("Pool full: destroy the handler");
-        curl_easy_cleanup(hCurl);
     }
 }
 
