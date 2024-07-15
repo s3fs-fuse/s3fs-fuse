@@ -62,29 +62,32 @@ class PseudoFdInfo
         int                     pseudo_fd;
         int                     physical_fd;
         int                     flags;              // flags at open
-        std::string             upload_id;
-        int                     upload_fd;          // duplicated fd for uploading
-        filepart_list_t         upload_list;
-        petagpool               etag_entities;      // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
-        mutable std::mutex      upload_list_lock;   // protects upload_id and upload_list
-        Semaphore               uploaded_sem;       // use a semaphore to trigger an upload completion like event flag
-        int                     instruct_count;     // number of instructions for processing by threads
-        int                     completed_count;    // number of completed processes by thread
-        int                     last_result;        // the result of thread processing
+        mutable std::mutex      upload_list_lock;   // protects upload_id/fd, upload_list, etc.
+        std::string             upload_id       GUARDED_BY(upload_list_lock);   //
+        int                     upload_fd       GUARDED_BY(upload_list_lock);   // duplicated fd for uploading
+        filepart_list_t         upload_list     GUARDED_BY(upload_list_lock);
+        petagpool               etag_entities   GUARDED_BY(upload_list_lock);   // list of etag string and part number entities(to maintain the etag entity even if MPPART_INFO is destroyed)
+        int                     instruct_count  GUARDED_BY(upload_list_lock);   // number of instructions for processing by threads
+        int                     completed_count GUARDED_BY(upload_list_lock);   // number of completed processes by thread
+        int                     last_result     GUARDED_BY(upload_list_lock);   // the result of thread processing
+        Semaphore               uploaded_sem;                                   // use a semaphore to trigger an upload completion like event flag
 
     private:
         static void* MultipartUploadThreadWorker(void* arg);
 
         bool Clear();
         void CloseUploadFd();
-        bool OpenUploadFd() REQUIRES(upload_list_lock);
+        bool OpenUploadFd();
         bool ResetUploadInfo() REQUIRES(upload_list_lock);
         bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
+        void IncreaseInstructionCount();
         bool CompleteInstruction(int result) REQUIRES(upload_list_lock);
-        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy) REQUIRES(upload_list_lock);
-        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag) REQUIRES(upload_list_lock);
+        bool GetUploadInfo(std::string& id, int& fd) const;
+        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
+        bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag);
         bool CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(const off_t& untreated_start, const off_t& untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
+        bool IsUploadingHasLock() const REQUIRES(upload_list_lock);
 
     public:
         explicit PseudoFdInfo(int fd = -1, int open_flags = 0);
@@ -104,7 +107,7 @@ class PseudoFdInfo
         bool ClearUploadInfo(bool is_cancel_mp = false);
         bool InitialUploadInfo(const std::string& id){ return RowInitialUploadInfo(id, true); }
 
-        bool IsUploading() const { return !upload_id.empty(); }
+        bool IsUploading() const;
         bool GetUploadId(std::string& id) const;
         bool GetEtaglist(etaglist_t& list) const;
 
