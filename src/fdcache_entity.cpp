@@ -380,10 +380,10 @@ bool FdEntity::IsUploading()
 //
 int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags)
 {
-    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ts_mctime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_mctime).c_str(), flags);
 
     // [NOTE]
     // When the file size is incremental by truncating, it must be keeped
@@ -872,9 +872,9 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 
 bool FdEntity::SetHoldingMtime(struct timespec mtime)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
+
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
     if(mtime.tv_sec < 0){
         return false;
@@ -1940,9 +1940,9 @@ bool FdEntity::ReserveDiskSpace(off_t size)
 
 ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force_load)
 {
-    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
+
+    S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
     if(-1 == physical_fd || nullptr == CheckPseudoFdFlags(fd, false)){
         S3FS_PRN_DBG("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not readable", fd, physical_fd, path.c_str());
@@ -2004,9 +2004,10 @@ ssize_t FdEntity::Read(int fd, char* bytes, off_t start, size_t size, bool force
 
 ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
 {
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), fd, physical_fd, static_cast<long long int>(start), size);
 
-    const std::lock_guard<std::mutex> lock(fdent_lock);
     PseudoFdInfo* pseudo_obj = nullptr;
     if(-1 == physical_fd || nullptr == (pseudo_obj = CheckPseudoFdFlags(fd, false))){
         S3FS_PRN_ERR("pseudo_fd(%d) to physical_fd(%d) for path(%s) is not opened or not writable", fd, physical_fd, path.c_str());
@@ -2456,10 +2457,10 @@ static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 // 
 bool FdEntity::PunchHole(off_t start, size_t size)
 {
-    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
-
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
 
     if(-1 == physical_fd){
         return false;
