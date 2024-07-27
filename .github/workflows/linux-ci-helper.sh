@@ -66,7 +66,9 @@ AWSCLI_ZIP_FILE="awscliv2.zip"
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
+CXX="g++"
 CXXFLAGS="-O -DS3FS_PTHREAD_ERRORCHECK=1"
+LDFLAGS=""
 CONFIGURE_OPTIONS="--prefix=/usr --with-openssl"
 
 #-----------------------------------------------------------
@@ -236,7 +238,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip"
+    INSTALL_PACKAGES="clang clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -338,8 +340,12 @@ fi
 #-----------------------------------------------------------
 echo "${PRGNAME} [INFO] Set environment for configure options"
 
-echo "CXXFLAGS=${CXXFLAGS}"                   >> "${GITHUB_ENV}"
-echo "CONFIGURE_OPTIONS=${CONFIGURE_OPTIONS}" >> "${GITHUB_ENV}"
+cat << EOF >> "${GITHUB_ENV}"
+CXX=${CXX}
+CXXFLAGS=${CXXFLAGS}
+LDFLAGS=${LDFLAGS}
+CONFIGURE_OPTIONS=${CONFIGURE_OPTIONS}
+EOF
 
 echo "${PRGNAME} [INFO] Finish Linux helper for installing packages."
 
