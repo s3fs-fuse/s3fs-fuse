@@ -691,6 +691,9 @@ bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
 //
 bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
 {
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
     if(!cachepath.empty()){
         // has cache path
 
@@ -838,6 +841,7 @@ bool FdEntity::UpdateAtime()
 bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(0 <= holding_mtime.tv_sec){
         // [NOTE]
@@ -874,6 +878,9 @@ bool FdEntity::UpdateMtime(bool clear_holding_mtime)
 bool FdEntity::SetHoldingMtime(struct timespec mtime)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][mtime=%s]", path.c_str(), physical_fd, str(mtime).c_str());
 
@@ -1252,7 +1259,10 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     s3fscurl.DestroyCurlHandle();
 
     // Clear the dirty flag, because the meta data is updated.
-    pending_status = pending_status_t::NO_UPDATE_PENDING;
+    {
+        const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
+    }
 
     // reset upload_id
     if(!pseudo_obj->InitialUploadInfo(upload_id)){
@@ -1285,6 +1295,9 @@ int FdEntity::NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t sta
     }
 
     S3fsCurl s3fscurl(true);
+
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+
     return s3fscurl.MultipartUploadRequest(upload_id, path.c_str(), tgfd, start, size, petagpair);
 }
 
@@ -2350,6 +2363,7 @@ ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes,
 bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     merge_headers(orgmeta, updatemeta, true);      // overwrite all keys
     // [NOTE]
@@ -2375,7 +2389,6 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
         SetAtimeHasLock(atime);
     }
 
-    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
     if(pending_status_t::NO_UPDATE_PENDING == pending_status && (IsUploading() || pagelist.IsModified())){
         pending_status = pending_status_t::UPDATE_META_PENDING;
     }
@@ -2512,7 +2525,7 @@ void FdEntity::MarkDirtyNewFile()
 
 bool FdEntity::IsDirtyNewFile() const
 {
-    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> lock(fdent_data_lock);
 
     return (pending_status_t::CREATE_FILE_PENDING == pending_status);
 }
