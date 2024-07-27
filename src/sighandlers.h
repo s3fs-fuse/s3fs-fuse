@@ -32,8 +32,8 @@ class Semaphore;
 class S3fsSignals
 {
     private:
-        static std::unique_ptr<S3fsSignals> pSingleton;
-        static bool         enableUsr1;
+        static inline std::unique_ptr<S3fsSignals> pSingleton;
+        static inline bool enableUsr1 = false;
 
         std::unique_ptr<std::thread> pThreadUsr1;
         std::unique_ptr<Semaphore> pSemUsr1;

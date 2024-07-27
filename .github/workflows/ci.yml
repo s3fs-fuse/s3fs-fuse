@@ -182,7 +182,7 @@ jobs:
       - name: Build
         run: |
           ./autogen.sh
-          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++11 -DS3FS_PTHREAD_ERRORCHECK=1'
+          PKG_CONFIG_PATH=/usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig ./configure CXXFLAGS='-std=c++17 -DS3FS_PTHREAD_ERRORCHECK=1'
           make --jobs=$(sysctl -n hw.ncpu)
 
       - name: Cppcheck

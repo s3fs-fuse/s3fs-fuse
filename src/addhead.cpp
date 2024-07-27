@@ -119,7 +119,7 @@ bool AdditionalHeader::Load(const char* file)
             key.erase(0, strlen(ADD_HEAD_REGEX));
 
             // compile
-            std::unique_ptr<regex_t> preg(new regex_t);
+            auto preg = std::make_unique<regex_t>();
             int       result;
             if(0 != (result = regcomp(preg.get(), key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
                 char    errbuf[256];
