@@ -68,7 +68,7 @@ On Windows, use [MSYS2](https://www.msys2.org/) to compile for itself.
 2. Install dependencies onto MSYS2:
 
    ```sh
-   pacman -S git autoconf automake gcc make pkg-config libopenssl-devel libcurl-devel libxml2-devel libzstd-devel
+   pacman -S git autoconf automake gcc make pkg-config openssl-devel libcurl-devel libxml2-devel libzstd-devel
    ```
 
 3. Clone this repository, then change directory into the cloned one.
@@ -101,7 +101,7 @@ On Windows, use [MSYS2](https://www.msys2.org/) to compile for itself.
    ```sh
    ./autogen.sh
    PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$(pwd)" ./configure
-   make
+   make CXXFLAGS="-I/usr/include"
    ```
 
 7. Copy binary files to distribute at one place:
