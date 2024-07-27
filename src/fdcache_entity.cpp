@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <climits>
+#include <cstring>
 #include <memory>
 #include <unistd.h>
 #include <sys/stat.h>

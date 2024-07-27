@@ -149,7 +149,7 @@ static int set_bucket(const char* arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
 static fsblkcnt_t parse_bucket_size(char* value);
 static bool is_cmd_exists(const std::string& command);
-static int print_umount_message(const std::string& mp, bool force);
+static int print_umount_message(const std::string& mp, bool force) __attribute__ ((unused));
 
 //-------------------------------------------------------------------
 // fuse interface functions
