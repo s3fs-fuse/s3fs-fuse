@@ -131,7 +131,7 @@ class S3fsCurl
             std::mutex      ssl_session;
         } callback_locks;
         static bool             is_initglobal_done;
-        static CurlHandlerPool* sCurlPool;
+        static std::unique_ptr<CurlHandlerPool> sCurlPool;
         static int              sCurlPoolSize;
         static CURLSH*          hCurlShare;
         static bool             is_cert_check;
