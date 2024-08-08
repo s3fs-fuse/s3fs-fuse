@@ -268,6 +268,7 @@ class S3fsCurl
         bool ResetHandle() REQUIRES(S3fsCurl::curl_handles_lock);
         bool RemakeHandle();
         bool ClearInternalData();
+        std::string extractURI(const std::string& url);
         void insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
