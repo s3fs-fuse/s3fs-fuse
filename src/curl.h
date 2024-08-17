@@ -233,6 +233,8 @@ class S3fsCurl
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
         static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
+        static std::string extractURI(const std::string& url);
+
 
         static bool LocateBundle();
         static size_t HeaderCallback(void *data, size_t blockSize, size_t numBlocks, void *userPtr);
