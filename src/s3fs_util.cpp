@@ -66,20 +66,22 @@ void init_sysconf_vars()
     // there is no hard limit on the size of the buffer needed to
     // store all the groups returned.
 
+    errno = 0;
     long res = sysconf(_SC_GETPW_R_SIZE_MAX);
     if(0 > res){
         if (errno != 0){
-            S3FS_PRN_WARN("could not get max pw length.");
+            S3FS_PRN_ERR("could not get max password length.");
             abort();
         }
         res = 1024; // default initial length
     }
     max_password_size = res;
 
+    errno = 0;
     res = sysconf(_SC_GETGR_R_SIZE_MAX);
     if(0 > res) {
         if (errno != 0) {
-            S3FS_PRN_ERR("could not get max name length.");
+            S3FS_PRN_ERR("could not get max group name length.");
             abort();
         }
         res = 1024; // default initial length
