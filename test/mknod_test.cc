@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
 #include <sys/sysmacros.h>
 #endif
 
