@@ -35,7 +35,7 @@ struct s3obj_entry{
     bool        is_dir = false;
 };
 
-typedef std::map<std::string, struct s3obj_entry> s3obj_t;
+typedef std::map<std::string, struct s3obj_entry, std::less<>> s3obj_t;
 typedef std::vector<std::string> s3obj_list_t;
 
 //-------------------------------------------------------------------
