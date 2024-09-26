@@ -254,7 +254,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_UPDATE_OPTIONS="refresh"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-17-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr ShellCheck unzip"
+    INSTALL_PACKAGES="automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-17-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr ShellCheck procps unzip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
