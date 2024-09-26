@@ -279,7 +279,7 @@ jobs:
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
             elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"
-                echo 'VALGRIND=--leak-check=full'
+                echo 'VALGRIND="--leak-check=full --error-exitcode=1"'
                 echo 'RETRIES=100'
                 echo 'S3_URL=http://127.0.0.1:8081'
             fi
