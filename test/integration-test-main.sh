@@ -784,18 +784,11 @@ function test_hardlink {
     echo foo > "${TEST_TEXT_FILE}"
 
     (
-        if ! uname | grep -q Darwin; then
-            set +o pipefail
-            ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q -e 'Operation not supported' -e 'Not supported'
-        else
-            # [macos] fuse-t
-            # Not error return code, and no stderr
-            #
-            ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
-            if stat "${ALT_TEST_TEXT_FILE}" >/dev/null 2>&1; then
-                exit 1
-            fi
-        fi
+        # [NOTE]
+        # macos-fuse-t returns 'Input/output error'
+        #
+        set +o pipefail
+        ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q -e 'Operation not supported' -e 'Not supported' -e 'Input/output error'
     )
 
     rm_test_file
