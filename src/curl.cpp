@@ -1920,6 +1920,10 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
                 int newline = 0;
                 if (eol == nullptr) {
                     eol = reinterpret_cast<char*>(memchr(p, '\r', remaining));
+                    if (eol == nullptr) {
+                        // No newlines, just emit entire line.
+                        eol = p + remaining;
+                    }
                 } else {
                     if (eol > p && *(eol - 1) == '\r') {
                         newline++;
