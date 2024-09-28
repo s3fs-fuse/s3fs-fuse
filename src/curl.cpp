@@ -1920,6 +1920,10 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
                 int newline = 0;
                 if (eol == nullptr) {
                     eol = reinterpret_cast<char*>(memchr(p, '\r', remaining));
+                    if (eol == nullptr) {
+                        // No newlines, just emit entire line.
+                        eol = p + remaining;
+                    }
                 } else {
                     if (eol > p && *(eol - 1) == '\r') {
                         newline++;
@@ -2568,7 +2572,8 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         }
 
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders)){
-            return false;
+            S3FS_PRN_ERR("Failed to call curl_easy_setopt, returned NOT CURLE_OK.");
+            return -EIO;
         }
 
         // Requests
