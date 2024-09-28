@@ -71,7 +71,6 @@ Checks: '
     -readability-function-cognitive-complexity,
     -readability-function-size,
     -readability-identifier-length,
-    -readability-implicit-bool-conversion,
     -readability-inconsistent-declaration-parameter-name,
     -readability-isolate-declaration,
     -readability-magic-numbers,
@@ -81,3 +80,6 @@ Checks: '
     -readability-redundant-declaration,
     -readability-simplify-boolean-expr,
     -readability-suspicious-call-argument'
+CheckOptions:
+    readability-implicit-bool-conversion.AllowIntegerConditions: 'true'
+    readability-implicit-bool-conversion.AllowPointerConditions: 'true'

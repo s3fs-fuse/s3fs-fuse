@@ -3122,7 +3122,7 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
         return -EIO;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILESIZE, 0)){
-        return false;
+        return -EIO;
     }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent
         return -EIO;
@@ -4280,8 +4280,9 @@ int S3fsCurl::UploadMultipartPostRequest(const char* tpath, int part_num, const 
 
     // request
     if(0 == (result = RequestPerform())){
-        // UploadMultipartPostComplete returns true on success -> convert to 0
-        result = !UploadMultipartPostComplete();
+        if(!UploadMultipartPostComplete()){
+            result = -EIO;
+        }
     }
 
     // closing

@@ -279,7 +279,7 @@ static bool IS_RMTYPEDIR(dirtype type)
 static bool IS_CREATE_MP_STAT(const char* path)
 {
     // [NOTE] has_mp_stat is set in get_object_attribute()
-    return (path && 0 == strcmp(path, "/") && !has_mp_stat);
+    return (path != nullptr && 0 == strcmp(path, "/") && !has_mp_stat);
 }
 
 static bool is_special_name_folder_object(const char* path)
