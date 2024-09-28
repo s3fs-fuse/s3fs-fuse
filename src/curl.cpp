@@ -2572,7 +2572,8 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         }
 
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders)){
-            return false;
+            S3FS_PRN_ERR("Failed to call curl_easy_setopt, returned NOT CURLE_OK.");
+            return -EIO;
         }
 
         // Requests
