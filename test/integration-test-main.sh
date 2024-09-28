@@ -2050,6 +2050,15 @@ function test_truncate_cache() {
         for file in $(seq 75); do
             touch "${dir}/${file}"
         done
+
+        # FIXME:
+        # In the case of macos-fuse-t, if you do not enter a wait here, the following error may occur:
+        #    "ls: fts_read: Input/output error"
+        # Currently, we have not yet been able to establish a solution to this problem.
+        # Please pay attention to future developments in macos-fuse-t.
+        #
+        wait_ostype 1 "Darwin"
+
         ls "${dir}"
     done
 
@@ -2773,15 +2782,30 @@ function add_all_tests {
 
     add_tests test_update_directory_time_chmod
     add_tests test_update_directory_time_chown
-    add_tests test_update_directory_time_set_xattr
     add_tests test_update_directory_time_touch
     if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         add_tests test_update_directory_time_touch_a
     fi
-    add_tests test_update_directory_time_subdir
+    if ! uname | grep -q Darwin; then
+        # FIXME:
+        # These test fail in macos-fuse-t because mtime/ctime/atime are not updated.
+        # Currently, these are not an issue with s3fs, so we will bypass this test for macos.
+        # Please pay attention to future developments in macos-fuse-t.
+        #
+        add_tests test_update_directory_time_set_xattr
+        add_tests test_update_directory_time_subdir
+    fi
     add_tests test_update_chmod_opened_file
     if s3fs_args | grep -q update_parent_dir_stat; then
-        add_tests test_update_parent_directory_time
+        if ! uname | grep -q Darwin; then
+            # FIXME:
+            # In macos-fuse-t, this test can sometimes succeed if the test waits for more
+            # than one second while it is processing.
+            # However, the results are currently unstable, thus this test is bypassed on macos.
+            # Please pay attention to future developments in macos-fuse-t.
+            #
+            add_tests test_update_parent_directory_time
+        fi
     fi
     if ! s3fs_args | grep -q use_xattr; then
         add_tests test_posix_acl
