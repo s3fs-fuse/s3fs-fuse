@@ -1510,6 +1510,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
 
         // rename
         FdManager::get()->Rename(from, to);
+        autoent.Detach();  // to takes over from resources
     }
 
     // Remove file

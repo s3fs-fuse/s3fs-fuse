@@ -51,17 +51,7 @@ jobs:
       matrix:
         container:
           - ubuntu:24.04
-          - ubuntu:22.04
           - ubuntu:20.04
-          - debian:bookworm
-          - debian:bullseye
-          - rockylinux:9
-          - rockylinux:8
-          - fedora:40
-          - fedora:39
-          - opensuse/leap:15
-          - alpine:3.20
-          - centos:centos7
 
     container:
       image: ${{ matrix.container }}

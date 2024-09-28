@@ -1355,8 +1355,15 @@ function test_update_directory_time_subdir() {
     fi
 
     rm -rf "${TIME_TEST_SUBDIR}"
-    rm -rf "${TIME_TEST_DIR}"
+    echo temporary logging to diagnose test failure
+    aws_cli s3 ls "s3://${TEST_BUCKET_1}" --recursive
+    find "${TIME_TEST_DIR}"
+    if ! strace rm -rf -v "${TIME_TEST_DIR}"; then
+        aws_cli s3 ls "s3://${TEST_BUCKET_1}" --recursive
+        false
+    fi
     rm -rf "${TEST_DIR}"
+    false
 }
 
 # [NOTE]
@@ -2713,113 +2720,7 @@ function test_statvfs() {
 }
 
 function add_all_tests {
-    if s3fs_args | grep -q use_cache; then
-        add_tests test_cache_file_stat
-        add_tests test_zero_cache_file_stat
-    else
-        add_tests test_file_names_longer_than_posix
-    fi
-    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
-        add_tests test_clean_up_cache
-    fi
-    add_tests test_create_empty_file
-    add_tests test_append_file
-    add_tests test_truncate_file
-    add_tests test_truncate_upload
-    add_tests test_truncate_empty_file
-    add_tests test_truncate_shrink_file
-    add_tests test_truncate_shrink_read_file
-    add_tests test_mv_file
-    add_tests test_mv_to_exist_file
-    add_tests test_mv_empty_directory
-    add_tests test_mv_nonempty_directory
-    add_tests test_redirects
-    add_tests test_mkdir_rmdir
-    add_tests test_chmod
-    add_tests test_chown
-    add_tests test_list
-    add_tests test_remove_nonempty_directory
-    add_tests test_external_directory_creation
-    add_tests test_external_modification
-    add_tests test_external_creation
-    add_tests test_read_external_object
-    add_tests test_read_external_dir_object
-    add_tests test_update_metadata_external_small_object
-    add_tests test_update_metadata_external_large_object
-    add_tests test_rename_before_close
-    add_tests test_multipart_upload
-    add_tests test_multipart_copy
-    add_tests test_multipart_mix
-    add_tests test_utimens_during_multipart
-    add_tests test_special_characters
-    add_tests test_hardlink
-    add_tests test_symlink
-    if ! uname | grep -q Darwin; then
-        add_tests test_mknod
-    fi
-    add_tests test_extended_attributes
-    add_tests test_mtime_file
-
-    add_tests test_update_time_chmod
-    add_tests test_update_time_chown
-    add_tests test_update_time_xattr
-    add_tests test_update_time_touch
-    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
-        add_tests test_update_time_touch_a
-    fi
-    add_tests test_update_time_append
-    add_tests test_update_time_cp_p
-    add_tests test_update_time_mv
-
-    add_tests test_update_directory_time_chmod
-    add_tests test_update_directory_time_chown
-    add_tests test_update_directory_time_set_xattr
-    add_tests test_update_directory_time_touch
-    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
-        add_tests test_update_directory_time_touch_a
-    fi
     add_tests test_update_directory_time_subdir
-    add_tests test_update_chmod_opened_file
-    if s3fs_args | grep -q update_parent_dir_stat; then
-        add_tests test_update_parent_directory_time
-    fi
-    if ! s3fs_args | grep -q use_xattr; then
-        add_tests test_posix_acl
-    fi
-
-    add_tests test_rm_rf_dir
-    add_tests test_copy_file
-    add_tests test_write_after_seek_ahead
-    add_tests test_overwrite_existing_file_range
-    add_tests test_concurrent_directory_updates
-    add_tests test_concurrent_reads
-    add_tests test_concurrent_writes
-    add_tests test_open_second_fd
-    add_tests test_write_multiple_offsets
-    add_tests test_write_multiple_offsets_backwards
-    add_tests test_content_type
-    add_tests test_truncate_cache
-    add_tests test_upload_sparsefile
-    add_tests test_mix_upload_entities
-    # TODO: investigate why only Alpine cannot see the implicit directory objects.
-    if ! test -f /etc/os-release || ! grep -q -i -e 'ID=alpine' -e 'ID="alpine"' /etc/os-release; then
-        add_tests test_not_existed_dir_obj
-    fi
-    add_tests test_ut_ossfs
-    add_tests test_cr_filename
-    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
-        add_tests test_ensurespace_move_file
-    fi
-    add_tests test_write_data_with_skip
-    add_tests test_not_boundary_writes
-
-    # [NOTE]
-    # The test on CI will fail depending on the permissions, so skip these(chmod/chown).
-    #
-    # add_tests test_chmod_mountpoint
-    # add_tests test_chown_mountpoint
-    add_tests test_time_mountpoint
-    add_tests test_statvfs
 }
 
 init_suite

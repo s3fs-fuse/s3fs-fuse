@@ -85,7 +85,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mailcap libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES="strace autoconf autotools-dev clang-tidy openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mailcap libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -94,7 +94,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES="strace autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -103,7 +103,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:20.04" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES="strace autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -112,7 +112,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
+    INSTALL_PACKAGES="strace autoconf autotools-dev clang-tidy openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -121,7 +121,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
+    INSTALL_PACKAGES="strace autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -137,7 +137,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+    INSTALL_PACKAGES="strace clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
@@ -151,7 +151,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 unzip"
+    INSTALL_PACKAGES="strace clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 unzip"
     INSTALL_CHECKER_PKGS="cppcheck"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=powertools"
 
@@ -227,7 +227,7 @@ elif [ "${CONTAINER_FULLNAME}" = "centos:centos7" ]; then
     # And in this version, it cannot be passed due to following error.
     # "shellcheck: ./test/integration-test-main.sh: hGetContents: invalid argument (invalid byte sequence)"
     #
-    INSTALL_PACKAGES="curl-devel fuse fuse-devel gcc libstdc++-devel llvm-toolset-7-clang-tools-extra gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl openssl-devel attr curl python3 epel-release unzip"
+    INSTALL_PACKAGES="strace curl-devel fuse fuse-devel gcc libstdc++-devel llvm-toolset-7-clang-tools-extra gcc-c++ glibc-langpack-en java-11-openjdk-headless libxml2-devel mailcap git automake make openssl openssl-devel attr curl python3 epel-release unzip"
     INSTALL_CHECKER_PKGS="cppcheck jq"
     INSTALL_CHECKER_PKG_OPTIONS="--enablerepo=epel"
 
@@ -236,7 +236,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip"
+    INSTALL_PACKAGES="strace clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -245,7 +245,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:39" ]; then
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip"
+    INSTALL_PACKAGES="strace clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -254,7 +254,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_UPDATE_OPTIONS="refresh"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-17-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr ShellCheck procps unzip"
+    INSTALL_PACKAGES="strace automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-17-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr ShellCheck procps unzip"
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
@@ -263,7 +263,7 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.20" ]; then
     PACKAGE_UPDATE_OPTIONS="update --no-progress"
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
 
-    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk17 aws-cli"
+    INSTALL_PACKAGES="strace bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk17 aws-cli"
     INSTALL_CHECKER_PKGS="cppcheck shellcheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
