@@ -2758,7 +2758,19 @@ function add_all_tests {
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
-    add_tests test_multipart_mix
+
+    if ! uname | grep -q Darwin || ! s3fs_args | grep -q nocopyapi; then
+        # FIXME:
+        # If you specify the nocopyapi option with macos-fuse-t, the following error will
+        # occur when manipulating the xattr of the copied object:
+        #    "could not copy extended attributes to <file>: Result too large"
+        # As no solution has been found at this time, this test is bypassed on macos with
+        # nocopyapi.
+        # Please pay attention to future developments in macos-fuse-t.
+        #
+        add_tests test_multipart_mix
+    fi
+
     add_tests test_utimens_during_multipart
     add_tests test_special_characters
     add_tests test_hardlink
