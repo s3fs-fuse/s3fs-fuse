@@ -769,7 +769,25 @@ bool FdManager::UpdateEntityToTempPath()
         std::string tmppath;
         FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
 
-        fdent_map_t::iterator iter = fent.find(except_iter->first);
+        // search the entry in fdent map
+        fdent_map_t::iterator iter;
+        if (!cache_dir.empty()) {
+          iter = fent.find(except_iter->first);
+        } else {
+
+          // If the cache directory is not specified, s3fs opens a temporary
+          // file when the file is opened. Then if it could not find a entity in
+          // map for the file, s3fs should search a entity in all which opened
+          // the temporary file.
+          //
+          for (iter = fent.begin(); iter != fent.end(); ++iter) {
+            if (iter->second && iter->second.get() == except_iter->second) {
+              // found opened fd in mapping
+              break;
+            }
+          }
+        }
+
         if(fent.end() != iter && iter->second.get() == except_iter->second){
             // Move the entry to the new key
             fent[tmppath] = std::move(iter->second);
@@ -783,7 +801,11 @@ bool FdManager::UpdateEntityToTempPath()
             // it will not enter here.
             // Thus, if it enters here, a warning is output.
             //
-            S3FS_PRN_WARN("For some reason the FdEntity pointer(for %s) is not found in the fent map. Recovery procedures are being performed, but the cause needs to be identified.", except_iter->first.c_str());
+            S3FS_PRN_CRIT(
+                "For some reason the FdEntity pointer(for %s) is not found in "
+                "the fent map. Recovery procedures are being performed, but "
+                "the cause needs to be identified.",
+                except_iter->first.c_str());
 
             // Add the entry for recovery procedures
             fent[tmppath] = std::unique_ptr<FdEntity>(except_iter->second);
