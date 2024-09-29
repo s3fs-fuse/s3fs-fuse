@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <libxml/xpathInternals.h>
 #include <mutex>
+#include <string>
 
 #include "common.h"
 #include "s3fs_logger.h"
@@ -31,10 +32,17 @@
 #include "string_util.h"
 
 //-------------------------------------------------------------------
+// Symbols
+//-------------------------------------------------------------------
+enum class get_object_name_result : std::uint8_t {
+    SUCCESS,
+    FAILURE,
+    FILE_OR_SUBDIR_IN_DIR
+};
+
+//-------------------------------------------------------------------
 // Variables
 //-------------------------------------------------------------------
-static constexpr char c_strErrorObjectName[] = "FILE or SUBDIR in DIR";
-
 // [NOTE]
 // mutex for static variables in GetXmlNsUrl
 //
@@ -132,20 +140,17 @@ unique_ptr_xmlChar get_next_marker(xmlDocPtr doc)
     return get_base_exp(doc, "NextMarker");
 }
 
-// return: the pointer to object name on allocated memory.
-//         the pointer to "c_strErrorObjectName".(not allocated)
-//         nullptr(a case of something error occurred)
-static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
+static std::pair<get_object_name_result, std::string> get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
 {
     // Get full path
     unique_ptr_xmlChar fullpath(xmlNodeListGetString(doc, node, 1), xmlFree);
     if(!fullpath){
         S3FS_PRN_ERR("could not get object full path name..");
-        return nullptr;
+        return {get_object_name_result::FAILURE, ""};
     }
     // basepath(path) is as same as fullpath.
     if(0 == strcmp(reinterpret_cast<char*>(fullpath.get()), path)){
-        return const_cast<char*>(c_strErrorObjectName);
+        return {get_object_name_result::FILE_OR_SUBDIR_IN_DIR, ""};
     }
 
     // Make dir path and filename
@@ -156,31 +161,31 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
     const char* basepath= (path && '/' == path[0]) ? &path[1] : path;
 
     if('\0' == mybname[0]){
-        return nullptr;
+        return {get_object_name_result::FAILURE, ""};
     }
 
     // check subdir & file in subdir
     if(0 < strlen(dirpath)){
         // case of "/"
         if(0 == strcmp(mybname, "/") && 0 == strcmp(dirpath, "/")){
-            return const_cast<char*>(c_strErrorObjectName);
+            return {get_object_name_result::FILE_OR_SUBDIR_IN_DIR, ""};
         }
         // case of "."
         if(0 == strcmp(mybname, ".") && 0 == strcmp(dirpath, ".")){
-            return const_cast<char *>(c_strErrorObjectName);
+            return {get_object_name_result::FILE_OR_SUBDIR_IN_DIR, ""};
         }
         // case of ".."
         if(0 == strcmp(mybname, "..") && 0 == strcmp(dirpath, ".")){
-            return const_cast<char *>(c_strErrorObjectName);
+            return {get_object_name_result::FILE_OR_SUBDIR_IN_DIR, ""};
         }
         // case of "name"
         if(0 == strcmp(dirpath, ".")){
             // OK
-            return strdup(mybname);
+            return {get_object_name_result::SUCCESS, mybname};
         }else{
             if(basepath && 0 == strcmp(dirpath, basepath)){
                 // OK
-                return strdup(mybname);
+                return {get_object_name_result::SUCCESS, mybname};
             }else if(basepath && 0 < strlen(basepath) && '/' == basepath[strlen(basepath) - 1] && 0 == strncmp(dirpath, basepath, strlen(basepath) - 1)){
                 std::string withdirname;
                 if(strlen(dirpath) > strlen(basepath)){
@@ -192,12 +197,12 @@ static char* get_object_name(xmlDocPtr doc, xmlNodePtr node, const char* path)
                     withdirname += "/";
                 }
                 withdirname += mybname;
-                return strdup(withdirname.c_str());
+                return {get_object_name_result::SUCCESS, withdirname};
             }
         }
     }
     // case of something wrong
-    return const_cast<char*>(c_strErrorObjectName);
+    return {get_object_name_result::FILE_OR_SUBDIR_IN_DIR, ""};
 }
 
 static unique_ptr_xmlChar get_exp_value_xml(xmlDocPtr doc, xmlXPathContextPtr ctx, const char* exp_key)
@@ -346,12 +351,13 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             continue;
         }
         xmlNodeSetPtr key_nodes = key->nodesetval;
-        char* name = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
+        auto result = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
-        if(!name){
+        switch(result.first){
+        case get_object_name_result::FAILURE:
             S3FS_PRN_WARN("name is something wrong. but continue.");
-
-        }else if(reinterpret_cast<const char*>(name) != c_strErrorObjectName){
+            break;
+        case get_object_name_result::SUCCESS: {
             is_dir  = isCPrefix ? true : false;
             stretag = "";
 
@@ -375,8 +381,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             // The XML data passed to this function is CR code(\r) encoded.
             // The function below decodes that encoded CR code.
             //
-            std::string decname = get_decoded_cr_code(name);
-            free(name);
+            std::string decname = get_decoded_cr_code(result.second.c_str());
 
             if(prefix){
                 head.AddCommonPrefix(decname);
@@ -385,8 +390,11 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
                 S3FS_PRN_ERR("insert_object returns with error.");
                 return -1;
             }
-        }else{
+            break;
+        }
+        case get_object_name_result::FILE_OR_SUBDIR_IN_DIR:
             S3FS_PRN_DBG("name is file or subdir in dir. but continue.");
+            break;
         }
     }
 

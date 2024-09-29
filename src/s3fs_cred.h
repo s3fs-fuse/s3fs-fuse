@@ -158,7 +158,7 @@ class S3fsCred
         static bool CheckForbiddenBucketParams();
 
     public:
-        static bool SetBucket(const char* bucket);
+        static bool SetBucket(const std::string& bucket);
         static const std::string& GetBucket();
 
         S3fsCred();
