@@ -50,10 +50,11 @@ class FdManager
       fdent_direct_map_t     except_fent;           // A map of delayed deletion fdentity
 
   private:
-      static off_t GetFreeDiskSpace(const char* path);
+      static off_t GetFreeDiskSpaceHasLock(const char* path) REQUIRES(FdManager::reserved_diskspace_lock);
       static off_t GetTotalDiskSpace(const char* path);
       static bool IsDir(const std::string& dir);
       static int GetVfsStat(const char* path, struct statvfs* vfsbuf);
+      static off_t GetEnsureFreeDiskSpaceHasLock() REQUIRES(FdManager::reserved_diskspace_lock);
 
       int GetPseudoFdCount(const char* path);
       bool UpdateEntityToTempPath();
@@ -85,11 +86,14 @@ class FdManager
       static bool CheckCacheDirExist();
       static bool HasOpenEntityFd(const char* path);
       static int GetOpenFdCount(const char* path);
-      static off_t GetEnsureFreeDiskSpace();
+      static off_t GetEnsureFreeDiskSpace()
+      {
+          const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
+          return FdManager::GetEnsureFreeDiskSpaceHasLock();
+      }
       static off_t SetEnsureFreeDiskSpace(off_t size);
       static bool InitFakeUsedDiskSize(off_t fake_freesize);
-      static bool IsSafeDiskSpace(const char* path, off_t size);
-      static bool IsSafeDiskSpaceWithLog(const char* path, off_t size);
+      static bool IsSafeDiskSpace(const char* path, off_t size, bool withmsg = false);
       static void FreeReservedDiskSpace(off_t size);
       static bool ReserveDiskSpace(off_t size);
       static bool HaveLseekHole();
