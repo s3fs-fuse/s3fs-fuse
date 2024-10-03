@@ -237,9 +237,8 @@ bool FdManager::CheckCacheDirExist()
     return IsDir(cache_dir);
 }
 
-off_t FdManager::GetEnsureFreeDiskSpace()
+off_t FdManager::GetEnsureFreeDiskSpaceHasLock()
 {
-    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
     return FdManager::free_disk_space;
 }
 
@@ -253,9 +252,11 @@ off_t FdManager::SetEnsureFreeDiskSpace(off_t size)
 
 bool FdManager::InitFakeUsedDiskSize(off_t fake_freesize)
 {
-    FdManager::fake_used_disk_space = 0;    // At first, clear this value because this value is used in GetFreeDiskSpace.
+    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
 
-    off_t actual_freesize = FdManager::GetFreeDiskSpace(nullptr);
+    FdManager::fake_used_disk_space = 0;    // At first, clear this value because this value is used in GetFreeDiskSpaceHasLock.
+
+    off_t actual_freesize = FdManager::GetFreeDiskSpaceHasLock(nullptr);
 
     if(fake_freesize < actual_freesize){
         FdManager::fake_used_disk_space = actual_freesize - fake_freesize;
@@ -283,7 +284,7 @@ off_t FdManager::GetTotalDiskSpace(const char* path)
     return actual_totalsize;
 }
 
-off_t FdManager::GetFreeDiskSpace(const char* path)
+off_t FdManager::GetFreeDiskSpaceHasLock(const char* path)
 {
     struct statvfs vfsbuf;
     int result = FdManager::GetVfsStat(path, &vfsbuf);
@@ -320,22 +321,20 @@ int FdManager::GetVfsStat(const char* path, struct statvfs* vfsbuf){
     return 0;
 }
 
-bool FdManager::IsSafeDiskSpace(const char* path, off_t size)
+bool FdManager::IsSafeDiskSpace(const char* path, off_t size, bool withmsg)
 {
-    off_t fsize = FdManager::GetFreeDiskSpace(path);
-    return size + FdManager::GetEnsureFreeDiskSpace() <= fsize;
-}
+    const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
 
-bool FdManager::IsSafeDiskSpaceWithLog(const char* path, off_t size)
-{
-    off_t fsize = FdManager::GetFreeDiskSpace(path);
-    off_t needsize = size + FdManager::GetEnsureFreeDiskSpace();
-    if(needsize <= fsize){
-        return true;
-    } else {
-        S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", static_cast<double>(needsize) / 1024 / 1024, static_cast<double>(fsize) / 1024 / 1024);
+    off_t fsize = FdManager::GetFreeDiskSpaceHasLock(path);
+    off_t needsize = size + FdManager::GetEnsureFreeDiskSpaceHasLock();
+
+    if(fsize < needsize){
+        if(withmsg){
+            S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", static_cast<double>(needsize) / 1024 / 1024, static_cast<double>(fsize) / 1024 / 1024);
+        }
         return false;
     }
+    return true;
 }
 
 bool FdManager::HaveLseekHole()
@@ -861,7 +860,7 @@ bool FdManager::ReserveDiskSpace(off_t size)
 {
     if(IsSafeDiskSpace(nullptr, size)){
         const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
-        free_disk_space += size;
+        FdManager::free_disk_space += size;
         return true;
     }
     return false;
@@ -870,7 +869,7 @@ bool FdManager::ReserveDiskSpace(off_t size)
 void FdManager::FreeReservedDiskSpace(off_t size)
 {
     const std::lock_guard<std::mutex> lock(FdManager::reserved_diskspace_lock);
-    free_disk_space -= size;
+    FdManager::free_disk_space -= size;
 }
 
 //
