@@ -33,6 +33,7 @@
 #include "common.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
+#include "s3fs_util.h"
 #include "types.h"
 
 //----------------------------------------------
@@ -190,7 +191,7 @@ class S3fsCurl
         filepart             partdata;             // use by multipart upload/get object callback
         bool                 is_use_ahbe;          // additional header by extension
         int                  retry_count;          // retry count for multipart
-        FILE*                b_infile;             // backup for retrying
+        std::unique_ptr<FILE, decltype(&s3fs_fclose)> b_infile = {nullptr, &s3fs_fclose};  // backup for retrying
         const unsigned char* b_postdata;           // backup for retrying
         off_t                b_postdata_remaining; // backup for retrying
         off_t                b_partdata_startpos;  // backup for retrying

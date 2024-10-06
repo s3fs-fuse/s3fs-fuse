@@ -1955,7 +1955,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 S3fsCurl::S3fsCurl(bool ahbe) : 
     type(REQTYPE::UNSET), requestHeaders(nullptr),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
-    retry_count(0), b_infile(nullptr), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
+    retry_count(0), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
     b_ssekey_pos(-1), b_ssetype(sse_type_t::SSE_DISABLE),
     sem(nullptr), completed_tids_lock(nullptr), completed_tids(nullptr), fpLazySetup(nullptr), curlCode(CURLE_OK)
 {
@@ -2184,7 +2184,7 @@ bool S3fsCurl::ClearInternalData()
     postdata             = nullptr;
     postdata_remaining   = 0;
     retry_count          = 0;
-    b_infile             = nullptr;
+    b_infile.reset();
     b_postdata           = nullptr;
     b_postdata_remaining = 0;
     b_partdata_startpos  = 0;
@@ -2237,12 +2237,12 @@ bool S3fsCurl::RemakeHandle()
     // rewind file
     struct stat st;
     if(b_infile){
-        if(-1 == fseek(b_infile, 0, SEEK_SET)){
-            S3FS_PRN_WARN("Could not reset position(fd=%d)", fileno(b_infile));
+        if(-1 == fseek(b_infile.get(), 0, SEEK_SET)){
+            S3FS_PRN_WARN("Could not reset position(fd=%d)", fileno(b_infile.get()));
             return false;
         }
-        if(-1 == fstat(fileno(b_infile), &st)){
-            S3FS_PRN_WARN("Could not get file stat(fd=%d)", fileno(b_infile));
+        if(-1 == fstat(fileno(b_infile.get()), &st)){
+            S3FS_PRN_WARN("Could not get file stat(fd=%d)", fileno(b_infile.get()));
             return false;
         }
     }
@@ -2334,7 +2334,7 @@ bool S3fsCurl::RemakeHandle()
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size))){
                     return false;
                 }
-                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, b_infile)){
+                if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, b_infile.get())){
                     return false;
                 }
             }else{
@@ -2945,7 +2945,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
             if(GetUnsignedPayload()){
                 payload_hash = "UNSIGNED-PAYLOAD";
             }else{
-                payload_hash = s3fs_sha256_hex_fd(b_infile == nullptr ? -1 : fileno(b_infile), 0, -1);
+                payload_hash = s3fs_sha256_hex_fd(b_infile == nullptr ? -1 : fileno(b_infile.get()), 0, -1);
             }
             break;
 
@@ -3530,7 +3530,6 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 {
     struct stat st;
-    std::unique_ptr<FILE, decltype(&s3fs_fclose)> file(nullptr, &s3fs_fclose);
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -3545,6 +3544,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
         // After processing, the FILE* is closed with fclose, and fd is closed together.
         // The fd should not be closed here, so call dup here to duplicate it.
         //
+        std::unique_ptr<FILE, decltype(&s3fs_fclose)> file(nullptr, &s3fs_fclose);
         int fd2;
         if(-1 == (fd2 = dup(fd)) || -1 == fstat(fd2, &st) || 0 != lseek(fd2, 0, SEEK_SET) || nullptr == (file = {fdopen(fd2, "rb"), &s3fs_fclose})){
             S3FS_PRN_ERR("Could not duplicate file descriptor(errno=%d)", errno);
@@ -3553,7 +3553,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
             }
             return -errno;
         }
-        b_infile = file.get();
+        b_infile = std::move(file);
     }else{
         // This case is creating zero byte object.(calling by create_file_object())
         S3FS_PRN_INFO3("create zero byte file object.");
@@ -3641,11 +3641,11 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
         return -EIO;
     }
-    if(file){
+    if(b_infile){
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size))){ // Content-Length
             return -EIO;
         }
-        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, file.get())){
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_INFILE, b_infile.get())){
             return -EIO;
         }
     }else{
