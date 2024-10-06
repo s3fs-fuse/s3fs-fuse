@@ -119,7 +119,7 @@ bool AdditionalHeader::Load(const char* file)
             key.erase(0, strlen(ADD_HEAD_REGEX));
 
             // compile
-            std::unique_ptr<regex_t> preg(new regex_t);
+            RegexPtr preg(new regex_t, regfree);
             int       result;
             if(0 != (result = regcomp(preg.get(), key.c_str(), REG_EXTENDED | REG_NOSUB))){ // we do not need matching info
                 char    errbuf[256];
@@ -131,7 +131,7 @@ bool AdditionalHeader::Load(const char* file)
             addheadlist.emplace_back(std::move(preg), key, head, value);
         }else{
             // not regex, directly comparing
-            addheadlist.emplace_back(nullptr, key, head, value);
+            addheadlist.emplace_back(RegexPtr(nullptr, regfree), key, head, value);
         }
 
         // set flag
