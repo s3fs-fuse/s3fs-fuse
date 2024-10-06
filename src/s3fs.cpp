@@ -145,9 +145,9 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
-static int set_bucket(const char* arg);
+static int set_bucket(const std::string& arg);
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
-static fsblkcnt_t parse_bucket_size(char* value);
+static fsblkcnt_t parse_bucket_size(std::string max_size);
 static bool is_cmd_exists(const std::string& command);
 static int print_umount_message(const std::string& mp, bool force) __attribute__ ((unused));
 
@@ -4553,32 +4553,31 @@ static bool set_mountpoint_attribute(struct stat& mpst)
 //
 // Set bucket and mount_prefix based on passed bucket name.
 //
-static int set_bucket(const char* arg)
+static int set_bucket(const std::string& arg)
 {
-    // TODO: Mutates input.  Consider some other tokenization.
-    char *bucket_name = const_cast<char*>(arg);
-    if(strstr(arg, ":")){
-        if(strstr(arg, "://")){
-            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+    size_t pos;
+    if((pos = arg.find(':')) != std::string::npos){
+        if(arg.find("://") != std::string::npos){
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg.c_str());
             return -1;
         }
-        if(!S3fsCred::SetBucket(strtok(bucket_name, ":"))){
-            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+        std::string bucket_name = arg.substr(0, pos);
+        if(!S3fsCred::SetBucket(bucket_name)){
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg.c_str());
             return -1;
         }
-        char* pmount_prefix = strtok(nullptr, "");
-        if(pmount_prefix){
-            if(0 == strlen(pmount_prefix) || '/' != pmount_prefix[0]){
-                S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix);
-                return -1;
-            }
-            mount_prefix = pmount_prefix;
-            // Trim the last consecutive '/'
-            mount_prefix = trim_right(mount_prefix, "/");
+
+        std::string pmount_prefix = arg.substr(pos + 1);
+        if(pmount_prefix.empty() || '/' != pmount_prefix[0]){
+            S3FS_PRN_EXIT("path(%s) must be prefix \"/\".", pmount_prefix.c_str());
+            return -1;
         }
+        mount_prefix = pmount_prefix;
+        // Trim the last consecutive '/'
+        mount_prefix = trim_right(mount_prefix, "/");
     }else{
         if(!S3fsCred::SetBucket(arg)){
-            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg);
+            S3FS_PRN_EXIT("bucket name and path(\"%s\") is wrong, it must be \"bucket[:/path]\".", arg.c_str());
             return -1;
         }
     }
@@ -4593,70 +4592,70 @@ static int set_bucket(const char* arg)
 //           of blocks with max_size calculated with the s3fs block size,
 //           or 0 on error
 //
-static fsblkcnt_t parse_bucket_size(char* max_size)
+static fsblkcnt_t parse_bucket_size(std::string max_size)
 {
     const unsigned long long ten00   = 1000L;
     const unsigned long long ten24   = 1024L;
     unsigned long long       scale   = 1;
     unsigned long long       n_bytes = 0;
-    char *ptr;
+    size_t pos;
 
-    if(nullptr != (ptr = strstr(max_size, "GB"))){
+    if((pos = max_size.find("GB")) != std::string::npos){
         scale = ten00 * ten00 * ten00;
-        if(2 < strlen(ptr)){
+        if(2 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "GiB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("GiB")) != std::string::npos){
         scale = ten24 * ten24 * ten24;
-        if(3 < strlen(ptr)){
+        if(3 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "TB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("TB")) != std::string::npos){
         scale = ten00 * ten00 * ten00 * ten00;
-        if(2 < strlen(ptr)){
+        if(2 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "TiB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("TiB")) != std::string::npos){
         scale = ten24 * ten24 * ten24 * ten24;
-        if(3 < strlen(ptr)){
+        if(3 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "PB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("PB")) != std::string::npos){
         scale = ten00 * ten00 * ten00 * ten00 * ten00;
-        if(2 < strlen(ptr)){
+        if(2 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "PiB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("PiB")) != std::string::npos){
         scale = ten24 * ten24 * ten24 * ten24 * ten24;
-        if(3 < strlen(ptr)){
+        if(3 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "EB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("EB")) != std::string::npos){
         scale = ten00 * ten00 * ten00 * ten00 * ten00 * ten00;
-        if(2 < strlen(ptr)){
+        if(2 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
-    }else if(nullptr != (ptr = strstr(max_size, "EiB"))){
+        max_size.erase(pos);
+    }else if((pos = max_size.find("EiB")) != std::string::npos){
         scale = ten24 * ten24 * ten24 * ten24 * ten24 * ten24;
-        if(3 < strlen(ptr)){
+        if(3 < max_size.size() - pos){
             return 0;   // no trailing garbage
         }
-        *ptr = '\0';
+        max_size.erase(pos);
     }
 
     // extra check
-    for(ptr = max_size; *ptr != '\0'; ++ptr){
-        if(!isdigit(*ptr)){
+    for(size_t i = 0; i < pos; ++i){
+        if(!isdigit(max_size[i])){
             return 0;   // wrong number
         }
-        n_bytes = strtoull(max_size, nullptr, 10);
+        n_bytes = strtoull(max_size.c_str(), nullptr, 10);
         if((INT64_MAX / scale) < n_bytes){
             return 0;   // overflow
         }
@@ -4720,7 +4719,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
     if(key == FUSE_OPT_KEY_NONOPT){
         // the first NONOPT option is the bucket name
         if(S3fsCred::GetBucket().empty()){
-            if ((ret = set_bucket(arg))){
+            if ((ret = set_bucket(arg)) != 0){
                 return ret;
             }
             return 0;
@@ -4806,7 +4805,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 1; // continue for fuse option
         }
         else if(is_prefix(arg, "bucket_size=")){
-            bucket_block_count = parse_bucket_size(const_cast<char *>(strchr(arg, '=')) + sizeof(char));
+            bucket_block_count = parse_bucket_size(strchr(arg, '=') + sizeof(char));
             if(0 == bucket_block_count){
                 S3FS_PRN_EXIT("invalid bucket_size option.");
                 return -1;
@@ -5052,7 +5051,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         else if(is_prefix(arg, "bucket=")){
             std::string bname = strchr(arg, '=') + sizeof(char);
-            if ((ret = set_bucket(bname.c_str()))){
+            if ((ret = set_bucket(bname))){
                 return ret;
             }
             return 0;

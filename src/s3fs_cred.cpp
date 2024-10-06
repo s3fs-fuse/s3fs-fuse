@@ -131,9 +131,9 @@ std::string S3fsCred::bucket_name;
 //-------------------------------------------------------------------
 // Class Methods 
 //-------------------------------------------------------------------
-bool S3fsCred::SetBucket(const char* bucket)
+bool S3fsCred::SetBucket(const std::string& bucket)
 {
-    if(!bucket || strlen(bucket) == 0){
+    if(bucket.empty()){
         return false;
     }
     S3fsCred::bucket_name = bucket;
