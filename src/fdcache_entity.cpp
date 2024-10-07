@@ -1560,6 +1560,14 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to complete(finish) multipart post for file(physical_fd=%d).", physical_fd);
             return result;
         }
+
+        struct stat st {};
+        if(GetStatsHasLock(st)){
+            size_orgmeta = st.st_size;
+        } else {
+            S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
+        }
+
         // truncate file to zero
         if(-1 == ftruncate(physical_fd, 0)){
             // So the file has already been removed, skip error.
@@ -1687,6 +1695,14 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
             S3FS_PRN_ERR("failed to complete(finish) multipart post for file(physical_fd=%d).", physical_fd);
             return result;
         }
+
+        struct stat st {};
+        if(GetStatsHasLock(st)){
+            size_orgmeta = st.st_size;
+        } else {
+            S3FS_PRN_ERR("fstat is failed by errno(%d), but continue...", errno);
+        }
+        
         // truncate file to zero
         if(-1 == ftruncate(physical_fd, 0)){
             // So the file has already been removed, skip error.
