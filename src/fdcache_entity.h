@@ -219,8 +219,7 @@ class FdEntity
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
 };
 
-typedef std::map<std::string, std::unique_ptr<FdEntity>> fdent_map_t;           // key=path, value=unique_ptr<FdEntity>
-typedef std::map<std::string, FdEntity*>                 fdent_direct_map_t;    // key=path, value=FdEntity*
+typedef std::map<std::string, std::shared_ptr<FdEntity>> fdent_map_t;           // key=path, value=unique_ptr<FdEntity>
 
 #endif // S3FS_FDCACHE_ENTITY_H_
 
