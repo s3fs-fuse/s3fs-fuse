@@ -115,7 +115,7 @@ bool S3fsMultiCurl::SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl)
 int S3fsMultiCurl::MultiPerform()
 {
     std::map<std::thread::id, std::pair<std::thread, std::future<int>>> threads;
-    bool                     success = true;
+    int                      result = 0;
     bool                     isMultiHead = false;
     Semaphore                sem(GetMaxParallelism());
 
@@ -164,12 +164,13 @@ int S3fsMultiCurl::MultiPerform()
         long int int_retval = it->second.second.get();
         if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
             S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
+            result = int_retval;
         }
         threads.erase(it);
     }
     completed_tids.clear();
 
-    return success ? 0 : -EIO;
+    return result;
 }
 
 int S3fsMultiCurl::MultiRead()

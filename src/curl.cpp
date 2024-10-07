@@ -1858,7 +1858,9 @@ bool S3fsCurl::AddUserAgent(const CurlUniquePtr& hCurl)
         return false;
     }
     if(S3fsCurl::IsUserAgentFlag()){
-        curl_easy_setopt(hCurl, CURLOPT_USERAGENT, S3fsCurl::userAgent.c_str());
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_USERAGENT, S3fsCurl::userAgent.c_str())){
+            return false;
+        }
     }
     return true;
 }

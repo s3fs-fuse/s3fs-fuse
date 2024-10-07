@@ -1203,13 +1203,13 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
                 fdpage page(iter->offset, start - iter->offset, iter->loaded, false);
                 iter->bytes -= (start - iter->offset);
                 iter->offset = start;
-                pagelist.pages.insert(iter, page);
+                iter = pagelist.pages.insert(iter, page);
             }
             if(0 != size && start + size < iter->next()){
                 fdpage page(iter->offset, start + size - iter->offset, true, false);
                 iter->bytes -= (start + size - iter->offset);
                 iter->offset = start + size;
-                pagelist.pages.insert(iter, page);
+                iter = pagelist.pages.insert(iter, page);
             }else{
                 iter->loaded   = true;
                 iter->modified = false;

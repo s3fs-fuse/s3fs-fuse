@@ -73,6 +73,9 @@ static std::unique_ptr<unsigned char[]> create_random_data(off_t size)
             readcnt = 0;
         }
     }
+
+    close(fd);
+
     return pbuff;
 }
 
