@@ -26,9 +26,13 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef __FreeBSD__
+#include <sys/types.h>
+#else
 #ifndef __APPLE__
 #include <sys/sysmacros.h>
 #endif
+#endif 
 
 //---------------------------------------------------------
 // Const

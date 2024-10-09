@@ -30,6 +30,10 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <getopt.h>
+#include <sys/param.h>
+#ifdef __FreeBSD__
+#include <sys/wait.h>
+#endif
 
 #include "common.h"
 #include "s3fs.h"
