@@ -228,6 +228,7 @@ jobs:
           - sanitize_address
           - sanitize_others
           - sanitize_thread
+          - thread_safety
           - valgrind
 
     container:
@@ -277,6 +278,10 @@ jobs:
             elif [ "${{ matrix.checktype }}" = "sanitize_others" ]; then
                 echo 'CXX=clang++'
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
+            elif [ "${{ matrix.checktype }}" = "thread_safety" ]; then
+                echo 'CXX=clang++'
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -Wthread-safety -stdlib=libc++ -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS -Werror"
+                echo 'LDFLAGS=-DCLANG_DEFAULT_LINKER=lld'
             elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"
                 echo 'VALGRIND="--leak-check=full --error-exitcode=1"'
@@ -288,7 +293,7 @@ jobs:
       - name: Build
         run: |
           ./autogen.sh
-          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" ./configure --prefix=/usr --with-openssl"
+          /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" LDFLAGS=\"${LDFLAGS}\" ./configure --prefix=/usr --with-openssl"
           make
 
       - name: Test suite
