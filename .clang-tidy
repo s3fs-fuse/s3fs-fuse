@@ -4,6 +4,7 @@ Checks: '
     -abseil-*,
     -altera-*,
     -android-*,
+    -boost-*,
     -bugprone-assignment-in-if-condition,
     -bugprone-branch-clone,
     -bugprone-easily-swappable-parameters,
