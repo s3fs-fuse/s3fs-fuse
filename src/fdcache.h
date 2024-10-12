@@ -48,7 +48,7 @@ class FdManager
       static std::string     tmp_dir;
 
       fdent_map_t            fent GUARDED_BY(fd_manager_lock);
-      fdent_direct_map_t     except_fent GUARDED_BY(except_entmap_lock);  // A map of delayed deletion fdentity
+      fdent_map_t            except_fent GUARDED_BY(except_entmap_lock);  // A map of delayed deletion fdentity
 
   private:
       static off_t GetFreeDiskSpaceHasLock(const char* path) REQUIRES(FdManager::reserved_diskspace_lock);
@@ -115,7 +115,7 @@ class FdManager
       FdEntity* OpenExistFdEntity(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);
       bool Close(FdEntity* ent, int fd);
-      bool ChangeEntityToTempPath(FdEntity* ent, const char* path);
+      bool ChangeEntityToTempPath(std::shared_ptr<FdEntity> ent, const char* path);
       void CleanupCacheDir();
 
       bool CheckAllCache();
