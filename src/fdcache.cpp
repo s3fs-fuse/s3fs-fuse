@@ -587,7 +587,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
             return nullptr;
         }
         // make new obj
-        std::unique_ptr<FdEntity> ent(new FdEntity(path, cache_path.c_str()));
+        auto ent = std::make_shared<FdEntity>(path, cache_path.c_str());
 
         // open
         if(0 > (fd = ent->Open(pmeta, size, ts_mctime, flags))){
@@ -700,7 +700,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // found
         S3FS_PRN_DBG("[from=%s][to=%s]", from.c_str(), to.c_str());
 
-        std::unique_ptr<FdEntity> ent(std::move(iter->second));
+        auto ent(std::move(iter->second));
 
         // retrieve old fd entity from map
         fent.erase(iter);
@@ -750,10 +750,10 @@ bool FdManager::Close(FdEntity* ent, int fd)
     return false;
 }
 
-bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
+bool FdManager::ChangeEntityToTempPath(std::shared_ptr<FdEntity> ent, const char* path)
 {
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
-    except_fent[path] = ent;
+    except_fent[path] = std::move(ent);
     return true;
 }
 
@@ -764,12 +764,12 @@ bool FdManager::UpdateEntityToTempPath()
 {
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
 
-    for(fdent_direct_map_t::iterator except_iter = except_fent.begin(); except_iter != except_fent.end(); ){
+    for(auto except_iter = except_fent.begin(); except_iter != except_fent.end(); ){
         std::string tmppath;
         FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
 
         fdent_map_t::iterator iter = fent.find(except_iter->first);
-        if(fent.end() != iter && iter->second.get() == except_iter->second){
+        if(fent.end() != iter && iter->second.get() == except_iter->second.get()){
             // Move the entry to the new key
             fent[tmppath] = std::move(iter->second);
             iter          = fent.erase(iter);
@@ -785,7 +785,7 @@ bool FdManager::UpdateEntityToTempPath()
             S3FS_PRN_WARN("For some reason the FdEntity pointer(for %s) is not found in the fent map. Recovery procedures are being performed, but the cause needs to be identified.", except_iter->first.c_str());
 
             // Add the entry for recovery procedures
-            fent[tmppath] = std::unique_ptr<FdEntity>(except_iter->second);
+            fent[tmppath] = except_iter->second;
             except_iter   = except_fent.erase(except_iter);
         }
     }
