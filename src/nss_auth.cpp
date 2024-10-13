@@ -193,7 +193,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     PK11_DigestFinal(md5ctx, result->data(), &md5outlen, result->size());
     PK11_DestroyContext(md5ctx, PR_TRUE);
 
-    return false;
+    return true;
 }
 
 //-------------------------------------------------------------------
