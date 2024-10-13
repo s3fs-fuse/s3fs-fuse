@@ -102,7 +102,7 @@ class S3fsCurl
     private:
         enum class REQTYPE : int8_t {
             UNSET  = -1,
-            DELETE = 0,
+            DELETE,
             HEAD,
             PUTHEAD,
             PUT,
