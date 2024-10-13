@@ -241,10 +241,9 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     EVP_DigestInit_ex(mdctx, EVP_md5(), nullptr);
 
     for(off_t total = 0; total < size; total += bytes){
-        const off_t len = 512;
-        char        buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -255,7 +254,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             return false;
         }
         // instead of MD5_Update
-        EVP_DigestUpdate(mdctx, buf, bytes);
+        EVP_DigestUpdate(mdctx, buf.data(), bytes);
     }
 
     // instead of MD5_Final
@@ -301,10 +300,9 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     MD5_Init(&md5ctx);
 
     for(off_t total = 0; total < size; total += bytes){
-        const off_t len = 512;
-        char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -313,7 +311,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             S3FS_PRN_ERR("file read error(%d)", errno);
             return false;
         }
-        MD5_Update(&md5ctx, buf, bytes);
+        MD5_Update(&md5ctx, buf.data(), bytes);
     }
 
     MD5_Final(result->data(), &md5ctx);
@@ -360,10 +358,9 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
     EVP_DigestInit_ex(sha256ctx, md, nullptr);
 
     for(off_t total = 0; total < size; total += bytes){
-        const off_t len = 512;
-        char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -373,7 +370,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
             EVP_MD_CTX_destroy(sha256ctx);
             return false;
         }
-        EVP_DigestUpdate(sha256ctx, buf, bytes);
+        EVP_DigestUpdate(sha256ctx, buf.data(), bytes);
     }
     EVP_DigestFinal_ex(sha256ctx, result->data(), nullptr);
     EVP_MD_CTX_destroy(sha256ctx);

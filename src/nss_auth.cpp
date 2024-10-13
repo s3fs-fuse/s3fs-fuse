@@ -175,10 +175,9 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     md5ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        unsigned char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<unsigned char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -188,7 +187,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             PK11_DestroyContext(md5ctx, PR_TRUE);
             return false;
         }
-        PK11_DigestOp(md5ctx, buf, bytes);
+        PK11_DigestOp(md5ctx, buf.data(), bytes);
     }
     PK11_DigestFinal(md5ctx, result->data(), &md5outlen, result->size());
     PK11_DestroyContext(md5ctx, PR_TRUE);
@@ -229,10 +228,9 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
     sha256ctx = PK11_CreateDigestContext(SEC_OID_SHA256);
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        unsigned char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<unsigned char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -242,7 +240,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
             PK11_DestroyContext(sha256ctx, PR_TRUE);
             return false;
         }
-        PK11_DigestOp(sha256ctx, buf, bytes);
+        PK11_DigestOp(sha256ctx, buf.data(), bytes);
     }
     PK11_DigestFinal(sha256ctx, result->data(), &sha256outlen, result->size());
     PK11_DestroyContext(sha256ctx, PR_TRUE);

@@ -205,10 +205,9 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     md5_init(&ctx_md5);
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        unsigned char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -260,10 +259,9 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     }
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -273,7 +271,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             gcry_md_close(ctx_md5);
             return false;
         }
-        gcry_md_write(ctx_md5, buf, bytes);
+        gcry_md_write(ctx_md5, buf.data(), bytes);
     }
     memcpy(result->data(), gcry_md_read(ctx_md5, 0), result->size());
     gcry_md_close(ctx_md5);
@@ -305,10 +303,9 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
     sha256_init(&ctx_sha256);
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        unsigned char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -361,10 +358,9 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
     }
 
     for(off_t total = 0; total < size; total += bytes){
-        off_t len = 512;
-        char buf[len];
-        bytes = len < (size - total) ? len : (size - total);
-        bytes = pread(fd, buf, bytes, start + total);
+        std::array<char, 512> buf;
+        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
             break;
@@ -374,7 +370,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
             gcry_md_close(ctx_sha256);
             return false;
         }
-        gcry_md_write(ctx_sha256, buf, bytes);
+        gcry_md_write(ctx_sha256, buf.data(), bytes);
     }
     memcpy(result->data(), gcry_md_read(ctx_sha256, 0), result->size());
     gcry_md_close(ctx_sha256);
