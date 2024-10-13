@@ -577,6 +577,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     //
     // Upload Multipart parts
     //
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
     if(!ParallelMultipartUpload(path, to_upload_list, false)){
         S3FS_PRN_ERR("Failed to upload multipart parts.");
         return -EIO;
