@@ -125,20 +125,21 @@ function check_file_size() {
     local FILE_NAME="$1"
     local EXPECTED_SIZE="$2"
 
-    # Verify file is zero length via metadata
+    # Verify file length via metadata
     local size
     size=$(get_size "${FILE_NAME}")
     if [ "${size}" -ne "${EXPECTED_SIZE}" ]
     then
-        echo "error: expected ${FILE_NAME} to be zero length"
+        echo "error: expected ${FILE_NAME} to be ${EXPECTED_SIZE} length but was ${size} via metadata"
         return 1
     fi
 
-    # Verify file is zero length via data
-    size=$(wc -c < "${FILE_NAME}")
+    # Verify file length via data
+    # shellcheck disable=SC2002
+    size=$(cat "${FILE_NAME}" | wc -c)
     if [ "${size}" -ne "${EXPECTED_SIZE}" ]
     then
-        echo "error: expected ${FILE_NAME} to be ${EXPECTED_SIZE} length, got ${size}"
+        echo "error: expected ${FILE_NAME} to be ${EXPECTED_SIZE} length, got ${size} via data"
         return 1
     fi
 }
