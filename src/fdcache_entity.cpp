@@ -29,6 +29,7 @@
 
 #include "common.h"
 #include "fdcache_entity.h"
+#include "fdcache_fdinfo.h"
 #include "fdcache_stat.h"
 #include "fdcache_untreated.h"
 #include "fdcache.h"
@@ -1001,11 +1002,6 @@ bool FdEntity::SetAllStatus(bool is_loaded)
     if(-1 == physical_fd){
         return false;
     }
-    // [NOTE]
-    // this method is only internal use, and calling after locking.
-    // so do not lock now.
-    //
-    //const std::lock_guard<std::mutex> lock(fdent_lock);
 
     // get file size
     struct stat st{};
@@ -1410,9 +1406,6 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
     return result;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd);
@@ -1475,9 +1468,6 @@ int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tp
     return result;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd);
@@ -1581,9 +1571,6 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
     return result;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd);
@@ -1708,9 +1695,6 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
     return result;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     S3FS_PRN_INFO3("[tpath=%s][path=%s][pseudo_fd=%d][physical_fd=%d][mix_upload=%s]", SAFESTRPTR(tpath), path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, (FdEntity::mixmultipart ? "true" : "false"));
@@ -2059,9 +2043,6 @@ ssize_t FdEntity::Write(int fd, const char* bytes, off_t start, size_t size)
     return wsize;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, static_cast<long long int>(start), size);
@@ -2120,9 +2101,6 @@ ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* b
     return wsize;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, static_cast<long long int>(start), size);
@@ -2217,9 +2195,6 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
     return wsize;
 }
 
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
-//
 ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), (pseudo_obj ? pseudo_obj->GetPseudoFd() : -1), physical_fd, static_cast<long long int>(start), size);
@@ -2298,9 +2273,6 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
 //
 // On Stream upload, the uploading is executed in another thread when the
 // written area exceeds the maximum size of multipart upload.
-//
-// [NOTE]
-// Both fdent_lock and fdent_data_lock must be locked before calling.
 //
 ssize_t FdEntity::WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size)
 {
@@ -2537,9 +2509,6 @@ void FdEntity::MarkDirtyMetadata()
 
 bool FdEntity::IsDirtyMetadata() const
 {
-    // [NOTE]
-    // fdent_lock must be previously locked.
-    //
     return (pending_status_t::UPDATE_META_PENDING == pending_status);
 }
 
@@ -2555,11 +2524,6 @@ bool FdEntity::AddUntreated(off_t start, off_t size)
     return result;
 }
 
-// [NOTE]
-// An object that has already been locked with fdent_lock is passed to
-// UploadBoundaryLastUntreatedArea(), which calls this method.
-// Therefore, there is no need to lock fdent_lock in this method.
-//
 bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size) const
 {
     // Get last untreated area
@@ -2569,11 +2533,6 @@ bool FdEntity::GetLastUpdateUntreatedPart(off_t& start, off_t& size) const
     return true;
 }
 
-// [NOTE]
-// An object that has already been locked with fdent_lock is passed to
-// UploadBoundaryLastUntreatedArea(), which calls this method.
-// Therefore, there is no need to lock fdent_lock in this method.
-//
 bool FdEntity::ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size)
 {
     if(0 < front_size){
