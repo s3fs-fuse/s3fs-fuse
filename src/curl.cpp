@@ -2570,7 +2570,9 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         
         // Insert headers
         if(!dontAddAuthHeaders) {
-             insertAuthHeaders();
+            if(!insertAuthHeaders()){
+                return -EIO;
+            }
         }
 
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_HTTPHEADER, requestHeaders)){
@@ -2938,7 +2940,7 @@ std::string S3fsCurl::extractURI(const std::string& url) {
     return uri;
 }
 
-void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
+bool S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
 {
     std::string server_path = type == REQTYPE::LISTBUCKET ? "/" : path;
     std::string payload_hash;
@@ -2973,7 +2975,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
 
     if(b_infile != nullptr && payload_hash.empty()){
         S3FS_PRN_ERR("Failed to make SHA256.");
-        // TODO: propagate error
+        return false;
     }
 
     S3FS_PRN_INFO3("computing signature [%s] [%s] [%s] [%s]", op.c_str(), server_path.c_str(), query_string.c_str(), payload_hash.c_str());
@@ -2998,6 +3000,8 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
         std::string auth = "AWS4-HMAC-SHA256 Credential=" + access_key_id + "/" + strdate + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
     }
+
+    return true;
 }
 
 void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
@@ -3032,7 +3036,7 @@ void S3fsCurl::insertIBMIAMHeaders(const std::string& access_key_id, const std::
     }
 }
 
-void S3fsCurl::insertAuthHeaders()
+bool S3fsCurl::insertAuthHeaders()
 {
     std::string access_key_id;
     std::string secret_access_key;
@@ -3041,7 +3045,7 @@ void S3fsCurl::insertAuthHeaders()
     // check and get credential variables
     if(!S3fsCurl::ps3fscred->CheckIAMCredentialUpdate(&access_key_id, &secret_access_key, &access_token)){
         S3FS_PRN_ERR("An error occurred in checking IAM credential.");
-        return; // do not insert auth headers on error
+        return false; // do not insert auth headers on error
     }
 
     if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
@@ -3049,8 +3053,11 @@ void S3fsCurl::insertAuthHeaders()
     }else if(S3fsCurl::signature_type == signature_type_t::V2_ONLY){
         insertV2Headers(access_key_id, secret_access_key, access_token);
     }else{
-        insertV4Headers(access_key_id, secret_access_key, access_token);
+        if(!insertV4Headers(access_key_id, secret_access_key, access_token)){
+            return false;
+        }
     }
+    return true;
 }
 
 int S3fsCurl::DeleteRequest(const char* tpath)
