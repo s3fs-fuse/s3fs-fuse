@@ -93,7 +93,6 @@ template<typename Arg> CURLcode curl_easy_getinfo(const CurlUniquePtr& handle, C
 // Class S3fsCurl
 //-------------------------------------------------------------------
 constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
-std::mutex       S3fsCurl::curl_warnings_lock;
 std::mutex       S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
@@ -124,8 +123,7 @@ std::string      S3fsCurl::client_priv_key;
 std::string      S3fsCurl::client_priv_key_type;
 std::string      S3fsCurl::client_key_password;
 
-// protected by curl_warnings_lock
-bool             S3fsCurl::curl_warnings_once = false;
+std::atomic<bool> S3fsCurl::curl_warnings_once(false);
 
 // protected by curl_handles_lock
 std::map<const CURL*, curlprogress> S3fsCurl::curl_progress;
@@ -1974,12 +1972,7 @@ S3fsCurl::~S3fsCurl()
 
 bool S3fsCurl::ResetHandle()
 {
-    bool run_once;
-    {
-        const std::lock_guard<std::mutex> lock(S3fsCurl::curl_warnings_lock);
-        run_once = curl_warnings_once;
-        curl_warnings_once = true;
-    }
+    bool run_once = curl_warnings_once.exchange(true);
 
     sCurlPool->ResetHandler(hCurl.get());
 
