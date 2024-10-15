@@ -175,7 +175,7 @@ class S3fsCurl
         static long             ipresolve_type;    // this value is a libcurl symbol.
 
         // variables
-        CurlUniquePtr        hCurl = {nullptr, curl_easy_cleanup};
+        CurlUniquePtr        hCurl PT_GUARDED_BY(curl_handles_lock) = {nullptr, curl_easy_cleanup};
         REQTYPE              type;                 // type of request
         std::string          path;                 // target object path
         std::string          base_path;            // base path (for multi curl head request)
@@ -205,7 +205,7 @@ class S3fsCurl
         std::string          query_string;         // request query string
         Semaphore            *sem;
         std::mutex           *completed_tids_lock;
-        std::vector<std::thread::id> *completed_tids;
+        std::vector<std::thread::id> *completed_tids PT_GUARDED_BY(*completed_tids_lock);
         s3fscurl_lazy_setup  fpLazySetup;          // curl options for lazy setting function
         CURLcode             curlCode;             // handle curl return
 

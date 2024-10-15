@@ -27,6 +27,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common.h"
 #include "psemaphore.h"
 
 //------------------------------------------------
@@ -66,9 +67,8 @@ class ThreadPoolMan
         Semaphore             thpoolman_sem;
 
         std::mutex            thread_list_lock;
-        std::vector<std::pair<std::thread, std::future<int>>> thread_list;
-
-        thpoolman_params_t    instruction_list;
+        std::vector<std::pair<std::thread, std::future<int>>> thread_list GUARDED_BY(thread_list_lock);
+        thpoolman_params_t    instruction_list GUARDED_BY(thread_list_lock);
 
     private:
         static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
