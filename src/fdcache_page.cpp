@@ -75,7 +75,7 @@ static void raw_compress_fdpage_list(const fdpage_list_t& pages, fdpage_list_t& 
 
     fdpage*                 lastpage = nullptr;
     fdpage_list_t::iterator add_iter;
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(0 == iter->bytes){
             continue;
         }
@@ -139,7 +139,7 @@ static void compress_fdpage_list(const fdpage_list_t& pages, fdpage_list_t& comp
 static fdpage_list_t parse_partsize_fdpage_list(const fdpage_list_t& pages, off_t max_partsize)
 {
     fdpage_list_t parsed_pages;
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->modified){
             // modified page
             fdpage tmppage = *iter;
@@ -288,7 +288,7 @@ bool PageList::CheckAreaInSparseFile(const struct fdpage& checkpage, const fdpag
     //
     bool result = true;
 
-    for(fdpage_list_t::const_iterator iter = sparse_list.begin(); iter != sparse_list.end(); ++iter){
+    for(auto iter = sparse_list.cbegin(); iter != sparse_list.cend(); ++iter){
         off_t check_start = 0;
         off_t check_bytes = 0;
         if((iter->offset + iter->bytes) <= checkpage.offset){
@@ -384,14 +384,14 @@ off_t PageList::Size() const
     if(pages.empty()){
         return 0;
     }
-    fdpage_list_t::const_reverse_iterator riter = pages.rbegin();
+    auto riter = pages.rbegin();
     return riter->next();
 }
 
 bool PageList::Compress()
 {
     fdpage* lastpage = nullptr;
-    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
+    for(auto iter = pages.begin(); iter != pages.end(); ){
         if(!lastpage){
             // First item
             lastpage = &(*iter);
@@ -427,7 +427,7 @@ bool PageList::Compress()
 
 bool PageList::Parse(off_t new_pos)
 {
-    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.begin(); iter != pages.end(); ++iter){
         if(new_pos == iter->offset){
             // nothing to do
             return true;
@@ -462,7 +462,7 @@ bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
 
     }else if(size < total){
         // cut area
-        for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ){
+        for(auto iter = pages.begin(); iter != pages.end(); ){
             if(iter->next() <= size){
                 ++iter;
             }else{
@@ -485,7 +485,7 @@ bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
 
 bool PageList::IsPageLoaded(off_t start, off_t size) const
 {
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->end() < start){
             continue;
         }
@@ -525,7 +525,7 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, PageList::page_statu
         Parse(start + size);
 
         // set loaded flag
-        for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        for(auto iter = pages.begin(); iter != pages.end(); ++iter){
             if(iter->end() < start){
                 continue;
             }else if(start + size <= iter->offset){
@@ -542,7 +542,7 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, PageList::page_statu
 
 bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const
 {
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(start <= iter->end()){
             if(!iter->loaded && !iter->modified){     // Do not load unloaded and modified areas
                 resstart = iter->offset;
@@ -568,7 +568,7 @@ off_t PageList::GetTotalUnloadedPageSize(off_t start, off_t size, off_t limit_si
     }
     off_t next     = start + size;
     off_t restsize = 0;
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->next() <= start){
             continue;
         }
@@ -609,7 +609,7 @@ size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off
     }
     off_t next = start + size;
 
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->next() <= start){
             continue;
         }
@@ -626,7 +626,7 @@ size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off
         off_t page_size  = page_next - page_start;
 
         // add list
-        fdpage_list_t::reverse_iterator riter = unloaded_list.rbegin();
+        auto riter = unloaded_list.rbegin();
         if(riter != unloaded_list.rend() && riter->next() == page_start){
             // merge to before page
             riter->bytes += page_size;
@@ -657,7 +657,7 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
     compress_fdpage_list_ignore_load(pages, modified_pages, false);
 
     fdpage        prev_page;
-    for(fdpage_list_t::const_iterator iter = modified_pages.begin(); iter != modified_pages.end(); ++iter){
+    for(auto iter = modified_pages.cbegin(); iter != modified_pages.cend(); ++iter){
         if(iter->modified){
             // current is modified area
             if(!prev_page.modified){
@@ -754,7 +754,7 @@ bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size
     // extract areas without data
     fdpage_list_t tmp_pagelist;
     off_t         stop_pos = (0L == size ? -1 : (start + size));
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if((iter->offset + iter->bytes) < start){
             continue;
         }
@@ -786,7 +786,7 @@ bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size
 off_t PageList::BytesModified() const
 {
     off_t total = 0;
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->modified){
             total += iter->bytes;
         }
@@ -799,7 +799,7 @@ bool PageList::IsModified() const
     if(is_shrink){
         return true;
     }
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(iter->modified){
             return true;
         }
@@ -811,7 +811,7 @@ bool PageList::ClearAllModified()
 {
     is_shrink = false;
 
-    for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.begin(); iter != pages.end(); ++iter){
         if(iter->modified){
             iter->modified = false;
         }
@@ -831,7 +831,7 @@ bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
         std::ostringstream ssall;
         ssall << inode << ":" << Size();
 
-        for(fdpage_list_t::iterator iter = pages.begin(); iter != pages.end(); ++iter){
+        for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
             ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
         }
 
@@ -975,7 +975,7 @@ void PageList::Dump() const
     int cnt = 0;
 
     S3FS_PRN_DBG("pages (shrunk=%s) = {", (is_shrink ? "yes" : "no"));
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter, ++cnt){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter, ++cnt){
         S3FS_PRN_DBG("  [%08d] -> {%014lld - %014lld : %s / %s}", cnt, static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), iter->loaded ? "loaded" : "unloaded", iter->modified ? "modified" : "not modified");
     }
     S3FS_PRN_DBG("}");
@@ -1016,7 +1016,7 @@ bool PageList::CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_ar
 
     // Compare each pages and sparse_list
     bool result = true;
-    for(fdpage_list_t::const_iterator iter = pages.begin(); iter != pages.end(); ++iter){
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         if(!PageList::CheckAreaInSparseFile(*iter, sparse_list, fd, err_area_list, warn_area_list)){
             result = false;
         }
