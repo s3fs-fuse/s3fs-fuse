@@ -21,6 +21,7 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
+#include <atomic>
 #include <cstdint>
 #include <curl/curl.h>
 #include <map>
@@ -123,8 +124,7 @@ class S3fsCurl
         static constexpr char   S3FS_SSL_PRIVKEY_PASSWORD[] = "S3FS_SSL_PRIVKEY_PASSWORD";
 
         // class variables
-        static std::mutex       curl_warnings_lock;
-        static bool             curl_warnings_once;  // emit older curl warnings only once
+        static std::atomic<bool> curl_warnings_once;  // emit older curl warnings only once
         static std::mutex       curl_handles_lock;
         static struct callback_locks_t {
             std::mutex      dns;
