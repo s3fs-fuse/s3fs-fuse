@@ -4003,7 +4003,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     return 0;
 }
 
-int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, etaglist_t& parts)
+int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, const etaglist_t& parts)
 {
     S3FS_PRN_INFO3("[tpath=%s][parts=%zu]", SAFESTRPTR(tpath), parts.size());
 
@@ -4014,7 +4014,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
-    for(etaglist_t::iterator it = parts.begin(); it != parts.end(); ++it){
+    for(auto it = parts.begin(); it != parts.end(); ++it){
         if(it->etag.empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", it->part_num);
             return -EIO;
