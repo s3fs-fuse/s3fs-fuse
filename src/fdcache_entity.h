@@ -28,9 +28,14 @@
 
 #include "common.h"
 #include "fdcache_page.h"
-#include "fdcache_fdinfo.h"
 #include "fdcache_untreated.h"
 #include "metaheader.h"
+
+//----------------------------------------------
+// Typedef
+//----------------------------------------------
+class PseudoFdInfo;
+typedef std::map<int, std::unique_ptr<PseudoFdInfo>> fdinfo_map_t;
 
 //------------------------------------------------
 // class FdEntity
@@ -55,14 +60,7 @@ class FdEntity
         mutable std::mutex fdent_lock;
         std::string     path            GUARDED_BY(fdent_lock);       // object path
         int             physical_fd     GUARDED_BY(fdent_lock);       // physical file(cache or temporary file) descriptor
-
-                                                                      // [FIXME]
-                                                                      // GetLastUpdateUntreatedPart and ReplaceLastUpdateUntreatedPart are called from
-                                                                      // PseudoFdInfo::UploadBoundaryLastUntreatedArea, but not sure how to write it between
-                                                                      // classes, so GUARDED_BY have beed removed for now.
-                                                                      //
-        UntreatedParts  untreated_list;                               // list of untreated parts that have been written and not yet uploaded(for streamupload)
-
+        UntreatedParts  untreated_list  GUARDED_BY(fdent_lock);       // list of untreated parts that have been written and not yet uploaded(for streamupload)
         fdinfo_map_t    pseudo_fd_map   GUARDED_BY(fdent_lock);       // pseudo file descriptor information map
         FILE*           pfile           GUARDED_BY(fdent_lock);       // file pointer(tmp file or cache file)
         ino_t           inode           GUARDED_BY(fdent_lock);       // inode number for cache file
@@ -87,10 +85,10 @@ class FdEntity
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
         bool IsUploading() REQUIRES(FdEntity::fdent_lock);
-        bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // [NOTE] not locking
+        bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
-        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
-        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size)  REQUIRES(FdEntity::fdent_lock);
+        int NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        int NoCacheMultipartPost(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
         int NoCacheCompleteMultipartPost(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
         int RowFlushHasLock(int fd, const char* tpath, bool force_sync) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
@@ -229,12 +227,11 @@ class FdEntity
         bool IsDirtyNewFile() const;
         void MarkDirtyMetadata();
 
-        // [FIXME]
-        // For these methods, REQUIRES(FdEntity::fdent_lock) should be specified, but since it is called back
-        // from PseudoFdInfo::UploadBoundaryLastUntreatedArea(), don't know how to write it.
-        //
-        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const;
-        bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
+        bool GetLastUpdateUntreatedPart(off_t& start, off_t& size) const REQUIRES(FdEntity::fdent_lock);
+        bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size) REQUIRES(FdEntity::fdent_lock);
+
+        // Intentionally unimplemented -- for lock checking only.
+        std::mutex* GetMutex() RETURN_CAPABILITY(fdent_lock);
 };
 
 typedef std::map<std::string, std::unique_ptr<FdEntity>> fdent_map_t;           // key=path, value=unique_ptr<FdEntity>

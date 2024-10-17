@@ -22,6 +22,7 @@
 #include <csignal>
 #include <thread>
 
+#include "psemaphore.h"
 #include "s3fs_logger.h"
 #include "sighandlers.h"
 #include "fdcache.h"
