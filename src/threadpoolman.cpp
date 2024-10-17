@@ -147,6 +147,8 @@ void ThreadPoolMan::SetExitFlag(bool exit_flag)
 
 bool ThreadPoolMan::StopThreads()
 {
+    const std::lock_guard<std::mutex> lock(thread_list_lock);
+
     if(thread_list.empty()){
         S3FS_PRN_INFO("Any threads are running now, then nothing to do.");
         return true;
@@ -195,6 +197,8 @@ bool ThreadPoolMan::StartThreads(int count)
         std::promise<int> promise;
         std::future<int> future = promise.get_future();
         std::thread thread(ThreadPoolMan::Worker, this, std::move(promise));
+
+        const std::lock_guard<std::mutex> lock(thread_list_lock);
         thread_list.emplace_back(std::move(thread), std::move(future));
     }
     return true;

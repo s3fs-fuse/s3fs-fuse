@@ -706,9 +706,6 @@ bool StatCache::DelSymlinkHasLock(const std::string& key)
     return true;
 }
 
-// [NOTE]
-// Need to lock StatCache::stat_cache_lock before calling this method.
-//
 bool StatCache::AddNotruncateCache(const std::string& key)
 {
     if(key.empty() || '/' == *key.rbegin()){
@@ -739,9 +736,6 @@ bool StatCache::AddNotruncateCache(const std::string& key)
     return true;
 }
 
-// [NOTE]
-// Need to lock StatCache::stat_cache_lock before calling this method.
-//
 bool StatCache::DelNotruncateCache(const std::string& key)
 {
     if(key.empty() || '/' == *key.rbegin()){

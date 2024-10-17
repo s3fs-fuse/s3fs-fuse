@@ -34,8 +34,8 @@ class UntreatedParts
     private:
         mutable std::mutex untreated_list_lock;   // protects untreated_list
 
-        untreated_list_t untreated_list;
-        long             last_tag = 0;            // [NOTE] Use this to identify the latest updated part.
+        untreated_list_t untreated_list GUARDED_BY(untreated_list_lock);
+        long             last_tag GUARDED_BY(untreated_list_lock) = 0;  // [NOTE] Use this to identify the latest updated part.
 
     private:
         bool RowGetPart(off_t& start, off_t& size, off_t max_size, off_t min_size, bool lastpart) const;

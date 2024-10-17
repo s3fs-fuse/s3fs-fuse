@@ -651,10 +651,6 @@ FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
     return ent;
 }
 
-// [NOTE]
-// Returns the number of open pseudo fd.
-// This method is called from GetOpenFdCount method which is already locked.
-//
 int FdManager::GetPseudoFdCount(const char* path)
 {
     S3FS_PRN_DBG("[path=%s]", SAFESTRPTR(path));
@@ -757,9 +753,6 @@ bool FdManager::ChangeEntityToTempPath(FdEntity* ent, const char* path)
     return true;
 }
 
-// [NOTE]
-// FdManager::fd_manager_lock should be locked by the caller.
-//
 bool FdManager::UpdateEntityToTempPath()
 {
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);

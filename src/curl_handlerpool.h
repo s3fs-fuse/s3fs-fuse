@@ -27,6 +27,8 @@
 #include <memory>
 #include <mutex>
 
+#include "common.h"
+
 //----------------------------------------------
 // Typedefs
 //----------------------------------------------
@@ -57,7 +59,7 @@ class CurlHandlerPool
     private:
         int             mMaxHandlers;
         std::mutex      mLock;
-        std::list<CurlUniquePtr> mPool;
+        std::list<CurlUniquePtr> mPool GUARDED_BY(mLock);
 };
 
 #endif // S3FS_CURL_HANDLERPOOL_H_

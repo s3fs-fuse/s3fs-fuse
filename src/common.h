@@ -63,6 +63,9 @@ extern std::string    instance_name;
 #define GUARDED_BY(x) \
     THREAD_ANNOTATION_ATTRIBUTE(guarded_by(x))
 
+#define PT_GUARDED_BY(x) \
+    THREAD_ANNOTATION_ATTRIBUTE(pt_guarded_by(x))
+
 #define REQUIRES(...) \
     THREAD_ANNOTATION_ATTRIBUTE(requires_capability(__VA_ARGS__))
 

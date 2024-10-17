@@ -83,14 +83,14 @@ class StatCache
     private:
         static StatCache       singleton;
         static std::mutex      stat_cache_lock;
-        stat_cache_t           stat_cache;
+        stat_cache_t           stat_cache GUARDED_BY(stat_cache_lock);
         bool                   IsExpireTime;
         bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
         time_t                 ExpireTime;
         unsigned long          CacheSize;
         bool                   IsCacheNoObject;
-        symlink_cache_t        symlink_cache;
-        notruncate_dir_map_t   notruncate_file_cache;
+        symlink_cache_t        symlink_cache GUARDED_BY(stat_cache_lock);
+        notruncate_dir_map_t   notruncate_file_cache GUARDED_BY(stat_cache_lock);
 
         StatCache();
         ~StatCache();
@@ -102,8 +102,8 @@ class StatCache
         // Truncate symbolic link cache
         bool TruncateSymlink() REQUIRES(StatCache::stat_cache_lock);
 
-        bool AddNotruncateCache(const std::string& key);
-        bool DelNotruncateCache(const std::string& key);
+        bool AddNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
+        bool DelNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
 
     public:
         StatCache(const StatCache&) = delete;
@@ -191,7 +191,7 @@ class StatCache
             const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
             return DelSymlinkHasLock(key);
         }
-        bool DelSymlinkHasLock(const std::string& key);
+        bool DelSymlinkHasLock(const std::string& key) REQUIRES(stat_cache_lock);
 
         // Cache for Notruncate file
         bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);
