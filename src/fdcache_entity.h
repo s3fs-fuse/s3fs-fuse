@@ -35,7 +35,7 @@
 //------------------------------------------------
 // class FdEntity
 //------------------------------------------------
-class FdEntity
+class FdEntity : public std::enable_shared_from_this<FdEntity>
 {
     private:
         // [NOTE]
@@ -109,6 +109,8 @@ class FdEntity
         bool AddUntreated(off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
 
         bool IsDirtyMetadata() const REQUIRES(FdEntity::fdent_data_lock);
+
+        std::shared_ptr<FdEntity> get_shared_ptr() { return shared_from_this(); }
 
     public:
         static bool GetNoMixMultipart() { return mixmultipart; }
@@ -237,8 +239,7 @@ class FdEntity
         bool ReplaceLastUpdateUntreatedPart(off_t front_start, off_t front_size, off_t behind_start, off_t behind_size);
 };
 
-typedef std::map<std::string, std::unique_ptr<FdEntity>> fdent_map_t;           // key=path, value=unique_ptr<FdEntity>
-typedef std::map<std::string, FdEntity*>                 fdent_direct_map_t;    // key=path, value=FdEntity*
+typedef std::map<std::string, std::shared_ptr<FdEntity>> fdent_map_t;           // key=path, value=FdEntity
 
 #endif // S3FS_FDCACHE_ENTITY_H_
 
