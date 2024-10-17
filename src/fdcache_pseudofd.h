@@ -24,6 +24,8 @@
 #include <mutex>
 #include <vector>
 
+#include "common.h"
+
 //------------------------------------------------
 // Typdefs
 //------------------------------------------------
@@ -37,7 +39,7 @@ typedef std::vector<int>    pseudofd_list_t;
 class PseudoFdManager
 {
     private:
-        pseudofd_list_t pseudofd_list;
+        pseudofd_list_t pseudofd_list GUARDED_BY(pseudofd_list_lock);
         std::mutex      pseudofd_list_lock;    // protects pseudofd_list
 
         static PseudoFdManager& GetManager();
@@ -45,7 +47,7 @@ class PseudoFdManager
         PseudoFdManager() = default;
         ~PseudoFdManager() = default;
 
-        int GetUnusedMinPseudoFd() const;
+        int GetUnusedMinPseudoFd() const REQUIRES(pseudofd_list_lock);
         int CreatePseudoFd();
         bool ReleasePseudoFd(int fd);
 

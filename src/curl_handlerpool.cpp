@@ -35,6 +35,7 @@ bool CurlHandlerPool::Init()
             Destroy();
             return false;
         }
+        const std::lock_guard<std::mutex> lock(mLock);
         mPool.push_back(std::move(hCurl));
     }
     return true;

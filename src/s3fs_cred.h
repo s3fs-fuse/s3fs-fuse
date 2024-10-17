@@ -65,22 +65,22 @@ class S3fsCred
 
         bool                load_iamrole;
 
-        std::string         AWSAccessKeyId;         // Protect exclusively
-        std::string         AWSSecretAccessKey;     // Protect exclusively
-        std::string         AWSAccessToken;         // Protect exclusively
-        time_t              AWSAccessTokenExpire;   // Protect exclusively
+        std::string         AWSAccessKeyId GUARDED_BY(token_lock);
+        std::string         AWSSecretAccessKey GUARDED_BY(token_lock);
+        std::string         AWSAccessToken GUARDED_BY(token_lock);
+        time_t              AWSAccessTokenExpire GUARDED_BY(token_lock);
 
         bool                is_ecs;
         bool                is_use_session_token;
         bool                is_ibm_iam_auth;
 
         std::string         IAM_cred_url;
-        int                 IAM_api_version;        // Protect exclusively
-        std::string         IAMv2_api_token;        // Protect exclusively
+        int                 IAM_api_version GUARDED_BY(token_lock);
+        std::string         IAMv2_api_token GUARDED_BY(token_lock);
         size_t              IAM_field_count;
         std::string         IAM_token_field;
         std::string         IAM_expiry_field;
-        std::string         IAM_role;               // Protect exclusively
+        std::string         IAM_role GUARDED_BY(token_lock);
 
         bool                set_builtin_cred_opts;  // true if options other than "credlib" is set
         std::string         credlib;                // credlib(name or path)

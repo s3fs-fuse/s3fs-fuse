@@ -27,6 +27,8 @@
 #include <thread>
 #include <vector>
 
+#include "common.h"
+
 //----------------------------------------------
 // Typedef
 //----------------------------------------------
@@ -56,7 +58,7 @@ class S3fsMultiCurl
         void*                      pNotFoundCallbackParam;
 
         std::mutex completed_tids_lock;
-        std::vector<std::thread::id> completed_tids;
+        std::vector<std::thread::id> completed_tids GUARDED_BY(completed_tids_lock);
 
     private:
         bool ClearEx(bool is_all);

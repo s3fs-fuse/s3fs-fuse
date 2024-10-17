@@ -39,15 +39,15 @@ class FdManager
       static std::mutex      except_entmap_lock;
       static std::string     cache_dir;
       static bool            check_cache_dir_exist;
-      static off_t           free_disk_space;       // limit free disk space
-      static off_t           fake_used_disk_space;  // difference between fake free disk space and actual at startup(for test/debug)
+      static off_t           free_disk_space GUARDED_BY(reserved_diskspace_lock);  // limit free disk space
+      static off_t           fake_used_disk_space GUARDED_BY(reserved_diskspace_lock);  // difference between fake free disk space and actual at startup(for test/debug)
       static std::string     check_cache_output;
       static bool            checked_lseek;
       static bool            have_lseek_hole;
       static std::string     tmp_dir;
 
-      fdent_map_t            fent;
-      fdent_direct_map_t     except_fent;           // A map of delayed deletion fdentity
+      fdent_map_t            fent GUARDED_BY(fd_manager_lock);
+      fdent_direct_map_t     except_fent GUARDED_BY(except_entmap_lock);  // A map of delayed deletion fdentity
 
   private:
       static off_t GetFreeDiskSpaceHasLock(const char* path) REQUIRES(FdManager::reserved_diskspace_lock);
@@ -56,9 +56,10 @@ class FdManager
       static int GetVfsStat(const char* path, struct statvfs* vfsbuf);
       static off_t GetEnsureFreeDiskSpaceHasLock() REQUIRES(FdManager::reserved_diskspace_lock);
 
-      int GetPseudoFdCount(const char* path);
-      bool UpdateEntityToTempPath();
-      void CleanupCacheDirInternal(const std::string &path = "");
+      // Returns the number of open pseudo fd.
+      int GetPseudoFdCount(const char* path) REQUIRES(fd_manager_lock);
+      bool UpdateEntityToTempPath() REQUIRES(fd_manager_lock);
+      void CleanupCacheDirInternal(const std::string &path = "") REQUIRES(cache_cleanup_lock);
       bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);
 
   public:
