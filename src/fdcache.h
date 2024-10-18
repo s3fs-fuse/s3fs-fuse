@@ -25,6 +25,7 @@
 
 #include "common.h"
 #include "fdcache_entity.h"
+#include "s3fs_util.h"
 
 //------------------------------------------------
 // class FdManager
@@ -100,7 +101,7 @@ class FdManager
       static bool HaveLseekHole();
       static bool SetTmpDir(const char* dir);
       static bool CheckTmpDirExist();
-      static FILE* MakeTempFile();
+      static std::unique_ptr<FILE, decltype(&s3fs_fclose)> MakeTempFile();
       static off_t GetTotalDiskSpaceByRatio(int ratio);
 
       // Return FdEntity associated with path, returning nullptr on error.  This operation increments the reference count; callers must decrement via Close after use.
