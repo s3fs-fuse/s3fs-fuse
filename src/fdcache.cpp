@@ -345,7 +345,7 @@ bool FdManager::HaveLseekHole()
 
     // create temporary file
     int fd;
-    std::unique_ptr<FILE, decltype(&s3fs_fclose)> ptmpfp(MakeTempFile(), &s3fs_fclose);
+    auto ptmpfp = MakeTempFile();
     if(nullptr == ptmpfp || -1 == (fd = fileno(ptmpfp.get()))){
         S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
         FdManager::checked_lseek   = true;
@@ -406,7 +406,7 @@ bool FdManager::CheckTmpDirExist()
     return IsDir(tmp_dir);
 }
 
-FILE* FdManager::MakeTempFile() {
+std::unique_ptr<FILE, decltype(&s3fs_fclose)> FdManager::MakeTempFile() {
     int fd;
     char cfn[PATH_MAX];
     std::string fn = tmp_dir + "/s3fstmp.XXXXXX";
@@ -416,13 +416,13 @@ FILE* FdManager::MakeTempFile() {
     fd = mkstemp(cfn);
     if (-1 == fd) {
         S3FS_PRN_ERR("failed to create tmp file. errno(%d)", errno);
-        return nullptr;
+        return {nullptr, &s3fs_fclose};
     }
     if (-1 == unlink(cfn)) {
         S3FS_PRN_ERR("failed to delete tmp file. errno(%d)", errno);
-        return nullptr;
+        return {nullptr, &s3fs_fclose};
     }
-    return fdopen(fd, "rb+");
+    return {fdopen(fd, "rb+"), &s3fs_fclose};
 }
 
 bool FdManager::HasOpenEntityFd(const char* path)
@@ -1041,11 +1041,13 @@ bool FdManager::CheckAllCache()
         return false;
     }
 
+    std::unique_ptr<FILE, decltype(&s3fs_fclose)> pfp(nullptr, &s3fs_fclose);
     FILE* fp;
     if(FdManager::check_cache_output.empty()){
         fp = stdout;
     }else{
-        if(nullptr == (fp = fopen(FdManager::check_cache_output.c_str(), "a+"))){
+        pfp.reset(fp = fopen(FdManager::check_cache_output.c_str(), "a+"));
+        if(nullptr == pfp){
             S3FS_PRN_ERR("Could not open(create) output file(%s) for checking all cache by errno(%d)", FdManager::check_cache_output.c_str(), errno);
             return false;
         }
@@ -1066,10 +1068,6 @@ bool FdManager::CheckAllCache()
 
     // print foot message
     S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FOOT, total_file_cnt, err_file_cnt, err_dir_cnt);
-
-    if(stdout != fp){
-        fclose(fp);
-    }
 
     return result;
 }

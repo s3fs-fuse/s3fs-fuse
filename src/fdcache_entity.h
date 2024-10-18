@@ -30,6 +30,7 @@
 #include "fdcache_page.h"
 #include "fdcache_untreated.h"
 #include "metaheader.h"
+#include "s3fs_util.h"
 
 //----------------------------------------------
 // Typedef
@@ -62,7 +63,7 @@ class FdEntity
         int             physical_fd     GUARDED_BY(fdent_lock);       // physical file(cache or temporary file) descriptor
         UntreatedParts  untreated_list  GUARDED_BY(fdent_lock);       // list of untreated parts that have been written and not yet uploaded(for streamupload)
         fdinfo_map_t    pseudo_fd_map   GUARDED_BY(fdent_lock);       // pseudo file descriptor information map
-        FILE*           pfile           GUARDED_BY(fdent_lock);       // file pointer(tmp file or cache file)
+        std::unique_ptr<FILE, decltype(&s3fs_fclose)> pfile GUARDED_BY(fdent_lock) = {nullptr, &s3fs_fclose};  // file pointer(tmp file or cache file)
         ino_t           inode           GUARDED_BY(fdent_lock);       // inode number for cache file
         headers_t       orgmeta         GUARDED_BY(fdent_lock);       // original headers at opening
         off_t           size_orgmeta    GUARDED_BY(fdent_lock);       // original file size in original headers

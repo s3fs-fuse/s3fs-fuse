@@ -108,7 +108,7 @@ ino_t FdEntity::GetInode(int fd)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     path(SAFESTRPTR(tpath)),
-    physical_fd(-1), pfile(nullptr), inode(0), size_orgmeta(0),
+    physical_fd(-1), inode(0), size_orgmeta(0),
     cachepath(SAFESTRPTR(cpath)), pending_status(pending_status_t::NO_UPDATE_PENDING)
 {
     holding_mtime.tv_sec = -1;
@@ -142,10 +142,7 @@ void FdEntity::Clear()
                 }
             }
         }
-        if(pfile){
-            fclose(pfile);
-            pfile = nullptr;
-        }
+        pfile.reset();
         physical_fd = -1;
         inode       = 0;
 
@@ -212,10 +209,7 @@ void FdEntity::Close(int fd)
                 }
             }
         }
-        if(pfile){
-            fclose(pfile);
-            pfile = nullptr;
-        }
+        pfile.reset();
         physical_fd = -1;
         inode       = 0;
 
@@ -537,7 +531,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             physical_fd = mirrorfd;
 
             // make file pointer(for being same tmpfile)
-            if(nullptr == (pfile = fdopen(physical_fd, "wb"))){
+            if(nullptr == (pfile = {fdopen(physical_fd, "wb"), &s3fs_fclose})){
                 S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
                 close(physical_fd);
                 physical_fd = -1;
@@ -550,14 +544,12 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             inode = 0;
 
             // open temporary file
-            if(nullptr == (pfile = FdManager::MakeTempFile()) || -1 ==(physical_fd = fileno(pfile))){
+            auto tmpfile = FdManager::MakeTempFile();
+            if(nullptr == tmpfile || -1 ==(physical_fd = fileno(tmpfile.get()))){
                 S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
-                if(pfile){
-                    fclose(pfile);
-                    pfile = nullptr;
-                }
                 return (0 == errno ? -EIO : -errno);
             }
+            pfile = std::move(tmpfile);
             if(-1 == size){
                 size = 0;
                 pagelist.Init(0, false, false);
@@ -580,8 +572,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         if(is_truncate){
             if(0 != ftruncate(physical_fd, size) || 0 != fsync(physical_fd)){
                 S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
-                fclose(pfile);
-                pfile       = nullptr;
+                pfile.reset();
                 physical_fd = -1;
                 inode       = 0;
                 return (0 == errno ? -EIO : -errno);
@@ -614,8 +605,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
         if(UTIME_OMIT != ts_mctime.tv_nsec){
             if(0 != SetMCtimeHasLock(ts_mctime, ts_mctime)){
                 S3FS_PRN_ERR("failed to set mtime/ctime. errno(%d)", errno);
-                fclose(pfile);
-                pfile       = nullptr;
+                pfile.reset();
                 physical_fd = -1;
                 inode       = 0;
                 return (0 == errno ? -EIO : -errno);
@@ -632,10 +622,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
     if(0 < truncated_size){
         if(!AddUntreated(truncated_start, truncated_size)){
             pseudo_fd_map.erase(pseudo_fd);
-            if(pfile){
-                fclose(pfile);
-                pfile = nullptr;
-            }
+            pfile.reset();
         }
     }
 
@@ -1103,7 +1090,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
 
     // open temporary file
     int tmpfd;
-    std::unique_ptr<FILE, decltype(&s3fs_fclose)> ptmpfp(FdManager::MakeTempFile(), &s3fs_fclose);
+    auto ptmpfp = FdManager::MakeTempFile();
     if(nullptr == ptmpfp || -1 == (tmpfd = fileno(ptmpfp.get()))){
         S3FS_PRN_ERR("failed to open temporary file by errno(%d)", errno);
         return (0 == errno ? -EIO : -errno);
