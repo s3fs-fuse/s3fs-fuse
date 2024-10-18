@@ -460,7 +460,7 @@ FdManager::FdManager()
 FdManager::~FdManager()
 {
     if(this == FdManager::get()){
-        for(fdent_map_t::iterator iter = fent.begin(); fent.end() != iter; ++iter){
+        for(auto iter = fent.cbegin(); fent.cend() != iter; ++iter){
             FdEntity* ent = (*iter).second.get();
             S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
         }
@@ -481,25 +481,25 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
 
     UpdateEntityToTempPath();
 
-    fdent_map_t::iterator iter = fent.find(path);
-    if(fent.end() != iter && iter->second){
+    auto fiter = fent.find(path);
+    if(fent.cend() != fiter && fiter->second){
         if(-1 == existfd){
             if(newfd){
-                existfd = iter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
+                existfd = fiter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
             }
-            return iter->second.get();
+            return fiter->second.get();
         }else{
-            if(iter->second->FindPseudoFd(existfd)){
+            if(fiter->second->FindPseudoFd(existfd)){
                 if(newfd){
-                    existfd = iter->second->Dup(existfd);
+                    existfd = fiter->second->Dup(existfd);
                 }
-                return iter->second.get();
+                return fiter->second.get();
             }
         }
     }
 
     if(-1 != existfd){
-        for(iter = fent.begin(); iter != fent.end(); ++iter){
+        for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
             if(iter->second && iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
                 if(iter->second->GetPath() == path){
@@ -518,7 +518,7 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
     // If the cache directory is not specified, s3fs opens a temporary file
     // when the file is opened.
     if(!FdManager::IsCacheDir()){
-        for(iter = fent.begin(); iter != fent.end(); ++iter){
+        for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
             if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
                 return iter->second.get();
             }
@@ -540,7 +540,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
     UpdateEntityToTempPath();
 
     // search in mapping by key(path)
-    fdent_map_t::iterator iter = fent.find(path);
+    auto iter = fent.find(path);
     if(fent.end() == iter && !force_tmpfile && !FdManager::IsCacheDir()){
         // If the cache directory is not specified, s3fs opens a temporary file
         // when the file is opened.
@@ -628,7 +628,7 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
     UpdateEntityToTempPath();
 
     // search from all entity.
-    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
         if(iter->second && iter->second->FindPseudoFd(existfd)){
             // found existfd in entity
             return iter->second.get();
@@ -662,7 +662,7 @@ int FdManager::GetPseudoFdCount(const char* path)
     UpdateEntityToTempPath();
 
     // search from all entity.
-    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
         if(iter->second && iter->second->GetPath() == path){
             // found the entity for the path
             return iter->second->GetOpenCount();
@@ -678,7 +678,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
 
     UpdateEntityToTempPath();
 
-    fdent_map_t::iterator iter = fent.find(from);
+    auto iter = fent.find(from);
     if(fent.end() == iter && !FdManager::IsCacheDir()){
         // If the cache directory is not specified, s3fs opens a temporary file
         // when the file is opened.
@@ -724,7 +724,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
 
     UpdateEntityToTempPath();
 
-    for(fdent_map_t::iterator iter = fent.begin(); iter != fent.end(); ++iter){
+    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
         if(iter->second.get() == ent){
             ent->Close(fd);
             if(!ent->IsOpen()){
@@ -732,7 +732,7 @@ bool FdManager::Close(FdEntity* ent, int fd)
                 iter = fent.erase(iter);
 
                 // check another key name for entity value to be on the safe side
-                for(; iter != fent.end(); ){
+                for(; iter != fent.cend(); ){
                     if(iter->second.get() == ent){
                         iter = fent.erase(iter);
                     }else{
@@ -757,15 +757,15 @@ bool FdManager::UpdateEntityToTempPath()
 {
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
 
-    for(fdent_direct_map_t::iterator except_iter = except_fent.begin(); except_iter != except_fent.end(); ){
+    for(auto except_iter = except_fent.cbegin(); except_iter != except_fent.cend(); ){
         std::string tmppath;
         FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
 
-        fdent_map_t::iterator iter = fent.find(except_iter->first);
-        if(fent.end() != iter && iter->second.get() == except_iter->second){
+        auto iter = fent.find(except_iter->first);
+        if(fent.cend() != iter && iter->second.get() == except_iter->second){
             // Move the entry to the new key
             fent[tmppath] = std::move(iter->second);
-            iter          = fent.erase(iter);
+            fent.erase(iter);
             except_iter   = except_fent.erase(except_iter);
         }else{
             // [NOTE]
@@ -838,8 +838,8 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
             }
             UpdateEntityToTempPath();
 
-            fdent_map_t::iterator iter = fent.find(next_path);
-            if(fent.end() == iter) {
+            auto iter = fent.find(next_path);
+            if(fent.cend() == iter) {
                 S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
                 FdManager::DeleteCacheFile(next_path.c_str());
             }
@@ -950,8 +950,8 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
                 UpdateEntityToTempPath();
 
-                fdent_map_t::iterator iter = fent.find(object_file_path);
-                if(fent.end() != iter){
+                auto iter = fent.find(object_file_path);
+                if(fent.cend() != iter){
                     // This file is opened now, then we need to put warning message.
                     strOpenedWarn = CACHEDBG_FMT_WARN_OPEN;
                 }
@@ -1007,14 +1007,14 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
                 S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
                 if(!warn_area_list.empty()){
                     S3FS_PRN_CACHE(fp, CACHEDBG_FMT_WARN_HEAD);
-                    for(fdpage_list_t::const_iterator witer = warn_area_list.begin(); witer != warn_area_list.end(); ++witer){
+                    for(auto witer = warn_area_list.cbegin(); witer != warn_area_list.cend(); ++witer){
                         S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, static_cast<size_t>(witer->offset), static_cast<size_t>(witer->bytes));
                     }
                 }
                 if(!err_area_list.empty()){
                     ++err_file_cnt;
                     S3FS_PRN_CACHE(fp, CACHEDBG_FMT_ERR_HEAD);
-                    for(fdpage_list_t::const_iterator eiter = err_area_list.begin(); eiter != err_area_list.end(); ++eiter){
+                    for(auto eiter = err_area_list.cbegin(); eiter != err_area_list.cend(); ++eiter){
                         S3FS_PRN_CACHE(fp, CACHEDBG_FMT_PROB_BLOCK, static_cast<size_t>(eiter->offset), static_cast<size_t>(eiter->bytes));
                     }
                 }

@@ -43,11 +43,11 @@ bool UntreatedParts::AddPart(off_t start, off_t size)
     ++last_tag;
 
     // Check the overlap with the existing part and add the part.
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
         if(iter->stretch(start, size, last_tag)){
             // the part was stretched, thus check if it overlaps with next parts
-            untreated_list_t::iterator niter = iter;
-            for(++niter; niter != untreated_list.end(); ){
+            auto niter = iter;
+            for(++niter; niter != untreated_list.cend(); ){
                 if(!iter->stretch(niter->start, niter->size, last_tag)){
                     // This next part does not overlap with the current part
                     break;
@@ -79,7 +79,7 @@ bool UntreatedParts::RowGetPart(off_t& start, off_t& size, off_t max_size, off_t
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
     // Check the overlap with the existing part and add the part.
-    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.cbegin(); iter != untreated_list.cend(); ++iter){
         if(!lastpart || iter->untreated_tag == last_tag){
             if(min_size <= iter->size){
                 if(iter->size <= max_size){
@@ -118,7 +118,7 @@ bool UntreatedParts::ClearParts(off_t start, off_t size)
     }
 
     // Check the overlap with the existing part.
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ){
+    for(auto iter = untreated_list.begin(); iter != untreated_list.end(); ){
         if(0 != size && (start + size) <= iter->start){
             // clear area is in front of iter area, no more to do.
             break;
@@ -166,7 +166,7 @@ bool UntreatedParts::GetLastUpdatePart(off_t& start, off_t& size) const
 {
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
-    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.cbegin(); iter != untreated_list.cend(); ++iter){
         if(iter->untreated_tag == last_tag){
             start = iter->start;
             size  = iter->size;
@@ -186,13 +186,13 @@ bool UntreatedParts::ReplaceLastUpdatePart(off_t start, off_t size)
 {
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
         if(iter->untreated_tag == last_tag){
             if(0 < size){
                 iter->start = start;
                 iter->size  = size;
             }else{
-                iter = untreated_list.erase(iter);
+                untreated_list.erase(iter);
             }
             return true;
         }
@@ -207,7 +207,7 @@ bool UntreatedParts::RemoveLastUpdatePart()
 {
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
-    for(untreated_list_t::iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
         if(iter->untreated_tag == last_tag){
             untreated_list.erase(iter);
             return true;
@@ -232,7 +232,7 @@ void UntreatedParts::Dump()
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
     S3FS_PRN_DBG("untreated list = [");
-    for(untreated_list_t::const_iterator iter = untreated_list.begin(); iter != untreated_list.end(); ++iter){
+    for(auto iter = untreated_list.cbegin(); iter != untreated_list.cend(); ++iter){
         S3FS_PRN_DBG("    {%014lld - %014lld : tag=%ld}", static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->untreated_tag);
     }
     S3FS_PRN_DBG("]");

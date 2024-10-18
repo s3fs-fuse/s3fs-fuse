@@ -284,7 +284,7 @@ void S3fsCurl::LockCurlShare(CURL* handle, curl_lock_data nLockData, curl_lock_a
     if(!hCurlShare){
         return;
     }
-    S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
+    auto* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
     if(CURL_LOCK_DATA_DNS == nLockData){
         locks->dns.lock();
     }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
@@ -297,7 +297,7 @@ void S3fsCurl::UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* use
     if(!hCurlShare){
         return;
     }
-    S3fsCurl::callback_locks_t* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
+    auto* locks = static_cast<S3fsCurl::callback_locks_t*>(useptr);
     if(CURL_LOCK_DATA_DNS == nLockData){
         locks->dns.unlock();
     }else if(CURL_LOCK_DATA_SSL_SESSION == nLockData){
@@ -457,10 +457,10 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     }
 
     // if we get here, then we have an extension (ext)
-    mimes_t::const_iterator iter = S3fsCurl::mimeTypes.find(ext);
+    auto iter = S3fsCurl::mimeTypes.find(ext);
     // if the last extension matches a mimeType, then return
     // that mime type
-    if (iter != S3fsCurl::mimeTypes.end()) {
+    if (iter != S3fsCurl::mimeTypes.cend()) {
         result = (*iter).second;
         return result;
     }
@@ -473,7 +473,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     // Didn't find a mime-type for the first extension
     // Look for second extension in mimeTypes, return if found
     iter = S3fsCurl::mimeTypes.find(ext2);
-    if (iter != S3fsCurl::mimeTypes.end()) {
+    if (iter != S3fsCurl::mimeTypes.cend()) {
         result = (*iter).second;
         return result;
     }
@@ -558,14 +558,14 @@ bool S3fsCurl::LocateBundle()
 
 size_t S3fsCurl::WriteMemoryCallback(void* ptr, size_t blockSize, size_t numBlocks, void* data)
 {
-    std::string* body  = static_cast<std::string*>(data);
+    auto* body  = static_cast<std::string*>(data);
     body->append(static_cast<const char*>(ptr), blockSize * numBlocks);
     return (blockSize * numBlocks);
 }
 
 size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
+    auto* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
@@ -584,7 +584,7 @@ size_t S3fsCurl::ReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 
 size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, void* userPtr)
 {
-    headers_t* headers = static_cast<headers_t*>(userPtr);
+    auto* headers = static_cast<headers_t*>(userPtr);
     std::string header(static_cast<char*>(data), blockSize * numBlocks);
     std::string key;
     std::istringstream ss(header);
@@ -592,7 +592,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
     if(getline(ss, key, ':')){
         // Force to lower, only "x-amz"
         std::string lkey = key;
-        transform(lkey.begin(), lkey.end(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
+        transform(lkey.cbegin(), lkey.cend(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
         if(is_prefix(lkey.c_str(), "x-amz")){
             key = lkey;
         }
@@ -605,7 +605,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
 
 size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
+    auto* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
@@ -637,7 +637,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
 
 size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, void* userp)
 {
-    S3fsCurl* pCurl = static_cast<S3fsCurl*>(userp);
+    auto* pCurl = static_cast<S3fsCurl*>(userp);
 
     if(1 > (size * nmemb)){
         return 0;
@@ -746,7 +746,7 @@ std::string S3fsCurl::SetStorageClass(const std::string& storage_class)
     std::string old = S3fsCurl::storage_class;
     S3fsCurl::storage_class = storage_class;
     // AWS requires uppercase storage class values
-    transform(S3fsCurl::storage_class.begin(), S3fsCurl::storage_class.end(), S3fsCurl::storage_class.begin(), ::toupper);
+    transform(S3fsCurl::storage_class.cbegin(), S3fsCurl::storage_class.cend(), S3fsCurl::storage_class.begin(), ::toupper);
     return old;
 }
 
@@ -919,8 +919,8 @@ bool S3fsCurl::LoadEnvSseKmsid()
 //
 bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
 {
-    for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter){
-        if(md5.empty() || md5 == (*iter).begin()->first){
+    for(auto iter = S3fsCurl::sseckeys.cbegin(); iter != S3fsCurl::sseckeys.cend(); ++iter){
+        if(md5.empty() || md5 == (*iter).cbegin()->first){
             md5    = iter->begin()->first;
             ssekey = iter->begin()->second;
             return true;
@@ -935,7 +935,7 @@ bool S3fsCurl::GetSseKeyMd5(size_t pos, std::string& md5)
         return false;
     }
     size_t cnt = 0;
-    for(sseckeylist_t::const_iterator iter = S3fsCurl::sseckeys.begin(); iter != S3fsCurl::sseckeys.end(); ++iter, ++cnt){
+    for(auto iter = S3fsCurl::sseckeys.cbegin(); iter != S3fsCurl::sseckeys.cend(); ++iter, ++cnt){
         if(pos == cnt){
             md5 = iter->begin()->first;
             return true;
@@ -1551,7 +1551,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
     curlmulti.SetSuccessCallback(S3fsCurl::MixMultipartPostCallback);
     curlmulti.SetRetryCallback(S3fsCurl::MixMultipartPostRetryCallback);
 
-    for(fdpage_list_t::const_iterator iter = mixuppages.begin(); iter != mixuppages.end(); ++iter){
+    for(auto iter = mixuppages.cbegin(); iter != mixuppages.cend(); ++iter){
         if(iter->modified){
             // Multipart upload
             std::unique_ptr<S3fsCurl> s3fscurl_para(new S3fsCurl(true));
@@ -2837,7 +2837,7 @@ std::string S3fsCurl::CalcSignatureV2(const std::string& method, const std::stri
 
     const void* key            = secret_access_key.data();
     size_t key_len             = secret_access_key.size();
-    const unsigned char* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
+    const auto* sdata = reinterpret_cast<const unsigned char*>(StringToSign.data());
     size_t sdata_len           = StringToSign.size();
     unsigned int md_len        = 0;
 
@@ -2883,7 +2883,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     std::unique_ptr<unsigned char[]> kService = s3fs_HMAC256(kRegion.get(), kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService_len);
     std::unique_ptr<unsigned char[]> kSigning = s3fs_HMAC256(kService.get(), kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning_len);
 
-    const unsigned char* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
+    const auto* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
     size_t               cRequest_len = StringCQ.size();
     sha256_t sRequest;
     s3fs_sha256(cRequest, cRequest_len, &sRequest);
@@ -2893,7 +2893,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringToSign += strdate + "/" + endpoint + "/s3/aws4_request\n";
     StringToSign += s3fs_hex_lower(sRequest.data(), sRequest.size());
 
-    const unsigned char* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
+    const auto* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
     size_t               cscope_len = StringToSign.size();
     unsigned int         md_len     = 0;
 
@@ -3413,7 +3413,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     // file exists in s3
     // fixme: clean this up.
     meta.clear();
-    for(headers_t::iterator iter = responseHeaders.begin(); iter != responseHeaders.end(); ++iter){
+    for(auto iter = responseHeaders.cbegin(); iter != responseHeaders.cend(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
         if(key == "content-type"){
@@ -3455,7 +3455,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     requestHeaders      = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
@@ -3592,7 +3592,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     std::string contype = S3fsCurl::LookupMimeType(tpath);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
@@ -3917,7 +3917,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
 
     std::string contype = S3fsCurl::LookupMimeType(tpath);
 
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
@@ -4007,7 +4007,7 @@ int S3fsCurl::CompleteMultipartPostRequest(const char* tpath, const std::string&
     // make contents
     std::string postContent;
     postContent += "<CompleteMultipartUpload>\n";
-    for(auto it = parts.begin(); it != parts.end(); ++it){
+    for(auto it = parts.cbegin(); it != parts.cend(); ++it){
         if(it->etag.empty()){
             S3FS_PRN_ERR("%d file part is not finished uploading.", it->part_num);
             return -EIO;
@@ -4323,7 +4323,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
         std::string value = iter->second;
         if(key == "x-amz-copy-source"){
@@ -4362,8 +4362,8 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
 
 bool S3fsCurl::UploadMultipartPostComplete()
 {
-    headers_t::iterator it = responseHeaders.find("ETag");
-    if (it == responseHeaders.end()) {
+    auto it = responseHeaders.find("ETag");
+    if (it == responseHeaders.cend()) {
         return false;
     }
     std::string etag = peeloff(it->second);

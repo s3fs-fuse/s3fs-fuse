@@ -126,7 +126,7 @@ std::string trim(std::string s, const char *t /* = SPACES */)
 
 std::string peeloff(const std::string& s)
 {
-    if(s.size() < 2 || *s.begin() != '"' || *s.rbegin() != '"'){
+    if(s.size() < 2 || *s.cbegin() != '"' || *s.rbegin() != '"'){
         return s;
     }
     return s.substr(1, s.size() - 2);

@@ -60,7 +60,7 @@ int PseudoFdManager::GetUnusedMinPseudoFd() const
     int min_fd = MIN_PSEUDOFD_NUMBER;
 
     // Look for the first discontinuous value.
-    for(pseudofd_list_t::const_iterator iter = pseudofd_list.begin(); iter != pseudofd_list.end(); ++iter){
+    for(auto iter = pseudofd_list.cbegin(); iter != pseudofd_list.cend(); ++iter){
         if(min_fd == (*iter)){
             ++min_fd;
         }else if(min_fd < (*iter)){
@@ -85,7 +85,7 @@ bool PseudoFdManager::ReleasePseudoFd(int fd)
 {
     const std::lock_guard<std::mutex> lock(pseudofd_list_lock);
 
-    for(pseudofd_list_t::iterator iter = pseudofd_list.begin(); iter != pseudofd_list.end(); ++iter){
+    for(auto iter = pseudofd_list.begin(); iter != pseudofd_list.end(); ++iter){
         if(fd == (*iter)){
             pseudofd_list.erase(iter);
             return true;

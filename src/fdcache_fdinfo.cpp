@@ -333,7 +333,7 @@ bool PseudoFdInfo::GetEtaglist(etaglist_t& list) const
     }
 
     list.clear();
-    for(filepart_list_t::const_iterator iter = upload_list.begin(); iter != upload_list.end(); ++iter){
+    for(auto iter = upload_list.cbegin(); iter != upload_list.cend(); ++iter){
         if(iter->petag){
             list.push_back(*(iter->petag));
         }else{
@@ -443,7 +443,7 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
         return false;
     }
 
-    for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
+    for(auto iter = mplist.cbegin(); iter != mplist.cend(); ++iter){
         // Insert upload part
         etagpair* petag = nullptr;
         if(!InsertUploadPart(iter->start, iter->size, iter->part_num, is_copy, &petag)){
@@ -452,7 +452,7 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
         }
 
         // make parameter for my thread
-        pseudofdinfo_thparam* thargs = new pseudofdinfo_thparam;
+        auto* thargs = new pseudofdinfo_thparam;
         thargs->ppseudofdinfo        = this;
         thargs->path                 = SAFESTRPTR(path);
         thargs->upload_id            = tmp_upload_id;
@@ -604,7 +604,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
     // When canceling(overwriting) a part that has already been uploaded, output it.
     //
     if(S3fsLog::IsS3fsLogDbg()){
-        for(filepart_list_t::const_iterator cancel_iter = cancel_uploaded_list.begin(); cancel_iter != cancel_uploaded_list.end(); ++cancel_iter){
+        for(auto cancel_iter = cancel_uploaded_list.cbegin(); cancel_iter != cancel_uploaded_list.cend(); ++cancel_iter){
             S3FS_PRN_DBG("Cancel uploaded: start(%lld), size(%lld), part number(%d)", static_cast<long long int>(cancel_iter->startpos), static_cast<long long int>(cancel_iter->size), (cancel_iter->petag ? cancel_iter->petag->part_num : -1));
         }
     }
@@ -733,7 +733,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t untreated_start, of
     {
         const std::lock_guard<std::mutex> lock(upload_list_lock);
 
-        for(filepart_list_t::iterator cur_iter = upload_list.begin(); cur_iter != upload_list.end(); /* ++cur_iter */){
+        for(auto cur_iter = upload_list.begin(); cur_iter != upload_list.end(); /* ++cur_iter */){
             // Check overlap
             if((cur_iter->startpos + cur_iter->size - 1) < aligned_start || (aligned_start + aligned_size - 1) < cur_iter->startpos){
                 // Areas do not overlap
@@ -805,8 +805,8 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
     untreated_list.Duplicate(dup_untreated_list);
 
     // Initialize the iterator of each list first
-    untreated_list_t::iterator dup_untreated_iter = dup_untreated_list.begin();
-    filepart_list_t::iterator  uploaded_iter      = upload_list.begin();
+    auto dup_untreated_iter = dup_untreated_list.begin();
+    auto uploaded_iter      = upload_list.begin();
 
     //
     // Loop to extract areas to upload and download
@@ -889,7 +889,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
         // It also assumes that each size of uploaded area must be a maximum upload
         // size.
         //
-        filepart_list_t::iterator overlap_uploaded_iter = upload_list.end();
+        auto overlap_uploaded_iter = upload_list.end();
         for(; uploaded_iter != upload_list.end(); ++uploaded_iter){
             if((cur_start < (uploaded_iter->startpos + uploaded_iter->size)) && (uploaded_iter->startpos < (cur_start + cur_size))){
                 if(overlap_uploaded_iter != upload_list.end()){
@@ -990,7 +990,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                 off_t changed_start = cur_start;
                 off_t changed_size  = cur_size;
                 bool  first_area    = true;
-                for(untreated_list_t::const_iterator tmp_cur_untreated_iter = cur_untreated_list.begin(); tmp_cur_untreated_iter != cur_untreated_list.end(); ++tmp_cur_untreated_iter, first_area = false){
+                for(auto tmp_cur_untreated_iter = cur_untreated_list.cbegin(); tmp_cur_untreated_iter != cur_untreated_list.cend(); ++tmp_cur_untreated_iter, first_area = false){
                     if(tmp_cur_start < tmp_cur_untreated_iter->start){
                         //
                         // Detected a gap at the start of area
@@ -1006,7 +1006,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list,
                             // within 5GB and the remaining area after unification is
                             // larger than the minimum multipart upload size.
                             //
-                            mp_part_list_t::reverse_iterator copy_riter = to_copy_list.rbegin();
+                            auto copy_riter = to_copy_list.rbegin();
 
                             if( (copy_riter->start + copy_riter->size) == tmp_cur_start &&
                                 (copy_riter->size + (tmp_cur_untreated_iter->start - tmp_cur_start)) <= FIVE_GB &&

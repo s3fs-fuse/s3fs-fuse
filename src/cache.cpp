@@ -194,7 +194,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    stat_cache_t::iterator iter = stat_cache.end();
+    auto iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
         strpath += "/";
         iter = stat_cache.find(strpath);
@@ -220,7 +220,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
             std::string stretag;
             if(petag){
                 // find & check ETag
-                for(headers_t::iterator hiter = ent->meta.begin(); hiter != ent->meta.end(); ++hiter){
+                for(auto hiter = ent->meta.cbegin(); hiter != ent->meta.cend(); ++hiter){
                     std::string tag = lower(hiter->first);
                     if(tag == "etag"){
                         stretag = hiter->second;
@@ -280,7 +280,7 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    stat_cache_t::iterator iter = stat_cache.end();
+    auto iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
         strpath += "/";
         iter     = stat_cache.find(strpath);
@@ -319,7 +319,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    if(stat_cache.end() != stat_cache.find(key)){
+    if(stat_cache.cend() != stat_cache.find(key)){
         // found cache
         DelStatHasLock(key);
     }else{
@@ -345,7 +345,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     ent.meta.clear();
     SetStatCacheTime(ent.cache_date);    // Set time.
     //copy only some keys
-    for(headers_t::const_iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string tag   = lower(iter->first);
         std::string value = iter->second;
         if(tag == "content-type"){
@@ -365,7 +365,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 
     // check symbolic link cache
     if(!S_ISLNK(value.stbuf.st_mode)){
-        if(symlink_cache.end() != symlink_cache.find(key)){
+        if(symlink_cache.cend() != symlink_cache.find(key)){
             // if symbolic link cache has key, thus remove it.
             DelSymlinkHasLock(key);
         }
@@ -395,14 +395,14 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
     S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-    stat_cache_t::iterator iter = stat_cache.find(key);
-    if(stat_cache.end() == iter){
+    auto iter = stat_cache.find(key);
+    if(stat_cache.cend() == iter){
         return true;
     }
     stat_cache_entry* ent = &iter->second;
 
     // update only meta keys
-    for(headers_t::const_iterator metaiter = meta.begin(); metaiter != meta.end(); ++metaiter){
+    for(auto metaiter = meta.cbegin(); metaiter != meta.cend(); ++metaiter){
         std::string tag   = lower(metaiter->first);
         std::string value = metaiter->second;
         if(tag == "content-type"){
@@ -439,7 +439,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    if(stat_cache.end() != stat_cache.find(key)){
+    if(stat_cache.cend() != stat_cache.find(key)){
 		// found
         DelStatHasLock(key);
     }else{
@@ -465,7 +465,7 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     stat_cache[key] = std::move(ent);
 
     // check symbolic link cache
-    if(symlink_cache.end() != symlink_cache.find(key)){
+    if(symlink_cache.cend() != symlink_cache.find(key)){
         // if symbolic link cache has key, thus remove it.
         DelSymlinkHasLock(key);
     }
@@ -475,9 +475,9 @@ bool StatCache::AddNoObjectCache(const std::string& key)
 void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
 {
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-    stat_cache_t::iterator iter = stat_cache.find(key);
+    auto iter = stat_cache.find(key);
 
-    if(stat_cache.end() != iter){
+    if(stat_cache.cend() != iter){
         stat_cache_entry* ent = &iter->second;
         if(no_truncate){
             if(0L == ent->notruncate){
@@ -505,7 +505,7 @@ bool StatCache::TruncateCache()
 
     // 1) erase over expire time
     if(IsExpireTime){
-        for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end(); ){
+        for(auto iter = stat_cache.cbegin(); iter != stat_cache.cend(); ){
             const stat_cache_entry* entry = &iter->second;
             if(0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime)){
                 iter = stat_cache.erase(iter);
@@ -523,7 +523,7 @@ bool StatCache::TruncateCache()
     // 3) erase from the old cache in order
     size_t            erase_count= stat_cache.size() - CacheSize + 1;
     statiterlist_t    erase_iters;
-    for(stat_cache_t::iterator iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
+    for(auto iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
         // check no truncate
         const stat_cache_entry* ent = &iter->second;
         if(0L < ent->notruncate){
@@ -542,8 +542,8 @@ bool StatCache::TruncateCache()
             }
         }
     }
-    for(statiterlist_t::iterator iiter = erase_iters.begin(); iiter != erase_iters.end(); ++iiter){
-        stat_cache_t::iterator siter = *iiter;
+    for(auto iiter = erase_iters.cbegin(); iiter != erase_iters.cend(); ++iiter){
+        auto siter = *iiter;
 
         S3FS_PRN_DBG("truncate stat cache[path=%s]", siter->first.c_str());
         stat_cache.erase(siter);
@@ -558,7 +558,7 @@ bool StatCache::DelStatHasLock(const std::string& key)
     S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key.c_str());
 
     stat_cache_t::iterator iter;
-    if(stat_cache.end() != (iter = stat_cache.find(key))){
+    if(stat_cache.cend() != (iter = stat_cache.find(key))){
         stat_cache.erase(iter);
         DelNotruncateCache(key);
     }
@@ -571,7 +571,7 @@ bool StatCache::DelStatHasLock(const std::string& key)
             // If there is "path/" cache, delete it.
             strpath += "/";
         }
-        if(stat_cache.end() != (iter = stat_cache.find(strpath))){
+        if(stat_cache.cend() != (iter = stat_cache.find(strpath))){
             stat_cache.erase(iter);
             DelNotruncateCache(strpath);
         }
@@ -588,8 +588,8 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    symlink_cache_t::iterator iter = symlink_cache.find(strpath);
-    if(iter != symlink_cache.end()){
+    auto iter = symlink_cache.find(strpath);
+    if(iter != symlink_cache.cend()){
         symlink_cache_entry* ent = &iter->second;
         if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){   // use the same as Stats
             // found
@@ -624,7 +624,7 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    if(symlink_cache.end() != symlink_cache.find(key)){
+    if(symlink_cache.cend() != symlink_cache.find(key)){
     	// found
         DelSymlinkHasLock(key);
     }else{
@@ -657,7 +657,7 @@ bool StatCache::TruncateSymlink()
 
     // 1) erase over expire time
     if(IsExpireTime){
-        for(symlink_cache_t::iterator iter = symlink_cache.begin(); iter != symlink_cache.end(); ){
+        for(auto iter = symlink_cache.cbegin(); iter != symlink_cache.cend(); ){
             const symlink_cache_entry* entry = &iter->second;
             if(IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
                 iter = symlink_cache.erase(iter);
@@ -675,15 +675,15 @@ bool StatCache::TruncateSymlink()
     // 3) erase from the old cache in order
     size_t            erase_count= symlink_cache.size() - CacheSize + 1;
     symlinkiterlist_t erase_iters;
-    for(symlink_cache_t::iterator iter = symlink_cache.begin(); iter != symlink_cache.end(); ++iter){
+    for(auto iter = symlink_cache.begin(); iter != symlink_cache.end(); ++iter){
         erase_iters.push_back(iter);
         sort(erase_iters.begin(), erase_iters.end(), sort_symlinkiterlist());
         if(erase_count < erase_iters.size()){
             erase_iters.pop_back();
         }
     }
-    for(symlinkiterlist_t::iterator iiter = erase_iters.begin(); iiter != erase_iters.end(); ++iiter){
-        symlink_cache_t::iterator siter = *iiter;
+    for(auto iiter = erase_iters.cbegin(); iiter != erase_iters.cend(); ++iiter){
+        auto siter = *iiter;
 
         S3FS_PRN_DBG("truncate symbolic link  cache[path=%s]", siter->first.c_str());
         symlink_cache.erase(siter);
@@ -698,7 +698,7 @@ bool StatCache::DelSymlinkHasLock(const std::string& key)
     S3FS_PRN_INFO3("delete symbolic link cache entry[path=%s]", key.c_str());
 
     symlink_cache_t::iterator iter;
-    if(symlink_cache.end() != (iter = symlink_cache.find(key))){
+    if(symlink_cache.cend() != (iter = symlink_cache.find(key))){
         symlink_cache.erase(iter);
     }
     S3FS_MALLOCTRIM(0);
@@ -719,8 +719,8 @@ bool StatCache::AddNotruncateCache(const std::string& key)
     }
     parentdir += '/';       // directory path must be '/' termination.
 
-    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(parentdir);
-    if(iter == notruncate_file_cache.end()){
+    auto iter = notruncate_file_cache.find(parentdir);
+    if(iter == notruncate_file_cache.cend()){
         // add new list
         notruncate_filelist_t list;
         list.push_back(filename);
@@ -728,8 +728,8 @@ bool StatCache::AddNotruncateCache(const std::string& key)
     }else{
         // add filename to existed list
         notruncate_filelist_t& filelist = iter->second;
-        notruncate_filelist_t::const_iterator fiter = std::find(filelist.begin(), filelist.end(), filename);
-        if(fiter == filelist.end()){
+        auto fiter = std::find(filelist.cbegin(), filelist.cend(), filename);
+        if(fiter == filelist.cend()){
             filelist.push_back(filename);
         }
     }
@@ -749,12 +749,12 @@ bool StatCache::DelNotruncateCache(const std::string& key)
     }
     parentdir += '/';       // directory path must be '/' termination.
 
-    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(parentdir);
-    if(iter != notruncate_file_cache.end()){
+    auto iter = notruncate_file_cache.find(parentdir);
+    if(iter != notruncate_file_cache.cend()){
         // found directory in map
         notruncate_filelist_t& filelist = iter->second;
-        notruncate_filelist_t::iterator fiter = std::find(filelist.begin(), filelist.end(), filename);
-        if(fiter != filelist.end()){
+        auto fiter = std::find(filelist.begin(), filelist.end(), filename);
+        if(fiter != filelist.cend()){
             // found filename in directory file list
             filelist.erase(fiter);
             if(filelist.empty()){
@@ -793,16 +793,16 @@ bool StatCache::GetNotruncateCache(const std::string& parentdir, notruncate_file
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    notruncate_dir_map_t::iterator iter = notruncate_file_cache.find(dirpath);
-    if(iter == notruncate_file_cache.end()){
+    auto iter = notruncate_file_cache.find(dirpath);
+    if(iter == notruncate_file_cache.cend()){
         // not found directory map
         return true;
     }
 
     // found directory in map
     const notruncate_filelist_t& filelist = iter->second;
-    for(notruncate_filelist_t::const_iterator fiter = filelist.begin(); fiter != filelist.end(); ++fiter){
-        if(list.end() == std::find(list.begin(), list.end(), *fiter)){
+    for(auto fiter = filelist.cbegin(); fiter != filelist.cend(); ++fiter){
+        if(list.cend() == std::find(list.cbegin(), list.cend(), *fiter)){
            // found notuncate file that does not exist in the list, so add it.
            list.push_back(*fiter);
         }

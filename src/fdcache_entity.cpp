@@ -188,8 +188,8 @@ void FdEntity::Close(int fd)
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
     // search pseudo fd and close it.
-    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() != iter){
+    auto iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.cend() != iter){
         pseudo_fd_map.erase(iter);
     }else{
         S3FS_PRN_WARN("Not found pseudo_fd(%d) in entity object(%s)", fd, path.c_str());
@@ -235,8 +235,8 @@ int FdEntity::DupWithLock(int fd)
     if(-1 == physical_fd){
         return -1;
     }
-    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() == iter){
+    auto iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.cend() == iter){
         S3FS_PRN_ERR("Not found pseudo_fd(%d) in entity object(%s) for physical_fd(%d)", fd, path.c_str(), physical_fd);
         return -1;
     }
@@ -287,7 +287,7 @@ int FdEntity::OpenMirrorFile()
     }
 
     // create seed generating mirror file name
-    unsigned int seed = static_cast<unsigned int>(time(nullptr));
+    auto seed = static_cast<unsigned int>(time(nullptr));
     int urandom_fd;
     if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
         unsigned int rand_data;
@@ -332,7 +332,7 @@ bool FdEntity::FindPseudoFdWithLock(int fd) const
     if(-1 == fd){
         return false;
     }
-    if(pseudo_fd_map.end() == pseudo_fd_map.find(fd)){
+    if(pseudo_fd_map.cend() == pseudo_fd_map.find(fd)){
         return false;
     }
     return true;
@@ -343,8 +343,8 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable)
     if(-1 == fd){
         return nullptr;
     }
-    fdinfo_map_t::iterator iter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() == iter || nullptr == iter->second){
+    auto iter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.cend() == iter || nullptr == iter->second){
         return nullptr;
     }
     if(writable){
@@ -361,7 +361,7 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable)
 
 bool FdEntity::IsUploading()
 {
-    for(fdinfo_map_t::const_iterator iter = pseudo_fd_map.begin(); iter != pseudo_fd_map.end(); ++iter){
+    for(auto iter = pseudo_fd_map.cbegin(); iter != pseudo_fd_map.cend(); ++iter){
         const PseudoFdInfo* ppseudoinfo = iter->second.get();
         if(ppseudoinfo && ppseudoinfo->IsUploading()){
             return true;
@@ -952,8 +952,8 @@ bool FdEntity::GetXattr(std::string& xattr) const
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
 
-    headers_t::const_iterator iter = orgmeta.find("x-amz-meta-xattr");
-    if(iter == orgmeta.end()){
+    auto iter = orgmeta.find("x-amz-meta-xattr");
+    if(iter == orgmeta.cend()){
         return false;
     }
     xattr = iter->second;
@@ -1028,7 +1028,7 @@ int FdEntity::Load(off_t start, off_t size, bool is_modified_flag)
     // check loaded area & load
     fdpage_list_t unloaded_list;
     if(0 < pagelist.GetUnloadedPages(unloaded_list, start, size)){
-        for(fdpage_list_t::iterator iter = unloaded_list.begin(); iter != unloaded_list.end(); ++iter){
+        for(auto iter = unloaded_list.cbegin(); iter != unloaded_list.cend(); ++iter){
             if(0 != size && start + size <= iter->offset){
                 // reached end
                 break;
@@ -1110,7 +1110,7 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     }
 
     // loop uploading by multipart
-    for(fdpage_list_t::iterator iter = pagelist.pages.begin(); iter != pagelist.pages.end(); ++iter){
+    for(auto iter = pagelist.pages.begin(); iter != pagelist.pages.end(); ++iter){
         if(iter->end() < start){
             continue;
         }
@@ -1357,8 +1357,8 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
     }
 
     // check pseudo fd and its flag
-    fdinfo_map_t::iterator miter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.end() == miter || nullptr == miter->second){
+    const auto miter = pseudo_fd_map.find(fd);
+    if(pseudo_fd_map.cend() == miter || nullptr == miter->second){
         return -EBADF;
     }
     if(!miter->second->Writable() && !(miter->second->GetFlags() & O_CREAT)){
@@ -1631,7 +1631,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
                 // [TODO] should use parallel downloading
                 //
-                for(fdpage_list_t::const_iterator iter = dlpages.begin(); iter != dlpages.end(); ++iter){
+                for(auto iter = dlpages.cbegin(); iter != dlpages.cend(); ++iter){
                     if(0 != (result = Load(iter->offset, iter->bytes, /*is_modified_flag=*/ true))){  // set loaded and modified flag
                         S3FS_PRN_ERR("failed to get parts(start=%lld, size=%lld) before uploading.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
                         return result;
@@ -1774,7 +1774,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             // [TODO]
             // Execute in parallel downloading with multiple thread.
             //
-            for(mp_part_list_t::const_iterator download_iter = to_download_list.begin(); download_iter != to_download_list.end(); ++download_iter){
+            for(auto download_iter = to_download_list.cbegin(); download_iter != to_download_list.cend(); ++download_iter){
                 if(0 != (result = Load(download_iter->start, download_iter->size))){
                     break;
                 }
@@ -1814,7 +1814,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         // When canceling(overwriting) a part that has already been uploaded, output it.
         //
         if(S3fsLog::IsS3fsLogDbg()){
-            for(filepart_list_t::const_iterator cancel_iter = cancel_uploaded_list.begin(); cancel_iter != cancel_uploaded_list.end(); ++cancel_iter){
+            for(auto cancel_iter = cancel_uploaded_list.cbegin(); cancel_iter != cancel_uploaded_list.cend(); ++cancel_iter){
                 S3FS_PRN_DBG("Cancel uploaded: start(%lld), size(%lld), part number(%d)", static_cast<long long int>(cancel_iter->startpos), static_cast<long long int>(cancel_iter->size), (cancel_iter->petag ? cancel_iter->petag->part_num : -1));
             }
         }
@@ -2330,7 +2330,7 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     merge_headers(orgmeta, updatemeta, true);      // overwrite all keys
     // [NOTE]
     // this is special cases, we remove the key which has empty values.
-    for(headers_t::iterator hiter = orgmeta.begin(); hiter != orgmeta.end(); ){
+    for(auto hiter = orgmeta.cbegin(); hiter != orgmeta.cend(); ){
         if(hiter->second.empty()){
             hiter = orgmeta.erase(hiter);
         }else{
@@ -2454,7 +2454,7 @@ bool FdEntity::PunchHole(off_t start, size_t size)
     }
 
     // try to punch hole to file
-    for(fdpage_list_t::const_iterator iter = nodata_pages.begin(); iter != nodata_pages.end(); ++iter){
+    for(auto iter = nodata_pages.cbegin(); iter != nodata_pages.cend(); ++iter){
         if(0 != fallocate(physical_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, iter->offset, iter->bytes)){
             if(ENOSYS == errno || EOPNOTSUPP == errno){
                 S3FS_PRN_ERR("failed to fallocate for punching hole to file with errno(%d), it maybe the fallocate function is not implemented in this kernel, or the file system does not support FALLOC_FL_PUNCH_HOLE.", errno);

@@ -311,7 +311,7 @@ typedef std::vector<struct mp_part> mp_part_list_t;
 inline off_t total_mp_part_list(const mp_part_list_t& mplist)
 {
     off_t size = 0;
-    for(mp_part_list_t::const_iterator iter = mplist.begin(); iter != mplist.end(); ++iter){
+    for(auto iter = mplist.cbegin(); iter != mplist.cend(); ++iter){
         size += iter->size;
     }
     return size;
