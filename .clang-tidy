@@ -59,7 +59,6 @@ Checks: '
     -modernize-use-nodiscard,
     -modernize-raw-string-literal,
     -modernize-return-braced-init-list,
-    -modernize-use-auto,
     -modernize-use-default-member-init,
     -modernize-use-trailing-return-type,
     -modernize-use-using,

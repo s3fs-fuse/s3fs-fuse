@@ -56,7 +56,7 @@ static struct timespec cvt_string_to_time(const char *str)
 static struct timespec get_time(const headers_t& meta, const char *header)
 {
     headers_t::const_iterator iter;
-    if(meta.end() == (iter = meta.find(header))){
+    if(meta.cend() == (iter = meta.find(header))){
         return DEFAULT_TIMESPEC;
     }
     return cvt_string_to_time((*iter).second.c_str());
@@ -112,8 +112,8 @@ off_t get_size(const char *s)
 
 off_t get_size(const headers_t& meta)
 {
-    headers_t::const_iterator iter = meta.find("Content-Length");
-    if(meta.end() == iter){
+    auto iter = meta.find("Content-Length");
+    if(meta.cend() == iter){
         return 0;
     }
     return get_size((*iter).second.c_str());
@@ -130,12 +130,12 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
     bool   isS3sync = false;
     headers_t::const_iterator iter;
 
-    if(meta.end() != (iter = meta.find("x-amz-meta-mode"))){
+    if(meta.cend() != (iter = meta.find("x-amz-meta-mode"))){
         mode = get_mode((*iter).second.c_str());
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
         mode = get_mode((*iter).second.c_str());
         isS3sync = true;
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
         mode = get_mode((*iter).second.c_str(), 8);
     }else{
         // If another tool creates an object without permissions, default to owner
@@ -152,7 +152,7 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
                 if(forcedir){
                     mode |= S_IFDIR;
                 }else{
-                    if(meta.end() != (iter = meta.find("Content-Type"))){
+                    if(meta.cend() != (iter = meta.find("Content-Type"))){
                         std::string strConType = (*iter).second;
                         // Leave just the mime type, remove any optional parameters (eg charset)
                         std::string::size_type pos = strConType.find(';');
@@ -212,11 +212,11 @@ uid_t get_uid(const char *s)
 uid_t get_uid(const headers_t& meta)
 {
     headers_t::const_iterator iter;
-    if(meta.end() != (iter = meta.find("x-amz-meta-uid"))){
+    if(meta.cend() != (iter = meta.find("x-amz-meta-uid"))){
         return get_uid((*iter).second.c_str());
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
         return get_uid((*iter).second.c_str());
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-uid"))){ // for GCS
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-uid"))){ // for GCS
         return get_uid((*iter).second.c_str());
     }else{
         return geteuid();
@@ -231,11 +231,11 @@ gid_t get_gid(const char *s)
 gid_t get_gid(const headers_t& meta)
 {
     headers_t::const_iterator iter;
-    if(meta.end() != (iter = meta.find("x-amz-meta-gid"))){
+    if(meta.cend() != (iter = meta.find("x-amz-meta-gid"))){
         return get_gid((*iter).second.c_str());
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-group"))){ // for s3sync
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-group"))){ // for s3sync
         return get_gid((*iter).second.c_str());
-    }else if(meta.end() != (iter = meta.find("x-amz-meta-goog-reserved-posix-gid"))){ // for GCS
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-gid"))){ // for GCS
         return get_gid((*iter).second.c_str());
     }else{
         return getegid();
@@ -269,8 +269,8 @@ time_t get_lastmodified(const char* s)
 
 time_t get_lastmodified(const headers_t& meta)
 {
-    headers_t::const_iterator iter = meta.find("Last-Modified");
-    if(meta.end() == iter){
+    auto iter = meta.find("Last-Modified");
+    if(meta.cend() == iter){
         return -1;
     }
     return get_lastmodified((*iter).second.c_str());
@@ -290,21 +290,21 @@ bool is_need_check_obj_detail(const headers_t& meta)
         return false;
     }
     // if the object has x-amz-meta information, checking is no more.
-    if(meta.end() != meta.find("x-amz-meta-mode")  ||
-       meta.end() != meta.find("x-amz-meta-mtime") ||
-       meta.end() != meta.find("x-amz-meta-ctime") ||
-       meta.end() != meta.find("x-amz-meta-atime") ||
-       meta.end() != meta.find("x-amz-meta-uid")   ||
-       meta.end() != meta.find("x-amz-meta-gid")   ||
-       meta.end() != meta.find("x-amz-meta-owner") ||
-       meta.end() != meta.find("x-amz-meta-group") ||
-       meta.end() != meta.find("x-amz-meta-permissions") )
+    if(meta.cend() != meta.find("x-amz-meta-mode")  ||
+       meta.cend() != meta.find("x-amz-meta-mtime") ||
+       meta.cend() != meta.find("x-amz-meta-ctime") ||
+       meta.cend() != meta.find("x-amz-meta-atime") ||
+       meta.cend() != meta.find("x-amz-meta-uid")   ||
+       meta.cend() != meta.find("x-amz-meta-gid")   ||
+       meta.cend() != meta.find("x-amz-meta-owner") ||
+       meta.cend() != meta.find("x-amz-meta-group") ||
+       meta.cend() != meta.find("x-amz-meta-permissions") )
     {
         return false;
     }
     // if there is not Content-Type, or Content-Type is "x-directory",
     // checking is no more.
-    if(meta.end() == (iter = meta.find("Content-Type"))){
+    if(meta.cend() == (iter = meta.find("Content-Type"))){
         return false;
     }
     if("application/x-directory" == (*iter).second){
@@ -319,8 +319,8 @@ bool is_need_check_obj_detail(const headers_t& meta)
 bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist)
 {
     bool added = false;
-    for(headers_t::const_iterator iter = additional.begin(); iter != additional.end(); ++iter){
-        if(add_noexist || base.find(iter->first) != base.end()){
+    for(auto iter = additional.cbegin(); iter != additional.cend(); ++iter){
+        if(add_noexist || base.find(iter->first) != base.cend()){
             base[iter->first] = iter->second;
             added             = true;
         }

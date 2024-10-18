@@ -164,7 +164,7 @@ bool AdditionalHeader::AddHeader(headers_t& meta, const char* path) const
     // [NOTE]
     // Because to allow duplicate key, and then scanning the entire table.
     //
-    for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter){
+    for(auto iter = addheadlist.cbegin(); iter != addheadlist.cend(); ++iter){
         const add_header *paddhead = &*iter;
 
         if(paddhead->pregex){
@@ -194,7 +194,7 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
     if(!AddHeader(meta, path)){
         return list;
     }
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         // Adding header
         list = curl_slist_sort_insert(list, iter->first.c_str(), iter->second.c_str());
     }
@@ -214,7 +214,7 @@ bool AdditionalHeader::Dump() const
 
     ssdbg << "Additional Header list[" << addheadlist.size() << "] = {" << std::endl;
 
-    for(addheadlist_t::const_iterator iter = addheadlist.begin(); iter != addheadlist.end(); ++iter, ++cnt){
+    for(auto iter = addheadlist.cbegin(); iter != addheadlist.cend(); ++iter, ++cnt){
         const add_header *paddhead = &*iter;
 
         ssdbg << "    [" << cnt << "] = {" << std::endl;

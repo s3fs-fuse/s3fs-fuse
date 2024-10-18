@@ -50,8 +50,8 @@ class S3ObjList
         bool insert_normalized(const char* name, const char* normalized, bool is_dir);
         const s3obj_entry* GetS3Obj(const char* name) const;
 
-        s3obj_t::const_iterator begin() const { return objects.begin(); }
-        s3obj_t::const_iterator end() const { return objects.end(); }
+        s3obj_t::const_iterator cbegin() const { return objects.cbegin(); }
+        s3obj_t::const_iterator cend() const { return objects.cend(); }
 
     public:
         bool IsEmpty() const { return objects.empty(); }

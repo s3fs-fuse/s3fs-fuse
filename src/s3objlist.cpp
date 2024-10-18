@@ -64,13 +64,13 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
     // Check derived name object.
     if(is_dir){
         std::string chkname = newname.substr(0, newname.length() - 1);
-        if(objects.end() != (iter = objects.find(chkname))){
+        if(objects.cend() != (iter = objects.find(chkname))){
             // found "dir" object --> remove it.
             objects.erase(iter);
         }
     }else{
         std::string chkname = newname + "/";
-        if(objects.end() != (iter = objects.find(chkname))){
+        if(objects.cend() != (iter = objects.find(chkname))){
             // found "dir/" object --> not add new object.
             // and add normalization
             return insert_normalized(orgname.c_str(), chkname.c_str(), true);
@@ -78,7 +78,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
     }
 
     // Add object
-    if(objects.end() != (iter = objects.find(newname))){
+    if(objects.cend() != (iter = objects.find(newname))){
         // Found same object --> update information.
         (*iter).second.normalname.clear();
         (*iter).second.orgname = orgname;
@@ -111,7 +111,7 @@ bool S3ObjList::insert_normalized(const char* name, const char* normalized, bool
     }
 
     s3obj_t::iterator iter;
-    if(objects.end() != (iter = objects.find(name))){
+    if(objects.cend() != (iter = objects.find(name))){
         // found name --> over write
         iter->second.orgname.clear();
         iter->second.etag.clear();
@@ -134,7 +134,7 @@ const s3obj_entry* S3ObjList::GetS3Obj(const char* name) const
     if(!name || '\0' == name[0]){
         return nullptr;
     }
-    if(objects.end() == (iter = objects.find(name))){
+    if(objects.cend() == (iter = objects.find(name))){
         return nullptr;
     }
     return &((*iter).second);
@@ -196,7 +196,7 @@ bool S3ObjList::GetLastName(std::string& lastname) const
 {
     bool result = false;
     lastname = "";
-    for(s3obj_t::const_iterator iter = objects.begin(); iter != objects.end(); ++iter){
+    for(auto iter = objects.cbegin(); iter != objects.cend(); ++iter){
         if(!iter->second.orgname.empty()){
             if(lastname.compare(iter->second.orgname) < 0){
                 lastname = (*iter).second.orgname;
@@ -216,7 +216,7 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
 {
     s3obj_t::const_iterator iter;
 
-    for(iter = objects.begin(); objects.end() != iter; ++iter){
+    for(iter = objects.cbegin(); objects.cend() != iter; ++iter){
         if(OnlyNormalized && !iter->second.normalname.empty()){
             continue;
         }
@@ -235,10 +235,8 @@ typedef std::map<std::string, bool> s3obj_h_t;
 bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
 {
     s3obj_h_t h_map;
-    s3obj_h_t::iterator hiter;
-    s3obj_list_t::const_iterator liter;
 
-    for(liter = list.begin(); list.end() != liter; ++liter){
+    for(auto liter = list.cbegin(); list.cend() != liter; ++liter){
         std::string strtmp = (*liter);
         if(1 < strtmp.length() && '/' == *strtmp.rbegin()){
             strtmp.erase(strtmp.length() - 1);
@@ -251,7 +249,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
             if(strtmp.empty() || "/" == strtmp){
                 break;
             }
-            if(h_map.end() == h_map.find(strtmp)){
+            if(h_map.cend() == h_map.find(strtmp)){
                 // not found
                 h_map[strtmp] = false;
             }
@@ -259,7 +257,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     }
 
     // check map and add lost hierarchized directory.
-    for(hiter = h_map.begin(); hiter != h_map.end(); ++hiter){
+    for(auto hiter = h_map.cbegin(); hiter != h_map.cend(); ++hiter){
         if(false == (*hiter).second){
             // add hierarchized directory.
             std::string strtmp = (*hiter).first;

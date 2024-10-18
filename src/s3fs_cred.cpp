@@ -637,7 +637,6 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
     std::string          line;
     size_t               first_pos;
     readline_t           linelist;
-    readline_t::iterator iter;
 
     // open passwd file
     std::ifstream PF(passwd_file.c_str());
@@ -668,7 +667,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
 
     // read '=' type
     kvmap_t kv;
-    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+    for(auto iter = linelist.cbegin(); iter != linelist.cend(); ++iter){
         first_pos = iter->find_first_of('=');
         if(first_pos == std::string::npos){
             continue;
@@ -679,7 +678,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
         if(key.empty()){
             continue;
         }
-        if(kv.end() != kv.find(key)){
+        if(kv.cend() != kv.find(key)){
             S3FS_PRN_WARN("same key name(%s) found in passwd file, skip this.", key.c_str());
             continue;
         }
@@ -689,7 +688,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
     resmap[S3fsCred::KEYVAL_FIELDS_TYPE] = kv;
 
     // read ':' type
-    for(iter = linelist.begin(); iter != linelist.end(); ++iter){
+    for(auto iter = linelist.cbegin(); iter != linelist.cend(); ++iter){
         first_pos       = iter->find_first_of(':');
         size_t last_pos = iter->find_last_of(':');
         if(first_pos == std::string::npos){
@@ -709,7 +708,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
             accesskey = trim(iter->substr(0, first_pos));
             secret    = trim(iter->substr(first_pos + 1, std::string::npos));
         }
-        if(resmap.end() != resmap.find(bucketname)){
+        if(resmap.cend() != resmap.find(bucketname)){
             S3FS_PRN_EXIT("there are multiple entries for the same bucket(%s) in the passwd file.", (bucketname.empty() ? "default" : bucketname.c_str()));
             return false;
         }
@@ -759,8 +758,8 @@ bool S3fsCred::ReadS3fsPasswdFile()
     //
     // check key=value type format.
     //
-    bucketkvmap_t::iterator it = bucketmap.find(S3fsCred::KEYVAL_FIELDS_TYPE);
-    if(bucketmap.end() != it){
+    auto it = bucketmap.find(S3fsCred::KEYVAL_FIELDS_TYPE);
+    if(bucketmap.cend() != it){
         // aws format
         std::string access_key_id;
         std::string secret_access_key;
@@ -778,19 +777,19 @@ bool S3fsCred::ReadS3fsPasswdFile()
     }
 
     std::string bucket_key = S3fsCred::ALLBUCKET_FIELDS_TYPE;
-    if(!S3fsCred::bucket_name.empty() && bucketmap.end() != bucketmap.find(S3fsCred::bucket_name)){
+    if(!S3fsCred::bucket_name.empty() && bucketmap.cend() != bucketmap.find(S3fsCred::bucket_name)){
         bucket_key = S3fsCred::bucket_name;
     }
 
     it = bucketmap.find(bucket_key);
-    if(bucketmap.end() == it){
+    if(bucketmap.cend() == it){
         S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
         return false;
     }
     keyval = it->second;
-    kvmap_t::iterator aws_accesskeyid_it = keyval.find(S3fsCred::AWS_ACCESSKEYID);
-    kvmap_t::iterator aws_secretkey_it   = keyval.find(S3fsCred::AWS_SECRETKEY);
-    if(keyval.end() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
+    auto aws_accesskeyid_it = keyval.find(S3fsCred::AWS_ACCESSKEYID);
+    auto aws_secretkey_it   = keyval.find(S3fsCred::AWS_SECRETKEY);
+    if(keyval.cend() == aws_accesskeyid_it || keyval.end() == aws_secretkey_it){
         S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
         return false;
     }
@@ -815,12 +814,12 @@ int S3fsCred::CheckS3fsCredentialAwsFormat(const kvmap_t& kvmap, std::string& ac
     if(kvmap.empty()){
         return 0;
     }
-    kvmap_t::const_iterator str1_it = kvmap.find(str1);
-    kvmap_t::const_iterator str2_it = kvmap.find(str2);
-    if(kvmap.end() == str1_it && kvmap.end() == str2_it){
+    auto str1_it = kvmap.find(str1);
+    auto str2_it = kvmap.find(str2);
+    if(kvmap.cend() == str1_it && kvmap.end() == str2_it){
         return 0;
     }
-    if(kvmap.end() == str1_it || kvmap.end() == str2_it){
+    if(kvmap.cend() == str1_it || kvmap.end() == str2_it){
         S3FS_PRN_EXIT("AWSAccesskey or AWSSecretkey is not specified.");
         return -1;
     }

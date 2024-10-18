@@ -129,7 +129,7 @@ static bool parse_write_blocks(const char* pstr, wbpart_list_t& wbparts, off_t& 
         return false;
     }
 
-    for(strlist_t::const_iterator iter = partlist.begin(); iter != partlist.end(); ++iter){
+    for(auto iter = partlist.cbegin(); iter != partlist.cend(); ++iter){
         strlist_t partpair;
         if(parse_string(iter->c_str(), ':', partpair) && 2 == partpair.size()){
             write_block_part tmp_part;
@@ -206,7 +206,7 @@ int main(int argc, char** argv)
     // make data and buffer
     std::unique_ptr<unsigned char[]> pData = create_random_data(max_size);
 
-    for(strlist_t::const_iterator fiter = files.begin(); fiter != files.end(); ++fiter){
+    for(auto fiter = files.cbegin(); fiter != files.cend(); ++fiter){
         // open/create file
         int         fd;
         struct stat st;
@@ -227,7 +227,7 @@ int main(int argc, char** argv)
         }
 
         // write blocks
-        for(wbpart_list_t::const_iterator piter = wbparts.begin(); piter != wbparts.end(); ++piter){
+        for(auto piter = wbparts.cbegin(); piter != wbparts.cend(); ++piter){
             // write one block
             for(ssize_t writepos = 0, writecnt = 0; writepos < piter->size; writepos += writecnt){
                 if(-1 == (writecnt = pwrite(fd, &(pData[writepos]), static_cast<size_t>(piter->size - writepos), (piter->start + writepos)))){

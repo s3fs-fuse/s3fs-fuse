@@ -105,8 +105,7 @@ static unsigned long s3fs_crypt_get_threadid()
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line) __attribute__ ((unused));
 static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
 {
-    struct CRYPTO_dynlock_value* dyndata = new CRYPTO_dynlock_value();
-    return dyndata;
+    return new CRYPTO_dynlock_value();
 }
 
 static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
@@ -329,7 +328,7 @@ bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest)
     EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
     EVP_DigestInit_ex(mdctx, md, nullptr);
     EVP_DigestUpdate(mdctx, data, datalen);
-    unsigned int digestlen = static_cast<unsigned int>(digest->size());
+    auto digestlen = static_cast<unsigned int>(digest->size());
     EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
     EVP_MD_CTX_destroy(mdctx);
 

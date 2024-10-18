@@ -46,7 +46,7 @@ static void print_incomp_mpu_list(const incomp_mpu_list_t& list)
         printf("---------------------------------------------------------------\n");
 
         int cnt = 0;
-        for(incomp_mpu_list_t::const_iterator iter = list.begin(); iter != list.end(); ++iter, ++cnt){
+        for(auto iter = list.cbegin(); iter != list.cend(); ++iter, ++cnt){
             printf(" Path     : %s\n", (*iter).key.c_str());
             printf(" UploadId : %s\n", (*iter).id.c_str());
             printf(" Date     : %s\n", (*iter).date.c_str());
@@ -69,7 +69,7 @@ static bool abort_incomp_mpu_list(const incomp_mpu_list_t& list, time_t abort_ti
     // do removing.
     S3fsCurl s3fscurl;
     bool     result = true;
-    for(incomp_mpu_list_t::const_iterator iter = list.begin(); iter != list.end(); ++iter){
+    for(auto iter = list.cbegin(); iter != list.cend(); ++iter){
         const char* tpath     = (*iter).key.c_str();
         std::string upload_id = (*iter).id;
 

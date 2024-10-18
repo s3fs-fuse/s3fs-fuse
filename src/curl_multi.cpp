@@ -45,8 +45,8 @@ S3fsMultiCurl::~S3fsMultiCurl()
 
 bool S3fsMultiCurl::ClearEx(bool is_all)
 {
-    s3fscurllist_t::iterator iter;
-    for(iter = clist_req.begin(); iter != clist_req.end(); ++iter){
+    s3fscurllist_t::const_iterator iter;
+    for(iter = clist_req.cbegin(); iter != clist_req.cend(); ++iter){
         S3fsCurl* s3fscurl = iter->get();
         if(s3fscurl){
             s3fscurl->DestroyCurlHandle();
@@ -55,7 +55,7 @@ bool S3fsMultiCurl::ClearEx(bool is_all)
     clist_req.clear();
 
     if(is_all){
-        for(iter = clist_all.begin(); iter != clist_all.end(); ++iter){
+        for(iter = clist_all.cbegin(); iter != clist_all.cend(); ++iter){
             S3fsCurl* s3fscurl = iter->get();
             s3fscurl->DestroyCurlHandle();
         }
@@ -119,7 +119,7 @@ int S3fsMultiCurl::MultiPerform()
     bool                     isMultiHead = false;
     Semaphore                sem(GetMaxParallelism());
 
-    for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ++iter) {
+    for(auto iter = clist_req.cbegin(); iter != clist_req.cend(); ++iter) {
         S3fsCurl*   s3fscurl = iter->get();
         if(!s3fscurl){
             continue;
@@ -177,7 +177,7 @@ int S3fsMultiCurl::MultiRead()
 {
     int result = 0;
 
-    for(s3fscurllist_t::iterator iter = clist_req.begin(); iter != clist_req.end(); ){
+    for(auto iter = clist_req.begin(); iter != clist_req.end(); ){
         std::unique_ptr<S3fsCurl> s3fscurl(std::move(*iter));
 
         bool isRetry = false;
@@ -284,7 +284,7 @@ int S3fsMultiCurl::MultiRead()
 
     if(!not_abort && 0 != result){
         // If an EIO error has already occurred, clear all retry objects.
-        for(s3fscurllist_t::iterator iter = clist_all.begin(); iter != clist_all.end(); ++iter){
+        for(auto iter = clist_all.cbegin(); iter != clist_all.cend(); ++iter){
             S3fsCurl* s3fscurl = iter->get();
             s3fscurl->DestroyCurlHandle();
         }
@@ -305,8 +305,7 @@ int S3fsMultiCurl::Request()
     while(!clist_all.empty()){
         // set curl handle to multi handle
         int                      result;
-        s3fscurllist_t::iterator iter;
-        for(iter = clist_all.begin(); iter != clist_all.end(); ++iter){
+        for(auto iter = clist_all.begin(); iter != clist_all.end(); ++iter){
             clist_req.push_back(std::move(*iter));
         }
         clist_all.clear();

@@ -254,7 +254,7 @@ int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
     const std::lock_guard<std::mutex> lock(filler_lock);
 
     int result = 0;
-    for(std::vector<std::string>::const_iterator it = pathlist.begin(); it != pathlist.end(); ++it) {
+    for(auto it = pathlist.cbegin(); it != pathlist.cend(); ++it) {
         if(filled.insert(*it).second){
             if(0 != filler_func(filler_buff, it->c_str(), nullptr, 0)){
                 result = 1;
@@ -846,7 +846,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
 
     ssetype = sse_type_t::SSE_DISABLE;
     ssevalue.clear();
-    for(headers_t::iterator iter = meta.begin(); iter != meta.end(); ++iter){
+    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key = (*iter).first;
         if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
             ssetype  = sse_type_t::SSE_S3;
@@ -1389,7 +1389,7 @@ static int s3fs_symlink(const char* _from, const char* _to)
         }
         // write(without space words)
         strFrom           = trim(from);
-        ssize_t from_size = static_cast<ssize_t>(strFrom.length());
+        auto from_size = static_cast<ssize_t>(strFrom.length());
         ssize_t ressize;
         if(from_size != (ressize = ent->Write(autoent.GetPseudoFd(), strFrom.c_str(), 0, from_size))){
             if(ressize < 0){
@@ -1690,7 +1690,7 @@ static int rename_directory(const char* from, const char* to)
     S3ObjList::MakeHierarchizedList(headlist, false);                       // add hierarchized dir.
 
     s3obj_list_t::const_iterator liter;
-    for(liter = headlist.begin(); headlist.end() != liter; ++liter){
+    for(liter = headlist.cbegin(); headlist.cend() != liter; ++liter){
         // make "from" and "to" object name.
         std::string from_name = basepath + (*liter);
         std::string to_name   = strto + (*liter);
@@ -1752,7 +1752,7 @@ static int rename_directory(const char* from, const char* to)
 
     // iterate over the list - copy the files with rename_object
     // does a safe copy - copies first and then deletes old
-    for(auto mn_cur = mvnodes.begin(); mn_cur != mvnodes.end(); ++mn_cur){
+    for(auto mn_cur = mvnodes.cbegin(); mn_cur != mvnodes.cend(); ++mn_cur){
         if(!mn_cur->is_dir){
             if(!nocopyapi && !norenameapi){
                 result = rename_object(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), false);          // keep ctime
@@ -3139,7 +3139,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
         bpath = s3fs_wtf8_decode(bpath);
     }
     if(param){
-        SyncFiller* pcbparam = reinterpret_cast<SyncFiller*>(param);
+        auto* pcbparam = reinterpret_cast<SyncFiller*>(param);
         struct stat st;
         if(StatCache::getStatCacheData()->GetStat(saved_path, &st)){
             pcbparam->Fill(bpath.c_str(), &st, 0);
@@ -3173,7 +3173,7 @@ static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
     }
 
     // set path to not found list
-    struct multi_head_notfound_callback_param* pcbparam = reinterpret_cast<struct multi_head_notfound_callback_param*>(param);
+    auto* pcbparam = reinterpret_cast<struct multi_head_notfound_callback_param*>(param);
 
     const std::lock_guard<std::mutex> lock(pcbparam->list_lock);
     pcbparam->notfound_list.push_back(s3fscurl->GetBasePath());
@@ -3243,7 +3243,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     }
 
     // Make single head request(with max).
-    for(s3obj_list_t::iterator iter = headlist.begin(); headlist.end() != iter; ++iter){
+    for(auto iter = headlist.cbegin(); headlist.cend() != iter; ++iter){
         std::string disppath = path + (*iter);
         std::string etag     = head.GetETag((*iter).c_str());
         struct stat st;
@@ -3310,7 +3310,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
         dummy_header["x-amz-meta-ctime"] = "0";
         dummy_header["x-amz-meta-mtime"] = "0";
 
-        for(s3obj_list_t::iterator reiter = notfound_param.notfound_list.begin(); reiter != notfound_param.notfound_list.end(); ++reiter){
+        for(auto reiter = notfound_param.notfound_list.cbegin(); reiter != notfound_param.notfound_list.cend(); ++reiter){
             int dir_result;
             const std::string& dirpath = *reiter;
             if(-ENOTEMPTY == (dir_result = directory_empty(dirpath.c_str()))){
@@ -3542,7 +3542,7 @@ static bool get_meta_xattr_value(const char* path, std::string& rawvalue)
     }
 
     headers_t::const_iterator iter;
-    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+    if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
         return false;
     }
     rawvalue = iter->second;
@@ -3586,7 +3586,7 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
     }
 
     xattrs_t::iterator iter;
-    if(xattrs.end() == (iter = xattrs.find(targetkey))){
+    if(xattrs.cend() == (iter = xattrs.find(targetkey))){
         return false;
     }
 
@@ -3696,7 +3696,7 @@ static std::string raw_build_xattrs(const xattrs_t& xattrs)
 {
     std::string strxattrs;
     bool        is_set = false;
-    for(xattrs_t::const_iterator iter = xattrs.begin(); iter != xattrs.end(); ++iter){
+    for(auto iter = xattrs.cbegin(); iter != xattrs.cend(); ++iter){
         if(is_set){
             strxattrs += ',';
         }else{
@@ -3732,7 +3732,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     xattrs_t xattrs;
 
     headers_t::iterator iter;
-    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+    if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
 #if defined(XATTR_REPLACE)
         if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
             // there is no xattr header but flags is replace, so failure.
@@ -3948,8 +3948,8 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
     }
 
     // get xattrs
-    headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
-    if(meta.end() == hiter){
+    auto hiter = meta.find("x-amz-meta-xattr");
+    if(meta.cend() == hiter){
         // object does not have xattrs
         return -ENOATTR;
     }
@@ -3961,8 +3961,8 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 
     // search name
     std::string strname = name;
-    xattrs_t::iterator xiter = xattrs.find(strname);
-    if(xattrs.end() == xiter){
+    auto xiter = xattrs.find(strname);
+    if(xattrs.cend() == xiter){
         // not found name in xattrs
         return -ENOATTR;
     }
@@ -4008,7 +4008,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
     // get xattrs
     headers_t::iterator iter;
-    if(meta.end() == (iter = meta.find("x-amz-meta-xattr"))){
+    if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
         // object does not have xattrs
         return 0;
     }
@@ -4020,7 +4020,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
     // calculate total name length
     size_t total = 0;
-    for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+    for(auto xiter = xattrs.cbegin(); xiter != xattrs.cend(); ++xiter){
         if(!xiter->first.empty()){
             total += xiter->first.length() + 1;
         }
@@ -4040,7 +4040,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
     // copy to list
     char* setpos = list;
-    for(xattrs_t::const_iterator xiter = xattrs.begin(); xiter != xattrs.end(); ++xiter){
+    for(auto xiter = xattrs.cbegin(); xiter != xattrs.cend(); ++xiter){
         if(!xiter->first.empty()){
             strcpy(setpos, xiter->first.c_str());
             setpos = &setpos[strlen(setpos) + 1];
@@ -4090,8 +4090,8 @@ static int s3fs_removexattr(const char* path, const char* name)
     }
 
     // get xattrs
-    headers_t::iterator hiter = meta.find("x-amz-meta-xattr");
-    if(meta.end() == hiter){
+    auto hiter = meta.find("x-amz-meta-xattr");
+    if(meta.cend() == hiter){
         // object does not have xattrs
         return -ENOATTR;
     }
@@ -4101,8 +4101,8 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     // check name xattrs
     std::string strname = name;
-    xattrs_t::iterator xiter = xattrs.find(strname);
-    if(xattrs.end() == xiter){
+    auto xiter = xattrs.find(strname);
+    if(xattrs.cend() == xiter){
         return -ENOATTR;
     }
 
@@ -5067,7 +5067,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(is_prefix(arg, "readwrite_timeout=")){
-            time_t rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            auto rwtimeout = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             S3fsCurl::SetReadwriteTimeout(rwtimeout);
             return 0;
         }
@@ -5081,19 +5081,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(is_prefix(arg, "max_stat_cache_size=")){
-            unsigned long cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
+            auto cache_size = static_cast<unsigned long>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetCacheSize(cache_size);
             return 0;
         }
         else if(is_prefix(arg, "stat_cache_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
+            auto expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time);
             return 0;
         }
         // [NOTE]
         // This option is for compatibility old version.
         else if(is_prefix(arg, "stat_cache_interval_expire=")){
-            time_t expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            auto expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
             StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
             return 0;
         }
