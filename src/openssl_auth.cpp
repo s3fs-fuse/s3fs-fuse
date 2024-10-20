@@ -82,7 +82,7 @@ struct CRYPTO_dynlock_value
     std::mutex dyn_mutex;
 };
 
-static std::mutex* s3fs_crypt_mutex = nullptr;
+static std::unique_ptr<std::mutex[]> s3fs_crypt_mutex;
 
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
 static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
@@ -138,7 +138,7 @@ bool s3fs_init_crypt_mutex()
             return false;
         }
     }
-    s3fs_crypt_mutex = new std::mutex[CRYPTO_num_locks()];
+    s3fs_crypt_mutex.reset(new std::mutex[CRYPTO_num_locks()]);
     // static lock
     CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
     CRYPTO_set_id_callback(s3fs_crypt_get_threadid);
@@ -163,8 +163,7 @@ bool s3fs_destroy_crypt_mutex()
     CRYPTO_set_locking_callback(nullptr);
 
     CRYPTO_cleanup_all_ex_data();
-    delete[] s3fs_crypt_mutex;
-    s3fs_crypt_mutex = nullptr;
+    s3fs_crypt_mutex.reset();
 
     return true;
 }

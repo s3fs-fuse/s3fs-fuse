@@ -96,7 +96,7 @@ constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
 std::mutex       S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
-CurlHandlerPool* S3fsCurl::sCurlPool           = nullptr;
+std::unique_ptr<CurlHandlerPool> S3fsCurl::sCurlPool;
 int              S3fsCurl::sCurlPoolSize       = 32;
 CURLSH*          S3fsCurl::hCurlShare          = nullptr;
 bool             S3fsCurl::is_cert_check       = true; // default
@@ -163,7 +163,7 @@ bool S3fsCurl::InitS3fsCurl()
     // sCurlPoolSize must be over parallel(or multireq) count.
     //
     sCurlPoolSize = std::max({sCurlPoolSize, GetMaxParallelCount(), GetMaxMultiRequest()});
-    sCurlPool = new CurlHandlerPool(sCurlPoolSize);
+    sCurlPool.reset(new CurlHandlerPool(sCurlPoolSize));
     if (!sCurlPool->Init()) {
         return false;
     }
@@ -180,8 +180,7 @@ bool S3fsCurl::DestroyS3fsCurl()
     if(!sCurlPool->Destroy()){
         result = false;
     }
-    delete sCurlPool;
-    sCurlPool = nullptr;
+    sCurlPool.reset();
     if(!S3fsCurl::DestroyShareCurl()){
         result = false;
     }

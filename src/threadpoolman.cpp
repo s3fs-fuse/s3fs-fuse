@@ -30,7 +30,7 @@
 //------------------------------------------------
 // ThreadPoolMan class variables
 //------------------------------------------------
-ThreadPoolMan* ThreadPoolMan::singleton = nullptr;
+std::unique_ptr<ThreadPoolMan> ThreadPoolMan::singleton;
 
 //------------------------------------------------
 // ThreadPoolMan class methods
@@ -38,19 +38,16 @@ ThreadPoolMan* ThreadPoolMan::singleton = nullptr;
 bool ThreadPoolMan::Initialize(int count)
 {
     if(ThreadPoolMan::singleton){
-        S3FS_PRN_WARN("Already singleton for Thread Manager is existed, then re-create it.");
-        ThreadPoolMan::Destroy();
+        S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
+        abort();
     }
-    ThreadPoolMan::singleton = new ThreadPoolMan(count);
+    ThreadPoolMan::singleton.reset(new ThreadPoolMan(count));
     return true;
 }
 
 void ThreadPoolMan::Destroy()
 {
-    if(ThreadPoolMan::singleton){
-        delete ThreadPoolMan::singleton;
-        ThreadPoolMan::singleton = nullptr;
-    }
+    ThreadPoolMan::singleton.reset();
 }
 
 bool ThreadPoolMan::Instruct(const thpoolman_param& param)
@@ -119,7 +116,7 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0)
         abort();
     }
     if(ThreadPoolMan::singleton){
-        S3FS_PRN_CRIT("Already singleton for Thread Manager is existed.");
+        S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
         abort();
     }
 
