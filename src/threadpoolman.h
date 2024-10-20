@@ -61,7 +61,7 @@ typedef std::list<thpoolman_param> thpoolman_params_t;
 class ThreadPoolMan
 {
     private:
-        static ThreadPoolMan* singleton;
+        static std::unique_ptr<ThreadPoolMan> singleton;
 
         std::atomic<bool>     is_exit;
         Semaphore             thpoolman_sem;
@@ -74,7 +74,6 @@ class ThreadPoolMan
         static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
 
         explicit ThreadPoolMan(int count = 1);
-        ~ThreadPoolMan();
 
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);
@@ -84,6 +83,7 @@ class ThreadPoolMan
         void SetInstruction(const thpoolman_param& pparam);
 
     public:
+        ~ThreadPoolMan();
         ThreadPoolMan(const ThreadPoolMan&) = delete;
         ThreadPoolMan(ThreadPoolMan&&) = delete;
         ThreadPoolMan& operator=(const ThreadPoolMan&) = delete;
