@@ -222,7 +222,6 @@ bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
 
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
-    EVP_MD_CTX*    mdctx;
     unsigned int   md5_digest_len = static_cast<unsigned int>(result->size());
     off_t          bytes;
 
@@ -235,8 +234,8 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
     }
 
     // instead of MD5_Init
-    mdctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(mdctx, EVP_md5(), nullptr);
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr);
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
@@ -248,16 +247,14 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
         }else if(-1 == bytes){
             // error
             S3FS_PRN_ERR("file read error(%d)", errno);
-            EVP_MD_CTX_free(mdctx);
             return false;
         }
         // instead of MD5_Update
-        EVP_DigestUpdate(mdctx, buf.data(), bytes);
+        EVP_DigestUpdate(mdctx.get(), buf.data(), bytes);
     }
 
     // instead of MD5_Final
-    EVP_DigestFinal_ex(mdctx, result->data(), &md5_digest_len);
-    EVP_MD_CTX_free(mdctx);
+    EVP_DigestFinal_ex(mdctx.get(), result->data(), &md5_digest_len);
 
     return true;
 }
