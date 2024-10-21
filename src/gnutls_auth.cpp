@@ -206,7 +206,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
-        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
         bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -216,7 +216,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             S3FS_PRN_ERR("file read error(%d)", errno);
             return false;
         }
-        md5_update(&ctx_md5, bytes, buf);
+        md5_update(&ctx_md5, bytes, reinterpret_cast<const uint8_t*>(buf.data()));
     }
     md5_digest(&ctx_md5, result->size(), result->data());
 
@@ -260,7 +260,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
-        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
         bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -304,7 +304,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
-        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
         bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
@@ -314,7 +314,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
             S3FS_PRN_ERR("file read error(%d)", errno);
             return false;
         }
-        sha256_update(&ctx_sha256, bytes, buf);
+        sha256_update(&ctx_sha256, bytes, reinterpret_cast<const uint8_t*>(buf.data()));
     }
     sha256_digest(&ctx_sha256, result->size(), result->data());
 
@@ -359,7 +359,7 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
-        bytes = buf.size() < (size - total) ? buf.size() : (size - total);
+        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
         bytes = pread(fd, buf.data(), bytes, start + total);
         if(0 == bytes){
             // end of file
