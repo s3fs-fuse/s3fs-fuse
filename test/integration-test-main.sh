@@ -2721,6 +2721,43 @@ function test_statvfs() {
     fi
 }
 
+function test_pjdfstest() {
+    # TODO: explain exclusions
+    # fails with -o use_cache: ../../pjdfstest/tests/rmdir/01.t
+    prove -rv \
+        ../../pjdfstest/tests/chflags/*.t \
+        ../../pjdfstest/tests/chmod/0[4689].t \
+        ../../pjdfstest/tests/chmod/10.t \
+        ../../pjdfstest/tests/chown/0[4689].t \
+        ../../pjdfstest/tests/chown/10.t \
+        ../../pjdfstest/tests/ftruncate/0[147-9].t \
+        ../../pjdfstest/tests/ftruncate/1[0134].t \
+        ../../pjdfstest/tests/granular/*.t \
+        ../../pjdfstest/tests/link/*.t \
+        ../../pjdfstest/tests/mkdir/0[347-9].t \
+        ../../pjdfstest/tests/mkdir/1[12]*.t \
+        ../../pjdfstest/tests/mkfifo/0[3478].t \
+        ../../pjdfstest/tests/mkfifo/1*.t \
+        ../../pjdfstest/tests/mknod/0[479].t \
+        ../../pjdfstest/tests/mknod/10.t \
+        ../../pjdfstest/tests/open/0[49].t \
+        ../../pjdfstest/tests/open/1*.t \
+        ../../pjdfstest/tests/open/2[0-134].t \
+        ../../pjdfstest/tests/posix_fallocate/*.t \
+        ../../pjdfstest/tests/rename/0[2-36-8].t \
+        ../../pjdfstest/tests/rename/1[15-9].t \
+        ../../pjdfstest/tests/rename/22.t \
+        ../../pjdfstest/tests/rmdir/0[3-59].t \
+        ../../pjdfstest/tests/rmdir/1[02-5].t \
+        ../../pjdfstest/tests/symlink/0[13479].t \
+        ../../pjdfstest/tests/symlink/1*.t \
+        ../../pjdfstest/tests/truncate/0[147-9].t \
+        ../../pjdfstest/tests/truncate/1[0134].t \
+        ../../pjdfstest/tests/unlink/0[47-8].t \
+        ../../pjdfstest/tests/unlink/1[02-4].t \
+        ../../pjdfstest/tests/utimensat/0[1-58-9].t
+}
+
 function add_all_tests {
     if s3fs_args | grep -q use_cache; then
         add_tests test_cache_file_stat
@@ -2856,6 +2893,8 @@ function add_all_tests {
     # add_tests test_chown_mountpoint
     add_tests test_time_mountpoint
     add_tests test_statvfs
+
+    add_tests test_pjdfstest
 }
 
 init_suite
