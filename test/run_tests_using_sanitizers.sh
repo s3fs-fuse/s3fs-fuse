@@ -49,7 +49,7 @@ ALL_TESTS=1 ASAN_OPTIONS='detect_leaks=1,detect_stack_use_after_return=1' make c
 make clean
 ./configure CXX=clang++ CXXFLAGS="$COMMON_FLAGS -fsanitize=thread"
 make --jobs="$(nproc)"
-ALL_TESTS=1 TSAN_OPTIONS='halt_on_error=1' make check -C test/
+ALL_TESTS=1 TSAN_OPTIONS='halt_on_error=1,suppressions=threadsanitizer_suppressions.txt' make check -C test/
 
 # run tests under UndefinedBehaviorSanitizer, https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 make clean
