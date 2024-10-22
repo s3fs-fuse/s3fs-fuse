@@ -142,9 +142,7 @@ static bool parse_write_blocks(const char* pstr, wbpart_list_t& wbparts, off_t& 
                 std::cerr << "[ERROR] -p option parameter(" << pstr << ") is something wrong." << std::endl;
                 return false;
             }
-            if(max_size < tmp_part.size){
-                max_size = tmp_part.size;
-            }
+            max_size = std::max(max_size, tmp_part.size);
             wbparts.push_back(tmp_part);
         }else{
             std::cerr << "[ERROR] -p option parameter(" << pstr << ") is something wrong." << std::endl;
