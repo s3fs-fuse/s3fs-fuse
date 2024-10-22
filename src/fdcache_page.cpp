@@ -819,154 +819,162 @@ bool PageList::ClearAllModified()
     return Compress();
 }
 
-bool PageList::Serialize(CacheFileStat& file, bool is_output, ino_t inode)
+bool PageList::Serialize(CacheFileStat& file, ino_t inode)
 {
     if(!file.Open()){
         return false;
     }
-    if(is_output){
-        //
-        // put to file
-        //
-        std::ostringstream ssall;
-        ssall << inode << ":" << Size();
 
-        for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
-            ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
-        }
+    //
+    // put to file
+    //
+    std::ostringstream ssall;
+    ssall << inode << ":" << Size();
 
-        if(-1 == ftruncate(file.GetFd(), 0)){
-            S3FS_PRN_ERR("failed to truncate file(to 0) for stats(%d)", errno);
-            return false;
-        }
-        std::string strall = ssall.str();
-        if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
-            S3FS_PRN_ERR("failed to write stats(%d)", errno);
-            return false;
-        }
+    for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
+        ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
+    }
 
+    if(-1 == ftruncate(file.GetFd(), 0)){
+        S3FS_PRN_ERR("failed to truncate file(to 0) for stats(%d)", errno);
+        return false;
+    }
+    std::string strall = ssall.str();
+    if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
+        S3FS_PRN_ERR("failed to write stats(%d)", errno);
+        return false;
+    }
+
+    return true;
+}
+
+bool PageList::Deserialize(CacheFileStat& file, ino_t inode)
+{
+    if(!file.Open()){
+        return false;
+    }
+
+    //
+    // loading from file
+    //
+    struct stat st{};
+    if(-1 == fstat(file.GetFd(), &st)){
+        S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
+        return false;
+    }
+    if(0 >= st.st_size){
+        // nothing
+        Init(0, false, false);
+        return true;
+    }
+    std::unique_ptr<char[]> ptmp(new char[st.st_size + 1]);
+    ssize_t result;
+    // read from file
+    if(0 >= (result = pread(file.GetFd(), ptmp.get(), st.st_size, 0))){
+        S3FS_PRN_ERR("failed to read stats(%d)", errno);
+        return false;
+    }
+    ptmp[result] = '\0';
+    std::string        oneline;
+    std::istringstream ssall(ptmp.get());
+
+    // loaded
+    Clear();
+
+    // load head line(for size and inode)
+    off_t total;
+    ino_t cache_inode;                  // if this value is 0, it means old format.
+    if(!getline(ssall, oneline, '\n')){
+        S3FS_PRN_ERR("failed to parse stats.");
+        return false;
     }else{
-        //
-        // loading from file
-        //
-        struct stat st{};
-        if(-1 == fstat(file.GetFd(), &st)){
-            S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
-            return false;
-        }
-        if(0 >= st.st_size){
-          // nothing
-            Init(0, false, false);
-            return true;
-        }
-        std::unique_ptr<char[]> ptmp(new char[st.st_size + 1]);
-        ssize_t result;
-        // read from file
-        if(0 >= (result = pread(file.GetFd(), ptmp.get(), st.st_size, 0))){
-            S3FS_PRN_ERR("failed to read stats(%d)", errno);
-            return false;
-        }
-        ptmp[result] = '\0';
-        std::string        oneline;
-        std::istringstream ssall(ptmp.get());
-    
-        // loaded
-        Clear();
-    
-        // load head line(for size and inode)
-        off_t total;
-        ino_t cache_inode;                  // if this value is 0, it means old format.
-        if(!getline(ssall, oneline, '\n')){
+        std::istringstream sshead(oneline);
+        std::string        strhead1;
+        std::string        strhead2;
+
+        // get first part in head line.
+        if(!getline(sshead, strhead1, ':')){
             S3FS_PRN_ERR("failed to parse stats.");
             return false;
+        }
+        // get second part in head line.
+        if(!getline(sshead, strhead2, ':')){
+            // old head format is "<size>\n"
+            total       = cvt_strtoofft(strhead1.c_str(), /* base= */10);
+            cache_inode = 0;
         }else{
-            std::istringstream sshead(oneline);
-            std::string        strhead1;
-            std::string        strhead2;
-    
-            // get first part in head line.
-            if(!getline(sshead, strhead1, ':')){
-                S3FS_PRN_ERR("failed to parse stats.");
+            // current head format is "<inode>:<size>\n"
+            total       = cvt_strtoofft(strhead2.c_str(), /* base= */10);
+            cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead1.c_str(), /* base= */10));
+            if(0 == cache_inode){
+                S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
                 return false;
             }
-            // get second part in head line.
-            if(!getline(sshead, strhead2, ':')){
-                // old head format is "<size>\n"
-                total       = cvt_strtoofft(strhead1.c_str(), /* base= */10);
-                cache_inode = 0;
-            }else{
-                // current head format is "<inode>:<size>\n"
-                total       = cvt_strtoofft(strhead2.c_str(), /* base= */10);
-                cache_inode = static_cast<ino_t>(cvt_strtoofft(strhead1.c_str(), /* base= */10));
-                if(0 == cache_inode){
-                    S3FS_PRN_ERR("wrong inode number in parsed cache stats.");
-                    return false;
-                }
-            }
-        }
-        // check inode number
-        if(0 != cache_inode && cache_inode != inode){
-            S3FS_PRN_ERR("differ inode and inode number in parsed cache stats.");
-            return false;
-        }
-    
-        // load each part
-        bool is_err = false;
-        while(getline(ssall, oneline, '\n')){
-            std::string        part;
-            std::istringstream ssparts(oneline);
-            // offset
-            if(!getline(ssparts, part, ':')){
-                is_err = true;
-                break;
-            }
-            off_t offset = cvt_strtoofft(part.c_str(), /* base= */10);
-            // size
-            if(!getline(ssparts, part, ':')){
-                is_err = true;
-                break;
-            }
-            off_t size = cvt_strtoofft(part.c_str(), /* base= */10);
-            // loaded
-            if(!getline(ssparts, part, ':')){
-                is_err = true;
-                break;
-            }
-            bool is_loaded = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
-            bool is_modified;
-            if(!getline(ssparts, part, ':')){
-                is_modified = false;        // old version does not have this part.
-            }else{
-                is_modified = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
-            }
-            // add new area
-            PageList::page_status pstatus = PageList::page_status::NOT_LOAD_MODIFIED;
-            if(is_loaded){
-                if(is_modified){
-                    pstatus = PageList::page_status::LOAD_MODIFIED;
-                }else{
-                    pstatus = PageList::page_status::LOADED;
-                }
-            }else{
-                if(is_modified){
-                    pstatus = PageList::page_status::MODIFIED;
-                }
-            }
-            SetPageLoadedStatus(offset, size, pstatus);
-        }
-        if(is_err){
-            S3FS_PRN_ERR("failed to parse stats.");
-            Clear();
-            return false;
-        }
-  
-        // check size
-        if(total != Size()){
-            S3FS_PRN_ERR("different size(%lld - %lld).", static_cast<long long int>(total), static_cast<long long int>(Size()));
-            Clear();
-            return false;
         }
     }
+    // check inode number
+    if(0 != cache_inode && cache_inode != inode){
+        S3FS_PRN_ERR("differ inode and inode number in parsed cache stats.");
+        return false;
+    }
+
+    // load each part
+    bool is_err = false;
+    while(getline(ssall, oneline, '\n')){
+        std::string        part;
+        std::istringstream ssparts(oneline);
+        // offset
+        if(!getline(ssparts, part, ':')){
+            is_err = true;
+            break;
+        }
+        off_t offset = cvt_strtoofft(part.c_str(), /* base= */10);
+        // size
+        if(!getline(ssparts, part, ':')){
+            is_err = true;
+            break;
+        }
+        off_t size = cvt_strtoofft(part.c_str(), /* base= */10);
+        // loaded
+        if(!getline(ssparts, part, ':')){
+            is_err = true;
+            break;
+        }
+        bool is_loaded = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
+        bool is_modified;
+        if(!getline(ssparts, part, ':')){
+            is_modified = false;        // old version does not have this part.
+        }else{
+            is_modified = (1 == cvt_strtoofft(part.c_str(), /* base= */10) ? true : false);
+        }
+        // add new area
+        PageList::page_status pstatus = PageList::page_status::NOT_LOAD_MODIFIED;
+        if(is_loaded){
+            if(is_modified){
+                pstatus = PageList::page_status::LOAD_MODIFIED;
+            }else{
+                pstatus = PageList::page_status::LOADED;
+            }
+        }else{
+            if(is_modified){
+                pstatus = PageList::page_status::MODIFIED;
+            }
+        }
+        SetPageLoadedStatus(offset, size, pstatus);
+    }
+    if(is_err){
+        S3FS_PRN_ERR("failed to parse stats.");
+        Clear();
+        return false;
+    }
+
+    // check size
+    if(total != Size()){
+        S3FS_PRN_ERR("different size(%lld - %lld).", static_cast<long long int>(total), static_cast<long long int>(Size()));
+        Clear();
+        return false;
+    }
+
     return true;
 }
 
