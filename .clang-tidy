@@ -24,7 +24,6 @@ Checks: '
     -cppcoreguidelines-avoid-non-const-global-variables,
     -cppcoreguidelines-init-variables,
     -cppcoreguidelines-macro-usage,
-    -cppcoreguidelines-narrowing-conversions,
     -cppcoreguidelines-no-malloc,
     -cppcoreguidelines-owning-memory,
     -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
@@ -80,5 +79,6 @@ Checks: '
     -readability-simplify-boolean-expr,
     -readability-suspicious-call-argument'
 CheckOptions:
+    cppcoreguidelines-narrowing-conversions.WarnOnEquivalentBitWidth: 'false'
     readability-implicit-bool-conversion.AllowIntegerConditions: 'true'
     readability-implicit-bool-conversion.AllowPointerConditions: 'true'
