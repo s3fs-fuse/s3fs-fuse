@@ -31,6 +31,10 @@ release : dist ../utils/release.sh
 
 .PHONY: cppcheck shellcheck
 
+clang-tidy:
+	make -C src/ clang-tidy
+	make -C test/ clang-tidy
+
 cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
