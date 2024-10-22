@@ -63,7 +63,8 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
 
     // Check derived name object.
     if(is_dir){
-        std::string chkname = newname.substr(0, newname.length() - 1);
+        std::string_view chkname = newname;
+        chkname.remove_suffix(1);
         if(objects.cend() != (iter = objects.find(chkname))){
             // found "dir" object --> remove it.
             objects.erase(iter);

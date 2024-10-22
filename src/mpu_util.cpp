@@ -121,18 +121,17 @@ int s3fs_utility_processing(time_t abort_time)
 
         }else{
             // make incomplete uploads list
-            incomp_mpu_list_t list;
-            if(!get_incomp_mpu_list(doc.get(), list)){
+            if(auto list = get_incomp_mpu_list(doc.get()); !list){
                 S3FS_PRN_DBG("get_incomp_mpu_list exited with error.");
                 result = EXIT_FAILURE;
 
             }else{
                 if(utility_incomp_type::INCOMP_TYPE_LIST == utility_mode){
                     // print list
-                    print_incomp_mpu_list(list);
+                    print_incomp_mpu_list(*list);
                 }else if(utility_incomp_type::INCOMP_TYPE_ABORT == utility_mode){
                     // remove
-                    if(!abort_incomp_mpu_list(list, abort_time)){
+                    if(!abort_incomp_mpu_list(*list, abort_time)){
                         S3FS_PRN_DBG("an error occurred during removal process.");
                         result = EXIT_FAILURE;
                     }

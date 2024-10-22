@@ -101,7 +101,9 @@ TESTS = \
     test_string_util
 
 clang-tidy:
-	clang-tidy -extra-arg-before=-xc++ *.h $(s3fs_SOURCES) -- $(DEPS_CFLAGS) $(CPPFLAGS)
+	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=c++17 \
+	*.h $(s3fs_SOURCES) \
+	-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #
 # Local variables:

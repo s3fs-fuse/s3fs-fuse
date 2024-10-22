@@ -181,7 +181,7 @@ bool StatCache::SetCacheNoObject(bool flag)
 
 void StatCache::Clear()
 {
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const std::scoped_lock<std::mutex> lock(StatCache::stat_cache_lock);
 
     stat_cache.clear();
     S3FS_MALLOCTRIM(0);
