@@ -161,9 +161,9 @@ int S3fsMultiCurl::MultiPerform()
     for(const auto &thread_id : completed_tids){
         auto it = threads.find(thread_id);
         it->second.first.join();
-        long int int_retval = it->second.second.get();
+        auto int_retval = it->second.second.get();
         if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
-            S3FS_PRN_WARN("thread terminated with non-zero return code: %ld", int_retval);
+            S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
             result = int_retval;
         }
         threads.erase(it);
