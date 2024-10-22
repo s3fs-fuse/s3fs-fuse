@@ -384,13 +384,13 @@ class S3fsCurl
         int GetObjectRequest(const char* tpath, int fd, off_t start = -1, off_t size = -1);
         int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
         int ListBucketRequest(const char* tpath, const char* query);
-        int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy);
+        int PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id);
         int CompleteMultipartPostRequest(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
         int UploadMultipartPostRequest(const char* tpath, int part_num, const std::string& upload_id);
         bool MixMultipartPostComplete();
         int MultipartListRequest(std::string& body);
         int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
-        int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy);
+        int MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta);
         int MultipartUploadRequest(const std::string& upload_id, const char* tpath, int fd, off_t offset, off_t size, etagpair* petagpair);
         int MultipartRenameRequest(const char* from, const char* to, headers_t& meta, off_t size);
 

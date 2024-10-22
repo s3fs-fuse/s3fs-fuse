@@ -588,7 +588,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_
         S3fsCurl    s3fscurl(true);
         std::string tmp_upload_id;
         int         result;
-        if(0 != (result = s3fscurl.PreMultipartPostRequest(path, meta, tmp_upload_id, true))){
+        if(0 != (result = s3fscurl.PreMultipartPostRequest(path, meta, tmp_upload_id))){
             S3FS_PRN_ERR("failed to setup multipart upload(create upload id) by errno(%d)", result);
             return result;
         }
