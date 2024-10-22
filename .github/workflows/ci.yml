@@ -35,7 +35,6 @@ on:
 jobs:
   Linux:
     runs-on: ubuntu-latest
-
     #
     # build matrix for containers
     #
@@ -113,14 +112,6 @@ jobs:
           ./autogen.sh
           /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
           make --jobs=$(nproc)
-
-      - name: clang-tidy
-        run: |
-          # skip if clang-tidy does not exist, e.g., CentOS 7
-          if command -v clang-tidy; then
-            make -C src/ clang-tidy
-            make -C test/ clang-tidy
-          fi
 
       - name: Cppcheck
         run: |
@@ -299,6 +290,31 @@ jobs:
       - name: Test suite
         run: |
           /bin/sh -c "ALL_TESTS=1 ASAN_OPTIONS=${ASAN_OPTIONS} TSAN_OPTIONS=${TSAN_OPTIONS} VALGRIND=${VALGRIND} RETRIES=${RETRIES} make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)"
+
+  clang-tidy:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:40
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          .github/workflows/linux-ci-helper.sh fedora:40
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
+          make --jobs=$(nproc)
+
+      - name: clang-tidy
+        run: |
+          make -C src/ clang-tidy
+          make -C test/ clang-tidy
+
 
 #
 # Local variables:
