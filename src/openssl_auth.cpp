@@ -208,7 +208,7 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, co
 
 bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
 {
-    unsigned int digestlen = static_cast<unsigned int>(digest->size());
+    auto digestlen = static_cast<unsigned int>(digest->size());
 
     const EVP_MD* md    = EVP_get_digestbyname("md5");
     EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
@@ -222,7 +222,7 @@ bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
 
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
-    unsigned int   md5_digest_len = static_cast<unsigned int>(result->size());
+    auto           md5_digest_len = static_cast<unsigned int>(result->size());
     off_t          bytes;
 
     if(-1 == size){
