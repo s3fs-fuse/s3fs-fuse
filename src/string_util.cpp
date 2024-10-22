@@ -125,12 +125,14 @@ std::string trim(std::string s, const char *t /* = SPACES */)
     return trim_left(trim_right(std::move(s), t), t);
 }
 
-std::string peeloff(const std::string& s)
+std::string peeloff(std::string s)
 {
     if(s.size() < 2 || *s.cbegin() != '"' || *s.rbegin() != '"'){
         return s;
     }
-    return s.substr(1, s.size() - 2);
+    s.erase(s.size() - 1);
+    s.erase(0, 1);
+    return s;
 }
 
 //
