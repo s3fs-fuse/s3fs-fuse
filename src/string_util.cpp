@@ -99,7 +99,7 @@ std::string lower(std::string s)
 {
     // change each character of the std::string to lower case
     for(size_t i = 0; i < s.length(); i++){
-        s[i] = tolower(s[i]);
+        s[i] = static_cast<char>(tolower(s[i]));
     }
     return s;
 }
