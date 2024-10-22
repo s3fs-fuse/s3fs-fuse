@@ -135,7 +135,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         }
         bool FindPseudoFdWithLock(int fd) const REQUIRES(FdEntity::fdent_lock);
         int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags);
-        bool LoadAll(int fd, headers_t* pmeta = nullptr, off_t* size = nullptr, bool force_load = false);
+        bool LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return DupWithLock(fd);

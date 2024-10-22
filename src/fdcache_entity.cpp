@@ -634,7 +634,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 // So we do not check disk space for this option mode, if there is no enough
 // disk space this method will be failed.
 //
-bool FdEntity::LoadAll(int fd, headers_t* pmeta, off_t* size, bool force_load)
+bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
 
@@ -1234,7 +1234,7 @@ int FdEntity::NoCachePreMultipartPost(PseudoFdInfo* pseudo_obj)
     S3fsCurl    s3fscurl(true);
     std::string upload_id;
     int         result;
-    if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id, false))){
+    if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id))){
         return result;
     }
     s3fscurl.DestroyCurlHandle();
@@ -1782,7 +1782,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             //
             S3fsCurl    s3fscurl(true);
             std::string upload_id;
-            if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id, true))){
+            if(0 != (result = s3fscurl.PreMultipartPostRequest(path.c_str(), orgmeta, upload_id))){
                 S3FS_PRN_ERR("failed to setup multipart upload(create upload id) by errno(%d)", result);
                 return result;
             }

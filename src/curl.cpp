@@ -1461,7 +1461,7 @@ int S3fsCurl::ParallelMultipartUploadRequest(const char* tpath, headers_t& meta,
         return -errno;
     }
 
-    if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, false))){
+    if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id))){
         return result;
     }
     s3fscurl.DestroyCurlHandle();
@@ -1533,7 +1533,7 @@ int S3fsCurl::ParallelMixMultipartUploadRequest(const char* tpath, headers_t& me
         return -errno;
     }
 
-    if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id, true))){
+    if(0 != (result = s3fscurl.PreMultipartPostRequest(tpath, meta, upload_id))){
         return result;
     }
     s3fscurl.DestroyCurlHandle();
@@ -3892,7 +3892,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 //   Date: Mon, 1 Nov 2010 20:34:56 GMT
 //   Authorization: AWS VGhpcyBtZXNzYWdlIHNpZ25lZCBieSBlbHZpbmc=
 //
-int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id, bool is_copy)
+int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::string& upload_id)
 {
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
@@ -4422,7 +4422,7 @@ bool S3fsCurl::MixMultipartPostComplete()
     return result;
 }
 
-int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta, bool is_copy)
+int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& meta)
 {
     int            result;
     std::string    upload_id;
@@ -4432,7 +4432,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
 
     S3FS_PRN_INFO3("[tpath=%s]", SAFESTRPTR(tpath));
 
-    if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id, is_copy))){
+    if(0 != (result = PreMultipartPostRequest(tpath, meta, upload_id))){
         return result;
     }
     DestroyCurlHandle();
@@ -4527,7 +4527,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     meta["Content-Type"]      = S3fsCurl::LookupMimeType(to);
     meta["x-amz-copy-source"] = srcresource;
 
-    if(0 != (result = PreMultipartPostRequest(to, meta, upload_id, true))){
+    if(0 != (result = PreMultipartPostRequest(to, meta, upload_id))){
         return result;
     }
     DestroyCurlHandle();

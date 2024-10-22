@@ -888,7 +888,7 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
         return -EIO;
     }
     // load
-    if(is_load && !ent->LoadAll(autoent.GetPseudoFd(), &meta)){
+    if(is_load && !ent->LoadAll(autoent.GetPseudoFd())){
         S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
         autoent.Close();
         return -EIO;
@@ -929,7 +929,7 @@ int put_headers(const char* path, headers_t& meta, bool is_copy, bool use_st_siz
     }
 
     if(!nocopyapi && !nomultipart && size >= multipart_threshold){
-        if(0 != (result = s3fscurl.MultipartHeadRequest(strpath.c_str(), size, meta, is_copy))){
+        if(0 != (result = s3fscurl.MultipartHeadRequest(strpath.c_str(), size, meta))){
             return result;
         }
     }else{
