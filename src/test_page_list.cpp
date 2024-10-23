@@ -22,7 +22,7 @@
 #include "fdcache_stat.h"
 #include "test_util.h"
 
-bool CacheFileStat::Open() { return false; }
+bool CacheFileStat::Open() { return false; }  // NOLINT(readability-convert-member-functions-to-static)
 
 void test_compress()
 {
