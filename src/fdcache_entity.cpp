@@ -137,7 +137,7 @@ void FdEntity::Clear()
             ino_t cur_inode = GetInode();
             if(0 != cur_inode && cur_inode == inode){
                 CacheFileStat cfstat(path.c_str());
-                if(!pagelist.Serialize(cfstat, true, inode)){
+                if(!pagelist.Serialize(cfstat, inode)){
                     S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
                 }
             }
@@ -204,7 +204,7 @@ void FdEntity::Close(int fd)
             ino_t cur_inode = GetInode();
             if(0 != cur_inode && cur_inode == inode){
                 CacheFileStat cfstat(path.c_str());
-                if(!pagelist.Serialize(cfstat, true, inode)){
+                if(!pagelist.Serialize(cfstat, inode)){
                     S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
                 }
             }
@@ -449,7 +449,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             // try to open cache file
             if( -1 != (physical_fd = open(cachepath.c_str(), O_RDWR)) &&
                 0 != (inode = FdEntity::GetInode(physical_fd))        &&
-                pagelist.Serialize(*pcfstat, false, inode)            )
+                pagelist.Deserialize(*pcfstat, inode))
             {
                 // succeed to open cache file and to load stats data
                 st = {};
@@ -581,7 +581,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 
         // reset cache stat file
         if(need_save_csf && pcfstat.get()){
-            if(!pagelist.Serialize(*pcfstat, true, inode)){
+            if(!pagelist.Serialize(*pcfstat, inode)){
                 S3FS_PRN_WARN("failed to save cache stat file(%s), but continue...", path.c_str());
             }
         }
