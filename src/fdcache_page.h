@@ -94,6 +94,7 @@ class PageList
 
         void Clear();
         bool Parse(off_t new_pos);
+        bool Serialize(CacheFileStat& file, ino_t inode);
 
     public:
         static void FreeList(fdpage_list_t& list);
@@ -122,7 +123,7 @@ class PageList
         bool ClearAllModified();
 
         bool Compress();
-        bool Serialize(CacheFileStat& file, bool is_output, ino_t inode);
+        bool Deserialize(CacheFileStat& file, ino_t inode);
         void Dump() const;
         bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
 };

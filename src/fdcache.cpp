@@ -981,7 +981,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             // open cache stat file and load page info.
             PageList      pagelist;
             CacheFileStat cfstat(object_file_path.c_str());
-            if(!cfstat.ReadOnlyOpen() || !pagelist.Serialize(cfstat, false, cache_file_inode)){
+            if(!cfstat.ReadOnlyOpen() || !pagelist.Deserialize(cfstat, cache_file_inode)){
                 ++err_file_cnt;
                 S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
                 S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not load cache file stats information");
