@@ -100,12 +100,12 @@ void S3fsSignals::CheckCacheWorker(Semaphore* pSem)
     // wait and loop
     while(S3fsSignals::enableUsr1){
         // wait
-        pSem->wait();
+        pSem->acquire();
 
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
         if(!S3fsSignals::enableUsr1){
-            break;    // assap
+            break;  // asap
         }
 
         // check all cache
@@ -114,7 +114,7 @@ void S3fsSignals::CheckCacheWorker(Semaphore* pSem)
         }
 
         // do not allow request queuing
-        while(pSem->try_wait());
+        while(pSem->try_acquire());
     }
 }
 
@@ -219,7 +219,7 @@ bool S3fsSignals::DestroyUsr1Handler()
     S3fsSignals::enableUsr1 = false;
 
     // wakeup thread
-    pSemUsr1->post();
+    pSemUsr1->release();
 
     // wait for thread exiting
     pThreadUsr1->join();
@@ -235,7 +235,7 @@ bool S3fsSignals::WakeupUsr1Thread()
         S3FS_PRN_ERR("The thread for SIGUSR1 is not setup.");
         return false;
     }
-    pSemUsr1->post();
+    pSemUsr1->release();
     return true;
 }
 
