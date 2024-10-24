@@ -74,7 +74,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
 
     while(!psingleton->IsExit()){
         // wait
-        psingleton->thpoolman_sem.wait();
+        psingleton->thpoolman_sem.acquire();
 
         if(psingleton->IsExit()){
             break;
@@ -99,7 +99,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
             S3FS_PRN_WARN("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
         }
         if(param.psem){
-            param.psem->post();
+            param.psem->release();
         }
     }
 
@@ -154,7 +154,7 @@ bool ThreadPoolMan::StopThreads()
     // all threads to exit
     SetExitFlag(true);
     for(size_t waitcnt = thread_list.size(); 0 < waitcnt; --waitcnt){
-        thpoolman_sem.post();
+        thpoolman_sem.release();
     }
 
     // wait for threads exiting
@@ -166,7 +166,7 @@ bool ThreadPoolMan::StopThreads()
     thread_list.clear();
 
     // reset semaphore(to zero)
-    while(thpoolman_sem.try_wait()){
+    while(thpoolman_sem.try_acquire()){
     }
 
     return true;
@@ -210,7 +210,7 @@ void ThreadPoolMan::SetInstruction(const thpoolman_param& param)
     }
 
     // run thread
-    thpoolman_sem.post();
+    thpoolman_sem.release();
 }
 
 /*

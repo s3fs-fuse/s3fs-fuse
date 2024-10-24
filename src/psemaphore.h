@@ -24,6 +24,13 @@
 //-------------------------------------------------------------------
 // Class Semaphore
 //-------------------------------------------------------------------
+#if __cplusplus >= 202002L
+
+#include <semaphore>
+typedef std::counting_semaphore<INT_MAX> Semaphore;
+
+#else
+
 // portability wrapper for sem_t since macOS does not implement it
 #ifdef __APPLE__
 
@@ -36,8 +43,8 @@ class Semaphore
         ~Semaphore()
         {
             // macOS cannot destroy a semaphore with posts less than the initializer
-            for(int i = 0; i < get_value(); ++i){
-                post();
+            for(int i = 0; i < value; ++i){
+                release();
             }
             dispatch_release(sem);
         }
@@ -46,8 +53,8 @@ class Semaphore
         Semaphore& operator=(const Semaphore&) = delete;
         Semaphore& operator=(Semaphore&&) = delete;
 
-        void wait() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
-        bool try_wait()
+        void acquire() { dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); }
+        bool try_acquire()
         {
             if(0 == dispatch_semaphore_wait(sem, DISPATCH_TIME_NOW)){
                 return true;
@@ -55,8 +62,7 @@ class Semaphore
                 return false;
             }
         }
-        void post() { dispatch_semaphore_signal(sem); }
-        int get_value() const { return value; }
+        void release() { dispatch_semaphore_signal(sem); }
 
     private:
         int value;
@@ -71,16 +77,16 @@ class Semaphore
 class Semaphore
 {
     public:
-        explicit Semaphore(int value) : value(value) { sem_init(&mutex, 0, value); }
+        explicit Semaphore(int value) { sem_init(&mutex, 0, value); }
         ~Semaphore() { sem_destroy(&mutex); }
-        void wait()
+        void acquire()
         {
             int r;
             do {
                 r = sem_wait(&mutex);
             } while (r == -1 && errno == EINTR);
         }
-        bool try_wait()
+        bool try_acquire()
         {
             int result;
             do{
@@ -89,13 +95,13 @@ class Semaphore
 
             return (0 == result);
         }
-        void post() { sem_post(&mutex); }
-        int get_value() const { return value; }
+        void release() { sem_post(&mutex); }
 
     private:
-        int value;
         sem_t mutex;
 };
+
+#endif
 
 #endif
 

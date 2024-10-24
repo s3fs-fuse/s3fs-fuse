@@ -24,7 +24,7 @@
 #include <memory>
 #include <thread>
 
-class Semaphore;
+#include "psemaphore.h"
 
 //----------------------------------------------
 // class S3fsSignals

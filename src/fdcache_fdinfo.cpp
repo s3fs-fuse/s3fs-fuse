@@ -644,7 +644,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
 
     while(is_loop){
         // need to wait the worker exiting
-        uploaded_sem.wait();
+        uploaded_sem.acquire();
         {
             const std::lock_guard<std::mutex> lock(upload_list_lock);
             if(0 < completed_count){

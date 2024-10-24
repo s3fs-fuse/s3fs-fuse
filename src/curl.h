@@ -34,6 +34,7 @@
 #include "common.h"
 #include "fdcache_page.h"
 #include "metaheader.h"
+#include "psemaphore.h"
 #include "s3fs_util.h"
 #include "types.h"
 
@@ -86,7 +87,6 @@ typedef std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> CurlUniquePtr;
 class CurlHandlerPool;
 class S3fsCred;
 class S3fsCurl;
-class Semaphore;
 
 // Prototype function for lazy setup options for curl handle
 typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);

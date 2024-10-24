@@ -117,7 +117,8 @@ int S3fsMultiCurl::MultiPerform()
     std::map<std::thread::id, std::pair<std::thread, std::future<int>>> threads;
     int                      result = 0;
     bool                     isMultiHead = false;
-    Semaphore                sem(GetMaxParallelism());
+    int                      semCount = GetMaxParallelism();
+    Semaphore                sem(semCount);
 
     for(auto iter = clist_req.cbegin(); iter != clist_req.cend(); ++iter) {
         S3fsCurl*   s3fscurl = iter->get();
@@ -125,7 +126,7 @@ int S3fsMultiCurl::MultiPerform()
             continue;
         }
 
-        sem.wait();
+        sem.acquire();
 
         {
             const std::lock_guard<std::mutex> lock(completed_tids_lock);
@@ -153,8 +154,8 @@ int S3fsMultiCurl::MultiPerform()
         threads.emplace(std::piecewise_construct, std::forward_as_tuple(thread_id), std::forward_as_tuple(std::move(thread), std::move(future)));
     }
 
-    for(int i = 0; i < sem.get_value(); ++i){
-        sem.wait();
+    for(int i = 0; i < semCount; ++i){
+        sem.acquire();
     }
 
     const std::lock_guard<std::mutex> lock(completed_tids_lock);
@@ -353,7 +354,7 @@ void S3fsMultiCurl::RequestPerformWrapper(S3fsCurl* s3fscurl, std::promise<int> 
 
     const std::lock_guard<std::mutex> lock(*s3fscurl->completed_tids_lock);
     s3fscurl->completed_tids->push_back(std::this_thread::get_id());
-    s3fscurl->sem->post();
+    s3fscurl->sem->release();
 
     promise.set_value(result);
 }
