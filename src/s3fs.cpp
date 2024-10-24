@@ -23,6 +23,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -5526,14 +5527,8 @@ int main(int argc, char* argv[])
         {nullptr, 0, nullptr, 0}
     };
 
-    // init bucket_block_size
-#if defined(__MSYS__)
-    bucket_block_count = static_cast<fsblkcnt_t>(INT32_MAX);
-#elif defined(__APPLE__)
-    bucket_block_count = static_cast<fsblkcnt_t>(INT32_MAX);
-#else
-    bucket_block_count = ~0U;
-#endif
+    // Use uint32_t instead of fsblkcnt_t::max since the latter overflows and confuses df
+    bucket_block_count = std::numeric_limits<uint32_t>::max();
 
     // init xml2
     xmlInitParser();
