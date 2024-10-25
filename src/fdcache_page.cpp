@@ -23,6 +23,7 @@
 #include <memory>
 #include <unistd.h>
 #include <sstream>
+#include <string>
 #include <sys/stat.h>
 
 #include "common.h"

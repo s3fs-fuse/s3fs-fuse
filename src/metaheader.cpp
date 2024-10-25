@@ -19,8 +19,9 @@
  */
 
 #include <ctime>
-#include <unistd.h>
+#include <string>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "metaheader.h"

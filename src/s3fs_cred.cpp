@@ -25,6 +25,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 #include "common.h"
 #include "s3fs_cred.h"

@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <unistd.h>
 #include <utility>
 #include <dirent.h>
