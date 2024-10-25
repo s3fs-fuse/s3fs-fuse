@@ -22,6 +22,7 @@
 #define S3FS_FDCACHE_H_
 
 #include <mutex>
+#include <string>
 
 #include "common.h"
 #include "fdcache_entity.h"

@@ -24,6 +24,7 @@
 #include <climits>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>

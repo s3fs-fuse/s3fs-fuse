@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <regex.h>
+#include <string>
 #include <utility>
 #include <vector>
 

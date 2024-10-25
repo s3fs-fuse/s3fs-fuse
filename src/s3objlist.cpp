@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "s3objlist.h"
 

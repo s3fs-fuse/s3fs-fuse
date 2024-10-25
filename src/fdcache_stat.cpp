@@ -20,6 +20,7 @@
 
 #include <cerrno>
 #include <unistd.h>
+#include <string>
 #include <sys/file.h>
 #include <sys/stat.h>
 

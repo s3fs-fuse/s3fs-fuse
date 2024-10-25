@@ -24,6 +24,7 @@
 #include <climits>
 #include <iomanip>
 #include <sstream>
+#include <string>
 #include <utility>
 
 #include "s3fs_logger.h"

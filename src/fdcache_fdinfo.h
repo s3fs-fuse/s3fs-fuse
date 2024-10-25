@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
 
 #include "common.h"
 #include "fdcache_entity.h"

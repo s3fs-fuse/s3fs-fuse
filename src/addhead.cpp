@@ -23,6 +23,7 @@
 #include <cstring>
 #include <sstream>
 #include <fstream>
+#include <string>
 #include <strings.h>
 #include <utility>
 #include <vector>
