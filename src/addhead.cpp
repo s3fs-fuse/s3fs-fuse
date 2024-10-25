@@ -24,6 +24,7 @@
 #include <sstream>
 #include <fstream>
 #include <strings.h>
+#include <utility>
 #include <vector>
 
 #include "s3fs.h"

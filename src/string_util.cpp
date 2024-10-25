@@ -23,8 +23,8 @@
 #include <cerrno>
 #include <climits>
 #include <iomanip>
-
 #include <sstream>
+#include <utility>
 
 #include "s3fs_logger.h"
 #include "string_util.h"
