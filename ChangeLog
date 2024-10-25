@@ -1,6 +1,16 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.95 -- 25 Oct, 2024 (major changes only)
+#2424 - Add ipresolve option to select IPv4- or IPv6-only
+#2443 - Retry request on HTTP 429 error
+#2448 - Changed s3fs logo
+#2455 - Fix deadlock in FdManager::ChangeEntityToTempPath
+#2487 - #2492 - #2493 - Enable static lock checking and fix locking errors
+#2506 - #2517 - Fix Windows compilation
+#2515 - Fix FreeBSD support
+#2532 - Fix use-after-free in FdManager::ChangeEntityToTempPath
+
 Version 1.94 -- 23 Feb, 2024 (major changes only)
 #2409 - Fixed a bug that mounting with ksmid specified to fail
 #2404 - Fixed ordering problem between fdatasync and flush
