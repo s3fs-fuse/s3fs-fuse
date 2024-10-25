@@ -312,8 +312,7 @@ jobs:
 
       - name: clang-tidy
         run: |
-          make -C src/ clang-tidy
-          make -C test/ clang-tidy
+          make clang-tidy
 
 
 #
