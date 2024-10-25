@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 
 #include "s3fs_logger.h"
 #include "mpu_util.h"

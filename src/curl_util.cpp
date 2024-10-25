@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <curl/curl.h>
+#include <string>
 
 #include "common.h"
 #include "s3fs_logger.h"

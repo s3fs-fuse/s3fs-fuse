@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
+#include <string>
 #include <sys/stat.h>
 #include <utility>
 #include <vector>

@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
