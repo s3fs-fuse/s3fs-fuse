@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <csignal>
 #include <thread>
+#include <utility>
 
 #include "psemaphore.h"
 #include "s3fs_logger.h"

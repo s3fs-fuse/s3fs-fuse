@@ -18,15 +18,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <memory>
 #include <unistd.h>
-#include <fstream>
 #include <sstream>
-#include <algorithm>
+#include <utility>
 
 #include "common.h"
 #include "s3fs.h"

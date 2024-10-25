@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <future>
 #include <thread>
+#include <utility>
 
 #include "s3fs_logger.h"
 #include "threadpoolman.h"
