@@ -19,6 +19,7 @@
  */
 
 #include <cstdio>
+#include <utility>
 
 #include "s3fs_logger.h"
 #include "curl_handlerpool.h"

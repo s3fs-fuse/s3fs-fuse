@@ -23,6 +23,7 @@
 #include <cerrno>
 #include <future>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "s3fs.h"

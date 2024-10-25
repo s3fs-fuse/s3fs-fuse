@@ -22,6 +22,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <sys/stat.h>
+#include <utility>
 #include <vector>
 
 #include "s3fs.h"
