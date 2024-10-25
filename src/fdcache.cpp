@@ -26,6 +26,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <utility>
 
 #include "fdcache.h"
 #include "fdcache_stat.h"
