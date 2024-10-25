@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <utility>

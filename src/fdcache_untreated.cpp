@@ -19,6 +19,7 @@
  */
 
 #include <cstdlib>
+#include <mutex>
 
 #include "s3fs_logger.h"
 #include "fdcache_untreated.h"
