@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <future>
+#include <mutex>
 #include <thread>
 #include <utility>
 #include <vector>

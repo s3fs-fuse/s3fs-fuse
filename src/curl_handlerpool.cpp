@@ -19,6 +19,7 @@
  */
 
 #include <cstdio>
+#include <mutex>
 #include <utility>
 
 #include "s3fs_logger.h"

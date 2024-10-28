@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <dlfcn.h>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <string>
 

@@ -24,6 +24,7 @@
 #include <climits>
 #include <unistd.h>
 #include <dirent.h>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
