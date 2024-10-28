@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <mutex>
 #include <vector>
 
 #include "fdcache_pseudofd.h"
