@@ -61,7 +61,6 @@ jobs:
           - fedora:39
           - opensuse/leap:15
           - alpine:3.20
-          - centos:centos7
 
     container:
       image: ${{ matrix.container }}
@@ -72,12 +71,6 @@ jobs:
       # Installation special environment variables for debian and ubuntu.
       #
       DEBIAN_FRONTEND:  noninteractive
-      # [NOTE]
-      # actions/checkout uses node20, but can only run up to node16 on centos7.
-      # (glibc 2.27 or later is required to use node20)
-      # This is a temporary solution and will be removed when centos7 support is discontinued.
-      #
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: ${{ matrix.container == 'centos:centos7' && true || false }}
 
     steps:
       # [NOTE]
@@ -88,17 +81,8 @@ jobs:
         run: |
           zypper install -y tar gzip
 
-      # [NOTE]
-      # Use actions/checkout@v4 except for centos7.
-      # On centos7, we need to run actions/checkout@v3 and configure it to use node16.
-      #
-      - name: Checkout source code(other than centos7)
-        if: matrix.container != 'centos:centos7'
+      - name: Checkout source code
         uses: actions/checkout@v4
-
-      - name: Checkout source code(only centos7)
-        if: matrix.container == 'centos:centos7'
-        uses: actions/checkout@v3
 
       # [NOTE]
       # Matters that depend on OS:VERSION are determined and executed in the following script.
