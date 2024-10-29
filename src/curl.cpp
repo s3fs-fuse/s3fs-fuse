@@ -4406,7 +4406,7 @@ bool S3fsCurl::CopyMultipartPostComplete()
 {
     std::string etag;
     partdata.uploaded = simple_parse_xml(bodydata.c_str(), bodydata.size(), "ETag", etag);
-    partdata.petag->etag = peeloff(etag);
+    partdata.petag->etag = peeloff(std::move(etag));
 
     bodydata.clear();
     headdata.clear();
