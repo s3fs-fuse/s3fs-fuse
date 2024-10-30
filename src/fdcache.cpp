@@ -761,8 +761,25 @@ bool FdManager::Close(FdEntity* ent, int fd)
 
 bool FdManager::ChangeEntityToTempPath(std::shared_ptr<FdEntity> ent, const char* path)
 {
+    // [NOTE]
+    // If the path element does not exist in fent, it may be because a cache directory
+    // has not been specified, or FdEntity::NoCacheLoadAndPost has already been called.
+    // In these cases, the path element(=ent) has already been registered as a TempPath
+    // element from fent, so there is no need to register ent in the except_fent map.
+    // (Processing with UpdateEntityToTempPath should not be performed.)
+    //
+    {
+        const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+
+        if(fent.cend() == fent.find(path)){
+            S3FS_PRN_INFO("Already path(%s) element does not exist in fent map.", path);
+            return false;
+        }
+    }
+
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
     except_fent[path] = std::move(ent);
+
     return true;
 }
 
