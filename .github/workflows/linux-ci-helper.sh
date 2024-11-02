@@ -171,7 +171,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     #
     SHELLCHECK_DIRECT_INSTALL=1
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
@@ -180,7 +180,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     INSTALL_CHECKER_PKGS="cppcheck ShellCheck"
     INSTALL_CHECKER_PKG_OPTIONS=""
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:39" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
