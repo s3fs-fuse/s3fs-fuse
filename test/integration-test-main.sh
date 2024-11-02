@@ -2777,8 +2777,8 @@ function add_all_tests {
     add_tests test_symlink
     if ! uname | grep -q Darwin; then
         add_tests test_mknod
+        add_tests test_extended_attributes
     fi
-    add_tests test_extended_attributes
     add_tests test_mtime_file
 
     add_tests test_update_time_chmod
