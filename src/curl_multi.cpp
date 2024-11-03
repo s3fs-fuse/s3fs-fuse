@@ -165,7 +165,22 @@ int S3fsMultiCurl::MultiPerform()
         auto it = threads.find(thread_id);
         it->second.first.join();
         auto int_retval = it->second.second.get();
-        if (int_retval && !(int_retval == -ENOENT && isMultiHead)) {
+
+        // [NOTE]
+        // For multipart HEAD requests(ex. readdir), we need to consider the
+        // cases where you may get ENOENT and EPERM.
+        // For example, we will get ENOENT when sending a HEAD request to a
+        // directory of an object whose path contains a directory uploaded
+        // from a client other than s3fs.
+        // We will also get EPERM if you try to read an encrypted object
+        // (such as KMS) without specifying SSE or with a different KMS key.
+        // In these cases, if we end this method with that error result,
+        // the caller will not be able to continue processing.(readdir will
+        // fail.)
+        // Therefore, if those conditions are met here, avoid setting it to
+        // result.
+        //
+        if(!isMultiHead || (-ENOENT != int_retval && -EPERM != int_retval)){
             S3FS_PRN_WARN("thread terminated with non-zero return code: %d", int_retval);
             result = int_retval;
         }
