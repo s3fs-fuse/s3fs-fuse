@@ -3417,7 +3417,7 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     meta.clear();
     for(auto iter = responseHeaders.cbegin(); iter != responseHeaders.cend(); ++iter){
         std::string key   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(key == "content-type"){
             meta[iter->first] = value;
         }else if(key == "content-length"){
@@ -3459,7 +3459,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
     // Make request headers
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
         }else if(is_prefix(key.c_str(), "x-amz-meta")){
@@ -3596,7 +3596,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
         }else if(is_prefix(key.c_str(), "x-amz-meta")){
@@ -3921,7 +3921,7 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
 
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(is_prefix(key.c_str(), "x-amz-acl")){
             // not set value, but after set it.
         }else if(is_prefix(key.c_str(), "x-amz-meta")){
@@ -4327,7 +4327,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
     // Make request headers
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string key   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(key == "x-amz-copy-source"){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source-range"){
