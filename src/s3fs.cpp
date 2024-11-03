@@ -4388,10 +4388,9 @@ static int s3fs_check_service()
     }
 
     S3fsCurl s3fscurl;
-    int      res;
     bool     force_no_sse = false;
 
-    while(0 > (res = s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir, force_no_sse))){
+    while(0 > s3fscurl.CheckBucket(get_realpath("/").c_str(), support_compat_dir, force_no_sse)){
         // get response code
         bool do_retry     = false;
         long responseCode = s3fscurl.GetLastResponseCode();

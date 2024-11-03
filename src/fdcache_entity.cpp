@@ -535,8 +535,10 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 
             // make file pointer(for being same tmpfile)
             if(nullptr == (pfile = {fdopen(physical_fd, "wb"), &s3fs_fclose})){
+                int saved_errno = errno;
                 S3FS_PRN_ERR("failed to get fileno(%s). errno(%d)", cachepath.c_str(), errno);
                 close(physical_fd);
+                errno = saved_errno;
                 physical_fd = -1;
                 inode       = 0;
                 return (0 == errno ? -EIO : -errno);
