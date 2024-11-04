@@ -350,7 +350,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     //copy only some keys
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         std::string tag   = lower(iter->first);
-        std::string value = iter->second;
+        const auto& value = iter->second;
         if(tag == "content-type"){
             ent.meta[iter->first] = value;
         }else if(tag == "content-length"){
@@ -407,7 +407,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
     // update only meta keys
     for(auto metaiter = meta.cbegin(); metaiter != meta.cend(); ++metaiter){
         std::string tag   = lower(metaiter->first);
-        std::string value = metaiter->second;
+        const auto& value = metaiter->second;
         if(tag == "content-type"){
             ent->meta[metaiter->first] = value;
         }else if(tag == "content-length"){
