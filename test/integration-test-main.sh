@@ -654,7 +654,7 @@ function test_multipart_mix {
     #     it makes no sense, but copying files is because it leaves no cache.
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local MODIFY_START_BLOCK=$((15*1024*1024/2/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${MODIFY_START_BLOCK}" conv=notrunc
@@ -671,7 +671,7 @@ function test_multipart_mix {
     #     modify directly(over file end offset)
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local OVER_FILE_BLOCK_POS=$((26*1024*1024/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${OVER_FILE_BLOCK_POS}" conv=notrunc
@@ -687,7 +687,7 @@ function test_multipart_mix {
     # (3) Writing from the 0th byte
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
 
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
     echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
@@ -703,7 +703,7 @@ function test_multipart_mix {
     #     modify directly(seek 1MB offset)
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local MODIFY_START_BLOCK=$((1*1024*1024))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${MODIFY_START_BLOCK}" conv=notrunc
@@ -874,7 +874,7 @@ function test_mtime_file {
     mk_test_file
 
     #copy the test file with preserve mode
-    cp -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
+    cp_avoid_xattr_err -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
 
     local testmtime; testmtime=$(get_mtime "${TEST_TEXT_FILE}")
     local testctime; testctime=$(get_ctime "${TEST_TEXT_FILE}")
@@ -1099,7 +1099,7 @@ function test_update_time_cp_p() {
     # cp -p -> update ctime, not update atime/mtime
     #
     local TIME_TEST_TEXT_FILE=test-s3fs-time.txt
-    cp -p "${TEST_TEXT_FILE}" "${TIME_TEST_TEXT_FILE}"
+    cp_avoid_xattr_err -p "${TEST_TEXT_FILE}" "${TIME_TEST_TEXT_FILE}"
     local atime; atime=$(get_atime "${TIME_TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TIME_TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TIME_TEST_TEXT_FILE}")

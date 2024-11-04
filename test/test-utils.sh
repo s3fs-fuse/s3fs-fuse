@@ -435,6 +435,39 @@ function wait_ostype() {
 }
 
 #
+# Avoid extended attribute errors when copying on macos(fuse-t)
+#
+# [NOTE][FIXME]
+# This avoids an error that occurs when copying (cp command) on macos
+# (fuse-t) stating that extended attributes cannot be copied and the
+# exit code becomes anything other than 0.
+#Even if this error occurs, the copy itself is successful.
+#
+# This issue is currently(2024/11/7) still in the process of being
+# fixed, so we will wait and see.
+# This issue only occurred in the test_multipart_mix test with the
+# nocopyapi option, but in macos-13 Github Actions, it occurs in
+# some tests that use the use_xattr option.
+#
+function cp_avoid_xattr_err() {
+    if uname | grep -q Darwin; then
+        if ! cp "$@"; then
+            return $?
+        fi
+    else
+        local CP_RESULT="";
+        if ! CP_RESULT=$(cp "$@" 2>&1); then
+            local CP_EXITCODE=$?
+            if ! echo "${CP_RESULT}" | grep -q -i "Result too large"; then
+                return "${CP_EXITCODE}"
+            fi
+            echo "[FIXME: MACOS] ${CP_RESULT}"
+        fi
+    fi
+    return 0
+}
+
+#
 # Local variables:
 # tab-width: 4
 # c-basic-offset: 4
