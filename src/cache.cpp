@@ -346,18 +346,14 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     SetStatCacheTime(ent.cache_date);    // Set time.
     //copy only some keys
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string tag   = lower(iter->first);
+        auto tag          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
-        if(tag == "content-type"){
+        if(tag == "content-type" ||
+           tag == "content-length" ||
+           tag == "etag" ||
+           tag == "last-modified" ||
+           tag.is_prefix("x-amz")){
             ent.meta[iter->first] = value;
-        }else if(tag == "content-length"){
-            ent.meta[iter->first] = value;
-        }else if(tag == "etag"){
-            ent.meta[iter->first] = value;
-        }else if(tag == "last-modified"){
-            ent.meta[iter->first] = value;
-        }else if(is_prefix(tag.c_str(), "x-amz")){
-            ent.meta[tag] = value;      // key is lower case for "x-amz"
         }
     }
 
@@ -403,18 +399,14 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
 
     // update only meta keys
     for(auto metaiter = meta.cbegin(); metaiter != meta.cend(); ++metaiter){
-        std::string tag   = lower(metaiter->first);
+        auto tag          = CaseInsensitiveStringView(metaiter->first);
         const auto& value = metaiter->second;
-        if(tag == "content-type"){
+        if(tag == "content-type" ||
+           tag == "content-length" ||
+           tag == "etag" ||
+           tag == "last-modified" ||
+           tag.is_prefix("x-amz")){
             ent->meta[metaiter->first] = value;
-        }else if(tag == "content-length"){
-            ent->meta[metaiter->first] = value;
-        }else if(tag == "etag"){
-            ent->meta[metaiter->first] = value;
-        }else if(tag == "last-modified"){
-            ent->meta[metaiter->first] = value;
-        }else if(is_prefix(tag.c_str(), "x-amz")){
-            ent->meta[tag] = value;      // key is lower case for "x-amz"
         }
     }
 

@@ -3416,18 +3416,14 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     // fixme: clean this up.
     meta.clear();
     for(auto iter = responseHeaders.cbegin(); iter != responseHeaders.cend(); ++iter){
-        std::string key   = lower(iter->first);
+        auto key          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
-        if(key == "content-type"){
+        if(key == "content-type" ||
+           key == "content-length" ||
+           key == "etag" ||
+           key == "last-modified" ||
+           key.is_prefix("x-amz")){
             meta[iter->first] = value;
-        }else if(key == "content-length"){
-            meta[iter->first] = value;
-        }else if(key == "etag"){
-            meta[iter->first] = value;
-        }else if(key == "last-modified"){
-            meta[iter->first] = value;
-        }else if(is_prefix(key.c_str(), "x-amz")){
-            meta[key] = value;        // key is lower case for "x-amz"
         }
     }
     return 0;
@@ -3458,11 +3454,11 @@ int S3fsCurl::PutHeadRequest(const char* tpath, headers_t& meta, bool is_copy)
 
     // Make request headers
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string key   = lower(iter->first);
+        auto key          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
-        if(is_prefix(key.c_str(), "x-amz-acl")){
+        if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
-        }else if(is_prefix(key.c_str(), "x-amz-meta")){
+        }else if(key.is_prefix("x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source"){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
@@ -3595,11 +3591,11 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string key   = lower(iter->first);
+        auto key          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
-        if(is_prefix(key.c_str(), "x-amz-acl")){
+        if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
-        }else if(is_prefix(key.c_str(), "x-amz-meta")){
+        }else if(key.is_prefix("x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
@@ -3920,11 +3916,11 @@ int S3fsCurl::PreMultipartPostRequest(const char* tpath, headers_t& meta, std::s
     std::string contype = S3fsCurl::LookupMimeType(tpath);
 
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string key   = lower(iter->first);
+        auto key          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
-        if(is_prefix(key.c_str(), "x-amz-acl")){
+        if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
-        }else if(is_prefix(key.c_str(), "x-amz-meta")){
+        }else if(key.is_prefix("x-amz-meta")){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
@@ -4326,7 +4322,7 @@ int S3fsCurl::CopyMultipartPostSetup(const char* from, const char* to, int part_
 
     // Make request headers
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string key   = lower(iter->first);
+        auto key          = CaseInsensitiveStringView(iter->first);
         const auto& value = iter->second;
         if(key == "x-amz-copy-source"){
             requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
