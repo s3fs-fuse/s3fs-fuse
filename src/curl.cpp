@@ -620,7 +620,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
     ssize_t readbytes;
     ssize_t totalread;
     // read and set
-    for(totalread = 0, readbytes = 0; totalread < copysize; totalread += readbytes){
+    for(totalread = 0; totalread < copysize; totalread += readbytes){
         readbytes = pread(pCurl->partdata.fd, &(static_cast<char*>(ptr))[totalread], (copysize - totalread), pCurl->partdata.startpos + totalread);
         if(0 == readbytes){
             // eof
@@ -659,7 +659,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     ssize_t totalwrite;
 
     // write
-    for(totalwrite = 0, writebytes = 0; totalwrite < copysize; totalwrite += writebytes){
+    for(totalwrite = 0; totalwrite < copysize; totalwrite += writebytes){
         writebytes = pwrite(pCurl->partdata.fd, &(static_cast<char*>(ptr))[totalwrite], (copysize - totalwrite), pCurl->partdata.startpos + totalwrite);
         if(0 == writebytes){
             // eof?
@@ -4445,7 +4445,7 @@ int S3fsCurl::MultipartHeadRequest(const char* tpath, off_t size, headers_t& met
     curlmulti.SetSuccessCallback(S3fsCurl::CopyMultipartPostCallback);
     curlmulti.SetRetryCallback(S3fsCurl::CopyMultipartPostRetryCallback);
 
-    for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
+    for(bytes_remaining = size; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > GetMultipartCopySize() ? GetMultipartCopySize() : bytes_remaining;
 
         std::ostringstream strrange;
@@ -4540,7 +4540,7 @@ int S3fsCurl::MultipartRenameRequest(const char* from, const char* to, headers_t
     curlmulti.SetSuccessCallback(S3fsCurl::CopyMultipartPostCallback);
     curlmulti.SetRetryCallback(S3fsCurl::CopyMultipartPostRetryCallback);
 
-    for(bytes_remaining = size, chunk = 0; 0 < bytes_remaining; bytes_remaining -= chunk){
+    for(bytes_remaining = size; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > GetMultipartCopySize() ? GetMultipartCopySize() : bytes_remaining;
 
         std::ostringstream strrange;
