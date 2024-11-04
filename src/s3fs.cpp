@@ -3956,7 +3956,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
         // object does not have xattrs
         return -ENOATTR;
     }
-    std::string strxattrs = hiter->second;
+    const auto& strxattrs = hiter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
@@ -4015,7 +4015,7 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
         // object does not have xattrs
         return 0;
     }
-    std::string strxattrs = iter->second;
+    const auto& strxattrs = iter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
@@ -4098,7 +4098,7 @@ static int s3fs_removexattr(const char* path, const char* name)
         // object does not have xattrs
         return -ENOATTR;
     }
-    std::string strxattrs = hiter->second;
+    const auto& strxattrs = hiter->second;
 
     parse_xattrs(strxattrs, xattrs);
 
