@@ -124,8 +124,8 @@ jobs:
   #   This job doesn't work with GitHub Actions using macOS 11+ because "load_osxfuse" returns
   #   "exit code = 1".(requires OS reboot)
   #
-  macos12:
-    runs-on: macos-12
+  macos-13:
+    runs-on: macos-13
 
     steps:
       - name: Checkout source code
