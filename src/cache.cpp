@@ -223,14 +223,11 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
             std::string stretag;
             if(petag){
                 // find & check ETag
-                for(auto hiter = ent->meta.cbegin(); hiter != ent->meta.cend(); ++hiter){
-                    std::string tag = lower(hiter->first);
-                    if(tag == "etag"){
-                        stretag = hiter->second;
-                        if('\0' != petag[0] && petag != stretag){
-                            is_delete_cache = true;
-                        }
-                        break;
+                auto hiter = ent->meta.find("etag");
+                if(hiter != ent->meta.end()){
+                    stretag = hiter->second;
+                    if('\0' != petag[0] && petag != stretag){
+                        is_delete_cache = true;
                     }
                 }
             }
