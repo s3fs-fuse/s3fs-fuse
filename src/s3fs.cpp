@@ -3960,8 +3960,6 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 
     parse_xattrs(strxattrs, xattrs);
 
-    S3FS_PRN_DBG("Get xattrs = %s", raw_build_xattrs(xattrs).c_str());
-
     // search name
     std::string strname = name;
     auto xiter = xattrs.find(strname);
