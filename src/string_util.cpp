@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
@@ -98,10 +99,13 @@ off_t cvt_strtoofft(const char* str, int base)
 
 std::string lower(std::string s)
 {
-    // change each character of the std::string to lower case
-    for(size_t i = 0; i < s.length(); i++){
-        s[i] = static_cast<char>(tolower(s[i]));
-    }
+    std::transform(s.cbegin(), s.cend(), s.begin(), ::tolower);
+    return s;
+}
+
+std::string upper(std::string s)
+{
+    std::transform(s.cbegin(), s.cend(), s.begin(), ::toupper);
     return s;
 }
 
