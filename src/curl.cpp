@@ -593,8 +593,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
 
     if(getline(ss, key, ':')){
         // Force to lower, only "x-amz"
-        std::string lkey = key;
-        transform(lkey.cbegin(), lkey.cend(), lkey.begin(), static_cast<int (*)(int)>(std::tolower));
+        std::string lkey = lower(key);
         if(is_prefix(lkey.c_str(), "x-amz")){
             key = lkey;
         }
@@ -746,9 +745,8 @@ acl_t S3fsCurl::GetDefaultAcl()
 std::string S3fsCurl::SetStorageClass(const std::string& storage_class)
 {
     std::string old = S3fsCurl::storage_class;
-    S3fsCurl::storage_class = storage_class;
     // AWS requires uppercase storage class values
-    transform(S3fsCurl::storage_class.cbegin(), S3fsCurl::storage_class.cend(), S3fsCurl::storage_class.begin(), ::toupper);
+    S3fsCurl::storage_class = upper(storage_class);
     return old;
 }
 
