@@ -24,6 +24,7 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <strings.h>
 
 //
 // A collection of string utilities for manipulating URLs and HTTP responses.
@@ -36,6 +37,14 @@ static constexpr char SPACES[] = " \t\r\n";
 //-------------------------------------------------------------------
 // Inline functions
 //-------------------------------------------------------------------
+class CaseInsensitiveStringView {
+public:
+    explicit CaseInsensitiveStringView(const std::string &str) : str(str.c_str()) {}
+    bool operator==(const char *other) const { return strcasecmp(str, other) == 0; }
+    bool is_prefix(const char *prefix) const { return strncasecmp(str, prefix, strlen(prefix)) == 0; }
+private:
+    const char *str;
+};
 static inline bool is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
 static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
