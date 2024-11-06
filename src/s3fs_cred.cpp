@@ -38,6 +38,8 @@
 #include "threadpoolman.h"
 #include "s3fs_threadreqs.h"
 
+using namespace std::string_literals;
+
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
@@ -996,7 +998,7 @@ bool S3fsCred::InitialS3fsCredentials()
     }
 
     // 3b - check ${HOME}/.aws/credentials
-    std::string aws_credentials = std::string(getpwuid(getuid())->pw_dir) + "/.aws/credentials";
+    std::string aws_credentials = getpwuid(getuid())->pw_dir + "/.aws/credentials"s;
     if(ReadAwsCredentialFile(aws_credentials)){
         return true;
     }else if(aws_profile != DEFAULT_AWS_PROFILE_NAME){
@@ -1393,7 +1395,7 @@ int S3fsCred::DetectParam(const char* arg)
              S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
              return -1;
         }
-        endpoint_url = std::string(iam_endpoint) + "/identity/token";
+        endpoint_url = iam_endpoint + "/identity/token"s;
         SetIAMCredentialsURL(endpoint_url.c_str());
         set_builtin_cred_opts = true;
         return 0;
