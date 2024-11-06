@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_FDINFO_H_
 #define S3FS_FDCACHE_FDINFO_H_
 
+#include <any>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -74,7 +75,7 @@ class PseudoFdInfo
         Semaphore               uploaded_sem;                                   // use a semaphore to trigger an upload completion like event flag
 
     private:
-        static void* MultipartUploadThreadWorker(void* arg);
+        static void* MultipartUploadThreadWorker(std::any arg);
 
         bool Clear();
         void CloseUploadFd();

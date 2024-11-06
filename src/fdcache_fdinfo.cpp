@@ -50,10 +50,14 @@ int PseudoFdInfo::opt_max_threads = -1;
 //
 // Worker function for uploading
 //
-void* PseudoFdInfo::MultipartUploadThreadWorker(void* arg)
+void* PseudoFdInfo::MultipartUploadThreadWorker(std::any arg)
 {
-    std::unique_ptr<pseudofdinfo_thparam> pthparam(static_cast<pseudofdinfo_thparam*>(arg));
-    if(!pthparam || !(pthparam->ppseudofdinfo)){
+    if(arg.type() != typeid(pseudofdinfo_thparam)){
+        return reinterpret_cast<void*>(-EIO);
+    }
+    auto thparam = std::any_cast<pseudofdinfo_thparam>(arg);
+    auto *pthparam = &thparam;
+    if(!pthparam->ppseudofdinfo){
         return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Upload Part Thread [tpath=%s][start=%lld][size=%lld][part=%d]", pthparam->path.c_str(), static_cast<long long>(pthparam->start), static_cast<long long>(pthparam->size), pthparam->part_num);
@@ -454,27 +458,26 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
         }
 
         // make parameter for my thread
-        auto* thargs = new pseudofdinfo_thparam;
-        thargs->ppseudofdinfo        = this;
-        thargs->path                 = SAFESTRPTR(path);
-        thargs->upload_id            = tmp_upload_id;
-        thargs->upload_fd            = tmp_upload_fd;
-        thargs->start                = iter->start;
-        thargs->size                 = iter->size;
-        thargs->is_copy              = is_copy;
-        thargs->part_num             = iter->part_num;
-        thargs->petag                = petag;
+        pseudofdinfo_thparam thargs;
+        thargs.ppseudofdinfo        = this;
+        thargs.path                 = SAFESTRPTR(path);
+        thargs.upload_id            = tmp_upload_id;
+        thargs.upload_fd            = tmp_upload_fd;
+        thargs.start                = iter->start;
+        thargs.size                 = iter->size;
+        thargs.is_copy              = is_copy;
+        thargs.part_num             = iter->part_num;
+        thargs.petag                = petag;
 
         // make parameter for thread pool
         thpoolman_param ppoolparam;
-        ppoolparam.args             = thargs;
+        ppoolparam.args             = std::move(thargs);
         ppoolparam.psem             = &uploaded_sem;
         ppoolparam.pfunc            = PseudoFdInfo::MultipartUploadThreadWorker;
 
         // setup instruction
         if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for uploading.");
-            delete thargs;
             return false;
         }
 

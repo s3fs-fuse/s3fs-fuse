@@ -1232,9 +1232,9 @@ bool S3fsCurl::SetIPResolveType(const char* value)
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
 // cppcheck-suppress constParameterCallback
-bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
+bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, std::any param)
 {
-    if(!s3fscurl || param){     // this callback does not need a parameter
+    if(!s3fscurl){
         return false;
     }
 
@@ -1244,9 +1244,9 @@ bool S3fsCurl::UploadMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
 // cppcheck-suppress constParameterCallback
-bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
+bool S3fsCurl::MixMultipartPostCallback(S3fsCurl* s3fscurl, std::any param)
 {
-    if(!s3fscurl || param){     // this callback does not need a parameter
+    if(!s3fscurl){
         return false;
     }
 
@@ -4385,9 +4385,9 @@ bool S3fsCurl::UploadMultipartPostComplete()
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameter
 // cppcheck-suppress constParameterCallback
-bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl, void* param)
+bool S3fsCurl::CopyMultipartPostCallback(S3fsCurl* s3fscurl, std::any param)
 {
-    if(!s3fscurl || param){     // this callback does not need a parameter
+    if(!s3fscurl){
         return false;
     }
 

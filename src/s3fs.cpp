@@ -125,7 +125,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
-static bool multi_head_callback(S3fsCurl* s3fscurl, void* param);
+static bool multi_head_callback(S3fsCurl* s3fscurl, std::any param);
 static std::unique_ptr<S3fsCurl> multi_head_retry_callback(S3fsCurl* s3fscurl);
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
@@ -3123,7 +3123,7 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 
 // cppcheck-suppress unmatchedSuppression
 // cppcheck-suppress constParameterCallback
-static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
+static bool multi_head_callback(S3fsCurl* s3fscurl, std::any param)
 {
     if(!s3fscurl){
         return false;
@@ -3141,8 +3141,8 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
     if(use_wtf8){
         bpath = s3fs_wtf8_decode(bpath);
     }
-    if(param){
-        auto* pcbparam = reinterpret_cast<SyncFiller*>(param);
+    if(param.type() == typeid(SyncFiller*)){
+        auto* pcbparam = std::any_cast<SyncFiller*>(param);
         struct stat st;
         if(StatCache::getStatCacheData()->GetStat(saved_path, &st)){
             pcbparam->Fill(bpath.c_str(), &st, 0);
@@ -3152,6 +3152,7 @@ static bool multi_head_callback(S3fsCurl* s3fscurl, void* param)
         }
     }else{
         S3FS_PRN_WARN("param(multi_head_callback_param*) is nullptr, then can not call filler.");
+        return false;
     }
 
     return true;
@@ -3163,20 +3164,20 @@ struct multi_head_notfound_callback_param
     s3obj_list_t    notfound_list;
 };
 
-static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, void* param)
+static bool multi_head_notfound_callback(S3fsCurl* s3fscurl, std::any param)
 {
     if(!s3fscurl){
         return false;
     }
     S3FS_PRN_INFO("HEAD returned NotFound(404) for %s object, it maybe only the path exists and the object does not exist.", s3fscurl->GetPath().c_str());
 
-    if(!param){
+    if(param.type() != typeid(struct multi_head_notfound_callback_param*)){
         S3FS_PRN_WARN("param(multi_head_notfound_callback_param*) is nullptr, then can not call filler.");
         return false;
     }
 
     // set path to not found list
-    auto* pcbparam = reinterpret_cast<struct multi_head_notfound_callback_param*>(param);
+    auto* pcbparam = std::any_cast<struct multi_head_notfound_callback_param*>(param);
 
     const std::lock_guard<std::mutex> lock(pcbparam->list_lock);
     pcbparam->notfound_list.push_back(s3fscurl->GetBasePath());
@@ -3236,13 +3237,13 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
     // Success Callback function parameter(SyncFiller object)
     SyncFiller syncfiller(buf, filler);
-    curlmulti.SetSuccessCallbackParam(reinterpret_cast<void*>(&syncfiller));
+    curlmulti.SetSuccessCallbackParam(&syncfiller);
 
     // Not found Callback function parameter
     struct multi_head_notfound_callback_param notfound_param;
     if(support_compat_dir){
         curlmulti.SetNotFoundCallback(multi_head_notfound_callback);
-        curlmulti.SetNotFoundCallbackParam(reinterpret_cast<void*>(&notfound_param));
+        curlmulti.SetNotFoundCallbackParam(&notfound_param);
     }
 
     // Make single head request(with max).
