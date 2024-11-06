@@ -204,17 +204,17 @@ static std::atomic<bool> has_mp_stat;
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static bool IS_REPLACEDIR(dirtype type)
+static constexpr bool IS_REPLACEDIR(dirtype type)
 {
     return dirtype::OLD == type || dirtype::FOLDER == type || dirtype::NOOBJ == type;
 }
 
-static bool IS_RMTYPEDIR(dirtype type)
+static constexpr bool IS_RMTYPEDIR(dirtype type)
 {
     return dirtype::OLD == type || dirtype::FOLDER == type;
 }
 
-static bool IS_CREATE_MP_STAT(const char* path)
+static constexpr bool IS_CREATE_MP_STAT(const char* path)
 {
     // [NOTE] has_mp_stat is set in get_object_attribute()
     return (path != nullptr && 0 == strcmp(path, "/") && !has_mp_stat);
@@ -5386,7 +5386,7 @@ int main(int argc, char* argv[])
 
     // set credential object
     //
-    ps3fscred.reset(new S3fsCred());
+    ps3fscred = std::make_unique<S3fsCred>();
     if(!S3fsCurl::InitCredentialObject(ps3fscred.get())){
         S3FS_PRN_EXIT("Failed to setup credential object to s3fs curl.");
         exit(EXIT_FAILURE);

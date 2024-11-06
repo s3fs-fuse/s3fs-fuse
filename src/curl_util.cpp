@@ -30,6 +30,8 @@
 #include "s3fs_auth.h"
 #include "s3fs_cred.h"
 
+using namespace std::string_literals;
+
 //-------------------------------------------------------------------
 // Utility Functions
 //-------------------------------------------------------------------
@@ -47,7 +49,7 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
     // key & value are trimmed and lower (only key)
     std::string strkey = trim(key);
     std::string strval = value ? trim(value) : "";
-    std::string strnew = key + std::string(": ") + strval;
+    std::string strnew = key + ": "s + strval;
     char* data;
     if(nullptr == (data = strdup(strnew.c_str()))){
         return list;
