@@ -44,7 +44,7 @@ static void SetStatCacheTime(struct timespec& ts)
     }
 }
 
-static int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
+static constexpr int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
 {
     // return -1:  ts1 < ts2
     //         0:  ts1 == ts2
@@ -119,7 +119,7 @@ std::mutex      StatCache::stat_cache_lock;
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), ExpireTime(15 * 60), CacheSize(100000), IsCacheNoObject(true)
+StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), ExpireTime(15 * 60), CacheSize(100'000), IsCacheNoObject(true)
 {
     if(this == StatCache::getStatCacheData()){
         stat_cache.clear();

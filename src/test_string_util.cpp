@@ -27,6 +27,8 @@
 #include "string_util.h"
 #include "test_util.h"
 
+using namespace std::string_literals;
+
 //-------------------------------------------------------------------
 // Global variables for test_string_util
 //-------------------------------------------------------------------
@@ -35,29 +37,29 @@ std::string instance_name;
 
 void test_trim()
 {
-    ASSERT_EQUALS(std::string("1234"), trim("  1234  "));
-    ASSERT_EQUALS(std::string("1234"), trim("1234  "));
-    ASSERT_EQUALS(std::string("1234"), trim("  1234"));
-    ASSERT_EQUALS(std::string("1234"), trim("1234"));
+    ASSERT_EQUALS("1234"s, trim("  1234  "));
+    ASSERT_EQUALS("1234"s, trim("1234  "));
+    ASSERT_EQUALS("1234"s, trim("  1234"));
+    ASSERT_EQUALS("1234"s, trim("1234"));
 
-    ASSERT_EQUALS(std::string("1234  "), trim_left("  1234  "));
-    ASSERT_EQUALS(std::string("1234  "), trim_left("1234  "));
-    ASSERT_EQUALS(std::string("1234"), trim_left("  1234"));
-    ASSERT_EQUALS(std::string("1234"), trim_left("1234"));
+    ASSERT_EQUALS("1234  "s, trim_left("  1234  "));
+    ASSERT_EQUALS("1234  "s, trim_left("1234  "));
+    ASSERT_EQUALS("1234"s, trim_left("  1234"));
+    ASSERT_EQUALS("1234"s, trim_left("1234"));
 
-    ASSERT_EQUALS(std::string("  1234"), trim_right("  1234  "));
-    ASSERT_EQUALS(std::string("1234"), trim_right("1234  "));
-    ASSERT_EQUALS(std::string("  1234"), trim_right("  1234"));
-    ASSERT_EQUALS(std::string("1234"), trim_right("1234"));
+    ASSERT_EQUALS("  1234"s, trim_right("  1234  "));
+    ASSERT_EQUALS("1234"s, trim_right("1234  "));
+    ASSERT_EQUALS("  1234"s, trim_right("  1234"));
+    ASSERT_EQUALS("1234"s, trim_right("1234"));
 
-    ASSERT_EQUALS(std::string("1234"), peeloff("\"1234\""));            // "1234"   -> 1234
-    ASSERT_EQUALS(std::string("\"1234\""), peeloff("\"\"1234\"\""));    // ""1234"" -> "1234"
-    ASSERT_EQUALS(std::string("\"1234"), peeloff("\"\"1234\""));        // ""1234"  ->  "1234
-    ASSERT_EQUALS(std::string("1234\""), peeloff("\"1234\"\""));        // "1234""  -> 1234"
-    ASSERT_EQUALS(std::string("\"1234"), peeloff("\"1234"));            // "1234    -> "1234
-    ASSERT_EQUALS(std::string("1234\""), peeloff("1234\""));            // 1234"    -> 1234"
-    ASSERT_EQUALS(std::string(" \"1234\""), peeloff(" \"1234\""));      // _"1234"  -> _"1234"
-    ASSERT_EQUALS(std::string("\"1234\" "), peeloff("\"1234\" "));      // "1234"_  -> "1234"_
+    ASSERT_EQUALS("1234"s, peeloff("\"1234\""));            // "1234"   -> 1234
+    ASSERT_EQUALS("\"1234\""s, peeloff("\"\"1234\"\""));    // ""1234"" -> "1234"
+    ASSERT_EQUALS("\"1234"s, peeloff("\"\"1234\""));        // ""1234"  ->  "1234
+    ASSERT_EQUALS("1234\""s, peeloff("\"1234\"\""));        // "1234""  -> 1234"
+    ASSERT_EQUALS("\"1234"s, peeloff("\"1234"));            // "1234    -> "1234
+    ASSERT_EQUALS("1234\""s, peeloff("1234\""));            // 1234"    -> 1234"
+    ASSERT_EQUALS(" \"1234\""s, peeloff(" \"1234\""));      // _"1234"  -> _"1234"
+    ASSERT_EQUALS("\"1234\" "s, peeloff("\"1234\" "));      // "1234"_  -> "1234"_
 }
 
 void test_base64()
@@ -65,30 +67,30 @@ void test_base64()
     std::string buf;
     char tmpbuf = '\0';
 
-    ASSERT_EQUALS(s3fs_base64(nullptr, 0), std::string(""));
+    ASSERT_EQUALS(s3fs_base64(nullptr, 0), ""s);
     buf = s3fs_decode64(nullptr, 0);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), &tmpbuf, 0);
 
-    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), std::string(""));
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>(""), 0), ""s);
     buf = s3fs_decode64("", 0);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), &tmpbuf, 0);
 
-    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), std::string("MQ=="));
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1"), 1), "MQ=="s);
     buf = s3fs_decode64("MQ==", 4);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "1", 1);
     ASSERT_EQUALS(buf.length(), static_cast<size_t>(1));
 
-    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("12"), 2), std::string("MTI="));
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("12"), 2), "MTI="s);
     buf = s3fs_decode64("MTI=", 4);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "12", 2);
     ASSERT_EQUALS(buf.length(), static_cast<size_t>(2));
 
-    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("123"), 3), std::string("MTIz"));
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("123"), 3), "MTIz"s);
     buf = s3fs_decode64("MTIz", 4);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "123", 3);
     ASSERT_EQUALS(buf.length(), static_cast<size_t>(3));
 
-    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1234"), 4), std::string("MTIzNA=="));
+    ASSERT_EQUALS(s3fs_base64(reinterpret_cast<const unsigned char *>("1234"), 4), "MTIzNA=="s);
     buf = s3fs_decode64("MTIzNA==", 8);
     ASSERT_BUFEQUALS(buf.c_str(), buf.length(), "1234", 4);
     ASSERT_EQUALS(buf.length(), static_cast<size_t>(4));
@@ -121,7 +123,7 @@ void test_strtoofft()
     ASSERT_EQUALS(value, static_cast<off_t>(15L));
 
     ASSERT_TRUE(s3fs_strtoofft(&value, "deadbeef", /*base=*/ 16));
-    ASSERT_EQUALS(value, static_cast<off_t>(3735928559L));
+    ASSERT_EQUALS(value, static_cast<off_t>(3'735'928'559L));
 }
 
 void test_wtf8_encoding()
