@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
+#include <memory>
 #include <mutex>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -138,7 +139,7 @@ bool s3fs_init_crypt_mutex()
             return false;
         }
     }
-    s3fs_crypt_mutex.reset(new std::mutex[CRYPTO_num_locks()]);
+    s3fs_crypt_mutex = std::make_unique<std::mutex[]>(CRYPTO_num_locks());
     // static lock
     CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
     CRYPTO_set_id_callback(s3fs_crypt_get_threadid);
@@ -177,7 +178,7 @@ static std::unique_ptr<unsigned char[]> s3fs_HMAC_RAW(const void* key, size_t ke
         return nullptr;
     }
     (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen]);
+    auto digest = std::make_unique<unsigned char[]>(*digestlen);
     if(is_sha256){
         HMAC(EVP_sha256(), key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen);
     }else{

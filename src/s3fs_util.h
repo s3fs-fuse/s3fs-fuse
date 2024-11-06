@@ -73,7 +73,7 @@ enum class stat_time_type : uint8_t {
 //-------------------------------------------------------------------
 static constexpr struct timespec S3FS_OMIT_TS = {0, UTIME_OMIT};
 
-int compare_timespec(const struct timespec& ts1, const struct timespec& ts2);
+constexpr int compare_timespec(const struct timespec& ts1, const struct timespec& ts2);
 int compare_timespec(const struct stat& st, stat_time_type type, const struct timespec& ts);
 void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts);
 struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts);

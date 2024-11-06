@@ -54,7 +54,6 @@ Checks: '
     -misc-use-internal-linkage,
     -modernize-avoid-c-arrays,
     -modernize-loop-convert,
-    -modernize-make-unique,
     -modernize-use-nodiscard,
     -modernize-raw-string-literal,
     -modernize-return-braced-init-list,

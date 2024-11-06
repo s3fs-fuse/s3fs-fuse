@@ -101,11 +101,11 @@ std::string get_username(uid_t uid)
     struct passwd* ppwinfo = nullptr;
 
     // make buffer
-    std::unique_ptr<char[]> pbuf(new char[maxlen]);
+    auto pbuf = std::make_unique<char[]>(maxlen);
     // get pw information
     while(ERANGE == (result = getpwuid_r(uid, &pwinfo, pbuf.get(), maxlen, &ppwinfo))){
         maxlen *= 2;
-        pbuf.reset(new char[maxlen]);
+        pbuf = std::make_unique<char[]>(maxlen);
     }
 
     if(0 != result){
@@ -129,11 +129,11 @@ int is_uid_include_group(uid_t uid, gid_t gid)
     struct group* pginfo = nullptr;
 
     // make buffer
-    std::unique_ptr<char[]> pbuf(new char[maxlen]);
+    auto pbuf = std::make_unique<char[]>(maxlen);
     // get group information
     while(ERANGE == (result = getgrgid_r(gid, &ginfo, pbuf.get(), maxlen, &pginfo))){
         maxlen *= 2;
-        pbuf.reset(new char[maxlen]);
+        pbuf = std::make_unique<char[]>(maxlen);
     }
 
     if(0 != result){
@@ -410,7 +410,7 @@ void print_launch_message(int argc, char** argv)
 //          0  ts1 == ts2
 //          1  ts1 >  ts2
 //
-int compare_timespec(const struct timespec& ts1, const struct timespec& ts2)
+constexpr int compare_timespec(const struct timespec& ts1, const struct timespec& ts2)
 {
     if(ts1.tv_sec < ts2.tv_sec){
         return -1;
