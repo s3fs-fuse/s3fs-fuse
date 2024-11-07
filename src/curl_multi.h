@@ -21,6 +21,7 @@
 #ifndef S3FS_CURL_MULTI_H_
 #define S3FS_CURL_MULTI_H_
 
+#include <any>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -35,8 +36,8 @@
 class S3fsCurl;
 
 typedef std::vector<std::unique_ptr<S3fsCurl>> s3fscurllist_t;
-typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, void* param);  // callback for succeed multi request
-typedef bool (*S3fsMultiNotFoundCallback)(S3fsCurl* s3fscurl, void* param); // callback for succeed multi request
+typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, std::any param);  // callback for succeed multi request
+typedef bool (*S3fsMultiNotFoundCallback)(S3fsCurl* s3fscurl, std::any param); // callback for succeed multi request
 typedef std::unique_ptr<S3fsCurl> (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);  // callback for failure and retrying
 
 //----------------------------------------------
@@ -54,8 +55,8 @@ class S3fsMultiCurl
         S3fsMultiSuccessCallback   SuccessCallback;
         S3fsMultiNotFoundCallback  NotFoundCallback;
         S3fsMultiRetryCallback     RetryCallback;
-        void*                      pSuccessCallbackParam;
-        void*                      pNotFoundCallbackParam;
+        std::any                   pSuccessCallbackParam;
+        std::any                   pNotFoundCallbackParam;
 
         std::mutex completed_tids_lock;
         std::vector<std::thread::id> completed_tids GUARDED_BY(completed_tids_lock);
@@ -80,8 +81,8 @@ class S3fsMultiCurl
         S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
         S3fsMultiNotFoundCallback SetNotFoundCallback(S3fsMultiNotFoundCallback function);
         S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
-        void* SetSuccessCallbackParam(void* param);
-        void* SetNotFoundCallbackParam(void* param);
+        std::any SetSuccessCallbackParam(std::any param);
+        std::any SetNotFoundCallbackParam(std::any param);
         bool Clear() { return ClearEx(true); }
         bool SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl);
         int Request();

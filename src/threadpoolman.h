@@ -21,6 +21,7 @@
 #ifndef S3FS_THREADPOOLMAN_H_
 #define S3FS_THREADPOOLMAN_H_
 
+#include <any>
 #include <atomic>
 #include <future>
 #include <list>
@@ -36,7 +37,7 @@
 //
 // Prototype function
 //
-typedef void* (*thpoolman_worker)(void*);
+typedef void* (*thpoolman_worker)(std::any);
 
 //
 // Parameter structure
@@ -48,7 +49,7 @@ typedef void* (*thpoolman_worker)(void*);
 //
 struct thpoolman_param
 {
-    void*            args = nullptr;
+    std::any         args;
     Semaphore*       psem = nullptr;
     thpoolman_worker pfunc = nullptr;
 };

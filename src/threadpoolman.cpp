@@ -96,7 +96,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
             }
         }
 
-        void* retval = param.pfunc(param.args);
+        void* retval = param.pfunc(std::move(param.args));
         if(nullptr != retval){
             S3FS_PRN_WARN("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
         }

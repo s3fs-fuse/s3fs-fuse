@@ -90,16 +90,16 @@ S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback fu
     return old;
 }
 
-void* S3fsMultiCurl::SetSuccessCallbackParam(void* param)
+std::any S3fsMultiCurl::SetSuccessCallbackParam(std::any param)
 {
-    void* old = pSuccessCallbackParam;
+    std::any old = pSuccessCallbackParam;
     pSuccessCallbackParam = param;
     return old;
 }
 
-void* S3fsMultiCurl::SetNotFoundCallbackParam(void* param)
+std::any S3fsMultiCurl::SetNotFoundCallbackParam(std::any param)
 {
-    void* old = pNotFoundCallbackParam;
+    std::any old = pNotFoundCallbackParam;
     pNotFoundCallbackParam = param;
     return old;
 }
