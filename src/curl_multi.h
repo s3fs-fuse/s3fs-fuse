@@ -35,8 +35,8 @@
 class S3fsCurl;
 
 typedef std::vector<std::unique_ptr<S3fsCurl>> s3fscurllist_t;
-typedef bool (*S3fsMultiSuccessCallback)(S3fsCurl* s3fscurl, void* param);  // callback for succeed multi request
-typedef bool (*S3fsMultiNotFoundCallback)(S3fsCurl* s3fscurl, void* param); // callback for succeed multi request
+typedef std::function<bool(S3fsCurl*)> S3fsMultiSuccessCallback;  // callback for succeed multi request
+typedef std::function<bool(S3fsCurl*)> S3fsMultiNotFoundCallback; // callback for succeed multi request
 typedef std::unique_ptr<S3fsCurl> (*S3fsMultiRetryCallback)(S3fsCurl* s3fscurl);  // callback for failure and retrying
 
 //----------------------------------------------
@@ -54,8 +54,6 @@ class S3fsMultiCurl
         S3fsMultiSuccessCallback   SuccessCallback;
         S3fsMultiNotFoundCallback  NotFoundCallback;
         S3fsMultiRetryCallback     RetryCallback;
-        void*                      pSuccessCallbackParam;
-        void*                      pNotFoundCallbackParam;
 
         std::mutex completed_tids_lock;
         std::vector<std::thread::id> completed_tids GUARDED_BY(completed_tids_lock);
@@ -77,11 +75,9 @@ class S3fsMultiCurl
 
         int GetMaxParallelism() const { return maxParallelism; }
 
-        S3fsMultiSuccessCallback SetSuccessCallback(S3fsMultiSuccessCallback function);
-        S3fsMultiNotFoundCallback SetNotFoundCallback(S3fsMultiNotFoundCallback function);
+        S3fsMultiSuccessCallback SetSuccessCallback(const S3fsMultiSuccessCallback &function);
+        S3fsMultiNotFoundCallback SetNotFoundCallback(const S3fsMultiNotFoundCallback &function);
         S3fsMultiRetryCallback SetRetryCallback(S3fsMultiRetryCallback function);
-        void* SetSuccessCallbackParam(void* param);
-        void* SetNotFoundCallbackParam(void* param);
         bool Clear() { return ClearEx(true); }
         bool SetS3fsCurlObject(std::unique_ptr<S3fsCurl> s3fscurl);
         int Request();
