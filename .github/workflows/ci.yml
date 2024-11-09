@@ -256,7 +256,7 @@ jobs:
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -fsanitize=undefined,implicit-conversion,local-bounds,unsigned-integer-overflow"
             elif [ "${{ matrix.checktype }}" = "thread_safety" ]; then
                 echo 'CXX=clang++'
-                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -Wthread-safety -stdlib=libc++ -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS -Werror"
+                echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1 -Wthread-safety -Wthread-safety-beta -stdlib=libc++ -D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS -Werror"
                 echo 'LDFLAGS=-DCLANG_DEFAULT_LINKER=lld'
             elif [ "${{ matrix.checktype }}" = "valgrind" ]; then
                 echo "CXXFLAGS=${COMMON_CXXFLAGS} -O1"

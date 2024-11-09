@@ -69,7 +69,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         headers_t       orgmeta         GUARDED_BY(fdent_lock);       // original headers at opening
         off_t           size_orgmeta    GUARDED_BY(fdent_lock);       // original file size in original headers
 
-        mutable std::mutex fdent_data_lock;                           // protects the following members
+        mutable std::mutex fdent_data_lock ACQUIRED_AFTER(fdent_lock);// protects the following members
         PageList         pagelist       GUARDED_BY(fdent_data_lock);
         std::string      cachepath      GUARDED_BY(fdent_data_lock);  // local cache file path
                                                                       // (if this is empty, does not load/save pagelist.)
