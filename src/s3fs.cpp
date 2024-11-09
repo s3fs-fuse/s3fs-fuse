@@ -2039,10 +2039,10 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         return result;
     }
 
-    if((uid_t)(-1) == uid){
+    if(static_cast<uid_t>(-1) == uid){
         uid = stbuf.st_uid;
     }
-    if((gid_t)(-1) == gid){
+    if(static_cast<gid_t>(-1) == gid){
         gid = stbuf.st_gid;
     }
     if(S_ISDIR(stbuf.st_mode)){
@@ -2161,10 +2161,10 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         return result;
     }
 
-    if((uid_t)(-1) == uid){
+    if(static_cast<uid_t>(-1) == uid){
         uid = stbuf.st_uid;
     }
-    if((gid_t)(-1) == gid){
+    if(static_cast<gid_t>(-1) == gid){
         gid = stbuf.st_gid;
     }
 
@@ -2749,7 +2749,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     FdEntity*    ent;
     headers_t    meta;
 
-    if((unsigned int)fi->flags & O_TRUNC){
+    if(static_cast<unsigned int>(fi->flags) & O_TRUNC){
         if(0 != st.st_size){
             st.st_size = 0;
             needs_flush = true;

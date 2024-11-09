@@ -499,7 +499,7 @@ size_t S3fsCurl::UploadReadCallback(void* ptr, size_t size, size_t nmemb, void* 
         return 0;
     }
     // read size
-    ssize_t copysize = (size * nmemb) < (size_t)pCurl->partdata.size ? (size * nmemb) : (size_t)pCurl->partdata.size;
+    ssize_t copysize = (size * nmemb) < static_cast<size_t>(pCurl->partdata.size) ? (size * nmemb) : static_cast<size_t>(pCurl->partdata.size);
     ssize_t readbytes;
     ssize_t totalread;
     // read and set
@@ -537,7 +537,7 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     }
 
     // write size
-    ssize_t copysize = (size * nmemb) < (size_t)pCurl->partdata.size ? (size * nmemb) : (size_t)pCurl->partdata.size;
+    ssize_t copysize = (size * nmemb) < static_cast<size_t>(pCurl->partdata.size) ? (size * nmemb) : static_cast<size_t>(pCurl->partdata.size);
     ssize_t writebytes;
     ssize_t totalwrite;
 
