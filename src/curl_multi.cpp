@@ -36,7 +36,7 @@
 //-------------------------------------------------------------------
 // Class S3fsMultiCurl 
 //-------------------------------------------------------------------
-S3fsMultiCurl::S3fsMultiCurl(int maxParallelism, bool not_abort) : maxParallelism(maxParallelism), not_abort(not_abort), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr), pSuccessCallbackParam(nullptr), pNotFoundCallbackParam(nullptr)
+S3fsMultiCurl::S3fsMultiCurl(int maxParallelism, bool not_abort) : maxParallelism(maxParallelism), not_abort(not_abort), SuccessCallback(nullptr), NotFoundCallback(nullptr), RetryCallback(nullptr)
 {
 }
 
@@ -69,14 +69,14 @@ bool S3fsMultiCurl::ClearEx(bool is_all)
     return true;
 }
 
-S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(S3fsMultiSuccessCallback function)
+S3fsMultiSuccessCallback S3fsMultiCurl::SetSuccessCallback(const S3fsMultiSuccessCallback &function)
 {
     S3fsMultiSuccessCallback old = SuccessCallback;
     SuccessCallback = function;
     return old;
 }
 
-S3fsMultiNotFoundCallback S3fsMultiCurl::SetNotFoundCallback(S3fsMultiNotFoundCallback function)
+S3fsMultiNotFoundCallback S3fsMultiCurl::SetNotFoundCallback(const S3fsMultiNotFoundCallback &function)
 {
     S3fsMultiNotFoundCallback old = NotFoundCallback;
     NotFoundCallback = function;
@@ -87,20 +87,6 @@ S3fsMultiRetryCallback S3fsMultiCurl::SetRetryCallback(S3fsMultiRetryCallback fu
 {
     S3fsMultiRetryCallback old = RetryCallback;
     RetryCallback = function;
-    return old;
-}
-
-void* S3fsMultiCurl::SetSuccessCallbackParam(void* param)
-{
-    void* old = pSuccessCallbackParam;
-    pSuccessCallbackParam = param;
-    return old;
-}
-
-void* S3fsMultiCurl::SetNotFoundCallbackParam(void* param)
-{
-    void* old = pNotFoundCallbackParam;
-    pNotFoundCallbackParam = param;
     return old;
 }
 
@@ -212,7 +198,7 @@ int S3fsMultiCurl::MultiRead()
                 // add into stat cache
                 // cppcheck-suppress unmatchedSuppression
                 // cppcheck-suppress knownPointerToBool
-                if(SuccessCallback && !SuccessCallback(s3fscurl.get(), pSuccessCallbackParam)){
+                if(SuccessCallback && !SuccessCallback(s3fscurl.get())){
                     S3FS_PRN_WARN("error from success callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(400 == responseCode){
@@ -228,7 +214,7 @@ int S3fsMultiCurl::MultiRead()
 				// Call callback function
                 // cppcheck-suppress unmatchedSuppression
                 // cppcheck-suppress knownPointerToBool
-                if(NotFoundCallback && !NotFoundCallback(s3fscurl.get(), pNotFoundCallbackParam)){
+                if(NotFoundCallback && !NotFoundCallback(s3fscurl.get())){
                     S3FS_PRN_WARN("error from not found callback function(%s).", s3fscurl->url.c_str());
                 }
             }else if(500 == responseCode){
