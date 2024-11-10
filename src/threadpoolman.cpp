@@ -34,6 +34,7 @@
 //------------------------------------------------
 // ThreadPoolMan class variables
 //------------------------------------------------
+int                            ThreadPoolMan::worker_count = 10;    // default
 std::unique_ptr<ThreadPoolMan> ThreadPoolMan::singleton;
 
 //------------------------------------------------
@@ -45,13 +46,36 @@ bool ThreadPoolMan::Initialize(int count)
         S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
         abort();
     }
-    ThreadPoolMan::singleton.reset(new ThreadPoolMan(count));
+    if(-1 != count){
+        ThreadPoolMan::SetWorkerCount(count);
+    }
+    ThreadPoolMan::singleton.reset(new ThreadPoolMan(ThreadPoolMan::worker_count));
+
     return true;
 }
 
 void ThreadPoolMan::Destroy()
 {
     ThreadPoolMan::singleton.reset();
+}
+
+int ThreadPoolMan::SetWorkerCount(int count)
+{
+    if(0 >= count){
+        S3FS_PRN_ERR("Thread worker count(%d) must be positive number.", count);
+        return -1;
+    }
+    if(count == ThreadPoolMan::worker_count){
+        return ThreadPoolMan::worker_count;
+    }
+
+    // [TODO]
+    // If we need to dynamically change worker threads, this is
+    // where we would terminate/add workers.
+    //
+    int old = ThreadPoolMan::worker_count;
+    ThreadPoolMan::worker_count = count;
+    return old;
 }
 
 bool ThreadPoolMan::Instruct(const thpoolman_param& param)

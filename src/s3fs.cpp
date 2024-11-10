@@ -106,7 +106,6 @@ static int max_keys_list_object   = 1000;// default is 1000
 static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
-static int max_thread_count       = 5;  // default is 5
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
 static fsblkcnt_t bucket_block_count;                       // advertised block count of the bucket
 static unsigned long s3fs_block_size = 16 * 1024 * 1024;    // s3fs block size is 16MB
@@ -4044,8 +4043,8 @@ static void* s3fs_init(struct fuse_conn_info* conn)
         S3FS_PRN_DBG("Could not initialize cache directory.");
     }
 
-    if(!ThreadPoolMan::Initialize(max_thread_count)){
-        S3FS_PRN_CRIT("Could not create thread pool(%d)", max_thread_count);
+    if(!ThreadPoolMan::Initialize()){
+        S3FS_PRN_CRIT("Could not create thread pool(%d)", ThreadPoolMan::GetWorkerCount());
         s3fs_exit_fuseloop(EXIT_FAILURE);
     }
 
@@ -4691,11 +4690,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_remove_cache = true;
             return 0;
         }
-        else if(is_prefix(arg, "multireq_max=")){
-            int maxreq = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
-            S3fsCurl::SetMaxMultiRequest(maxreq);
-            return 0;
-        }
         else if(0 == strcmp(arg, "nonempty")){
             nonempty = true;
             return 1; // need to continue for fuse.
@@ -4941,13 +4935,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurlShare::SetSslSessionCache(false);
             return 0;
         }
-        else if(is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){
-            int maxpara = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
-            if(0 >= maxpara){
-                S3FS_PRN_EXIT("argument should be over 1: parallel_count");
+        else if(is_prefix(arg, "multireq_max=") || is_prefix(arg, "parallel_count=") || is_prefix(arg, "parallel_upload=")){
+            S3FS_PRN_WARN("The multireq_max, parallel_count and parallel_upload options have been deprecated and merged with max_thread_count. In the near future, these options will no longer be available. For compatibility, the values you specify for these options will be treated as max_thread_count.");
+
+            int max_thcount = static_cast<int>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
+            if(0 >= max_thcount){
+                S3FS_PRN_EXIT("argument should be over 1: max_thread_count");
                 return -1;
             }
-            S3fsCurl::SetMaxParallelCount(maxpara);
+            ThreadPoolMan::SetWorkerCount(max_thcount);
             return 0;
         }
         else if(is_prefix(arg, "max_thread_count=")){
@@ -4956,8 +4952,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 S3FS_PRN_EXIT("argument should be over 1: max_thread_count");
                 return -1;
             }
-            max_thread_count = max_thcount;
-            S3FS_PRN_WARN("The max_thread_count option is not a formal option. Please note that it will change in the future.");
+            ThreadPoolMan::SetWorkerCount(max_thcount);
             return 0;
         }
         else if(is_prefix(arg, "fd_page_size=")){
@@ -5610,12 +5605,12 @@ int main(int argc, char* argv[])
         }
 
         // Check free disk space for maultipart request
-        if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount())){
+        if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * ThreadPoolMan::GetWorkerCount())){
             // Try to clean cache dir and retry
             S3FS_PRN_WARN("No enough disk space for s3fs, try to clean cache dir");
             FdManager::get()->CleanupCacheDir();
 
-            if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * S3fsCurl::GetMaxParallelCount(), true)){
+            if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * ThreadPoolMan::GetWorkerCount(), true)){
                 S3fsCurl::DestroyS3fsCurl();
                 s3fs_destroy_global_ssl();
                 exit(EXIT_FAILURE);

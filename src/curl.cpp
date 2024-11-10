@@ -129,8 +129,6 @@ std::map<const CURL*, curlprogress> S3fsCurl::curl_progress;
 std::string      S3fsCurl::curl_ca_bundle;
 mimes_t          S3fsCurl::mimeTypes;
 std::string      S3fsCurl::userAgent;
-int              S3fsCurl::max_parallel_cnt    = 5;              // default
-int              S3fsCurl::max_multireq        = 20;             // default
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
 signature_type_t S3fsCurl::signature_type      = signature_type_t::V2_OR_V4;       // default
@@ -944,20 +942,6 @@ bool S3fsCurl::SetMultipartCopySize(off_t size)
     }
     S3fsCurl::multipart_copy_size = size;
     return true;
-}
-
-int S3fsCurl::SetMaxParallelCount(int value)
-{
-    int old = S3fsCurl::max_parallel_cnt;
-    S3fsCurl::max_parallel_cnt = value;
-    return old;
-}
-
-int S3fsCurl::SetMaxMultiRequest(int max)
-{
-    int old = S3fsCurl::max_multireq;
-    S3fsCurl::max_multireq = max;
-    return old;
 }
 
 // [NOTE]
