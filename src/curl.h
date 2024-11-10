@@ -151,7 +151,6 @@ class S3fsCurl
         static std::string      curl_ca_bundle;
         static mimes_t          mimeTypes;
         static std::string      userAgent;
-        static int              max_parallel_cnt;
         static int              max_multireq;
         static off_t            multipart_size;
         static off_t            multipart_copy_size;
@@ -302,12 +301,6 @@ class S3fsCurl
         static long GetSslVerifyHostname() { return S3fsCurl::ssl_verify_hostname; }
         static bool SetSSLClientCertOptions(const std::string& values);
         static void ResetOffset(S3fsCurl* pCurl);
-        // maximum parallel GET and PUT requests
-        static int SetMaxParallelCount(int value);
-        static int GetMaxParallelCount() { return S3fsCurl::max_parallel_cnt; }
-        // maximum parallel HEAD requests
-        static int SetMaxMultiRequest(int max);
-        static int GetMaxMultiRequest() { return S3fsCurl::max_multireq; }
         static bool SetMultipartSize(off_t size);
         static off_t GetMultipartSize() { return S3fsCurl::multipart_size; }
         static bool SetMultipartCopySize(off_t size);

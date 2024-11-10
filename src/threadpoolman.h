@@ -63,6 +63,7 @@ typedef std::list<thpoolman_param> thpoolman_params_t;
 class ThreadPoolMan
 {
     private:
+        static int                            worker_count;
         static std::unique_ptr<ThreadPoolMan> singleton;
 
         std::atomic<bool>     is_exit;
@@ -91,8 +92,10 @@ class ThreadPoolMan
         ThreadPoolMan& operator=(const ThreadPoolMan&) = delete;
         ThreadPoolMan& operator=(ThreadPoolMan&&) = delete;
 
-        static bool Initialize(int count);
+        static bool Initialize(int count = -1);
         static void Destroy();
+        static int SetWorkerCount(int count);
+        static int GetWorkerCount() { return ThreadPoolMan::worker_count; }
         static bool Instruct(const thpoolman_param& pparam);
         static bool AwaitInstruct(const thpoolman_param& param);
 };
