@@ -1000,7 +1000,7 @@ void PageList::Dump() const
 // If it is a bad area in the previous case, it will be reported as an error.
 // If the latter case does not match, it will be reported as a warning.
 // 
-bool PageList::CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list)
+bool PageList::CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list) const
 {
     err_area_list.clear();
     warn_area_list.clear();

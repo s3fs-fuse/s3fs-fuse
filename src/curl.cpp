@@ -1089,7 +1089,7 @@ bool S3fsCurl::SetIPResolveType(const char* value)
     return true;
 }
 
-int S3fsCurl::MapPutErrorResponse(int result)
+int S3fsCurl::MapPutErrorResponse(int result) const
 {
     if(result != 0){
         return result;

@@ -148,7 +148,7 @@ class S3fsCred
         bool ReadAwsCredentialFile(const std::string &filename) REQUIRES(S3fsCred::token_lock);
 
         bool InitialS3fsCredentials() REQUIRES(S3fsCred::token_lock);
-        bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
+        bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval) const;
 
         bool GetIAMCredentialsURL(std::string& url, bool check_iam_role) REQUIRES(S3fsCred::token_lock);
         bool LoadIAMCredentials() REQUIRES(S3fsCred::token_lock);

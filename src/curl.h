@@ -254,7 +254,7 @@ class S3fsCurl
         int MultipartUploadCopyPartSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
         bool MultipartUploadContentPartComplete();
         bool MultipartUploadCopyPartComplete();
-        int MapPutErrorResponse(int result);
+        int MapPutErrorResponse(int result) const;
 
     public:
         // class methods

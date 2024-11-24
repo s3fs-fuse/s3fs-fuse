@@ -1039,7 +1039,7 @@ bool S3fsCred::InitialS3fsCredentials()
 //-------------------------------------------------------------------
 // Methods : for IAM
 //-------------------------------------------------------------------
-bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval)
+bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval) const
 {
     if(!response){
       return false;
