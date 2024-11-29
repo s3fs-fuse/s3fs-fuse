@@ -223,7 +223,7 @@ void* put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     if(!pthparam){
         return reinterpret_cast<void*>(-EIO);
     }
-    S3FS_PRN_INFO3("Put Head Request [path=%s][meta count=%lu][is copy=%s]", pthparam->path.c_str(), pthparam->meta.size(), (pthparam->isCopy ? "true" : "false"));
+    S3FS_PRN_INFO3("Put Head Request [path=%s][meta count=%zu][is copy=%s]", pthparam->path.c_str(), pthparam->meta.size(), (pthparam->isCopy ? "true" : "false"));
 
     s3fscurl.SetUseAhbe(true);
 
@@ -241,7 +241,7 @@ void* put_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     if(!pthparam){
         return reinterpret_cast<void*>(-EIO);
     }
-    S3FS_PRN_INFO3("Put Request [path=%s][meta count=%lu][fd=%d][use_ahbe=%s]", pthparam->path.c_str(), pthparam->meta.size(), pthparam->fd, (pthparam->ahbe ? "true" : "false"));
+    S3FS_PRN_INFO3("Put Request [path=%s][meta count=%zu][fd=%d][use_ahbe=%s]", pthparam->path.c_str(), pthparam->meta.size(), pthparam->fd, (pthparam->ahbe ? "true" : "false"));
 
     s3fscurl.SetUseAhbe(pthparam->ahbe);
 
@@ -298,7 +298,7 @@ void* pre_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     if(!pthparam){
         return reinterpret_cast<void*>(-EIO);
     }
-    S3FS_PRN_INFO3("Pre Multipart Upload Request [path=%s][meta count=%lu]", pthparam->path.c_str(), pthparam->meta.size());
+    S3FS_PRN_INFO3("Pre Multipart Upload Request [path=%s][meta count=%zu]", pthparam->path.c_str(), pthparam->meta.size());
 
     s3fscurl.SetUseAhbe(true);
 
@@ -357,7 +357,7 @@ void* complete_multipart_upload_threadworker(S3fsCurl& s3fscurl, void* arg)
     if(!pthparam){
         return reinterpret_cast<void*>(-EIO);
     }
-    S3FS_PRN_INFO3("Complete Multipart Upload Request [path=%s][upload id=%s][etaglist=%lu]", pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->etaglist.size());
+    S3FS_PRN_INFO3("Complete Multipart Upload Request [path=%s][upload id=%s][etaglist=%zu]", pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->etaglist.size());
 
     s3fscurl.SetUseAhbe(true);
 
@@ -748,11 +748,11 @@ int put_head_request(const std::string& strpath, const headers_t& meta, bool is_
 
     // send request by thread
     if(!ThreadPoolMan::AwaitInstruct(ppoolparam)){
-        S3FS_PRN_ERR("failed to setup Await Put Head Request Thread Worker [path=%s][meta count=%lu][is copy=%s]", strpath.c_str(), meta.size(), (is_copy ? "true" : "false"));
+        S3FS_PRN_ERR("failed to setup Await Put Head Request Thread Worker [path=%s][meta count=%zu][is copy=%s]", strpath.c_str(), meta.size(), (is_copy ? "true" : "false"));
         return -EIO;
     }
     if(0 != thargs.result){
-        S3FS_PRN_ERR("Await Put Head Request by error(%d) [path=%s][meta count=%lu][is copy=%s]", thargs.result, strpath.c_str(), meta.size(), (is_copy ? "true" : "false"));
+        S3FS_PRN_ERR("Await Put Head Request by error(%d) [path=%s][meta count=%zu][is copy=%s]", thargs.result, strpath.c_str(), meta.size(), (is_copy ? "true" : "false"));
         return thargs.result;
     }
     return 0;
@@ -779,11 +779,11 @@ int put_request(const std::string& strpath, const headers_t& meta, int fd, bool 
 
     // send request by thread
     if(!ThreadPoolMan::AwaitInstruct(ppoolparam)){
-        S3FS_PRN_ERR("failed to setup Await Put Request Thread Worker [path=%s][meta count=%lu][fd=%d][use_ahbe=%s]", strpath.c_str(), meta.size(), fd, (ahbe ? "true" : "false"));
+        S3FS_PRN_ERR("failed to setup Await Put Request Thread Worker [path=%s][meta count=%zu][fd=%d][use_ahbe=%s]", strpath.c_str(), meta.size(), fd, (ahbe ? "true" : "false"));
         return -EIO;
     }
     if(0 != thargs.result){
-        S3FS_PRN_ERR("Await Put Request by error(%d) [path=%s][meta count=%lu][fd=%d][use_ahbe=%s]", thargs.result, strpath.c_str(), meta.size(), fd, (ahbe ? "true" : "false"));
+        S3FS_PRN_ERR("Await Put Request by error(%d) [path=%s][meta count=%zu][fd=%d][use_ahbe=%s]", thargs.result, strpath.c_str(), meta.size(), fd, (ahbe ? "true" : "false"));
         return thargs.result;
     }
     return 0;
