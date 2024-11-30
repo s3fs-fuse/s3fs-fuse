@@ -360,7 +360,7 @@ function stop_s3fs {
         fi
     else
         if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then 
-            retry 10 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount -u "${TEST_BUCKET_MOUNT_POINT_1}"
+            retry 10 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     fi
 }
