@@ -125,7 +125,7 @@ class PageList
         bool Compress();
         bool Deserialize(CacheFileStat& file, ino_t inode);
         void Dump() const;
-        bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list);
+        bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list) const;
 };
 
 #endif // S3FS_FDCACHE_PAGE_H_

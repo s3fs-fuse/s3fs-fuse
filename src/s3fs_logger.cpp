@@ -234,7 +234,7 @@ S3fsLog::s3fs_log_level S3fsLog::LowSetLogLevel(s3fs_log_level level)
     return old;
 }
 
-S3fsLog::s3fs_log_level S3fsLog::LowBumpupLogLevel()
+S3fsLog::s3fs_log_level S3fsLog::LowBumpupLogLevel() const
 {
     if(S3fsLog::pSingleton != this){
         S3FS_PRN_ERR("This object is not as same as S3fsLog::pSingleton.");

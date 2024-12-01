@@ -67,7 +67,7 @@ class S3fsLog
         bool LowLoadEnv();
         bool LowSetLogfile(const char* pfile);
         s3fs_log_level LowSetLogLevel(s3fs_log_level level);
-        s3fs_log_level LowBumpupLogLevel();
+        s3fs_log_level LowBumpupLogLevel() const;
 
     public:
         static bool IsS3fsLogLevel(s3fs_log_level level);

@@ -27,7 +27,7 @@
 //------------------------------------------------
 // UntreatedParts methods
 //------------------------------------------------
-bool UntreatedParts::empty()
+bool UntreatedParts::empty() const
 {
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
     return untreated_list.empty();

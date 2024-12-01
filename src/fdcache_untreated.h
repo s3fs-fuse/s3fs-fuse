@@ -48,7 +48,7 @@ class UntreatedParts
         UntreatedParts& operator=(const UntreatedParts&) = delete;
         UntreatedParts& operator=(UntreatedParts&&) = delete;
 
-        bool empty();
+        bool empty() const;
 
         bool AddPart(off_t start, off_t size);
         bool GetLastUpdatedPart(off_t& start, off_t& size, off_t max_size, off_t min_size = MIN_MULTIPART_SIZE) const { return RowGetPart(start, size, max_size, min_size, true); }
