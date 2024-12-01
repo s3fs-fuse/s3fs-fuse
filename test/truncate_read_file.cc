@@ -51,7 +51,7 @@ int main(int argc, const char *argv[])
 
     // truncate
     if(0 != ftruncate(fd, size)){
-        fprintf(stderr, "[ERROR] Could not truncate file(%s) to %lld byte.\n", filepath, (long long)size);
+        fprintf(stderr, "[ERROR] Could not truncate file(%s) to %lld byte.\n", filepath, static_cast<long long>(size));
         close(fd);
         exit(EXIT_FAILURE);
     }
