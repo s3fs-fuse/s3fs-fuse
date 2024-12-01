@@ -79,6 +79,11 @@ class Semaphore
     public:
         explicit Semaphore(int value) { sem_init(&mutex, 0, value); }
         ~Semaphore() { sem_destroy(&mutex); }
+        Semaphore(const Semaphore&) = delete;
+        Semaphore(Semaphore&&) = delete;
+        Semaphore& operator=(const Semaphore&) = delete;
+        Semaphore& operator=(Semaphore&&) = delete;
+
         void acquire()
         {
             int r;
@@ -86,6 +91,7 @@ class Semaphore
                 r = sem_wait(&mutex);
             } while (r == -1 && errno == EINTR);
         }
+
         bool try_acquire()
         {
             int result;
@@ -95,6 +101,7 @@ class Semaphore
 
             return (0 == result);
         }
+
         void release() { sem_post(&mutex); }
 
     private:
