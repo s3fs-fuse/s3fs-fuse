@@ -359,7 +359,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
         //
         if(GetIMDSVersion() > 1){
             std::string token;
-            int result = get_iamv2api_token_request(std::string(S3fsCred::IAMv2_token_url), S3fsCred::IAMv2_token_ttl, std::string(S3fsCred::IAMv2_token_ttl_hdr), token);
+            int result = get_iamv2api_token_request(S3fsCred::IAMv2_token_url, S3fsCred::IAMv2_token_ttl, S3fsCred::IAMv2_token_ttl_hdr, token);
 
             if(-ENOENT == result){
                 // If we get a 404 back when requesting the token service,
