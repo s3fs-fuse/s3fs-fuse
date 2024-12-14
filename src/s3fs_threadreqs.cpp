@@ -282,10 +282,10 @@ void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
     s3fscurl.SetUseAhbe(false);
 
-    if(0 == (pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE))){
-        *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
-        *(pthparam->presponseBody) = s3fscurl.GetBodyData();
-    }
+    pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE);
+    *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
+    *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+
     return reinterpret_cast<void*>(pthparam->result);
 }
 
