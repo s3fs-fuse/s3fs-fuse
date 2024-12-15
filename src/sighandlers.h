@@ -50,13 +50,12 @@ class S3fsSignals
         static void HandlerHUP(int sig);
         static bool InitHupHandler();
 
-        S3fsSignals();
-
         bool InitUsr1Handler();
         bool DestroyUsr1Handler();
         bool WakeupUsr1Thread();
 
     public:
+        S3fsSignals();
         ~S3fsSignals();
         S3fsSignals(const S3fsSignals&) = delete;
         S3fsSignals(S3fsSignals&&) = delete;
