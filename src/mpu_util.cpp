@@ -86,7 +86,7 @@ static bool abort_incomp_mpu_list(const incomp_mpu_list_t& list, time_t abort_ti
             }
         }
 
-        if(0 != abort_multipart_upload_request(std::string(tpath), upload_id)){
+        if(0 != abort_multipart_upload_request(tpath, upload_id)){
             S3FS_PRN_EXIT("Failed to remove %s multipart uploading object.", tpath);
             result = false;
         }else{

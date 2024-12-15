@@ -1001,7 +1001,7 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
     meta["x-amz-meta-mtime"] = strnow;
 
     int result;
-    if(0 != (result = put_request(std::string(SAFESTRPTR(path)), meta, -1, true/* ahbe */))){
+    if(0 != (result = put_request(SAFESTRPTR(path), meta, -1, true/* ahbe */))){
         return result;
     }
     return 0;
@@ -1197,7 +1197,7 @@ static int s3fs_unlink(const char* _path)
         return result;
     }
 
-    if(0 != (result = delete_request(std::string(SAFESTRPTR(path))))){
+    if(0 != (result = delete_request(SAFESTRPTR(path)))){
         return result;
     }
 
@@ -1551,7 +1551,7 @@ static int rename_large_object(const char* from, const char* to)
         return result;
     }
 
-    if(0 != (result = multipart_put_head_request(std::string(from), std::string(to), buf.st_size, meta))){
+    if(0 != (result = multipart_put_head_request(from, to, buf.st_size, meta))){
         return result;
     }
 
@@ -3079,7 +3079,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     // Make base path list.
     s3obj_list_t  headlist;
     head.GetNameList(headlist, true, false);                                        // get name with "/".
-    StatCache::getStatCacheData()->GetNotruncateCache(std::string(path), headlist); // Add notruncate file name from stat cache
+    StatCache::getStatCacheData()->GetNotruncateCache(path, headlist); // Add notruncate file name from stat cache
 
     // Initialize SyncFiller object
     SyncFiller syncfiller(buf, filler);
@@ -3276,7 +3276,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         each_query += query_prefix;
 
         // send request
-        if(0 != (result = list_bucket_request(std::string(SAFESTRPTR(path)), each_query, responseBody))){
+        if(0 != (result = list_bucket_request(SAFESTRPTR(path), each_query, responseBody))){
             return result;
         }
 
