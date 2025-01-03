@@ -59,7 +59,7 @@ class S3fsCurlShare
         static void UnlockCurlShare(CURL* handle, curl_lock_data nLockData, void* useptr) NO_THREAD_SAFETY_ANALYSIS;
         static bool InitializeCurlShare(const CurlSharePtr& hShare, const ShareLocksPtr& ShareLock) REQUIRES(curl_share_lock);
 
-        bool DestroyCurlShareHandle();
+        void DestroyCurlShareHandle();
         CURLSH* GetCurlShareHandle();
 
     public:

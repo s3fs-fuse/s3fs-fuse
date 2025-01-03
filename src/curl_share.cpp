@@ -97,7 +97,8 @@ bool S3fsCurlShare::SetCurlShareHandle(CURL* hCurl)
 bool S3fsCurlShare::DestroyCurlShareHandleForThread()
 {
     S3fsCurlShare CurlShareObj;
-    return CurlShareObj.DestroyCurlShareHandle();
+    CurlShareObj.DestroyCurlShareHandle();
+    return true;
 }
 
 bool S3fsCurlShare::InitializeCurlShare(const CurlSharePtr& hShare, const ShareLocksPtr& ShareLock)
@@ -153,11 +154,11 @@ S3fsCurlShare::S3fsCurlShare() : ThreadId(std::this_thread::get_id())
 {
 }
 
-bool S3fsCurlShare::DestroyCurlShareHandle()
+void S3fsCurlShare::DestroyCurlShareHandle()
 {
     if(!S3fsCurlShare::is_dns_cache && !S3fsCurlShare::is_ssl_cache){
         // Any curl share handle does not exist
-        return true;
+        return;
     }
 
     const std::lock_guard<std::mutex> lock(S3fsCurlShare::curl_share_lock);
@@ -167,10 +168,6 @@ bool S3fsCurlShare::DestroyCurlShareHandle()
     if(handle_iter == S3fsCurlShare::ShareHandles.end()){
         S3FS_PRN_WARN("Not found curl share handle");
     }else{
-        if(CURLSHE_OK != curl_share_cleanup(handle_iter->second.get())){
-            S3FS_PRN_ERR("Failed to cleanup curl share handle");
-            return false;
-        }
         S3fsCurlShare::ShareHandles.erase(handle_iter);
     }
 
@@ -181,8 +178,6 @@ bool S3fsCurlShare::DestroyCurlShareHandle()
     }else{
         S3fsCurlShare::ShareLocks.erase(locks_iter);
     }
-
-    return true;
 }
 
 CURLSH* S3fsCurlShare::GetCurlShareHandle()
