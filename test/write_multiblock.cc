@@ -62,7 +62,7 @@ static std::unique_ptr<unsigned char[]> create_random_data(off_t size)
         return nullptr;
     }
 
-    std::unique_ptr<unsigned char[]> pbuff(new unsigned char[size]);
+    auto pbuff = std::make_unique<unsigned char[]>(size);
     for(ssize_t readpos = 0, readcnt = 0; readpos < size; readpos += readcnt){
         if(-1 == (readcnt = read(fd, &(pbuff[readpos]), static_cast<size_t>(size - readpos)))){
             if(EAGAIN != errno && EWOULDBLOCK != errno && EINTR != errno){
