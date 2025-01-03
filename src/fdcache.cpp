@@ -630,13 +630,28 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 
     UpdateEntityToTempPath();
 
-    // search from all entity.
-    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-        if(iter->second && iter->second->FindPseudoFd(existfd)){
-            // found existfd in entity
-            return iter->second.get();
+    // If use_cache is disabled, or the disk space is insufficient when use_cache
+    // is enabled, the corresponding key of the entity in fent is not path. 
+    fdent_map_t::iterator iter = fent.find(std::string(path));
+    if(fent.end() != iter){
+      if(iter->second && iter->second->FindPseudoFd(existfd)){
+        return iter->second;
+      }
+    } else {
+      // no matter it's use_cache or not, we search from all entities to 
+      // find entity with the same path. Then we compare the pseudo fd.
+      for(iter = fent.cbegin(); iter != fent.cend(); ++iter){
+        // IsOpen() is protected by fd_manager_lock, and so is GetPath().
+        // Therefore there is no need to hold entity lock here (FindPseudoFd
+        // holds it inside).
+        if(iter->second && iter->second->IsOpen() && 
+            0 == strcmp(iter->second->GetPath(), path) &&
+            iter->second->FindPseudoFd(existfd)){
+          return iter->second.get();
         }
+      }
     }
+
     // not found entity
     return nullptr;
 }
