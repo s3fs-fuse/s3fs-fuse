@@ -632,21 +632,20 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 
     // If use_cache is disabled, or the disk space is insufficient when use_cache
     // is enabled, the corresponding key of the entity in fent is not path. 
-    fdent_map_t::iterator iter = fent.find(std::string(path));
+    auto iter = fent.find(std::string(path));
     if(fent.end() != iter){
       if(iter->second && iter->second->FindPseudoFd(existfd)){
-        return iter->second;
+        return iter->second.get();
       }
     } else {
-      // no matter it's use_cache or not, we search from all entities to 
-      // find entity with the same path. Then we compare the pseudo fd.
-      for(iter = fent.cbegin(); iter != fent.cend(); ++iter){
-        // IsOpen() is protected by fd_manager_lock, and so is GetPath().
-        // Therefore there is no need to hold entity lock here (FindPseudoFd
-        // holds it inside).
-        if(iter->second && iter->second->IsOpen() && 
-            0 == strcmp(iter->second->GetPath(), path) &&
-            iter->second->FindPseudoFd(existfd)){
+      // no matter use_cache is enabled or not, search from all entities to 
+      // find the entity with the same path. And then compare the pseudo fd.
+      for(iter = fent.begin(); iter != fent.end(); ++iter) {
+        // path is protected by fd_manager_lock (RenamePath), therefore there 
+        // is no need to hold entity lock inside it (FindPseudoFd holds 
+        // lock inside).
+        if(iter->second && (iter->second->GetPathWithoutLock() == path)
+           && iter->second->FindPseudoFd(existfd)) {
           return iter->second.get();
         }
       }
