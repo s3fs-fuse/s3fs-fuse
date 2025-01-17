@@ -34,7 +34,7 @@ on:
 #
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     #
     # build matrix for containers
     #
@@ -139,7 +139,8 @@ jobs:
       - name: Install awscli2
         run: |
           cd /tmp
-          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+          # TODO: pin version to work around https://github.com/gaul/s3proxy/issues/760
+          curl "https://awscli.amazonaws.com/AWSCLIV2-2.22.35.pkg" -o "AWSCLIV2.pkg"
           sudo installer -pkg AWSCLIV2.pkg -target /
 
       - name: Build
@@ -167,7 +168,7 @@ jobs:
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   MemoryTest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     #
     # build matrix for containers
