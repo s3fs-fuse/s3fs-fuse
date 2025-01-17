@@ -60,7 +60,8 @@ CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print
 #-----------------------------------------------------------
 # Common variables for awscli2
 #-----------------------------------------------------------
-AWSCLI_URI="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+# TODO: pin version to work around https://github.com/gaul/s3proxy/issues/760
+AWSCLI_URI="https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m)-2.22.35.zip"
 AWSCLI_ZIP_FILE="awscliv2.zip"
 
 #-----------------------------------------------------------
