@@ -452,6 +452,11 @@ bool S3fsCred::LoadIAMCredentials()
         S3FS_PRN_ERR("Something error occurred, could not set IAM credentials.");
         return false;
     }
+
+    if(!SetIAMCredentials(cred.c_str())){
+        S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+        return false;
+    }
     return true;
 }
 
@@ -497,8 +502,6 @@ bool S3fsCred::LoadIAMRoleFromMetaData()
 
 bool S3fsCred::SetIAMCredentials(const char* response)
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
-
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
 
     iamcredmap_t keyval;
