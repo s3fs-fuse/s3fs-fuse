@@ -152,7 +152,7 @@ class S3fsCred
 
         bool GetIAMCredentialsURL(std::string& url, bool check_iam_role) REQUIRES(S3fsCred::token_lock);
         bool LoadIAMCredentials() REQUIRES(S3fsCred::token_lock);
-        bool SetIAMCredentials(const char* response);
+        bool SetIAMCredentials(const char* response) REQUIRES(S3fsCred::token_lock);
         bool SetIAMRoleFromMetaData(const char* response);
 
         bool SetExtCredLib(const char* arg);
