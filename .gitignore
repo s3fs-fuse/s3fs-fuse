@@ -82,8 +82,11 @@ src/s3fs
 src/test_curl_util
 src/test_page_list
 src/test_string_util
+
 test/chaos-http-proxy-*
 test/junk_data
+test/pjdfstest
+test/pjd-pjdfstest-*
 test/s3proxy-*
 test/write_multiblock
 test/mknod_test

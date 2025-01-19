@@ -136,28 +136,28 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel attr diffutils curl python3 unzip"
+    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 unzip"
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
+    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
+    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl perl-Test-Harness openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
 
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
@@ -171,7 +171,7 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.21" ]; then
     PACKAGE_UPDATE_OPTIONS="update --no-progress"
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
 
-    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk17 aws-cli"
+    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk17 perl-test-harness-utils aws-cli"
 
     AWSCLI_DIRECT_INSTALL=0
 
