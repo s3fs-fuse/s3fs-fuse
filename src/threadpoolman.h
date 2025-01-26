@@ -76,8 +76,6 @@ class ThreadPoolMan
     private:
         static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
 
-        explicit ThreadPoolMan(int count = 1);
-
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);
 
@@ -86,6 +84,7 @@ class ThreadPoolMan
         void SetInstruction(const thpoolman_param& pparam);
 
     public:
+        explicit ThreadPoolMan(int count = 1);
         ~ThreadPoolMan();
         ThreadPoolMan(const ThreadPoolMan&) = delete;
         ThreadPoolMan(ThreadPoolMan&&) = delete;
