@@ -131,6 +131,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return (-1 != physical_fd);
         }
+
         bool FindPseudoFd(int fd) const {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return FindPseudoFdWithLock(fd);
@@ -154,6 +155,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return path;
         }
+        std::string GetPathWithoutLock() const { return path; }
         bool RenamePath(const std::string& newpath, std::string& fentmapkey);
         int GetPhysicalFd() const REQUIRES(FdEntity::fdent_lock) { return physical_fd; }
         bool IsModified() const;
