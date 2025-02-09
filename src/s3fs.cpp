@@ -4004,8 +4004,9 @@ static int s3fs_removexattr(const char* path, const char* name)
     }
     if(need_put_header){
         // not found opened file.
-        if(updatemeta["x-amz-meta-xattr"].empty()){
-            updatemeta.erase("x-amz-meta-xattr");
+        auto iter = updatemeta.find("x-amz-meta-xattr");
+        if(iter != updatemeta.end() && iter->second.empty()){
+            updatemeta.erase(iter);
         }
 
         merge_headers(meta, updatemeta, true);
