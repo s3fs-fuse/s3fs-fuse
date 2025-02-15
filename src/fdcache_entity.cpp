@@ -49,7 +49,7 @@
 //------------------------------------------------
 // Symbols
 //------------------------------------------------
-static constexpr int MAX_MULTIPART_CNT         = 10 * 1000; // S3 multipart max count
+static constexpr int MAX_MULTIPART_CNT         = 10'000; // S3 multipart max count
 
 //------------------------------------------------
 // FdEntity class variables
@@ -246,7 +246,7 @@ int FdEntity::DupWithLock(int fd)
         return -1;
     }
     const PseudoFdInfo* org_pseudoinfo = iter->second.get();
-    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0)));
+    auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
     int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
     pseudo_fd_map[pseudo_fd]       = std::move(ppseudoinfo);
 
@@ -262,7 +262,7 @@ int FdEntity::OpenPseudoFd(int flags)
     if(-1 == physical_fd){
         return -1;
     }
-    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, flags));
+    auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, flags);
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
     pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
 
@@ -455,7 +455,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
             }
 
             // open cache and cache stat file, load page info.
-            pcfstat.reset(new CacheFileStat(path.c_str()));
+            pcfstat = std::make_unique<CacheFileStat>(path.c_str());
 
             // try to open cache file
             if( -1 != (physical_fd = open(cachepath.c_str(), O_RDWR)) &&
@@ -627,7 +627,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
     }
 
     // create new pseudo fd, and set it to map
-    std::unique_ptr<PseudoFdInfo> ppseudoinfo(new PseudoFdInfo(physical_fd, flags));
+    auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, flags);
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
     pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
 
