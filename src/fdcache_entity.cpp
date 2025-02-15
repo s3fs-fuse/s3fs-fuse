@@ -163,6 +163,10 @@ void FdEntity::Clear()
     pagelist.Init(0, false, false);
     path      = "";
     cachepath = "";
+
+    // set backup(read only) variable
+    const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
+    ro_path   = path;
 }
 
 // [NOTE]
@@ -722,6 +726,10 @@ bool FdEntity::RenamePath(const std::string& newpath, std::string& fentmapkey)
     }
     // set new path
     path = newpath;
+
+    // set backup(read only) variable
+    const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
+    ro_path = path;
 
     return true;
 }
