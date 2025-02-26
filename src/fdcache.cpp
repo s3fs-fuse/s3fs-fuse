@@ -641,10 +641,9 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
       // no matter use_cache is enabled or not, search from all entities to 
       // find the entity with the same path. And then compare the pseudo fd.
       for(iter = fent.begin(); iter != fent.end(); ++iter) {
-        // path is protected by fd_manager_lock (RenamePath), therefore there 
-        // is no need to hold entity lock inside it (FindPseudoFd holds 
-        // lock inside).
-        if(iter->second && (iter->second->GetPathWithoutLock() == path)
+        // GetROPath() holds ro_path_lock rather than fdent_lock.
+        // Therefore GetExistFdEntity does not contends with FdEntity::Read() / Write().
+        if(iter->second && (iter->second->GetROPath() == path)
            && iter->second->FindPseudoFd(existfd)) {
           return iter->second.get();
         }

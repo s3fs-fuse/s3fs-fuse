@@ -115,6 +115,7 @@ ino_t FdEntity::GetInode(int fd)
 //------------------------------------------------
 FdEntity::FdEntity(const char* tpath, const char* cpath) :
     path(SAFESTRPTR(tpath)),
+    ro_path(SAFESTRPTR(tpath)),
     physical_fd(-1), inode(0), size_orgmeta(0),
     cachepath(SAFESTRPTR(cpath)), pending_status(pending_status_t::NO_UPDATE_PENDING)
 {
