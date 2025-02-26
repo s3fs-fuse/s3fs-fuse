@@ -77,6 +77,9 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         pending_status_t pending_status GUARDED_BY(fdent_data_lock);  // status for new file creation and meta update
         struct timespec  holding_mtime  GUARDED_BY(fdent_data_lock);  // if mtime is updated while the file is open, it is set time_t value
 
+        mutable std::mutex ro_path_lock;                              // for only the ro_path variable
+        std::string        ro_path      GUARDED_BY(ro_path_lock);     // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
+
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
         static ino_t GetInode(int fd);
@@ -137,6 +140,10 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             return FindPseudoFdWithLock(fd);
         }
         bool FindPseudoFdWithLock(int fd) const REQUIRES(FdEntity::fdent_lock);
+        std::string GetROPath() const {
+            const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
+            return ro_path;
+        }
         int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags);
         bool LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {

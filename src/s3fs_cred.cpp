@@ -452,6 +452,11 @@ bool S3fsCred::LoadIAMCredentials()
         S3FS_PRN_ERR("Something error occurred, could not set IAM credentials.");
         return false;
     }
+
+    if(!SetIAMCredentials(cred.c_str())){
+        S3FS_PRN_ERR("Something error occurred, could not set IAM role name.");
+        return false;
+    }
     return true;
 }
 
@@ -497,8 +502,6 @@ bool S3fsCred::LoadIAMRoleFromMetaData()
 
 bool S3fsCred::SetIAMCredentials(const char* response)
 {
-    const std::lock_guard<std::mutex> lock(token_lock);
-
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
 
     iamcredmap_t keyval;
@@ -511,19 +514,32 @@ bool S3fsCred::SetIAMCredentials(const char* response)
         return false;
     }
 
-    AWSAccessToken = keyval[IAM_token_field];
+    auto aws_access_token = keyval.find(IAM_token_field);
+    if(aws_access_token == keyval.end()){
+        return false;
+    }
 
     if(is_ibm_iam_auth){
+        auto access_token_expire = keyval.find(IAM_expiry_field);
         off_t tmp_expire = 0;
-        if(!s3fs_strtoofft(&tmp_expire, keyval[IAM_expiry_field].c_str(), /*base=*/ 10)){
+        if(access_token_expire == keyval.end() || !s3fs_strtoofft(&tmp_expire, access_token_expire->second.c_str(), /*base=*/ 10)){
             return false;
         }
         AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
     }else{
-        AWSAccessKeyId       = keyval[S3fsCred::IAMCRED_ACCESSKEYID];
-        AWSSecretAccessKey   = keyval[S3fsCred::IAMCRED_SECRETACCESSKEY];
-        AWSAccessTokenExpire = cvtIAMExpireStringToTime(keyval[IAM_expiry_field].c_str());
+        auto access_key_id = keyval.find(S3fsCred::IAMCRED_ACCESSKEYID);
+        auto secret_access_key = keyval.find(S3fsCred::IAMCRED_SECRETACCESSKEY);
+        auto access_token_expire = keyval.find(IAM_expiry_field);
+        if(access_key_id == keyval.end() || secret_access_key == keyval.end() || access_token_expire == keyval.end()){
+            return false;
+        }
+
+        AWSAccessKeyId = access_key_id->second;
+        AWSSecretAccessKey = secret_access_key->second;
+        AWSAccessTokenExpire = cvtIAMExpireStringToTime(access_token_expire->second.c_str());
     }
+
+    AWSAccessToken = aws_access_token->second;
     return true;
 }
 

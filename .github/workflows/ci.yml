@@ -98,19 +98,6 @@ jobs:
           /bin/sh -c "./configure ${CONFIGURE_OPTIONS}"
           make --jobs=$(nproc)
 
-      - name: Cppcheck
-        run: |
-          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
-            make cppcheck
-          fi
-
-      - name: Shellcheck
-        run: |
-          if shellcheck --version | awk -F '[ .]' '/version:/ && ($2 * 1000 + $3 <= 7) { exit(1) }'; then
-            make shellcheck
-          fi
-
       - name: Test suite
         run: |
           make check -C src
@@ -152,7 +139,8 @@ jobs:
       - name: Install awscli2
         run: |
           cd /tmp
-          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+          # TODO: pin version to work around https://github.com/gaul/s3proxy/issues/760
+          curl "https://awscli.amazonaws.com/AWSCLIV2-2.22.35.pkg" -o "AWSCLIV2.pkg"
           sudo installer -pkg AWSCLIV2.pkg -target /
 
       - name: Build
@@ -276,7 +264,7 @@ jobs:
         run: |
           /bin/sh -c "ALL_TESTS=1 ASAN_OPTIONS=${ASAN_OPTIONS} TSAN_OPTIONS=${TSAN_OPTIONS} VALGRIND=${VALGRIND} RETRIES=${RETRIES} make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)"
 
-  clang-tidy:
+  static-checks:
     runs-on: ubuntu-latest
     container:
       image: fedora:41
@@ -299,6 +287,13 @@ jobs:
         run: |
           make clang-tidy
 
+      - name: Cppcheck
+        run: |
+          make cppcheck
+
+      - name: Shellcheck
+        run: |
+          make shellcheck
 
 #
 # Local variables:
