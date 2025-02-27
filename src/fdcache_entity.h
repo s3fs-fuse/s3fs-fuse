@@ -134,7 +134,6 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return (-1 != physical_fd);
         }
-
         bool FindPseudoFd(int fd) const {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return FindPseudoFdWithLock(fd);

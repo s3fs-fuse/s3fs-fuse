@@ -503,27 +503,24 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
 
     if(-1 != existfd){
         for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second && iter->second->FindPseudoFd(existfd)){
+            if(iter->second && 
+              iter->second->GetROPath() == path &&
+              iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
-                if(iter->second->GetPath() == path){
-                    if(newfd){
-                        existfd = iter->second->Dup(existfd);
-                    }
-                    return iter->second.get();
+                if(newfd){
+                    existfd = iter->second->Dup(existfd);
                 }
-                // found fd, but it is used another file(file descriptor is recycled)
-                // so returns nullptr.
-                break;
+                return iter->second.get();
             }
         }
-    }
-
-    // If the cache directory is not specified, s3fs opens a temporary file
-    // when the file is opened.
-    if(!FdManager::IsCacheDir()){
-        for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
-                return iter->second.get();
+    } else {
+        // If the cache directory is not specified, s3fs opens a temporary file
+        // when the file is opened.
+        if(!FdManager::IsCacheDir()){
+            for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
+                if(iter->second && iter->second->IsOpen() && iter->second->GetROPath() == path){
+                    return iter->second.get();
+                }
             }
         }
     }
