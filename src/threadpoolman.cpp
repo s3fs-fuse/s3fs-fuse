@@ -49,7 +49,7 @@ bool ThreadPoolMan::Initialize(int count)
     if(-1 != count){
         ThreadPoolMan::SetWorkerCount(count);
     }
-    ThreadPoolMan::singleton.reset(new ThreadPoolMan(ThreadPoolMan::worker_count));
+    ThreadPoolMan::singleton = std::make_unique<ThreadPoolMan>(ThreadPoolMan::worker_count);
 
     return true;
 }

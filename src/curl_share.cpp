@@ -203,7 +203,7 @@ CURLSH* S3fsCurlShare::GetCurlShareHandle()
         S3FS_PRN_ERR("Failed to create curl share handle");
         return nullptr;
     }
-    ShareLocksPtr pLocks(new curl_share_locks);
+    auto pLocks = std::make_unique<curl_share_locks>();
 
     // Initialize curl share handle
     if(!S3fsCurlShare::InitializeCurlShare(hShare, pLocks)){
