@@ -64,7 +64,7 @@ Keep in mind using the pre-built packages when available.
 
 On Windows, use [MSYS2](https://www.msys2.org/) to compile for itself.
 
-1. Install [WinFsp](https://github.com/billziss-gh/winfsp) to your machine. Note it should be installed with developper mode to include header files.
+1. Install [WinFsp](https://github.com/billziss-gh/winfsp) to your machine. Note it should be installed with developer mode to include header files.
 2. Install dependencies onto MSYS2:
 
    ```sh
