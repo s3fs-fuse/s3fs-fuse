@@ -536,13 +536,34 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
     // set headers for mount point from default stat
     if(is_mountpoint){
-        if(0 != result || pheader->empty()){
+        // [NOTE]
+        // This assumes the case where, in a HEAD request to a mount point,
+        // the "/" object (path = "//") does not exist, but a 200 error is
+        // received instead of a 404 error.
+        // In this case, the expected key is not present in the meta header,
+        // but other keys may be present and the header may not be empty.
+        // Therefore, here we check for the presence of keys that are assumed
+        // to be required, and forcibly clear the header if they are missing.
+        // Probably, this can occur with AWS-compatible storage.
+        //
+        if(0 != result                                          ||
+           pheader->empty()                                     ||
+           pheader->cend() == pheader->find("Content-Type")     ||
+           pheader->cend() == pheader->find("x-amz-meta-uid")   ||
+           pheader->cend() == pheader->find("x-amz-meta-gid")   ||
+           pheader->cend() == pheader->find("x-amz-meta-mode")  ||
+           pheader->cend() == pheader->find("x-amz-meta-atime") ||
+           pheader->cend() == pheader->find("x-amz-meta-ctime") ||
+           pheader->cend() == pheader->find("x-amz-meta-mtime") )
+        {
             has_mp_stat = false;
+            result      = 0;
 
             // [NOTE]
             // If mount point and no stat information file, create header
             // information from the default stat.
             //
+            pheader->clear();
             (*pheader)["Content-Type"]     = S3fsCurl::LookupMimeType(strpath);
             (*pheader)["x-amz-meta-uid"]   = std::to_string(pstat->st_uid);
             (*pheader)["x-amz-meta-gid"]   = std::to_string(pstat->st_gid);
@@ -550,8 +571,6 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             (*pheader)["x-amz-meta-atime"] = std::to_string(pstat->st_atime);
             (*pheader)["x-amz-meta-ctime"] = std::to_string(pstat->st_ctime);
             (*pheader)["x-amz-meta-mtime"] = std::to_string(pstat->st_mtime);
-
-            result = 0;
         }else{
             has_mp_stat = true;
         }
