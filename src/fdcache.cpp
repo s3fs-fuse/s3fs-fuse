@@ -503,27 +503,24 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
 
     if(-1 != existfd){
         for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second && iter->second->FindPseudoFd(existfd)){
+            if(iter->second && 
+              iter->second->GetROPath() == path &&
+              iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
-                if(iter->second->GetPath() == path){
-                    if(newfd){
-                        existfd = iter->second->Dup(existfd);
-                    }
-                    return iter->second.get();
+                if(newfd){
+                    existfd = iter->second->Dup(existfd);
                 }
-                // found fd, but it is used another file(file descriptor is recycled)
-                // so returns nullptr.
-                break;
+                return iter->second.get();
             }
         }
-    }
-
-    // If the cache directory is not specified, s3fs opens a temporary file
-    // when the file is opened.
-    if(!FdManager::IsCacheDir()){
-        for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
-                return iter->second.get();
+    } else {
+        // If the cache directory is not specified, s3fs opens a temporary file
+        // when the file is opened.
+        if(!FdManager::IsCacheDir()){
+            for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
+                if(iter->second && iter->second->IsOpen() && iter->second->GetROPath() == path){
+                    return iter->second.get();
+                }
             }
         }
     }
@@ -630,13 +627,26 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 
     UpdateEntityToTempPath();
 
-    // search from all entity.
-    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-        if(iter->second && iter->second->FindPseudoFd(existfd)){
-            // found existfd in entity
-            return iter->second.get();
+    // If use_cache is disabled, or the disk space is insufficient when use_cache
+    // is enabled, the corresponding key of the entity in fent is not path. 
+    auto iter = fent.find(std::string(path));
+    if(fent.end() != iter){
+      if(iter->second && iter->second->FindPseudoFd(existfd)){
+        return iter->second.get();
+      }
+    } else {
+      // no matter use_cache is enabled or not, search from all entities to 
+      // find the entity with the same path. And then compare the pseudo fd.
+      for(iter = fent.begin(); iter != fent.end(); ++iter) {
+        // GetROPath() holds ro_path_lock rather than fdent_lock.
+        // Therefore GetExistFdEntity does not contends with FdEntity::Read() / Write().
+        if(iter->second && (iter->second->GetROPath() == path)
+           && iter->second->FindPseudoFd(existfd)) {
+          return iter->second.get();
         }
+      }
     }
+
     // not found entity
     return nullptr;
 }

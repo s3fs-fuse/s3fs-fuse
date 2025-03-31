@@ -51,6 +51,7 @@ cppcheck:
             --suppress=useStlAlgorithm \
             --suppress=checkLevelNormal \
             --suppress=normalCheckLevelMaxBranches \
+            --addon=test/map-subscript-read.py \
             src/ test/
 
 #

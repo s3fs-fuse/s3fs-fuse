@@ -1,10 +1,15 @@
+---
+name: Support request (Including bug reports)
+about: Request support for usage, bugs, etc.
+title: ''
+labels: ''
+assignees: ''
+---
+
 <!-- --------------------------------------------------------------------------
  The following information is very important in order to help us to help you.
  Omission of the following details may delay your support request or receive no
  attention at all.
- Keep in mind that the commands we provide to retrieve information are oriented
- to GNU/Linux Distributions, so you could need to use others if you use s3fs on
- macOS or BSD.
 --------------------------------------------------------------------------- -->
 
 ### Additional Information
@@ -37,4 +42,5 @@
 
 ### Details about issue
 <!-- Please describe the content of the issue in detail. -->
+
 

@@ -312,7 +312,7 @@ void* pre_multipart_upload_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 //
 void* multipart_upload_part_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
-    auto* pthparam = static_cast<multipart_upload_part_req_thparam*>(arg);
+    std::unique_ptr<multipart_upload_part_req_thparam> pthparam(static_cast<multipart_upload_part_req_thparam*>(arg));
     if(!pthparam || !pthparam->pthparam_lock || !pthparam->petag || !pthparam->presult){
         return reinterpret_cast<void*>(-EIO);
     }
@@ -413,7 +413,7 @@ void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 //
 void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
-    auto* pthparam = static_cast<multipart_put_head_req_thparam*>(arg);
+    std::unique_ptr<multipart_put_head_req_thparam> pthparam(static_cast<multipart_put_head_req_thparam*>(arg));
     if(!pthparam || !pthparam->ppartdata || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
         return reinterpret_cast<void*>(-EIO);
     }
@@ -531,7 +531,7 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 //
 void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
-    auto* pthparam = static_cast<parallel_get_object_req_thparam*>(arg);
+    std::unique_ptr<parallel_get_object_req_thparam> pthparam(static_cast<parallel_get_object_req_thparam*>(arg));
     if(!pthparam || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
         return reinterpret_cast<void*>(-EIO);
     }
