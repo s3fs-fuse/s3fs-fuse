@@ -20,6 +20,9 @@ assignees: ''
 #### Version of fuse being used (`pkg-config --modversion fuse`, `rpm -qi fuse` or `dpkg -s fuse`)
 <!-- example: 2.9.2 -->
 
+#### Provider (`AWS`, `OVH`, `Hetzner`, `iDrive E2`, ...)
+<!-- example: AWS -->
+
 #### Kernel information (`uname -r`)
 <!-- example: 5.10.96-90.460.amzn2.x86_64 -->
 
