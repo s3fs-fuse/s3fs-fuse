@@ -994,10 +994,23 @@ function test_update_time_xattr() {
     local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
-    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-       echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
-       return 1
+
+    if ! uname | grep -q Darwin; then
+        if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+           echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+           return 1
+        fi
+    else
+        # [macos] fuse-t
+        # atime/ctime are all updated.
+        # see) https://github.com/macos-fuse-t/fuse-t/issues/87
+        #
+        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+           echo "set_xattr expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+           return 1
+        fi
     fi
+
     rm_test_file
 }
 
