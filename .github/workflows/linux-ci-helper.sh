@@ -53,9 +53,9 @@ fi
 #-----------------------------------------------------------
 CONTAINER_FULLNAME=$1
 # shellcheck disable=SC2034
-CONTAINER_OSNAME=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print $1}')
+CONTAINER_OSNAME=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f1)
 # shellcheck disable=SC2034
-CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | sed 's/:/ /g' | awk '{print $2}')
+CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f2)
 
 #-----------------------------------------------------------
 # Common variables for awscli2
@@ -145,19 +145,19 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
 
     INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-17-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 unzip"
 
+elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ]; then
+    PACKAGE_MANAGER_BIN="dnf"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
+
+    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gawk gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
+
 elif [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
-
-elif [ "${CONTAINER_FULLNAME}" = "fedora:40" ]; then
-    PACKAGE_MANAGER_BIN="dnf"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl perl-Test-Harness openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
+    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gawk gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl perl-Test-Harness openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
 
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"

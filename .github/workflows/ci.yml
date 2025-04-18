@@ -57,8 +57,8 @@ jobs:
           - debian:bullseye
           - rockylinux:9
           - rockylinux:8
+          - fedora:42
           - fedora:41
-          - fedora:40
           - opensuse/leap:15
           - alpine:3.21
 
