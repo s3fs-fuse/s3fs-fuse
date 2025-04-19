@@ -352,7 +352,7 @@ function check_content_type() {
 
 function get_disk_avail_size() {
     local DISK_AVAIL_SIZE
-    DISK_AVAIL_SIZE=$(BLOCKSIZE=$((1024 * 1024)) df "$1" | awk '{print $4}' | tail -n 1)
+    read -r _ _ _ DISK_AVAIL_SIZE _ < <(BLOCKSIZE=$((1024 * 1024)) df "$1" | tail -n 1)
     echo "${DISK_AVAIL_SIZE}"
 }
 
