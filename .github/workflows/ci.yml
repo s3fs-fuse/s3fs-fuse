@@ -196,7 +196,7 @@ jobs:
           - valgrind
 
     container:
-      image: fedora:41
+      image: fedora:42
 
       options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
 
@@ -206,7 +206,7 @@ jobs:
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:41
+          .github/workflows/linux-ci-helper.sh fedora:42
 
       - name: Install clang
         run: |
@@ -267,7 +267,7 @@ jobs:
   static-checks:
     runs-on: ubuntu-latest
     container:
-      image: fedora:41
+      image: fedora:42
 
     steps:
       - name: Checkout source code
@@ -275,7 +275,7 @@ jobs:
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:41
+          .github/workflows/linux-ci-helper.sh fedora:42
 
       - name: Build
         run: |
