@@ -152,7 +152,7 @@ function test_mv_file {
     mk_test_file
 
     # save file length
-    local ALT_TEXT_LENGTH; ALT_TEXT_LENGTH=$(wc -c "${TEST_TEXT_FILE}" | awk '{print $1}')
+    local ALT_TEXT_LENGTH; ALT_TEXT_LENGTH=$(wc -c < "${TEST_TEXT_FILE}")
 
     #rename the test file
     mv "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
@@ -169,7 +169,7 @@ function test_mv_file {
     fi
 
     # Check the contents of the alt file
-    local ALT_FILE_LENGTH; ALT_FILE_LENGTH=$(wc -c "${ALT_TEST_TEXT_FILE}" | awk '{print $1}')
+    local ALT_FILE_LENGTH; ALT_FILE_LENGTH=$(wc -c < "${ALT_TEST_TEXT_FILE}")
     if [ "$ALT_FILE_LENGTH" -ne "$ALT_TEXT_LENGTH" ]
     then
        echo "moved file length is not as expected expected: $ALT_TEXT_LENGTH  got: $ALT_FILE_LENGTH"
@@ -2719,10 +2719,10 @@ function test_statvfs() {
     # but the order of Total/Used/Available size is the same.
     #
     local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
-    local DF_RESULT;  DF_RESULT=$(df "${MOUNTPOINT_DIR}" 2>/dev/null | tail -n +2)
-    local TOTAL_SIZE; TOTAL_SIZE=$(echo "${DF_RESULT}" | awk '{print $2}')
-    local USED_SIZE;  USED_SIZE=$(echo "${DF_RESULT}" | awk '{print $3}')
-    local AVAIL_SIZE; AVAIL_SIZE=$(echo "${DF_RESULT}" | awk '{print $4}')
+    local TOTAL_SIZE
+    local USED_SIZE
+    local AVAIL_SIZE
+    read -r _ TOTAL_SIZE USED_SIZE AVAIL_SIZE _ < <(df "${MOUNTPOINT_DIR}" 2>/dev/null | tail -n +2)
 
     # [NOTE]
     # In the disk information (statvfs) provided by s3fs, Total size and
