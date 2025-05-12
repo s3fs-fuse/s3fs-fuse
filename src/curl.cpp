@@ -2007,7 +2007,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                     case 301:
                     case 307:
                         S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", bodydata.c_str());
-                        S3FS_PRN_ERR("The options of url and endpoint may be useful for solving, please try to use both options.");
+                        S3FS_PRN_ERR("The options of url and region may be useful for solving, please try to use both options.");
                         result = -EIO;
                         break;
 
@@ -2271,7 +2271,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len = 0;
 
     std::unique_ptr<unsigned char[]> kDate = s3fs_HMAC256(kSecret.c_str(), kSecret.size(), reinterpret_cast<const unsigned char*>(strdate.data()), strdate.size(), &kDate_len);
-    std::unique_ptr<unsigned char[]> kRegion = s3fs_HMAC256(kDate.get(), kDate_len, reinterpret_cast<const unsigned char*>(endpoint.c_str()), endpoint.size(), &kRegion_len);
+    std::unique_ptr<unsigned char[]> kRegion = s3fs_HMAC256(kDate.get(), kDate_len, reinterpret_cast<const unsigned char*>(region.c_str()), region.size(), &kRegion_len);
     std::unique_ptr<unsigned char[]> kService = s3fs_HMAC256(kRegion.get(), kRegion_len, reinterpret_cast<const unsigned char*>("s3"), sizeof("s3") - 1, &kService_len);
     std::unique_ptr<unsigned char[]> kSigning = s3fs_HMAC256(kService.get(), kService_len, reinterpret_cast<const unsigned char*>("aws4_request"), sizeof("aws4_request") - 1, &kSigning_len);
 
@@ -2282,7 +2282,7 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
 
     StringToSign  = "AWS4-HMAC-SHA256\n";
     StringToSign += date8601 + "\n";
-    StringToSign += strdate + "/" + endpoint + "/s3/aws4_request\n";
+    StringToSign += strdate + "/" + region + "/s3/aws4_request\n";
     StringToSign += s3fs_hex_lower(sRequest.data(), sRequest.size());
 
     const auto* cscope     = reinterpret_cast<const unsigned char*>(StringToSign.c_str());
@@ -2382,7 +2382,7 @@ bool S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
 
     if(!S3fsCurl::IsPublicBucket()){
         std::string Signature = CalcSignature(op, realpath, query_string + (type == REQTYPE::PREMULTIPOST || type == REQTYPE::MULTILIST ? "=" : ""), strdate, contentSHA256, date8601, secret_access_key, access_token);
-        std::string auth = "AWS4-HMAC-SHA256 Credential=" + access_key_id + "/" + strdate + "/" + endpoint + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
+        std::string auth = "AWS4-HMAC-SHA256 Credential=" + access_key_id + "/" + strdate + "/" + region + "/s3/aws4_request, SignedHeaders=" + get_sorted_header_keys(requestHeaders) + ", Signature=" + Signature;
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", auth.c_str());
     }
 

@@ -99,7 +99,7 @@ static bool is_remove_cache       = false;
 static bool is_use_xattr          = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
-static bool is_specified_endpoint = false;
+static bool is_region_specified   = false;
 static int s3fs_init_deferred_exit_status = 0;
 static bool support_compat_dir    = false;// default does not support compatibility directory type
 static int max_keys_list_object   = 1000;// default is 1000
@@ -4243,7 +4243,7 @@ static int s3fs_check_service()
         long        responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
         std::string responseBody;
         if(0 > check_service_request(get_realpath("/"), forceNoSSE, support_compat_dir, responseCode, responseBody)){
-            // check wrong endpoint, and automatically switch endpoint
+            // check wrong region, and automatically switch region
             if(300 <= responseCode && responseCode < 500){
                 // check region error(for putting message or retrying)
                 std::string expectregion;
@@ -4252,50 +4252,50 @@ static int s3fs_check_service()
                 // Check if any case can be retried
                 if(check_region_error(responseBody.c_str(), responseBody.size(), expectregion)){
                     // [NOTE]
-                    // If endpoint is not specified(using us-east-1 region) and
+                    // If region is not specified(using us-east-1 region) and
                     // an error is encountered accessing a different region, we
                     // will retry the check on the expected region.
                     // see) https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro
                     //
                     if(s3host != "http://s3.amazonaws.com" && s3host != "https://s3.amazonaws.com"){
-                        // specified endpoint for specified url is wrong.
-                        if(is_specified_endpoint){
-                            S3FS_PRN_CRIT("The bucket region is not '%s'(specified) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                        // specified region for specified url is wrong.
+                        if(is_region_specified){
+                            S3FS_PRN_CRIT("The bucket region is not '%s'(specified) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and region(%s) option.", region.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
                         }else{
-                            S3FS_PRN_CRIT("The bucket region is not '%s'(default) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and endpoint(%s) option.", endpoint.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
+                            S3FS_PRN_CRIT("The bucket region is not '%s'(default) for specified url(%s), it is correctly '%s'. You should specify url(http(s)://s3-%s.amazonaws.com) and region(%s) option.", region.c_str(), s3host.c_str(), expectregion.c_str(), expectregion.c_str(), expectregion.c_str());
                         }
                         isLoop = false;
 
-                    }else if(is_specified_endpoint){
-                        // specified endpoint is wrong.
-                        S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                    }else if(is_region_specified){
+                        // specified region is wrong.
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify region(%s) option.", region.c_str(), expectregion.c_str(), expectregion.c_str());
                         isLoop = false;
 
                     }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY || S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
-                        // current endpoint and url are default value, so try to connect to expected region.
-                        S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                        // current region and url are default value, so try to connect to expected region.
+                        S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", region.c_str(), expectregion.c_str(), expectregion.c_str());
 
-                        // change endpoint
-                        endpoint = expectregion;
+                        // change region
+                        region = expectregion;
 
                         // change url
                         if(s3host == "http://s3.amazonaws.com"){
-                            s3host = "http://s3-" + endpoint + ".amazonaws.com";
+                            s3host = "http://s3-" + region + ".amazonaws.com";
                         }else if(s3host == "https://s3.amazonaws.com"){
-                            s3host = "https://s3-" + endpoint + ".amazonaws.com";
+                            s3host = "https://s3-" + region + ".amazonaws.com";
                         }
 
                     }else{
-                        S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify endpoint(%s) option.", endpoint.c_str(), expectregion.c_str(), expectregion.c_str());
+                        S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify region(%s) option.", region.c_str(), expectregion.c_str(), expectregion.c_str());
                         isLoop = false;
                     }
 
                 }else if(check_endpoint_error(responseBody.c_str(), responseBody.size(), expectendpoint)){
                     // redirect error
                     if(pathrequeststyle){
-                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and endpoint(%s)). You need to specify correct url(http(s)://s3-<endpoint>.amazonaws.com) and endpoint option with use_path_request_style option.", s3host.c_str(), endpoint.c_str());
+                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and region(%s)). You need to specify correct url(http(s)://s3-<region>.amazonaws.com) and region option with use_path_request_style option.", s3host.c_str(), region.c_str());
                     }else{
-                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and endpoint(%s)). You need to specify correct endpoint option.", expectendpoint.c_str(), s3host.c_str(), endpoint.c_str());
+                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and region(%s)). You need to specify correct region option.", expectendpoint.c_str(), s3host.c_str(), region.c_str());
                     }
                     return EXIT_FAILURE;
 
@@ -4316,7 +4316,7 @@ static int s3fs_check_service()
             //
             if(!isLoop && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
                 // switch sigv2
-                S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and endpoint option.");
+                S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and region option.");
 
                 // retry to check with sigv2
                 isLoop = true;
@@ -5154,9 +5154,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetSignatureType(signature_type_t::V4_ONLY);
             return 0;
         }
-        else if(is_prefix(arg, "endpoint=")){
-            endpoint              = strchr(arg, '=') + sizeof(char);
-            is_specified_endpoint = true;
+        else if(is_prefix(arg, "region=") || is_prefix(arg, "endpoint=")){
+            region              = strchr(arg, '=') + sizeof(char);
+            is_region_specified = true;
             return 0;
         }
         else if(0 == strcmp(arg, "use_path_request_style")){
