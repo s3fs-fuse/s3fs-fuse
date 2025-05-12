@@ -42,7 +42,7 @@ extern std::string    program_name;
 extern std::string    service_path;
 extern std::string    s3host;
 extern std::string    mount_prefix;
-extern std::string    endpoint;
+extern std::string    region;
 extern std::string    cipher_suites;
 extern std::string    instance_name;
 

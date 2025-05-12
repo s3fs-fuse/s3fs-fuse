@@ -317,7 +317,7 @@ function start_s3fs {
             ${TEST_BUCKET_MOUNT_POINT_1} \
             -o use_path_request_style \
             -o url="${S3_URL}" \
-            -o endpoint="${S3_ENDPOINT}" \
+            -o region="${S3_ENDPOINT}" \
             -o use_xattr=1 \
             -o enable_unsigned_payload \
             ${AUTH_OPT} \
