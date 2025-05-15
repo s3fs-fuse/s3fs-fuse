@@ -126,7 +126,7 @@ static std::unique_ptr<unsigned char[]> s3fs_HMAC_RAW(const void* key, size_t ke
     PK11_FreeSymKey(pKey);
     PK11_FreeSlot(Slot);
 
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen]);
+    auto digest = std::make_unique<unsigned char[]>(*digestlen);
     memcpy(digest.get(), tmpdigest, *digestlen);
 
     return digest;
