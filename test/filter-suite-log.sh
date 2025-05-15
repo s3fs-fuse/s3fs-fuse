@@ -117,7 +117,7 @@ done < "${TMP_LINENO_FILE}"
 #
 # Print rest lines
 #
-file_line_cnt=$(wc -l "${SUITELOG}" | awk '{print $1}')
+file_line_cnt=$(wc -l < "${SUITELOG}")
 tail_line_cnt=$((file_line_cnt - prev_line_number))
 
 if [ "${prev_line_type}" -eq 1 ]; then
