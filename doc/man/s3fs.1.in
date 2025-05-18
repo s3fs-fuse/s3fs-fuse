@@ -255,12 +255,13 @@ Set a service path when the non-Amazon host requires a prefix.
 sets the url to use to access Amazon S3. If you want to use HTTP, then you can set "url=http://s3.amazonaws.com".
 If you do not use https, please specify the URL with the url option.
 .TP
-\fB\-o\fR endpoint (default="us-east-1")
-sets the endpoint to use on signature version 4.
+\fB\-o\fR region (default="us-east-1")
+sets the region to use on signature version 4.
 If this option is not specified, s3fs uses "us-east-1" region as the default.
 If the s3fs could not connect to the region specified by this option, s3fs could not run.
 But if you do not specify this option, and if you can not connect with the default region, s3fs will retry to automatically connect to the other region.
 So s3fs can know the correct region name, because s3fs can find it in an error from the S3 server.
+You can also specify the legacy -o endpoint which means the same thing.
 .TP
 \fB\-o\fR sigv2 (default is signature version 4 falling back to version 2)
 sets signing AWS requests by using only signature version 2.
