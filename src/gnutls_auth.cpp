@@ -111,7 +111,7 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const
         return nullptr;
     }
 
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[SHA1_DIGEST_SIZE]);
+    auto digest = std::make_unique<unsigned char[]>(SHA1_DIGEST_SIZE);
 
     struct hmac_sha1_ctx ctx_hmac;
     hmac_sha1_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
@@ -128,7 +128,7 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, co
         return nullptr;
     }
 
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[SHA256_DIGEST_SIZE]);
+    auto digest = std::make_unique<unsigned char[]>(SHA256_DIGEST_SIZE);
 
     struct hmac_sha256_ctx ctx_hmac;
     hmac_sha256_set_key(&ctx_hmac, keylen, reinterpret_cast<const uint8_t*>(key));
@@ -150,7 +150,7 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC(const void* key, size_t keylen, const
     if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA1))){
         return nullptr;
     }
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen + 1]);
+    auto digest = std::make_unique<unsigned char[]>(*digestlen + 1);
     if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA1, key, keylen, data, datalen, digest.get())){
         return nullptr;
     }
@@ -166,7 +166,7 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, co
     if(0 == (*digestlen = gnutls_hmac_get_len(GNUTLS_MAC_SHA256))){
         return nullptr;
     }
-    std::unique_ptr<unsigned char[]> digest(new unsigned char[*digestlen + 1]);
+    auto digest = std::make_unique<unsigned char[]>(*digestlen + 1);
     if(0 > gnutls_hmac_fast(GNUTLS_MAC_SHA256, key, keylen, data, datalen, digest.get())){
         return nullptr;
     }

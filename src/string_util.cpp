@@ -404,25 +404,23 @@ std::string s3fs_base64(const unsigned char* input, size_t length)
     return result;
 }
 
-static inline unsigned char char_decode64(const char ch)
+static constexpr unsigned char char_decode64(const char ch)
 {
-    unsigned char by;
     if('A' <= ch && ch <= 'Z'){                   // A - Z
-        by = static_cast<unsigned char>(ch - 'A');
+        return static_cast<unsigned char>(ch - 'A');
     }else if('a' <= ch && ch <= 'z'){             // a - z
-        by = static_cast<unsigned char>(ch - 'a' + 26);
+        return static_cast<unsigned char>(ch - 'a' + 26);
     }else if('0' <= ch && ch <= '9'){             // 0 - 9
-        by = static_cast<unsigned char>(ch - '0' + 52);
+        return static_cast<unsigned char>(ch - '0' + 52);
     }else if('+' == ch){                         // +
-        by = 62;
+        return 62;
     }else if('/' == ch){                         // /
-        by = 63;
+        return 63;
     }else if('=' == ch){                         // =
-        by = 64;
+        return 64;
     }else{                                       // something wrong
-        by = UCHAR_MAX;
+        return UCHAR_MAX;
     }
-    return by;
 }
 
 std::string s3fs_decode64(const char* input, size_t input_len)
@@ -509,7 +507,7 @@ bool s3fs_wtf8_encode(const char *s, std::string *result)
             // four byte encoding
             if ((c & 0xf8) == 0xf0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80 && (s[3] & 0xc0) == 0x80) {
                 const unsigned code = ((c & 0x07) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
-                if (code >= 0x10000 && code <= 0x10ffff) {
+                if (code >= 0x10'000 && code <= 0x10f'fff) {
                   // not overlong and in defined unicode space
                   if (result) {
                       *result += c;

@@ -258,7 +258,7 @@ void s3fs_low_logprn(S3fsLog::s3fs_log_level level, const char* file, const char
         size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
         va_end(va);
 
-        std::unique_ptr<char[]> message(new char[len]);
+        auto message = std::make_unique<char[]>(len);
         va_start(va, fmt);
         vsnprintf(message.get(), len, fmt, va);
         va_end(va);
@@ -282,7 +282,7 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
         size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
         va_end(va);
 
-        std::unique_ptr<char[]> message(new char[len]);
+        auto message = std::make_unique<char[]>(len);
         va_start(va, fmt);
         vsnprintf(message.get(), len, fmt, va);
         va_end(va);

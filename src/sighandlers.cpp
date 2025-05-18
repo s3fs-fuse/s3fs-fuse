@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <csignal>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -40,7 +41,7 @@ bool S3fsSignals::enableUsr1         = false;
 bool S3fsSignals::Initialize()
 {
     if(!S3fsSignals::pSingleton){
-        S3fsSignals::pSingleton.reset(new S3fsSignals);
+        S3fsSignals::pSingleton = std::make_unique<S3fsSignals>();
     }
     return true;
 }
@@ -193,8 +194,8 @@ bool S3fsSignals::InitUsr1Handler()
     }
 
     // create thread
-    std::unique_ptr<Semaphore> pSemUsr1_tmp(new Semaphore(0));
-    pThreadUsr1.reset(new std::thread(S3fsSignals::CheckCacheWorker, pSemUsr1_tmp.get()));
+    auto pSemUsr1_tmp = std::make_unique<Semaphore>(0);
+    pThreadUsr1 = std::make_unique<std::thread>(S3fsSignals::CheckCacheWorker, pSemUsr1_tmp.get());
     pSemUsr1 = std::move(pSemUsr1_tmp);
 
     // set handler

@@ -67,7 +67,7 @@ enum class acl_t : uint8_t {
     UNKNOWN
 };
 
-inline const char* str(acl_t value)
+constexpr const char* str(acl_t value)
 {
     switch(value){
     case acl_t::PRIVATE:

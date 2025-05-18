@@ -234,7 +234,7 @@ bool PageList::GetSparseFilePages(int fd, size_t file_size, fdpage_list_t& spars
 //
 bool PageList::CheckZeroAreaInFile(int fd, off_t start, size_t bytes)
 {
-    std::unique_ptr<char[]> readbuff(new char[CHECK_CACHEFILE_PART_SIZE]);
+    auto readbuff = std::make_unique<char[]>(CHECK_CACHEFILE_PART_SIZE);
 
     for(size_t comp_bytes = 0, check_bytes = 0; comp_bytes < bytes; comp_bytes += check_bytes){
         if(CHECK_CACHEFILE_PART_SIZE < (bytes - comp_bytes)){
@@ -868,7 +868,7 @@ bool PageList::Deserialize(CacheFileStat& file, ino_t inode)
         Init(0, false, false);
         return true;
     }
-    std::unique_ptr<char[]> ptmp(new char[st.st_size + 1]);
+    auto ptmp = std::make_unique<char[]>(st.st_size + 1);
     ssize_t result;
     // read from file
     if(0 >= (result = pread(file.GetFd(), ptmp.get(), st.st_size, 0))){
