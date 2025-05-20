@@ -86,7 +86,10 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        s3fscurl.GetResponseCode(responseCode, false);
+        if(!s3fscurl.GetResponseCode(responseCode, false)){
+            result = -EIO;
+            break;
+        }
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){
@@ -441,7 +444,10 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        s3fscurl.GetResponseCode(responseCode, false);
+        if(!s3fscurl.GetResponseCode(responseCode, false)){
+            result = -EIO;
+            break;
+        }
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){
@@ -559,7 +565,10 @@ void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        s3fscurl.GetResponseCode(responseCode, false);
+        if(!s3fscurl.GetResponseCode(responseCode, false)){
+            result = -EIO;
+            break;
+        }
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){

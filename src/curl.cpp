@@ -1517,7 +1517,9 @@ bool S3fsCurl::CreateCurlHandle(bool remake)
             return false;
         }
     }
-    ResetHandle();
+    if(!ResetHandle()){
+        return false;
+    }
 
     return true;
 }
@@ -1653,7 +1655,9 @@ bool S3fsCurl::RemakeHandle()
     // reset handle
     {
         const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
-        ResetHandle();
+        if(!ResetHandle()){
+            return false;
+        }
     }
 
     // set options
@@ -2278,7 +2282,9 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     const auto* cRequest     = reinterpret_cast<const unsigned char*>(StringCQ.c_str());
     size_t               cRequest_len = StringCQ.size();
     sha256_t sRequest;
-    s3fs_sha256(cRequest, cRequest_len, &sRequest);
+    if(!s3fs_sha256(cRequest, cRequest_len, &sRequest)){
+        return "";  // TODO: better return value
+    }
 
     StringToSign  = "AWS4-HMAC-SHA256\n";
     StringToSign += date8601 + "\n";
@@ -2342,7 +2348,9 @@ bool S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
             {
                 size_t          cRequest_len = strlen(reinterpret_cast<const char *>(b_postdata));
                 sha256_t sRequest;
-                s3fs_sha256(b_postdata, cRequest_len, &sRequest);
+                if(!s3fs_sha256(b_postdata, cRequest_len, &sRequest)){
+                    return false;
+                }
                 payload_hash = s3fs_hex_lower(sRequest.data(), sRequest.size());
                 break;
             }

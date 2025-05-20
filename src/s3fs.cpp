@@ -1474,7 +1474,10 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 ent = autoent.Open(from, &meta, buf.st_size, mtime, O_RDONLY, false, true, false);
             }
             if(ent){
-                ent->SetMCtime(mtime, ctime);
+                if(0 != (result = ent->SetMCtime(mtime, ctime))){
+                    S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", from, result);
+                    return result;
+                }
                 ent->SetAtime(atime);
             }
         }
@@ -2469,7 +2472,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
-                ent->SetHoldingMtime(mtime);
+                if(!ent->SetHoldingMtime(mtime)){
+                    return -EIO;
+                }
 
                 // If there is data in the Stats cache, update the Stats cache.
                 StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
@@ -2511,7 +2516,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             StatCache::getStatCacheData()->DelStat(nowcache);
 
             if(keep_mtime){
-                ent->SetHoldingMtime(mtime);
+                if(!ent->SetHoldingMtime(mtime)){
+                    return -EIO;
+                }
             }
         }
     }
@@ -2679,7 +2686,10 @@ static int s3fs_truncate(const char* _path, off_t size)
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
-        ent->UpdateCtime();
+        if(!ent->UpdateCtime()){
+            S3FS_PRN_ERR("could not update ctime file(%s)", path);
+            return -EIO;
+        }
 
 #if defined(__APPLE__)
         // [NOTE]
@@ -2783,7 +2793,9 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         //
         if(nullptr != (ent = autoent.OpenExistFdEntity(path)) && ent->IsModified()){
             // sets the file size being edited.
-            ent->GetSize(st.st_size);
+            if(!ent->GetSize(st.st_size)){
+                return -EIO;
+            }
         }
     }
     if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
@@ -2806,7 +2818,10 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         struct timespec ts;
         s3fs_realtime(ts);
 
-        ent->SetMCtime(ts, ts);
+        if(0 != (result = ent->SetMCtime(ts, ts))){
+            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
+            return result;
+        }
 
         if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
@@ -2936,8 +2951,14 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     if(nullptr != (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         bool is_new_file = ent->IsDirtyNewFile();
 
-        ent->UpdateMtime(true);         // clear the flag not to update mtime.
-        ent->UpdateCtime();
+        if(!ent->UpdateMtime()){         // clear the flag not to update mtime.
+            S3FS_PRN_ERR("could not update mtime file(%s)", path);
+            return -EIO;
+        }
+        if(!ent->UpdateCtime()){
+            S3FS_PRN_ERR("could not update ctime file(%s)", path);
+            return -EIO;
+        }
         result = ent->Flush(static_cast<int>(fi->fh), false);
         StatCache::getStatCacheData()->DelStat(path);
 
@@ -2970,8 +2991,14 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
         bool is_new_file = ent->IsDirtyNewFile();
 
         if(0 == datasync){
-            ent->UpdateMtime();
-            ent->UpdateCtime();
+            if(!ent->UpdateMtime()){
+                S3FS_PRN_ERR("could not update mtime file(%s)", path);
+                return -EIO;
+            }
+            if(!ent->UpdateCtime()){
+                S3FS_PRN_ERR("could not update ctime file(%s)", path);
+                return -EIO;
+            }
         }
         result = ent->Flush(static_cast<int>(fi->fh), false);
 
