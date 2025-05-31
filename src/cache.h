@@ -88,7 +88,7 @@ class StatCache
         bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
         time_t                 ExpireTime;
         unsigned long          CacheSize;
-        bool                   IsCacheNoObject;
+        bool                   UseNegativeCache;
         symlink_cache_t        symlink_cache GUARDED_BY(stat_cache_lock);
         notruncate_dir_map_t   notruncate_file_cache GUARDED_BY(stat_cache_lock);
 
@@ -126,18 +126,18 @@ class StatCache
         time_t GetExpireTime() const;
         time_t SetExpireTime(time_t expire, bool is_interval = false);
         time_t UnsetExpireTime();
-        bool SetCacheNoObject(bool flag);
-        bool EnableCacheNoObject()
+        bool SetNegativeCache(bool flag);
+        bool EnableNegativeCache()
         {
-            return SetCacheNoObject(true);
+            return SetNegativeCache(true);
         }
-        bool DisableCacheNoObject()
+        bool DisableNegativeCache()
         {
-            return SetCacheNoObject(false);
+            return SetNegativeCache(false);
         }
-        bool GetCacheNoObject() const
+        bool IsEnabledNegativeCache() const
         {
-            return IsCacheNoObject;
+            return UseNegativeCache;
         }
 
         // Get stat cache
