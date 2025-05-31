@@ -192,11 +192,11 @@ void StatCache::Clear()
 
 bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
 {
-    bool is_delete_cache = false;
-    std::string strpath = key;
-
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    std::string strpath = key;
+
+    // Search path in cache
     auto iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
         strpath += "/";
@@ -206,80 +206,83 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
         strpath = key;
         iter = stat_cache.find(strpath);
     }
+    if(iter == stat_cache.end()){
+        // not hit
+        return false;
+    }
 
-    if(iter != stat_cache.end()){
-        stat_cache_entry* ent = &iter->second;
-        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
-            if(ent->noobjcache){
-                if(!IsCacheNoObject){
-                    // need to delete this cache.
-                    DelStatHasLock(strpath);
-                }else{
-                    // noobjcache = true means no object.
-                }
-                return false;
-            }
-            // hit without checking etag
-            std::string stretag;
-            if(petag){
-                // find & check ETag
-                auto hiter = ent->meta.find("etag");
-                if(hiter != ent->meta.end()){
-                    stretag = hiter->second;
-                    if('\0' != petag[0] && petag != stretag){
-                        is_delete_cache = true;
-                    }
-                }
-            }
-            if(is_delete_cache){
-                // not hit by different ETag
+    // Stat cache entry object
+    stat_cache_entry* ent = &iter->second;
+
+    // Check timeout
+    if(0L == ent->notruncate && IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
+        DelStatHasLock(strpath);
+        return false;
+    }
+
+    // No object
+    if(ent->noobjcache){
+        if(!IsCacheNoObject){
+            // need to delete this cache.
+            DelStatHasLock(strpath);
+        }else{
+            // noobjcache = true means no object.
+        }
+        return false;
+    }
+
+    // Need to check ETag (because hitted cache object without checking it)
+    if(petag){
+        // find ETag in hitted cache object
+        auto hiter = ent->meta.find("etag");
+        if(hiter != ent->meta.end()){
+            // compare ETag
+            std::string stretag = hiter->second;
+            if(petag != stretag){
+                // different ETag
                 S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%lld.%09ld][hit count=%lu][ETag(%s)!=(%s)]",
                     strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count, petag ? petag : "null", stretag.c_str());
-            }else{
-                // hit 
-                S3FS_PRN_DBG("stat cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
-                    strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
 
-                if(pst!= nullptr){
-                    *pst= ent->stbuf;
-                }
-                if(meta != nullptr){
-                    *meta = ent->meta;
-                }
-                if(pisforce != nullptr){
-                    (*pisforce) = ent->isforce;
-                }
-                ent->hit_count++;
-  
-                if(IsExpireIntervalType){
-                    SetStatCacheTime(ent->cache_date);
-                }
-                return true;
+                // remove hitted cache object
+                DelStatHasLock(strpath);
+                return false;
             }
-
-        }else{
-            // timeout
-            is_delete_cache = true;
         }
     }
 
-    if(is_delete_cache){
-        DelStatHasLock(strpath);
+    // Valid cache object
+    S3FS_PRN_DBG("stat cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
+        strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
+
+    // Copy elements and update cache object's data
+    if(pst!= nullptr){
+        *pst= ent->stbuf;
     }
-    return false;
+    if(meta != nullptr){
+        *meta = ent->meta;
+    }
+    if(pisforce != nullptr){
+        (*pisforce) = ent->isforce;
+    }
+    ent->hit_count++;
+
+    if(IsExpireIntervalType){
+        SetStatCacheTime(ent->cache_date);
+    }
+
+    return true;
 }
 
 bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
 {
-    bool is_delete_cache = false;
-    std::string strpath = key;
-
     if(!IsCacheNoObject){
         return false;
     }
-
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    std::string strpath = key;
+
+    // Search path in cache
     auto iter = stat_cache.end();
     if(overcheck && '/' != *strpath.rbegin()){
         strpath += "/";
@@ -289,25 +292,32 @@ bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
         strpath = key;
         iter    = stat_cache.find(strpath);
     }
-
-    if(iter != stat_cache.end()) {
-        const stat_cache_entry* ent = &iter->second;
-        if(0 < ent->notruncate || !IsExpireTime || !IsExpireStatCacheTime(iter->second.cache_date, ExpireTime)){
-            if(iter->second.noobjcache){
-                // noobjcache = true means no object.
-                SetStatCacheTime((*iter).second.cache_date);
-                return true;
-            }
-        }else{
-            // timeout
-            is_delete_cache = true;
-        }
+    if(iter == stat_cache.end()){
+        // not hit
+        return false;
     }
 
-    if(is_delete_cache){
+    // Stat cache entry object
+    const stat_cache_entry* ent = &iter->second;
+
+    if(!ent->noobjcache){
+        // Hit but not no object cache
+        return false;
+    }
+
+    // Check timeout
+    if(0L == ent->notruncate && IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
         DelStatHasLock(strpath);
+        return false;
     }
-    return false;
+
+    // Valid no object cache
+    S3FS_PRN_DBG("stat cache(no object) hit [path=%s][hit count=%lu]", strpath.c_str(), ent->hit_count);
+
+    if(IsExpireIntervalType){
+        SetStatCacheTime((*iter).second.cache_date);    // [NOTE] ent cannot be used because it is const
+    }
+    return true;
 }
 
 bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forcedir, bool no_truncate)
@@ -319,17 +329,18 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    // if key is found, delete it
     if(stat_cache.cend() != stat_cache.find(key)){
         // found cache
         DelStatHasLock(key);
     }else{
-        // check: need to truncate cache
-        if(stat_cache.size() > CacheSize){
-            // cppcheck-suppress unmatchedSuppression
-            // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache()){
-                return false;
-            }
+        // truncate cache (only when cache oversize)
+
+        // [MEMO] The following warning will be fixed later
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
+        if(!TruncateCache(true)){
+            return false;
         }
     }
 
@@ -344,6 +355,7 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
     ent.notruncate = (no_truncate ? 1L : 0L);
     ent.meta.clear();
     SetStatCacheTime(ent.cache_date);    // Set time.
+
     //copy only some keys
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
         auto tag          = CaseInsensitiveStringView(iter->first);
@@ -432,16 +444,16 @@ bool StatCache::AddNoObjectCache(const std::string& key)
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     if(stat_cache.cend() != stat_cache.find(key)){
-		// found
+        // found
         DelStatHasLock(key);
     }else{
-        // check: need to truncate cache
-        if(stat_cache.size() > CacheSize){
-            // cppcheck-suppress unmatchedSuppression
-            // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateCache()){
-                return false;
-            }
+        // truncate cache (only when cache oversize)
+
+        // [MEMO] The following warning will be fixed later
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
+        if(!TruncateCache(true)){
+            return false;
         }
     }
 
@@ -489,9 +501,15 @@ void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
     }
 }
 
-bool StatCache::TruncateCache()
+// [NOTE]
+// If check_only_oversize_case=true, the process will only be performed
+// if the cache size is overflowing.
+// If false, the process of removing expired cache entries will
+// always be performed(if IsExpireTime is enabled).
+//
+bool StatCache::TruncateCache(bool check_only_oversize_case)
 {
-    if(stat_cache.empty()){
+    if(stat_cache.empty() || (check_only_oversize_case && stat_cache.size() < CacheSize)){
         return true;
     }
 
@@ -549,11 +567,14 @@ bool StatCache::DelStatHasLock(const std::string& key)
 {
     S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key.c_str());
 
+    // Search key in cache
     stat_cache_t::iterator iter;
     if(stat_cache.cend() != (iter = stat_cache.find(key))){
         stat_cache.erase(iter);
         DelNotruncateCache(key);
     }
+
+    // Search again key with(without) "/" character in cache
     if(!key.empty() && key != "/"){
         std::string strpath = key;
         if('/' == *strpath.rbegin()){
@@ -575,36 +596,37 @@ bool StatCache::DelStatHasLock(const std::string& key)
 
 bool StatCache::GetSymlink(const std::string& key, std::string& value)
 {
-    bool is_delete_cache = false;
-    const std::string& strpath = key;
-
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    const std::string& strpath = key;
+
+    // Search path in cache
     auto iter = symlink_cache.find(strpath);
-    if(iter != symlink_cache.cend()){
-        symlink_cache_entry* ent = &iter->second;
-        if(!IsExpireTime || !IsExpireStatCacheTime(ent->cache_date, ExpireTime)){   // use the same as Stats
-            // found
-            S3FS_PRN_DBG("symbolic link cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
-                strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
-
-            value = ent->link;
-
-            ent->hit_count++;
-            if(IsExpireIntervalType){
-                SetStatCacheTime(ent->cache_date);
-            }
-            return true;
-        }else{
-            // timeout
-            is_delete_cache = true;
-        }
+    if(symlink_cache.cend() == iter){
+        return false;
     }
 
-    if(is_delete_cache){
+    // Symlink cache entry object
+    symlink_cache_entry* ent = &iter->second;
+
+    // Check timeout
+    if(IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){     // use the same as Stats
         DelSymlinkHasLock(strpath);
+        return false;
     }
-    return false;
+
+    // Valid symlink object cache
+    S3FS_PRN_DBG("symbolic link cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
+        strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
+
+    value = ent->link;
+
+    ent->hit_count++;
+    if(IsExpireIntervalType){
+        SetStatCacheTime(ent->cache_date);
+    }
+
+    return true;
 }
 
 bool StatCache::AddSymlink(const std::string& key, const std::string& value)
@@ -617,16 +639,16 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     if(symlink_cache.cend() != symlink_cache.find(key)){
-    	// found
+        // found
         DelSymlinkHasLock(key);
     }else{
-        // check: need to truncate cache
-        if(symlink_cache.size() > CacheSize){
-            // cppcheck-suppress unmatchedSuppression
-            // cppcheck-suppress knownConditionTrueFalse
-            if(!TruncateSymlink()){
-                return false;
-            }
+        // truncate symlink cache (only when cache oversize)
+
+        // [MEMO] The following warning will be fixed later
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
+        if(!TruncateSymlink(true)){
+            return false;
         }
     }
 
@@ -641,9 +663,15 @@ bool StatCache::AddSymlink(const std::string& key, const std::string& value)
     return true;
 }
 
-bool StatCache::TruncateSymlink()
+// [NOTE]
+// If check_only_oversize_case=true, the process will only be performed
+// if the cache size is overflowing.
+// If false, the process of removing expired cache entries will
+// always be performed(if IsExpireTime is enabled).
+//
+bool StatCache::TruncateSymlink(bool check_only_oversize_case)
 {
-    if(symlink_cache.empty()){
+    if(stat_cache.empty() || (check_only_oversize_case && symlink_cache.size() < CacheSize)){
         return true;
     }
 
@@ -689,13 +717,7 @@ bool StatCache::DelSymlinkHasLock(const std::string& key)
 {
     S3FS_PRN_INFO3("delete symbolic link cache entry[path=%s]", key.c_str());
 
-    symlink_cache_t::iterator iter;
-    if(symlink_cache.cend() != (iter = symlink_cache.find(key))){
-        symlink_cache.erase(iter);
-    }
-    S3FS_MALLOCTRIM(0);
-
-    return true;
+	return (0 < symlink_cache.erase(key));
 }
 
 bool StatCache::AddNotruncateCache(const std::string& key)

@@ -98,12 +98,15 @@ class StatCache
         void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
         // Truncate stat cache
-        bool TruncateCache() REQUIRES(StatCache::stat_cache_lock);
+        bool TruncateCache(bool check_only_oversize_case = false) REQUIRES(StatCache::stat_cache_lock);
         // Truncate symbolic link cache
-        bool TruncateSymlink() REQUIRES(StatCache::stat_cache_lock);
+        bool TruncateSymlink(bool check_only_oversize_case = false) REQUIRES(StatCache::stat_cache_lock);
 
         bool AddNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
         bool DelNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
+
+        bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
+        bool DelSymlinkHasLock(const std::string& key) REQUIRES(stat_cache_lock);
 
     public:
         StatCache(const StatCache&) = delete;
@@ -182,7 +185,6 @@ class StatCache
             const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
             return DelStatHasLock(key);
         }
-        bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
 
         // Cache for symbolic link
         bool GetSymlink(const std::string& key, std::string& value);
@@ -191,7 +193,6 @@ class StatCache
             const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
             return DelSymlinkHasLock(key);
         }
-        bool DelSymlinkHasLock(const std::string& key) REQUIRES(stat_cache_lock);
 
         // Cache for Notruncate file
         bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);
