@@ -43,6 +43,7 @@
 #include "string_util.h"
 #include "addhead.h"
 #include "s3fs_threadreqs.h"
+#include "s3fs_xml.h"
 
 //-------------------------------------------------------------------
 // Symbols
