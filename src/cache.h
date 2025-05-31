@@ -198,11 +198,6 @@ class StatCache
         bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);
 };
 
-//-------------------------------------------------------------------
-// Functions
-//-------------------------------------------------------------------
-bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir = false);
-
 #endif // S3FS_CACHE_H_
 
 /*

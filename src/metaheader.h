@@ -58,7 +58,7 @@ time_t get_lastmodified(const char* s);
 time_t get_lastmodified(const headers_t& meta);
 bool is_need_check_obj_detail(const headers_t& meta);
 bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist);
-bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value);
+bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir = false);
 
 #endif // S3FS_METAHEADER_H_
 
