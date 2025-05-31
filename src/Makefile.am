@@ -40,6 +40,7 @@ s3fs_SOURCES = \
     curl_util.cpp \
     s3objlist.cpp \
     cache.cpp \
+    cache_node.cpp \
     string_util.cpp \
     s3fs_cred.cpp \
     s3fs_util.cpp \
