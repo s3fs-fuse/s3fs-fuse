@@ -165,6 +165,8 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         int GetPhysicalFd() const REQUIRES(FdEntity::fdent_lock) { return physical_fd; }
         bool IsModified() const;
         bool MergeOrgMeta(headers_t& updatemeta);
+        bool GetOrgMeta(headers_t& meta) const;
+
         int UploadPending(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);

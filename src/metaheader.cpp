@@ -206,6 +206,60 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
     return mode;
 }
 
+// [NOTE]
+// Gets a only FMT bit in mode from meta headers.
+// The processing is almost the same as get_mode().
+// This function is intended to be used from get_object_attribute().
+//
+static mode_t convert_meta_to_mode_fmt(const headers_t& meta)
+{
+    mode_t mode = 0;
+    bool   isS3sync = false;
+    headers_t::const_iterator iter;
+
+    if(meta.cend() != (iter = meta.find("x-amz-meta-mode"))){
+        mode = get_mode((*iter).second.c_str());
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
+        mode = get_mode((*iter).second.c_str());
+        isS3sync = true;
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
+        mode = get_mode((*iter).second.c_str(), 8);
+    }
+
+    if(!(mode & S_IFMT)){
+        if(!isS3sync){
+            if(meta.cend() != (iter = meta.find("Content-Type"))){
+                std::string strConType = (*iter).second;
+                // Leave just the mime type, remove any optional parameters (eg charset)
+                std::string::size_type pos = strConType.find(';');
+                if(std::string::npos != pos){
+                    strConType.erase(pos);
+                }
+                if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
+                    // Nextcloud uses this MIME type for directory objects when mounting bucket as external Storage
+                    mode |= S_IFDIR;
+                }
+            }
+        }
+    }
+    return (mode & S_IFMT);
+}
+
+bool is_reg_fmt(const headers_t& meta)
+{
+    return S_ISREG(convert_meta_to_mode_fmt(meta));
+}
+
+bool is_symlink_fmt(const headers_t& meta)
+{
+    return S_ISLNK(convert_meta_to_mode_fmt(meta));
+}
+
+bool is_dir_fmt(const headers_t& meta)
+{
+    return S_ISDIR(convert_meta_to_mode_fmt(meta));
+}
+
 uid_t get_uid(const char *s)
 {
     return static_cast<uid_t>(cvt_strtoofft(s, /*base=*/ 0));
@@ -330,70 +384,68 @@ bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexis
     return added;
 }
 
-bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir)
+bool convert_header_to_stat(const std::string& strpath, const headers_t& meta, struct stat& stbuf, bool forcedir)
 {
-    if(!path || !pst){
-        return false;
-    }
-    *pst = {};
+    stbuf = {};
 
-    pst->st_nlink = 1; // see fuse FAQ
+    // set hard link count always 1
+    stbuf.st_nlink = 1; // see fuse FAQ
 
     // mode
-    pst->st_mode = get_mode(meta, path, true, forcedir);
+    stbuf.st_mode = get_mode(meta, strpath, true, forcedir);
 
     // blocks
-    if(S_ISREG(pst->st_mode)){
-        pst->st_blocks = get_blocks(pst->st_size);
+    if(S_ISREG(stbuf.st_mode)){
+        stbuf.st_blocks = get_blocks(stbuf.st_size);
     }
-    pst->st_blksize = 4096;
+    stbuf.st_blksize = 4096;
 
     // mtime
     struct timespec mtime = get_mtime(meta);
-    if(pst->st_mtime < 0){
-        pst->st_mtime = 0L;
+    if(stbuf.st_mtime < 0){
+        stbuf.st_mtime = 0L;
     }else{
         if(mtime.tv_sec < 0){
             mtime.tv_sec  = 0;
             mtime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, stat_time_type::MTIME, mtime);
+        set_timespec_to_stat(stbuf, stat_time_type::MTIME, mtime);
     }
 
     // ctime
     struct timespec ctime = get_ctime(meta);
-    if(pst->st_ctime < 0){
-        pst->st_ctime = 0L;
+    if(stbuf.st_ctime < 0){
+        stbuf.st_ctime = 0L;
     }else{
         if(ctime.tv_sec < 0){
             ctime.tv_sec  = 0;
             ctime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, stat_time_type::CTIME, ctime);
+        set_timespec_to_stat(stbuf, stat_time_type::CTIME, ctime);
     }
 
     // atime
     struct timespec atime = get_atime(meta);
-    if(pst->st_atime < 0){
-        pst->st_atime = 0L;
+    if(stbuf.st_atime < 0){
+        stbuf.st_atime = 0L;
     }else{
         if(atime.tv_sec < 0){
             atime.tv_sec  = 0;
             atime.tv_nsec = 0;
         }
-        set_timespec_to_stat(*pst, stat_time_type::ATIME, atime);
+        set_timespec_to_stat(stbuf, stat_time_type::ATIME, atime);
     }
 
     // size
-    if(S_ISDIR(pst->st_mode)){
-        pst->st_size = 4096;
+    if(S_ISDIR(stbuf.st_mode)){
+        stbuf.st_size = 4096;
     }else{
-        pst->st_size = get_size(meta);
+        stbuf.st_size = get_size(meta);
     }
 
     // uid/gid
-    pst->st_uid = get_uid(meta);
-    pst->st_gid = get_gid(meta);
+    stbuf.st_uid = get_uid(meta);
+    stbuf.st_gid = get_gid(meta);
 
     return true;
 }
