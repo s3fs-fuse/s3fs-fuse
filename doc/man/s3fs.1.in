@@ -168,10 +168,16 @@ specify expire time (seconds) for entries in the stat cache and symbolic link ca
 specify expire time (seconds) for entries in the stat cache and symbolic link cache. This expire time is based on the time from the last access time of those cache.
 This option is exclusive with stat_cache_expire, and is left for compatibility with older versions.
 .TP
-\fB\-o\fR disable_noobj_cache (default is enable)
-By default s3fs memorizes when an object does not exist up until the stat cache timeout.
-This caching can cause staleness for applications.
-If disabled, s3fs will not memorize objects and may cause extra HeadObject requests and reduce performance.
+\fB\-o\fR enable_negative_cache (default is enabled negative cache)
+This option will keep non-existence of objects in a stat cache.
+When this negative cache is enabled, it will not process extra HeadObject requests to search for non-existent objects, improving performance.
+This feature is enabled by default, so there is no need to specify it.
+.TP
+\fB\-o\fR disable_negative_cache (default is enabled negative cache)
+By default, s3fs keeps non-existent objects in the stat cache.
+This option disables this negative caching.
+This prevents delays in updates due to cache retention.
+However, it may increase the number of HeadObject requests to check if an object exists, which may decrease performance.
 .TP
 \fB\-o\fR no_check_certificate (by default this option is disabled)
 server certificate won't be checked against the available certificate authorities.
@@ -515,13 +521,13 @@ s3fs is a multi-threaded application. Depending on the workload it may use multi
 .TP
 s3fs provides several options (e.g. "max_thread_count" option) to control behaviour and thus indirectly the performance. The possible combinations of these options in conjunction with the various S3 backends are so varied that there is no individual recommendation other than the default values. Improved individual settings can be found by testing and measuring.
 .TP
-The two options "Enable no object cache" ("\-o enable_noobj_cache") and "Disable support of alternative directory names" ("\-o notsup_compat_dir") can be used to control shared access to the same bucket by different applications:
+The two options "Enable negative cache" ("\-o enable_negative_cache") and "Disable support of alternative directory names" ("\-o notsup_compat_dir") can be used to control shared access to the same bucket by different applications:
 .TP
 .IP \[bu]
-Enable no object cache ("\-o enable_noobj_cache")
+Enable negative cache ("\-o enable_negative_cache")
 .RS
 .TP
-If a bucket is used exclusively by an s3fs instance, you can enable the cache for non-existent files and directories with "\-o enable_noobj_cache". This eliminates repeated requests to check the existence of an object, saving time and possibly money.
+If a bucket is used exclusively by an s3fs instance, you can enable the cache for non-existent files and directories with "\-o enable_negative_cache". This eliminates repeated requests to check the existence of an object, saving time and possibly money.
 .RE
 .IP \[bu]
 Enable support of alternative directory names ("\-o compat_dir")

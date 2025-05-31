@@ -119,7 +119,7 @@ std::mutex      StatCache::stat_cache_lock;
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), ExpireTime(15 * 60), CacheSize(100'000), IsCacheNoObject(true)
+StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), ExpireTime(15 * 60), CacheSize(100'000), UseNegativeCache(true)
 {
     if(this == StatCache::getStatCacheData()){
         stat_cache.clear();
@@ -175,10 +175,10 @@ time_t StatCache::UnsetExpireTime()
     return old;
 }
 
-bool StatCache::SetCacheNoObject(bool flag)
+bool StatCache::SetNegativeCache(bool flag)
 {
-    bool old = IsCacheNoObject;
-    IsCacheNoObject = flag;
+    bool old = UseNegativeCache;
+    UseNegativeCache = flag;
     return old;
 }
 
@@ -222,7 +222,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
 
     // No object
     if(ent->noobjcache){
-        if(!IsCacheNoObject){
+        if(!UseNegativeCache){
             // need to delete this cache.
             DelStatHasLock(strpath);
         }else{
@@ -275,7 +275,7 @@ bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* met
 
 bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
 {
-    if(!IsCacheNoObject){
+    if(!UseNegativeCache){
         return false;
     }
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
@@ -433,7 +433,7 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
 
 bool StatCache::AddNoObjectCache(const std::string& key)
 {
-    if(!IsCacheNoObject){
+    if(!UseNegativeCache){
         return true;    // pretend successful
     }
     if(CacheSize < 1){
