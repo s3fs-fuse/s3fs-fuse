@@ -2455,6 +2455,15 @@ bool FdEntity::MergeOrgMeta(headers_t& updatemeta)
     return (pending_status_t::NO_UPDATE_PENDING != pending_status);
 }
 
+bool FdEntity::GetOrgMeta(headers_t& meta) const
+{
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+
+    meta = orgmeta;
+    return true;
+}
+
 int FdEntity::UploadPendingHasLock(int fd)
 {
     int result;

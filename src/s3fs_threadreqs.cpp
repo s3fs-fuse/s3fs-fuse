@@ -62,18 +62,6 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         return reinterpret_cast<void*>(-EIO);
     }
 
-    // Check retry max count and print debug message
-    {
-        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-
-        S3FS_PRN_INFO3("Multi Head Request [filler=%p][thparam_lock=%p][retrycount=%d][notfound_list=%p][wtf8=%s][path=%s]", pthparam->psyncfiller, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->pnotfound_list, pthparam->use_wtf8 ? "true" : "false", pthparam->path.c_str());
-
-        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
-            S3FS_PRN_ERR("Head request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
-            return reinterpret_cast<void*>(-EIO);
-        }
-    }
-
     s3fscurl.SetUseAhbe(false);
 
     // loop for head request
@@ -94,27 +82,48 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){
-                // add into stat cache
-                if(StatCache::getStatCacheData()->AddStat(pthparam->path, *(s3fscurl.GetResponseHeaders()))){
-                    // Get stats from stats cache(for converting from meta), and fill
-                    std::string bpath = mybasename(pthparam->path);
-                    if(pthparam->use_wtf8){
-                        bpath = s3fs_wtf8_decode(bpath);
+                std::string bpath = mybasename(pthparam->path);
+                if(pthparam->use_wtf8){
+                     bpath = s3fs_wtf8_decode(bpath);
+                }
+
+                // set stat structure
+                struct stat stbuf;
+                if(convert_header_to_stat(pthparam->path, *(s3fscurl.GetResponseHeaders()), stbuf, false)){
+                    // fill stat
+                    pthparam->psyncfiller->Fill(bpath, &stbuf, 0);
+
+                    // objet type
+                    objtype_t ObjType = pthparam->objtype;
+                    if(objtype_t::UNKNOWN == ObjType){
+                        if(is_reg_fmt(*(s3fscurl.GetResponseHeaders()))){
+                            ObjType = objtype_t::FILE;
+                        }else if(is_symlink_fmt(*(s3fscurl.GetResponseHeaders()))){
+                            ObjType = objtype_t::SYMLINK;
+                        }else if(is_dir_fmt(*(s3fscurl.GetResponseHeaders()))){
+                            S3FS_PRN_WARN("The path(%s) has a directory type headers, so we determine the precise directory type here. But it might not be the exact directory type.", pthparam->path.c_str());
+                            if('/' != *(pthparam->path.rbegin())){
+                                ObjType = objtype_t::DIR_NOT_TERMINATE_SLASH;
+                            }else if(std::string::npos != pthparam->path.find("_$folder$", 0)){
+                                ObjType = objtype_t::DIR_FOLFER_SUFFIX;
+                            }else{
+                                ObjType = objtype_t::DIR_NORMAL;
+                            }
+                        }else{
+                            S3FS_PRN_WARN("The objtype of the path(%s) could not be determined, and the type is re-checked again after AddStat is called.", pthparam->path.c_str());
+                        }
                     }
 
-                    struct stat st;
-                    if(StatCache::getStatCacheData()->GetStat(pthparam->path, &st)){
-                        pthparam->psyncfiller->Fill(bpath, &st, 0);
-                    }else{
-                        S3FS_PRN_INFO2("Could not find %s file in stat cache.", pthparam->path.c_str());
-                        pthparam->psyncfiller->Fill(bpath, nullptr, 0);
+                    // add stat cache
+                    if(!StatCache::getStatCacheData()->AddStat(pthparam->path, stbuf, *(s3fscurl.GetResponseHeaders()), ObjType, false)){
+                        S3FS_PRN_ERR("failed add new stat cache[path=%s]", pthparam->path.c_str());
+                        if(0 == result){
+                            result = -EIO;
+                        }
                     }
-                    result = 0;
                 }else{
-                    S3FS_PRN_ERR("failed adding stat cache [path=%s]", pthparam->path.c_str());
-                    if(0 == result){
-                        result = -EIO;
-                    }
+                    S3FS_PRN_INFO2("Could not convert headers to stat[path=%s]", pthparam->path.c_str());
+                    pthparam->psyncfiller->Fill(bpath, nullptr, 0);
                 }
                 break;
 
@@ -422,18 +431,6 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         return reinterpret_cast<void*>(-EIO);
     }
 
-    // Check retry max count and print debug message
-    {
-        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-
-        S3FS_PRN_INFO3("Multipart Put Head Request [from=%s][to=%s][upload_id=%s][part_number=%d][filepart=%p][thparam_lock=%p][retrycount=%d][from=%s][to=%s]", pthparam->from.c_str(), pthparam->to.c_str(), pthparam->upload_id.c_str(), pthparam->part_number, pthparam->ppartdata, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->from.c_str(), pthparam->to.c_str());
-
-        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
-            S3FS_PRN_ERR("Multipart Put Head request(%s->%s) reached the maximum number of retry count(%d).", pthparam->from.c_str(), pthparam->to.c_str(), *(pthparam->pretrycount));
-            return reinterpret_cast<void*>(-EIO);
-        }
-    }
-
     s3fscurl.SetUseAhbe(true);
 
     int result = 0;
@@ -683,7 +680,11 @@ int head_request(const std::string& strpath, headers_t& header)
 //
 // Calls S3fsCurl::HeadRequest via multi_head_req_threadworker
 //
-int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, int& result, Semaphore& sem)
+// [NOTE]
+// objtype_t is a valid value only for directories.
+// For files and symbolic links, specified any value other than the directory type(including UNKNOWN).
+//
+int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, objtype_t objtype, int& result, Semaphore& sem)
 {
     // parameter for thread worker
     auto* thargs           = new multi_head_req_thparam;    // free in multi_head_req_threadworker
@@ -693,6 +694,7 @@ int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::
     thargs->pretrycount    = &retrycount;
     thargs->pnotfound_list = &notfound_list;
     thargs->use_wtf8       = use_wtf8;
+    thargs->objtype        = objtype;
     thargs->presult        = &result;
 
     // make parameter for thread pool
