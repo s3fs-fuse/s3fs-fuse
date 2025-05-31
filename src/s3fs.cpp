@@ -4973,13 +4973,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
             return 0;
         }
-        else if(0 == strcmp(arg, "enable_noobj_cache")){
-            S3FS_PRN_WARN("enable_noobj_cache is enabled by default and a future version will remove this option.");
-            StatCache::getStatCacheData()->EnableCacheNoObject();
+        else if(0 == strcmp(arg, "enable_negative_cache") || 0 == strcmp(arg, "enable_noobj_cache")){
+            S3FS_PRN_WARN("enable_negative_cache(enable_noobj_cache) is enabled by default and a future version will remove this option.");
+            StatCache::getStatCacheData()->EnableNegativeCache();
             return 0;
         }
-        else if(0 == strcmp(arg, "disable_noobj_cache")){
-            StatCache::getStatCacheData()->DisableCacheNoObject();
+        else if(0 == strcmp(arg, "disable_negative_cache") || 0 == strcmp(arg, "disable_noobj_cache")){
+            StatCache::getStatCacheData()->DisableNegativeCache();
             return 0;
         }
         else if(0 == strcmp(arg, "nodnscache")){
