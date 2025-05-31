@@ -26,6 +26,7 @@
 #include "common.h"
 #include "metaheader.h"
 #include "string_util.h"
+#include "s3fs_util.h"
 
 static constexpr struct timespec DEFAULT_TIMESPEC = {-1, 0};
 
@@ -327,6 +328,74 @@ bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexis
         }
     }
     return added;
+}
+
+bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir)
+{
+    if(!path || !pst){
+        return false;
+    }
+    *pst = {};
+
+    pst->st_nlink = 1; // see fuse FAQ
+
+    // mode
+    pst->st_mode = get_mode(meta, path, true, forcedir);
+
+    // blocks
+    if(S_ISREG(pst->st_mode)){
+        pst->st_blocks = get_blocks(pst->st_size);
+    }
+    pst->st_blksize = 4096;
+
+    // mtime
+    struct timespec mtime = get_mtime(meta);
+    if(pst->st_mtime < 0){
+        pst->st_mtime = 0L;
+    }else{
+        if(mtime.tv_sec < 0){
+            mtime.tv_sec  = 0;
+            mtime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(*pst, stat_time_type::MTIME, mtime);
+    }
+
+    // ctime
+    struct timespec ctime = get_ctime(meta);
+    if(pst->st_ctime < 0){
+        pst->st_ctime = 0L;
+    }else{
+        if(ctime.tv_sec < 0){
+            ctime.tv_sec  = 0;
+            ctime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(*pst, stat_time_type::CTIME, ctime);
+    }
+
+    // atime
+    struct timespec atime = get_atime(meta);
+    if(pst->st_atime < 0){
+        pst->st_atime = 0L;
+    }else{
+        if(atime.tv_sec < 0){
+            atime.tv_sec  = 0;
+            atime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(*pst, stat_time_type::ATIME, atime);
+    }
+
+    // size
+    if(S_ISDIR(pst->st_mode)){
+        pst->st_size = 4096;
+    }else{
+        pst->st_size = get_size(meta);
+    }
+
+    // uid/gid
+    pst->st_uid = get_uid(meta);
+    pst->st_gid = get_gid(meta);
+
+    return true;
 }
 
 /*

@@ -27,6 +27,7 @@
 #include "curl_util.h"
 #include "s3fs_logger.h"
 #include "s3fs_util.h"
+#include "s3fs_xml.h"
 #include "cache.h"
 #include "string_util.h"
 
