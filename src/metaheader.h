@@ -48,6 +48,9 @@ off_t get_size(const char *s);
 off_t get_size(const headers_t& meta);
 mode_t get_mode(const char *s, int base = 0);
 mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir = false, bool forcedir = false);
+bool is_reg_fmt(const headers_t& meta);
+bool is_symlink_fmt(const headers_t& meta);
+bool is_dir_fmt(const headers_t& meta);
 uid_t get_uid(const char *s);
 uid_t get_uid(const headers_t& meta);
 gid_t get_gid(const char *s);
@@ -58,7 +61,7 @@ time_t get_lastmodified(const char* s);
 time_t get_lastmodified(const headers_t& meta);
 bool is_need_check_obj_detail(const headers_t& meta);
 bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist);
-bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir = false);
+bool convert_header_to_stat(const std::string& strpath, const headers_t& meta, struct stat& stbuf, bool forcedir = false);
 
 #endif // S3FS_METAHEADER_H_
 

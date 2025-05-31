@@ -26,18 +26,21 @@
 #include <utility>
 #include <vector>
 
+#include "types.h"
+
 //-------------------------------------------------------------------
 // Structure / Typedef
 //-------------------------------------------------------------------
 struct s3obj_entry{
-    std::string normalname; // normalized name: if empty, object is normalized name.
-    std::string orgname;    // original name: if empty, object is original name.
+    std::string normalname;                 // normalized name: if empty, object is normalized name.
+    std::string orgname;                    // original name: if empty, object is original name.
     std::string etag;
-    bool        is_dir = false;
+    objtype_t   type = objtype_t::UNKNOWN;  // only set for directories, UNKNOWN for non-directories.
 };
 
 typedef std::map<std::string, struct s3obj_entry> s3obj_t;
 typedef std::vector<std::string> s3obj_list_t;
+typedef std::map<std::string, objtype_t> s3obj_type_map_t;
 
 //-------------------------------------------------------------------
 // Class S3ObjList
@@ -48,8 +51,9 @@ class S3ObjList
         s3obj_t objects;
         std::vector<std::string> common_prefixes;
 
-        bool insert_normalized(const char* name, const char* normalized, bool is_dir);
+        bool insert_normalized(const char* name, const char* normalized, objtype_t type);
         const s3obj_entry* GetS3Obj(const char* name) const;
+        bool RawGetNames(s3obj_list_t* plist, s3obj_type_map_t* pobjmap, bool OnlyNormalized, bool CutSlash) const;
 
         s3obj_t::const_iterator cbegin() const { return objects.cbegin(); }
         s3obj_t::const_iterator cend() const { return objects.cend(); }
@@ -64,6 +68,7 @@ class S3ObjList
         void AddCommonPrefix(std::string prefix) { common_prefixes.push_back(std::move(prefix)); }
         bool IsDir(const char* name) const;
         bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
+        bool GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetLastName(std::string& lastname) const;
 
         static bool MakeHierarchizedList(s3obj_list_t& list, bool haveSlash);

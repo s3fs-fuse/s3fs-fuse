@@ -33,6 +33,8 @@
 //-------------------------------------------------------------------
 // Structures for MultiThread Request
 //-------------------------------------------------------------------
+typedef std::map<std::string, int> retrycnt_t;
+
 //
 // Head Request parameter structure for Thread Pool.
 //
@@ -54,6 +56,7 @@ struct multi_head_req_thparam
     int*          pretrycount    = nullptr;
     s3obj_list_t* pnotfound_list = nullptr;
     bool          use_wtf8       = false;
+    objtype_t     objtype        = objtype_t::UNKNOWN;
     int*          presult        = nullptr;
 };
 
@@ -228,7 +231,7 @@ void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg);
 // Utility functions
 //-------------------------------------------------------------------
 int head_request(const std::string& strpath, headers_t& header);
-int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, int& result, Semaphore& sem);
+int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, objtype_t objtype, int& result, Semaphore& sem);
 int delete_request(const std::string& strpath);
 int put_head_request(const std::string& strpath, const headers_t& meta, bool is_copy);
 int put_request(const std::string& strpath, const headers_t& meta, int fd, bool ahbe);

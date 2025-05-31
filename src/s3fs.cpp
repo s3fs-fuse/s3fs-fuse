@@ -66,14 +66,6 @@
 #define ENOATTR                   ENODATA
 #endif
 
-enum class dirtype : int8_t {
-    UNKNOWN = -1,
-    NEW = 0,
-    OLD = 1,
-    FOLDER = 2,
-    NOOBJ = 3,
-};
-
 //-------------------------------------------------------------------
 // Static variables
 //-------------------------------------------------------------------
@@ -113,15 +105,14 @@ static unsigned long s3fs_block_size = 16 * 1024 * 1024;    // s3fs block size i
 //-------------------------------------------------------------------
 // Static functions : prototype
 //-------------------------------------------------------------------
-static bool is_special_name_folder_object(const char* path);
-static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta = nullptr, dirtype* pDirType = nullptr);
-static int remove_old_type_dir(const std::string& path, dirtype type);
-static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = nullptr, bool overcheck = true, bool* pisforce = nullptr, bool add_no_truncate_cache = false);
+static int chk_dir_object_type(const char* path, std::string& normpath, std::string& curpath, headers_t* pmeta = nullptr, objtype_t* pObjType = nullptr);
+static int remove_old_type_dir(const std::string& path, objtype_t ObjType);
+static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta = nullptr, bool overcheck = true, objtype_t* pObjType = nullptr, bool notruncate = false);
 static int check_object_access(const char* path, int mask, struct stat* pstbuf);
 static int check_object_owner(const char* path, struct stat* pstbuf);
 static int check_parent_object_access(const char* path, int mask);
 static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* path, int flags = O_RDONLY, bool is_load = false);
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
+static int readdir_multi_head(const std::string& strpath, const S3ObjList& head, void* buf, fuse_fill_dir_t filler);
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
@@ -204,57 +195,10 @@ static std::atomic<bool> has_mp_stat;
 //-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-static constexpr bool IS_REPLACEDIR(dirtype type)
-{
-    return dirtype::OLD == type || dirtype::FOLDER == type || dirtype::NOOBJ == type;
-}
-
-static constexpr bool IS_RMTYPEDIR(dirtype type)
-{
-    return dirtype::OLD == type || dirtype::FOLDER == type;
-}
-
 static constexpr bool IS_CREATE_MP_STAT(const char* path)
 {
     // [NOTE] has_mp_stat is set in get_object_attribute()
     return (path != nullptr && 0 == strcmp(path, "/") && !has_mp_stat);
-}
-
-static bool is_special_name_folder_object(const char* path)
-{
-    if(!support_compat_dir){
-        // s3fs does not support compatibility directory type("_$folder$" etc) now,
-        // thus always returns false.
-        return false;
-    }
-
-    if(!path || '\0' == path[0]){
-        return false;
-    }
-    if(0 == strcmp(path, "/") && mount_prefix.empty()){
-        // the path is the mount point which is the bucket root
-        return false;
-    }
-
-    std::string strpath = path;
-    headers_t   header;
-
-    if(std::string::npos == strpath.find("_$folder$", 0)){
-        if('/' == *strpath.rbegin()){
-            strpath.erase(strpath.length() - 1);
-        }
-        strpath += "_$folder$";
-    }
-
-    // send request
-    if(0 != head_request(strpath, header)){
-        return false;
-    }
-
-    header.clear();
-    S3FS_MALLOCTRIM(0);
-
-    return true;
 }
 
 // [Detail]
@@ -263,94 +207,49 @@ static bool is_special_name_folder_object(const char* path)
 // Please see the codes which calls this function.
 //
 // path:      target path
-// newpath:   should be object path for making/putting/getting after checking
-// nowpath:   now object name for deleting after checking
-// nowcache:  now cache path for deleting after checking
+// normpath:  normalized path for making/putting/getting after checking
+// curpath:   current object name for deleting after checking
 // pmeta:     headers map
-// pDirType:  directory object type
+// pObjType:  object type(only directory)
 //
-static int chk_dir_object_type(const char* path, std::string& newpath, std::string& nowpath, std::string& nowcache, headers_t* pmeta, dirtype* pDirType)
+static int chk_dir_object_type(const char* path, std::string& normpath, std::string& curpath, headers_t* pmeta, objtype_t* pObjType)
 {
-    dirtype TypeTmp = dirtype::UNKNOWN;
-    int  result  = -1;
-    bool isforce = false;
-    dirtype* pType = pDirType ? pDirType : &TypeTmp;
+    objtype_t tmpObjType = objtype_t::UNKNOWN;
+    int       result     = -1;
+    pObjType             = pObjType ? pObjType : &tmpObjType;
 
     // Normalize new path.
-    newpath = path;
-    if('/' != *newpath.rbegin()){
+    normpath = path;
+    if('/' != *normpath.rbegin()){
         std::string::size_type Pos;
-        if(std::string::npos != (Pos = newpath.find("_$folder$", 0))){
-            newpath.erase(Pos);
+        if(std::string::npos != (Pos = normpath.find("_$folder$", 0))){
+            normpath.erase(Pos);
         }
-        newpath += "/";
+        normpath += "/";
     }
 
     // Always check "dir/" at first.
-    if(0 == (result = get_object_attribute(newpath.c_str(), nullptr, pmeta, false, &isforce))){
-        // Found "dir/" cache --> Check for "_$folder$", "no dir object"
-        nowcache = newpath;
-        if(is_special_name_folder_object(newpath.c_str())){     // check support_compat_dir in this function
-            // "_$folder$" type.
-            (*pType) = dirtype::FOLDER;
-            nowpath.erase(newpath.length() - 1);
-            nowpath += "_$folder$"; // cut and add
-        }else if(isforce){
-            // "no dir object" type.
-            (*pType) = dirtype::NOOBJ;
-            nowpath  = "";
-        }else{
-            nowpath = newpath;
-            if(!nowpath.empty() && '/' == *nowpath.rbegin()){
-                // "dir/" type
-                (*pType) = dirtype::NEW;
-            }else{
-                // "dir" type
-                (*pType) = dirtype::OLD;
-            }
-        }
-    }else if(support_compat_dir){
-        // Check "dir" when support_compat_dir is enabled
-        nowpath.erase(newpath.length() - 1);
-        if(0 == (result = get_object_attribute(nowpath.c_str(), nullptr, pmeta, false, &isforce))){
-            // Found "dir" cache --> this case is only "dir" type.
-            // Because, if object is "_$folder$" or "no dir object", the cache is "dir/" type.
-            // (But "no dir object" is checked here.)
-            nowcache = nowpath;
-            if(isforce){
-                (*pType) = dirtype::NOOBJ;
-                nowpath  = "";
-            }else{
-                (*pType) = dirtype::OLD;
-            }
-        }else{
-            // Not found cache --> check for "_$folder$" and "no dir object".
-            // (come here is that support_compat_dir is enabled)
-            nowcache = "";  // This case is no cache.
-            nowpath += "_$folder$";
-            if(is_special_name_folder_object(nowpath.c_str())){
-                // "_$folder$" type.
-                (*pType) = dirtype::FOLDER;
-                result   = 0;             // result is OK.
-            }else if(-ENOTEMPTY == directory_empty(newpath.c_str())){
-                // "no dir object" type.
-                (*pType) = dirtype::NOOBJ;
-                nowpath  = "";            // now path.
-                result   = 0;             // result is OK.
-            }else{
-                // Error: Unknown type.
-                (*pType) = dirtype::UNKNOWN;
-                newpath = "";
-                nowpath = "";
-            }
+    if(0 == (result = get_object_attribute(normpath.c_str(), nullptr, pmeta, false, pObjType))){
+        // Found "dir/" object
+        if(objtype_t::DIR_NOT_TERMINATE_SLASH == *pObjType){
+            curpath = normpath;
+            curpath.erase(normpath.length() - 1);
+        }else if(objtype_t::DIR_FOLFER_SUFFIX == *pObjType){
+            curpath = normpath;
+            curpath.erase(normpath.length() - 1);
+            curpath += "_$folder$";
+        }else if(objtype_t::DIR_NOT_EXIST_OBJECT == *pObjType){
+            curpath  = "";
+        }else{  // objtype_t::DIR_NORMAL
+            curpath = normpath;
         }
     }
     return result;
 }
 
-static int remove_old_type_dir(const std::string& path, dirtype type)
+static int remove_old_type_dir(const std::string& path, objtype_t ObjType)
 {
-    if(IS_RMTYPEDIR(type)){
+    if(NEED_RMDIR_OBJ(ObjType)){
         int result;
         if(0 != (result = delete_request(path))){
             return result;
@@ -381,62 +280,91 @@ static int remove_old_type_dir(const std::string& path, dirtype type)
 //           2) "foo/"
 //           3) "foo_$folder$"
 //
-static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, bool* pisforce, bool add_no_truncate_cache)
+static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t* pmeta, bool overcheck, objtype_t* pObjType, bool notruncate)
 {
-    int          result = -1;
-    struct stat  tmpstbuf;
-    struct stat* pstat = pstbuf ? pstbuf : &tmpstbuf;
-    headers_t    tmpHead;
-    headers_t*   pheader = pmeta ? pmeta : &tmpHead;
+    int          result               = -1;
     std::string  strpath;
-    bool         forcedir = false;
-    bool         is_mountpoint = false;             // path is the mount point
+    struct stat  tmpstbuf             = {};
+    headers_t    tmpHead;
+    objtype_t    tmpObjType           = objtype_t::UNKNOWN;
+    bool         is_mountpoint        = false;      // path is the mount point
     bool         is_bucket_mountpoint = false;      // path is the mount point which is the bucket root
     std::string::size_type Pos;
 
-    S3FS_PRN_DBG("[path=%s]", path);
-
+    //
+    // Initialize variables in this function
+    //
     if(!path || '\0' == path[0]){
         return -ENOENT;
     }
+    strpath   = path;
+    pmeta     = pmeta ? pmeta : &tmpHead;
+    pstbuf    = pstbuf ? pstbuf : &tmpstbuf;
+    *pstbuf   = {};
+    pObjType  = (pObjType ? pObjType : &tmpObjType);
+    *pObjType = objtype_t::UNKNOWN;
 
-    *pstat = {};
+    S3FS_PRN_DBG("[path=%s, overcheck=%s, objtype=%s, notruncate=%s]", path, overcheck ? "yes" : "no", STR_OBJTYPE(*pObjType).c_str(), notruncate ? "yes" : "no");
 
-    // check mount point
-    if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
+    //
+    // Check mount point
+    //
+    if("/" == strpath || "." == strpath){
         is_mountpoint = true;
         if(mount_prefix.empty()){
             is_bucket_mountpoint = true;
         }
         // default stat for mount point if the directory stat file is not existed.
-        pstat->st_mode  = mp_mode;
-        pstat->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
-        pstat->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
+        pstbuf->st_mode  = mp_mode;
+        pstbuf->st_uid   = is_s3fs_uid ? s3fs_uid : mp_uid;
+        pstbuf->st_gid   = is_s3fs_gid ? s3fs_gid : mp_gid;
     }
 
-    // Check cache.
-    pisforce    = (nullptr != pisforce ? pisforce : &forcedir);
-    (*pisforce) = false;
-    strpath     = path;
+    //
+    // Set object type by path
+    //
+    // [NOTE]
+    // With "support_compat_dir" and "overcheck", if the path has a "_$folder$" suffix,
+    // it will be searched as "dir/".
+    //
+    if(std::string::npos != strpath.find("_$folder$", 0)){
+        *pObjType = objtype_t::DIR_FOLFER_SUFFIX;
+    }else if('/' == *strpath.rbegin()){
+        *pObjType = objtype_t::DIR_NORMAL;
+    }else{      // '/' != *strpath.rbegin()
+        *pObjType = objtype_t::UNKNOWN;
+    }
+
+    //
+    // Check compatible directory
+    //
     if(support_compat_dir && overcheck && std::string::npos != (Pos = strpath.find("_$folder$", 0))){
         strpath.erase(Pos);
         strpath += "/";
     }
+
+    //
+    // Check Stat Cache
+    //
     // [NOTE]
     // For mount points("/"), the Stat cache key name is "/".
     //
-    if(StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
-        if(is_mountpoint){
-            // if mount point, we need to set this.
-            pstat->st_nlink = 1; // see fuse faq
-        }
+    if(StatCache::getStatCacheData()->GetStat(strpath, pstbuf, pmeta, pObjType)){
         return 0;
-    }
-    if(StatCache::getStatCacheData()->IsNoObjectCache(strpath)){
-        // there is the path in the cache for no object, it is no object.
-        return -ENOENT;
+    }else{
+        // [NOTE]
+        // In the case of a Negative Cache, GetStat() returns false and
+        // objtype_t::NEGATIVE is set.
+        //
+        if(objtype_t::NEGATIVE == *pObjType){
+            // When not hit cache and the reason is negative cache.
+            return -ENOENT;
+        }
     }
 
+    //
+    // Get "path" object headers
+    //
     // set query(head request) path
     if(is_bucket_mountpoint){
         // [NOTE]
@@ -456,7 +384,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     }
 
     // get headers
-    result = head_request(strpath, *pheader);
+    result = head_request(strpath, *pmeta);
 
     // if not found target path object, do over checking
     if(-EPERM == result){
@@ -476,29 +404,37 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         // It is better not to set meta header other than mode,
         // so do not do it.
         //
-        (*pheader)["x-amz-meta-mode"] = "0";
+        (*pmeta)["x-amz-meta-mode"] = "0";
+
+        *pObjType = objtype_t::FILE;       // Since can't access the object, set as a file.
 
     }else if(0 != result){
         if(overcheck && !is_bucket_mountpoint){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
             if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
                 // now path is "object", do check "object/" for over checking
-                strpath    += "/";
+                strpath += "/";
 
                 // re-get headers
-                result = head_request(strpath, *pheader);
+                if(0 == (result = head_request(strpath, *pmeta))){
+                    // found "dir/"
+                    *pObjType = objtype_t::DIR_NORMAL;
+                }
             }
             if(support_compat_dir && 0 != result){
                 // now path is "object/", do check "object_$folder$" for over checking
                 strpath.erase(strpath.length() - 1);
-                strpath    += "_$folder$";
+                strpath += "_$folder$";
 
                 // re-get headers
-                result = head_request(strpath, *pheader);
+                result = head_request(strpath, *pmeta);
 
-		        // cppcheck-suppress unmatchedSuppression
-		        // cppcheck-suppress knownConditionTrueFalse
-                if(0 != result){
+                // cppcheck-suppress unmatchedSuppression
+                // cppcheck-suppress knownConditionTrueFalse
+                if(0 == result){
+                    // found "object_$folder$"
+                    *pObjType = objtype_t::DIR_FOLFER_SUFFIX;
+                }else{
                     // cut "_$folder$" for over checking "no dir object" after here
                     if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
                         strpath.erase(Pos);
@@ -516,20 +452,49 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
                 strpath.erase(strpath.length() - 1);
             }
             if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-                // found "no dir object".
+                // found "non-existed directory object".
                 strpath  += "/";
-                *pisforce = true;
+                *pObjType = objtype_t::DIR_NOT_EXIST_OBJECT;
                 result    = 0;
             }
         }
+
     }else{
-        if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pheader)){
-            // check a case of that "object" does not have attribute and "object" is possible to be directory.
-            if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-                // found "no dir object".
-                strpath  += "/";
-                *pisforce = true;
-                result    = 0;
+        if(is_reg_fmt(*pmeta)){
+            *pObjType = objtype_t::FILE;
+        }else if(is_symlink_fmt(*pmeta)){
+            *pObjType = objtype_t::SYMLINK;
+        }else if(is_dir_fmt(*pmeta)){
+            if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
+                // check to send a head request for "dir/"
+                //
+                // [NOTE][FIXME]
+                // Some backends, a Head request to a "dir" path will succeed when only the
+                // "dir/" object exists(s3proxy is one of them).
+                // When detected as "dir" in this way, the directory type is no longer accurate,
+                // so the Head request must be re-examined as "dir/".
+                // In this case, the AWS S3 server fails to detect "dir". So in most cases, this
+                // process should have little impact on performance. (Currently, s3fs-fuse tests
+                // are affected by this process.)
+                //
+                std::string recheckPath = strpath + "/";
+                headers_t   recheckHead;
+                if(0 == head_request(recheckPath, recheckHead)){
+                    if(is_dir_fmt(recheckHead)){
+                        strpath   = recheckPath;
+                        *pmeta    = recheckHead;
+                    }else{
+                        S3FS_PRN_ERR("Both objects \"%s\" and \"%s\" were found, but \"%s\" is a directory and \"%s\" is not a directory. \"%s\" will be ignored.", strpath.c_str(), recheckPath.c_str(), strpath.c_str(), recheckPath.c_str(), recheckPath.c_str());
+                    }
+                }
+                if('/' != *strpath.rbegin() && is_need_check_obj_detail(*pmeta)){
+                    // check a case of that "object" does not have attribute and "object" is possible to be directory.
+                    if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+                        // found "non-existed directory object".
+                        strpath  += "/";
+                        *pObjType = objtype_t::DIR_NOT_EXIST_OBJECT;
+                    }
+                }
             }
         }
     }
@@ -546,50 +511,79 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         // to be required, and forcibly clear the header if they are missing.
         // Probably, this can occur with AWS-compatible storage.
         //
-        if(0 != result                                          ||
-           pheader->empty()                                     ||
-           pheader->cend() == pheader->find("Content-Type")     ||
-           pheader->cend() == pheader->find("x-amz-meta-uid")   ||
-           pheader->cend() == pheader->find("x-amz-meta-gid")   ||
-           pheader->cend() == pheader->find("x-amz-meta-mode")  ||
-           pheader->cend() == pheader->find("x-amz-meta-atime") ||
-           pheader->cend() == pheader->find("x-amz-meta-ctime") ||
-           pheader->cend() == pheader->find("x-amz-meta-mtime") )
+        if(0 != result                                      ||
+           pmeta->empty()                                   ||
+           pmeta->cend() == pmeta->find("Content-Type")     ||
+           pmeta->cend() == pmeta->find("x-amz-meta-uid")   ||
+           pmeta->cend() == pmeta->find("x-amz-meta-gid")   ||
+           pmeta->cend() == pmeta->find("x-amz-meta-mode")  ||
+           pmeta->cend() == pmeta->find("x-amz-meta-atime") ||
+           pmeta->cend() == pmeta->find("x-amz-meta-ctime") ||
+           pmeta->cend() == pmeta->find("x-amz-meta-mtime") )
         {
             has_mp_stat = false;
+            *pObjType   = objtype_t::DIR_NOT_EXIST_OBJECT;
             result      = 0;
 
             // [NOTE]
             // If mount point and no stat information file, create header
             // information from the default stat.
             //
-            pheader->clear();
-            (*pheader)["Content-Type"]     = S3fsCurl::LookupMimeType(strpath);
-            (*pheader)["x-amz-meta-uid"]   = std::to_string(pstat->st_uid);
-            (*pheader)["x-amz-meta-gid"]   = std::to_string(pstat->st_gid);
-            (*pheader)["x-amz-meta-mode"]  = std::to_string(pstat->st_mode);
-            (*pheader)["x-amz-meta-atime"] = std::to_string(pstat->st_atime);
-            (*pheader)["x-amz-meta-ctime"] = std::to_string(pstat->st_ctime);
-            (*pheader)["x-amz-meta-mtime"] = std::to_string(pstat->st_mtime);
+            pmeta->clear();
+            (*pmeta)["Content-Type"]     = S3fsCurl::LookupMimeType(strpath);
+            (*pmeta)["x-amz-meta-uid"]   = std::to_string(pstbuf->st_uid);
+            (*pmeta)["x-amz-meta-gid"]   = std::to_string(pstbuf->st_gid);
+            (*pmeta)["x-amz-meta-mode"]  = std::to_string(pstbuf->st_mode);
+            (*pmeta)["x-amz-meta-atime"] = std::to_string(pstbuf->st_atime);
+            (*pmeta)["x-amz-meta-ctime"] = std::to_string(pstbuf->st_ctime);
+            (*pmeta)["x-amz-meta-mtime"] = std::to_string(pstbuf->st_mtime);
         }else{
             has_mp_stat = true;
+            *pObjType   = objtype_t::DIR_NORMAL;
         }
     }
 
     // [NOTE]
     // If the file is listed but not allowed access, put it in
     // the positive cache instead of the negative cache.
-    // 
+    //
     // When mount points, the following error does not occur.
-    // 
+    //
     if(0 != result && -EPERM != result){
         // finally, "path" object did not find. Add no object cache.
-        strpath = path;  // reset original
-        StatCache::getStatCacheData()->AddNoObjectCache(strpath);
+        *pObjType = objtype_t::NEGATIVE;
+
+        // reset original
+        strpath = path;
+        if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
+            // if path has "_$folder$", need to cut it.
+            strpath.erase(Pos);
+            strpath += "/";
+        }
+        StatCache::getStatCacheData()->AddNegativeStat(strpath);
         return result;
     }
 
-    // set cache key
+    //
+    // Set the object type if UNKNOWN( -> FILE / SYMLINK / DIR_NOT_TERMINATE_SLASH)
+    //
+    if(objtype_t::UNKNOWN == *pObjType){
+        if(is_dir_fmt(*pmeta)){
+            // The directory judged here is of type "dir" or "dir/".
+            if('/' == *strpath.rbegin()){
+                *pObjType = objtype_t::DIR_NORMAL;
+            }else{
+                *pObjType = objtype_t::DIR_NOT_TERMINATE_SLASH;
+            }
+        }else if(is_symlink_fmt(*pmeta)){
+            *pObjType = objtype_t::SYMLINK;
+        }else{  // is_reg_fmt(*pmeta)
+            *pObjType = objtype_t::FILE;
+        }
+    }
+
+    // Set cache key(path)
+    //
     if(is_bucket_mountpoint){
         strpath = "/";
     }else if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
@@ -598,38 +592,23 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         strpath += "/";
     }
 
+    // Set stat structure
+    if(!convert_header_to_stat(strpath, *pmeta, *pstbuf, (objtype_t::DIR_NOT_EXIST_OBJECT == *pObjType))){
+        S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
+        return -ENOENT;
+    }
+
     // Set into cache
     //
     // [NOTE]
-    // When add_no_truncate_cache is true, the stats is always cached.
+    // When notruncate is true, the stats is always cached.
     // This cached stats is only removed by DelStat().
     // This is necessary for the case to access the attribute of opened file.
     // (ex. getxattr() is called while writing to the opened file.)
     //
-    if(add_no_truncate_cache || 0 != StatCache::getStatCacheData()->GetCacheSize()){
-        // add into stat cache
-        if(!StatCache::getStatCacheData()->AddStat(strpath, (*pheader), forcedir, add_no_truncate_cache)){
-            S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
-            return -ENOENT;
-        }
-        if(!StatCache::getStatCacheData()->GetStat(strpath, pstat, pheader, overcheck, pisforce)){
-            // There is not in cache.(why?) -> retry to convert.
-            if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-                S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
-                return -ENOENT;
-            }
-        }
-    }else{
-        // cache size is Zero -> only convert.
-        if(!convert_header_to_stat(strpath.c_str(), (*pheader), pstat, forcedir)){
-            S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
-            return -ENOENT;
-        }
-    }
-
-    if(is_mountpoint){
-        // if mount point, we need to set this.
-        pstat->st_nlink = 1; // see fuse faq
+    if(!StatCache::getStatCacheData()->AddStat(strpath, *pstbuf, *pmeta, *pObjType, notruncate)){
+        S3FS_PRN_ERR("failed adding stat cache [path=%s]", strpath.c_str());
+        return -ENOENT;
     }
 
     return 0;
@@ -950,51 +929,98 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         return 0;
     }
     WTF8_ENCODE(path)
+    std::string strPath = path;
     std::string strValue;
-    FUSE_CTX_INFO("[path=%s]", path);
+    objtype_t   ObjType = objtype_t::UNKNOWN;
+    struct stat stbuf   = {};
+    headers_t   meta;
 
-    // check symbolic link cache
-    if(!StatCache::getStatCacheData()->GetSymlink(path, strValue)){
-        // not found in cache, then open the path
-        {   // scope for AutoFdEntity
+    FUSE_CTX_INFO("[path=%s]", strPath.c_str());
+
+    const struct fuse_context* pcxt;
+    if(nullptr == (pcxt = fuse_get_context())){
+        return -EIO;
+    }
+
+    // check if there is a valid cache
+    bool found_cache = false;
+    if(StatCache::getStatCacheData()->GetStat(strPath, &stbuf, &meta, &ObjType)){
+        if(IS_SYMLINK_OBJ(ObjType)){
+            // found symlink stat cache
+            found_cache = true;
+        }else{
+            // found stat cache, but it is not symlink type.
+            StatCache::getStatCacheData()->DelStat(strPath);
+        }
+    }
+
+    // get symlink path
+    if(!found_cache || !StatCache::getStatCacheData()->GetSymlink(strPath, strValue)){
+        // could not get symlink path from stat cache, so read symlink path from file.
+        ssize_t ressize = 0;
+        {
             AutoFdEntity autoent;
             FdEntity*    ent;
             int          result;
-            if(0 != (result = get_local_fent(autoent, &ent, path, O_RDONLY))){
-                S3FS_PRN_ERR("could not get fent(file=%s)", path);
+            if(0 != (result = get_local_fent(autoent, &ent, strPath.c_str(), O_RDONLY))){
+                S3FS_PRN_ERR("could not get fent(file=%s)", strPath.c_str());
                 return result;
             }
+
             // Get size
             off_t readsize;
             if(!ent->GetSize(readsize)){
-                S3FS_PRN_ERR("could not get file size(file=%s)", path);
+                S3FS_PRN_ERR("could not get file size(file=%s)", strPath.c_str());
                 return -EIO;
             }
             if(static_cast<off_t>(size) <= readsize){
                 readsize = size - 1;
             }
+
             // Read
-            ssize_t ressize;
             if(0 > (ressize = ent->Read(autoent.GetPseudoFd(), buf, 0, readsize))){
-                S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", path, ressize);
+                S3FS_PRN_ERR("could not read file(file=%s, ressize=%zd)", strPath.c_str(), ressize);
                 return static_cast<int>(ressize);
             }
             buf[ressize] = '\0';
+
+            // check buf if it has space words.
+            strValue = trim(buf);
+
+            // decode wtf8. This will always be shorter
+            if(use_wtf8){
+                strValue = s3fs_wtf8_decode(strValue);
+            }
         }
 
-        // check buf if it has space words.
-        strValue = trim(buf);
+        // make meta and stat
+        bool add_cache = true;
+        if(!found_cache){
+            // make headers for symlink
+            std::string strnow       = s3fs_str_realtime();
+            meta["Content-Type"]     = "application/octet-stream";  // Static
+            meta["Content-Length"]   = std::to_string(ressize);     // length
+            meta["x-amz-meta-mode"]  = std::to_string(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+            meta["x-amz-meta-atime"] = strnow;
+            meta["x-amz-meta-ctime"] = strnow;
+            meta["x-amz-meta-mtime"] = strnow;
+            meta["x-amz-meta-uid"]   = std::to_string(pcxt->uid);
+            meta["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
 
-        // decode wtf8. This will always be shorter
-        if(use_wtf8){
-          strValue = s3fs_wtf8_decode(strValue);
+            if(!convert_header_to_stat(strPath, meta, stbuf, false)){
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s], but continue...", strPath.c_str());
+                add_cache = false;
+            }
         }
 
         // add symbolic link cache
-        if(!StatCache::getStatCacheData()->AddSymlink(path, strValue)){
-          S3FS_PRN_ERR("failed to add symbolic link cache for %s", path);
+        if(add_cache){
+            if(!StatCache::getStatCacheData()->AddSymlink(strPath, stbuf, meta, strValue)){
+                S3FS_PRN_ERR("failed to add symbolic link cache for %s, but continue...", strPath.c_str());
+            }
         }
     }
+
     // copy result
     strncpy(buf, strValue.c_str(), size - 1);
     buf[size - 1] = '\0';
@@ -1042,6 +1068,8 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
         S3FS_PRN_ERR("could not create object for special file(result=%d)", result);
         return result;
     }
+
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(path);
 
     // update parent directory timestamp
@@ -1058,28 +1086,30 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
-    int result;
+    std::string  strpath = path;
+    int          result;
     const struct fuse_context* pcxt;
 
-    FUSE_CTX_INFO("[path=%s][mode=%04o][flags=0x%x]", path, mode, fi->flags);
+    FUSE_CTX_INFO("[path=%s][mode=%04o][flags=0x%x]", strpath.c_str(), mode, fi->flags);
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
     }
 
     // check parent directory attribute.
-    if(0 != (result = check_parent_object_access(path, X_OK))){
+    if(0 != (result = check_parent_object_access(strpath.c_str(), X_OK))){
         return result;
     }
-    result = check_object_access(path, W_OK, nullptr);
+    result = check_object_access(strpath.c_str(), W_OK, nullptr);
     if(-ENOENT == result){
-        if(0 != (result = check_parent_object_access(path, W_OK))){
+        if(0 != (result = check_parent_object_access(strpath.c_str(), W_OK))){
             return result;
         }
     }else if(0 != result){
         return result;
     }
 
+    // Set meta headers
     std::string strnow = s3fs_str_realtime();
     headers_t   meta;
     meta["Content-Length"] = "0";
@@ -1091,9 +1121,16 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     meta["x-amz-meta-ctime"] = strnow;
 
     std::string xattrvalue;
-    if(build_inherited_xattr_value(path, xattrvalue)){
+    if(build_inherited_xattr_value(strpath.c_str(), xattrvalue)){
         S3FS_PRN_DBG("Set xattrs = %s", urlDecode(xattrvalue).c_str());
         meta["x-amz-meta-xattr"] = xattrvalue;
+    }
+
+    // Set stat structure
+    struct stat stbuf = {};
+    if(!convert_header_to_stat(strpath, meta, stbuf, false)){
+        S3FS_PRN_ERR("failed convert headers to stat[path=%s]", strpath.c_str());
+        return -EIO;
     }
 
     // [NOTE] set no_truncate flag
@@ -1104,15 +1141,16 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     // from the server with a Head request and will get an
     // unexpected error because the result object does not exist.
     //
-    if(!StatCache::getStatCacheData()->AddStat(path, meta, false, true)){
+    if(!StatCache::getStatCacheData()->AddStat(std::string(path), stbuf, meta, objtype_t::FILE, true)){     // [NOTICE] notruncate = true
         return -EIO;
     }
 
     AutoFdEntity autoent;
     FdEntity*    ent;
     int error = 0;
-    if(nullptr == (ent = autoent.Open(path, &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, &error))){
-        StatCache::getStatCacheData()->DelStat(path);
+    if(nullptr == (ent = autoent.Open(strpath.c_str(), &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, &error))){
+        // remove from cache
+        StatCache::getStatCacheData()->DelStat(strpath);
         return error;
     }
     ent->MarkDirtyNewFile();
@@ -1192,6 +1230,7 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
     s3fs_realtime(now);
     result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid, pxattrvalue);
 
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(path);
 
     // update parent directory timestamp
@@ -1208,26 +1247,27 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
 static int s3fs_unlink(const char* _path)
 {
     WTF8_ENCODE(path)
-    int result;
+    std::string strPath = path;
+    int         result;
 
-    FUSE_CTX_INFO("[path=%s]", path);
+    FUSE_CTX_INFO("[path=%s]", strPath.c_str());
 
-    if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
+    if(0 != (result = check_parent_object_access(strPath.c_str(), W_OK | X_OK))){
         return result;
     }
 
-    if(0 != (result = delete_request(SAFESTRPTR(path)))){
+    if(0 != (result = delete_request(strPath))){
         return result;
     }
 
-    StatCache::getStatCacheData()->DelStat(path);
-    StatCache::getStatCacheData()->DelSymlink(path);
-    FdManager::DeleteCacheFile(path);
+    // remove file cache and stat cache
+    StatCache::getStatCacheData()->DelStat(strPath);
+    FdManager::DeleteCacheFile(strPath.c_str());
 
     // update parent directory timestamp
     int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(path))){
-        S3FS_PRN_ERR("succeed to remove the file(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+    if(0 != (update_result = update_mctime_parent_directory(strPath.c_str()))){
+        S3FS_PRN_ERR("succeed to remove the file(%s), but could not update timestamp of its parent directory(result=%d).", strPath.c_str(), update_result);
     }
 
     S3FS_MALLOCTRIM(0);
@@ -1253,9 +1293,10 @@ static int directory_empty(const char* path)
 static int s3fs_rmdir(const char* _path)
 {
     WTF8_ENCODE(path)
-    int result;
+    int         result;
     std::string strpath;
     struct stat stbuf;
+    objtype_t   ObjType;
 
     FUSE_CTX_INFO("[path=%s]", path);
 
@@ -1276,6 +1317,7 @@ static int s3fs_rmdir(const char* _path)
     // delete request
     result = delete_request(strpath);
 
+    // remove stat cache
     StatCache::getStatCacheData()->DelStat(strpath);
 
     // double check for old version(before 1.63)
@@ -1286,25 +1328,43 @@ static int s3fs_rmdir(const char* _path)
     if('/' == *strpath.rbegin()){
         strpath.erase(strpath.length() - 1);
     }
-    if(0 == get_object_attribute(strpath.c_str(), &stbuf, nullptr, false)){
-        if(S_ISDIR(stbuf.st_mode)){
+    if(0 == get_object_attribute(strpath.c_str(), &stbuf, nullptr, false, &ObjType)){
+        if(IS_DIR_OBJ(ObjType)){
             // Found "dir" object.
+            if(objtype_t::DIR_NORMAL == ObjType){
+                // delete request
+                strpath += "/";
+                result = delete_request(strpath);
 
-            // delete request
-            result = delete_request(strpath);
-            StatCache::getStatCacheData()->DelStat(strpath);
+                // remove stat cache
+                StatCache::getStatCacheData()->DelStat(strpath);
+
+            }else if(objtype_t::DIR_NOT_TERMINATE_SLASH == ObjType){
+                // delete request
+                result = delete_request(strpath);
+
+                // remove stat cache
+                strpath += "/";
+                StatCache::getStatCacheData()->DelStat(strpath);
+
+            }else if(objtype_t::DIR_FOLFER_SUFFIX == ObjType){
+                // delete request
+                std::string strtmp = strpath + "_$folder$";
+                result = delete_request(strtmp);
+
+                // remove stat cache
+                strpath += "/";
+                StatCache::getStatCacheData()->DelStat(strpath);
+
+            }else if(objtype_t::DIR_NOT_EXIST_OBJECT == ObjType){
+                // the directory to be deleted does not exist
+                result = 0;
+
+                // remove stat cache
+                strpath += "/";
+                StatCache::getStatCacheData()->DelStat(strpath);
+            }
         }
-    }
-    // If there is no "dir" and "dir/" object(this case is made by s3cmd/s3sync),
-    // the cache key is "dir/". So we get error only once(delete "dir/").
-
-    // check for "_$folder$" object.
-    // This processing is necessary for other S3 clients compatibility.
-    if(is_special_name_folder_object(strpath.c_str())){
-        strpath += "_$folder$";
-
-        // delete request
-        result = delete_request(strpath);
     }
 
     // update parent directory timestamp
@@ -1322,18 +1382,20 @@ static int s3fs_symlink(const char* _from, const char* _to)
 {
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
-    int result;
+    std::string                strFrom = trim(from);;
+    std::string                strTo   = trim(to);
+    int                        result;
     const struct fuse_context* pcxt;
 
-    FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
+    FUSE_CTX_INFO("[from=%s][to=%s]", strFrom.c_str(), strTo.c_str());
 
     if(nullptr == (pcxt = fuse_get_context())){
         return -EIO;
     }
-    if(0 != (result = check_parent_object_access(to, W_OK | X_OK))){
+    if(0 != (result = check_parent_object_access(strTo.c_str(), W_OK | X_OK))){
         return result;
     }
-    if(-ENOENT != (result = check_object_access(to, F_OK, nullptr))){
+    if(-ENOENT != (result = check_object_access(strTo.c_str(), F_OK, nullptr))){
         if(0 == result){
             result = -EEXIST;
         }
@@ -1354,16 +1416,14 @@ static int s3fs_symlink(const char* _from, const char* _to)
     // Symbolic links do not set xattrs.
 
     // open tmpfile
-    std::string strFrom;
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(nullptr == (ent = autoent.Open(to, &headers, 0, S3FS_OMIT_TS, O_RDWR, true, true, false))){
+        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, S3FS_OMIT_TS, O_RDWR, true, true, false))){
             S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
             return -errno;
         }
         // write(without space words)
-        strFrom           = trim(from);
         auto from_size = static_cast<ssize_t>(strFrom.length());
         ssize_t ressize;
         if(from_size != (ressize = ent->Write(autoent.GetPseudoFd(), strFrom.c_str(), 0, from_size))){
@@ -1375,21 +1435,31 @@ static int s3fs_symlink(const char* _from, const char* _to)
                 return (0 == errno ? -EIO : -errno);
             }
         }
+
+        // set length
+        headers["Content-Length"] = std::to_string(ressize);
+
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_WARN("could not upload tmpfile(result=%d)", result);
         }
     }
 
-    StatCache::getStatCacheData()->DelStat(to);
-    if(!StatCache::getStatCacheData()->AddSymlink(to, strFrom)){
-        S3FS_PRN_ERR("failed to add symbolic link cache for %s", to);
+    // make stat and add cache
+    struct stat stbuf;
+    if(!convert_header_to_stat(strTo, headers, stbuf, false)){
+        S3FS_PRN_ERR("failed convert headers to stat[path=%s], but continue...", strTo.c_str());
+    }else{
+        // add symbolic link cache
+        if(!StatCache::getStatCacheData()->AddSymlink(strTo, stbuf, headers, strFrom)){
+          S3FS_PRN_ERR("failed to add symbolic link cache for %s(->%s), but continue...", strTo.c_str(), strFrom.c_str());
+        }
     }
 
     // update parent directory timestamp
     int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(to))){
-        S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
+    if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
+        S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
     }
 
     S3FS_MALLOCTRIM(0);
@@ -1494,6 +1564,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     // Remove file
     result = s3fs_unlink(from);
 
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1547,7 +1618,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
     // Remove file
     result = s3fs_unlink(from);
 
-    // Stats
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1583,7 +1654,7 @@ static int rename_large_object(const char* from, const char* to)
     // Remove file
     result = s3fs_unlink(from);
 
-    // Stats
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1613,6 +1684,7 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     }
     result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue);
 
+    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1620,19 +1692,18 @@ static int clone_directory_object(const char* from, const char* to, bool update_
 
 static int rename_directory(const char* from, const char* to)
 {
-    S3ObjList head;
+    S3ObjList    head;
     s3obj_list_t headlist;
-    std::string strfrom  = from ? from : "";   // from is without "/".
-    std::string strto    = to ? to : "";       // to is without "/" too.
-    std::string basepath = strfrom + "/";
-    std::string newpath;                       // should be from name(not used)
-    std::string nowcache;                      // now cache path(not used)
-    dirtype DirType;
-    bool normdir; 
+    std::string  strfrom  = from ? from : "";   // from is without "/".
+    std::string  strto    = to ? to : "";       // to is without "/" too.
+    std::string  basepath = strfrom + "/";
+    std::string  normpath;                      // normalized path for "from name"(not used)
+    objtype_t    ObjType;
+    bool         normdir; 
+    struct stat  stbuf;
+    int          result;
+    bool         is_dir;
     std::vector<mvnode> mvnodes;
-    struct stat stbuf;
-    int result;
-    bool is_dir;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
 
@@ -1640,8 +1711,8 @@ static int rename_directory(const char* from, const char* to)
     // Initiate and Add base directory into mvnode struct.
     //
     strto += "/";
-    if(0 == chk_dir_object_type(from, newpath, strfrom, nowcache, nullptr, &DirType) && dirtype::UNKNOWN != DirType){
-        if(dirtype::NOOBJ != DirType){
+    if(0 == chk_dir_object_type(strfrom.c_str(), normpath, strfrom, nullptr, &ObjType) && IS_DIR_OBJ(ObjType)){
+        if(objtype_t::DIR_NOT_EXIST_OBJECT != ObjType){
             normdir = false;
         }else{
             normdir = true;
@@ -1662,8 +1733,19 @@ static int rename_directory(const char* from, const char* to)
         return result; 
     }
     head.GetNameList(headlist);                                             // get name without "/".
-    StatCache::getStatCacheData()->GetNotruncateCache(basepath, headlist);  // Add notruncate file name from stat cache
-    S3ObjList::MakeHierarchizedList(headlist, false);                       // add hierarchized dir.
+
+    // [NOTE]
+    // If there are leaf paths that only exist in the Stat Cache,
+    // they will be merged here.
+    // This means that for newly created file, the Stat Cache(NoTruncate)
+    // will exist before the actual file is uploaded.
+    //
+    if(!StatCache::getStatCacheData()->GetChildStatList(basepath, headlist)){
+        S3FS_PRN_ERR("failed get child leaf list[path=%s], but continue...", basepath.c_str());
+    }
+
+    // add hierarchized dir.
+    S3ObjList::MakeHierarchizedList(headlist, false);
 
     s3obj_list_t::const_iterator liter;
     for(liter = headlist.cbegin(); headlist.cend() != liter; ++liter){
@@ -1673,18 +1755,20 @@ static int rename_directory(const char* from, const char* to)
         std::string etag      = head.GetETag((*liter).c_str());
 
         // Check subdirectory.
-        StatCache::getStatCacheData()->HasStat(from_name, etag.c_str()); // Check ETag
-        if(0 != get_object_attribute(from_name.c_str(), &stbuf, nullptr)){
-            S3FS_PRN_WARN("failed to get %s object attribute.", from_name.c_str());
-            continue;
+        if(!StatCache::getStatCacheData()->GetStat(from_name, &stbuf, etag.c_str())){    // Check ETag
+            // try to get stat directly(and cached it)
+            if(0 != get_object_attribute(from_name.c_str(), &stbuf, nullptr)){
+                S3FS_PRN_WARN("failed to get %s object attribute.", from_name.c_str());
+                continue;
+            }
         }
         if(S_ISDIR(stbuf.st_mode)){
             is_dir = true;
-            if(0 != chk_dir_object_type(from_name.c_str(), newpath, from_name, nowcache, nullptr, &DirType) || dirtype::UNKNOWN == DirType){
+            if(0 != chk_dir_object_type(from_name.c_str(), normpath, from_name, nullptr, &ObjType) || !IS_DIR_OBJ(ObjType)){
                 S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
                 continue;
             }
-            if(dirtype::NOOBJ != DirType){
+            if(objtype_t::DIR_NOT_EXIST_OBJECT != ObjType){
                 normdir = false;
             }else{
                 normdir = true;
@@ -1751,7 +1835,7 @@ static int rename_directory(const char* from, const char* to)
                     return result;
                 }
             }else{
-                // cache clear.
+                // remove stat cache
                 StatCache::getStatCacheData()->DelStat(mn_cur->old_path);
             }
         }
@@ -1793,6 +1877,7 @@ static int s3fs_rename(const char* _from, const char* _to)
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", to, result);
                 return result;
             }
+            // remove stat cache
             StatCache::getStatCacheData()->DelStat(from);
         }
     }
@@ -1836,13 +1921,12 @@ static int s3fs_link(const char* _from, const char* _to)
 static int s3fs_chmod(const char* _path, mode_t mode)
 {
     WTF8_ENCODE(path)
-    int result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
-    headers_t meta;
+    int         result;
+    std::string curpath;
+    std::string normpath;
+    headers_t   meta;
     struct stat stbuf;
-    dirtype nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][mode=%04o]", path, mode);
 
@@ -1854,34 +1938,36 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, &meta, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, &meta);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, &meta);
     }
     if(0 != result){
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+    if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -1891,12 +1977,12 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
         // normal object or directory object of newer version
-        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
         headers_t   updatemeta;
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-mode"]          = std::to_string(mode);
@@ -1912,24 +1998,39 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
+        if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
 
-                // If there is data in the Stats cache, update the Stats cache.
-                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
-
-                // [NOTE]
-                // There are cases where this function is called during the process of
-                // creating a new file (before uploading).
-                // In this case, a temporary cache exists in the Stat cache.
-                // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
-                //
-                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                // get current entity's meta headers
+                if(!ent->GetOrgMeta(meta)){
+                    S3FS_PRN_ERR("failed get original meta from fd entity object");
                     return -EIO;
+                }
+
+                // set stat structure
+                if(!convert_header_to_stat(normpath, meta, stbuf, false)){
+                    S3FS_PRN_ERR("failed convert headers to stat[path=%s]", normpath.c_str());
+                    return -EIO;
+                }
+
+                // update cache(if exists)
+                if(!StatCache::getStatCacheData()->UpdateStat(curpath, stbuf, meta)){
+                    // maybe cache is not found, so add new cache
+
+                    // check object type(if UNKNOWN, to symbolic link or file)
+                    if(is_symlink_fmt(meta)){
+                        ObjType = objtype_t::SYMLINK;
+                    }else if(is_reg_fmt(meta)){
+                        ObjType = objtype_t::FILE;
+                    }
+                    if(!StatCache::getStatCacheData()->AddStat(curpath, stbuf, meta, ObjType, true)){     // [NOTICE] notruncate = true
+                        S3FS_PRN_ERR("failed add new stat cache [path=%s]", curpath.c_str());
+                        return -EIO;
+                    }
                 }
             }
         }
@@ -1938,10 +2039,12 @@ static int s3fs_chmod(const char* _path, mode_t mode)
             merge_headers(meta, updatemeta, true);
 
             // upload meta directly.
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+            if(0 != (result = put_headers(curpath.c_str(), meta, true))){
                 return result;
             }
-            StatCache::getStatCacheData()->DelStat(nowcache);
+
+            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -1953,11 +2056,10 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 {
     WTF8_ENCODE(path)
     int         result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
+    std::string curpath;
+    std::string normpath;
     struct stat stbuf;
-    dirtype     nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][mode=%04o]", path, mode);
 
@@ -1970,11 +2072,11 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 
     // Get attributes
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, nullptr, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, nullptr, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, nullptr);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, nullptr);
     }
     if(0 != result){
         return result;
@@ -1983,22 +2085,24 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     if(S_ISDIR(stbuf.st_mode)){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
 
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -2008,7 +2112,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2017,8 +2121,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
-            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+        if(0 != (result = get_local_fent(autoent, &ent, curpath.c_str(), O_RDWR, true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", curpath.c_str());
             return result;
         }
 
@@ -2031,10 +2135,12 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
-            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
     }
     S3FS_MALLOCTRIM(0);
   
@@ -2044,13 +2150,12 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
 static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
 {
     WTF8_ENCODE(path)
-    int result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
-    headers_t meta;
+    int         result;
+    std::string curpath;
+    std::string normpath;
+    headers_t   meta;
     struct stat stbuf;
-    dirtype nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -2060,43 +2165,44 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     if(0 != (result = check_object_owner(path, &stbuf))){
         return result;
     }
-
     if(static_cast<uid_t>(-1) == uid){
         uid = stbuf.st_uid;
     }
     if(static_cast<gid_t>(-1) == gid){
         gid = stbuf.st_gid;
     }
+
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, &meta, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, &meta);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, &meta);
     }
     if(0 != result){
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+    if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
-
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -2106,11 +2212,11 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
             return result;
         }
     }else{
-        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
         headers_t   updatemeta;
         updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
         updatemeta["x-amz-meta-uid"]           = std::to_string(uid);
@@ -2127,24 +2233,39 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
+        if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
 
-                // If there is data in the Stats cache, update the Stats cache.
-                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
-
-                // [NOTE]
-                // There are cases where this function is called during the process of
-                // creating a new file (before uploading).
-                // In this case, a temporary cache exists in the Stat cache.
-                // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
-                //
-                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                // get current entity's meta headers
+                if(!ent->GetOrgMeta(meta)){
+                    S3FS_PRN_ERR("failed get original meta from fd entity object");
                     return -EIO;
+                }
+
+                // set stat structure
+                if(!convert_header_to_stat(normpath, meta, stbuf, false)){
+                    S3FS_PRN_ERR("failed convert headers to stat[path=%s]", normpath.c_str());
+                    return -EIO;
+                }
+
+                // update cache(if exists)
+                if(!StatCache::getStatCacheData()->UpdateStat(curpath, stbuf, meta)){
+                    // maybe cache is not found, so add new cache
+
+                    // check object type(if UNKNOWN, to symbolic link or file)
+                    if(is_symlink_fmt(meta)){
+                        ObjType = objtype_t::SYMLINK;
+                    }else if(is_reg_fmt(meta)){
+                        ObjType = objtype_t::FILE;
+                    }
+                    if(!StatCache::getStatCacheData()->AddStat(curpath, stbuf, meta, ObjType, true)){     // [NOTICE] notruncate = true
+                        S3FS_PRN_ERR("failed add new stat cache [path=%s]", curpath.c_str());
+                        return -EIO;
+                    }
                 }
             }
         }
@@ -2153,10 +2274,12 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
             merge_headers(meta, updatemeta, true);
 
             // upload meta directly.
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+            if(0 != (result = put_headers(curpath.c_str(), meta, true))){
                 return result;
             }
-            StatCache::getStatCacheData()->DelStat(nowcache);
+
+            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }
     S3FS_MALLOCTRIM(0);
@@ -2168,11 +2291,10 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 {
     WTF8_ENCODE(path)
     int         result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
+    std::string curpath;
+    std::string normpath;
     struct stat stbuf;
-    dirtype     nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
 
@@ -2182,7 +2304,6 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     if(0 != (result = check_object_owner(path, &stbuf))){
         return result;
     }
-
     if(static_cast<uid_t>(-1) == uid){
         uid = stbuf.st_uid;
     }
@@ -2192,11 +2313,11 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
 
     // Get attributes
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, nullptr, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, nullptr, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, nullptr);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, nullptr);
     }
     if(0 != result){
         return result;
@@ -2205,22 +2326,24 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     if(S_ISDIR(stbuf.st_mode)){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
 
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -2230,7 +2353,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2239,8 +2362,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
-            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+        if(0 != (result = get_local_fent(autoent, &ent, curpath.c_str(), O_RDWR, true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", curpath.c_str());
             return result;
         }
 
@@ -2254,10 +2377,12 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
   
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
-            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
     }
     S3FS_MALLOCTRIM(0);
   
@@ -2286,14 +2411,13 @@ static int update_mctime_parent_directory(const char* _path)
     WTF8_ENCODE(path)
     int             result;
     std::string     parentpath;     // parent directory path
-    std::string     nowpath;        // now directory object path("dir" or "dir/" or "xxx_$folder$", etc)
-    std::string     newpath;        // directory path for the current version("dir/")
-    std::string     nowcache;
+    std::string     curpath;        // current directory object path("dir" or "dir/" or "xxx_$folder$", etc)
+    std::string     normpath;       // normalized directory path(ex. "dir/")
     headers_t       meta;
     struct stat     stbuf;
     struct timespec mctime;
     struct timespec atime;
-    dirtype         nDirType = dirtype::UNKNOWN;
+    objtype_t       ObjType = objtype_t::UNKNOWN;
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
@@ -2301,7 +2425,7 @@ static int update_mctime_parent_directory(const char* _path)
     parentpath = mydirname(path);
 
     // check & get directory type
-    if(0 != (result = chk_dir_object_type(parentpath.c_str(), newpath, nowpath, nowcache, &meta, &nDirType))){
+    if(0 != (result = chk_dir_object_type(parentpath.c_str(), normpath, curpath, &meta, &ObjType))){
         return result;
     }
 
@@ -2329,33 +2453,35 @@ static int update_mctime_parent_directory(const char* _path)
         atime = mctime;
     }
 
-    if(nocopyapi || IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(parentpath.c_str())){
+    if(nocopyapi || NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(parentpath.c_str())){
         // Should rebuild directory object(except new type)
         // Need to remove old dir("dir" etc) and make new dir("dir/")
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(parentpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
 
         // At first, remove directory old object
-        if(!nowpath.empty()){
-            if(0 != (result = remove_old_type_dir(nowpath, nDirType))){
+        if(!curpath.empty()){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        if(!nowcache.empty()){
-            StatCache::getStatCacheData()->DelStat(nowcache);
+
+        if(!normpath.empty()){
+            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mctime, mctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mctime, mctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
-        std::string strSourcePath              = (mount_prefix.empty() && "/" == nowpath) ? "//" : nowpath;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
         headers_t   updatemeta;
         updatemeta["x-amz-meta-mtime"]         = str(mctime);
         updatemeta["x-amz-meta-ctime"]         = str(mctime);
@@ -2366,10 +2492,12 @@ static int update_mctime_parent_directory(const char* _path)
         merge_headers(meta, updatemeta, true);
 
         // upload meta for parent directory.
-        if(0 != (result = put_headers(nowpath.c_str(), meta, true))){
+        if(0 != (result = put_headers(curpath.c_str(), meta, true))){
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2379,13 +2507,12 @@ static int update_mctime_parent_directory(const char* _path)
 static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 {
     WTF8_ENCODE(path)
-    int result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
-    headers_t meta;
+    int         result;
+    std::string curpath;
+    std::string normpath;
+    headers_t   meta;
     struct stat stbuf;
-    dirtype nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
@@ -2413,42 +2540,43 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     struct timespec mtime = handle_utimens_special_values(ts[1], now, ts_mtime);
 
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, &meta, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, &meta);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, &meta);
     }
     if(0 != result){
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
+    if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
-
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
-        std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+        std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
         headers_t   updatemeta;
         updatemeta["x-amz-meta-mtime"]         = str(mtime);
         updatemeta["x-amz-meta-ctime"]         = str(ctime);
@@ -2466,7 +2594,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         FdEntity*    ent;
         bool         need_put_header = true;
         bool         keep_mtime      = false;
-        if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
+        if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
@@ -2476,22 +2604,32 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                     return -EIO;
                 }
 
-                // If there is data in the Stats cache, update the Stats cache.
-                StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
-
-                // [NOTE]
-                // There are cases where this function is called during the process of
-                // creating a new file (before uploading).
-                // In this case, a temporary cache exists in the Stat cache.(see s3fs_create)
-                // So we need to update the cache, if it exists.
-                //
-                // Previously, the process of creating a new file was to update the
-                // file content after first uploading the file, but now the file is
-                // not created until flushing.
-                // So we need to create a temporary Stat cache for it.
-                //
-                if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+                // get current entity's meta headers
+                if(!ent->GetOrgMeta(meta)){
+                    S3FS_PRN_ERR("failed get original meta from fd entity object");
                     return -EIO;
+                }
+
+                // set stat structure
+                if(!convert_header_to_stat(normpath, meta, stbuf, false)){
+                    S3FS_PRN_ERR("failed convert headers to stat[path=%s]", normpath.c_str());
+                    return -EIO;
+                }
+
+                // update cache(if exists)
+                if(!StatCache::getStatCacheData()->UpdateStat(curpath, stbuf, meta)){
+                    // maybe cache is not found, so add new cache
+
+                    // check object type(if UNKNOWN, to symbolic link or file)
+                    if(is_symlink_fmt(meta)){
+                        ObjType = objtype_t::SYMLINK;
+                    }else if(is_reg_fmt(meta)){
+                        ObjType = objtype_t::FILE;
+                    }
+                    if(!StatCache::getStatCacheData()->AddStat(curpath, stbuf, meta, ObjType, true)){     // [NOTICE] notruncate = true
+                        S3FS_PRN_ERR("failed add new stat cache [path=%s]", curpath.c_str());
+                        return -EIO;
+                    }
                 }
 
             }else{
@@ -2510,10 +2648,12 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             merge_headers(meta, updatemeta, true);
 
             // upload meta directly.
-            if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+            if(0 != (result = put_headers(curpath.c_str(), meta, true))){
                 return result;
             }
-            StatCache::getStatCacheData()->DelStat(nowcache);
+
+            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+            StatCache::getStatCacheData()->DelStat(normpath);
 
             if(keep_mtime){
                 if(!ent->SetHoldingMtime(mtime)){
@@ -2531,11 +2671,10 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 {
     WTF8_ENCODE(path)
     int         result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
+    std::string curpath;
+    std::string normpath;
     struct stat stbuf;
-    dirtype     nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
@@ -2564,11 +2703,11 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
 
     // Get attributes
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, nullptr, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, nullptr, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, nullptr);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, nullptr);
     }
     if(0 != result){
         return result;
@@ -2577,25 +2716,27 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     if(S_ISDIR(stbuf.st_mode)){
         std::string xattrvalue;
         const char* pxattrvalue;
-        if(get_meta_xattr_value(path, xattrvalue)){
+        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
             pxattrvalue = xattrvalue.c_str();
         }else{
             pxattrvalue = nullptr;
         }
 
-        if(IS_REPLACEDIR(nDirType)){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
             return result;
         }
     }else{
@@ -2604,29 +2745,31 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // open & load
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(0 != (result = get_local_fent(autoent, &ent, strpath.c_str(), O_RDWR, true))){
-            S3FS_PRN_ERR("could not open and read file(%s)", strpath.c_str());
+        if(0 != (result = get_local_fent(autoent, &ent, curpath.c_str(), O_RDWR, true))){
+            S3FS_PRN_ERR("could not open and read file(%s)", curpath.c_str());
             return result;
         }
 
         // set mtime/ctime
         if(0 != (result = ent->SetMCtime(mtime, ctime))){
-            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", strpath.c_str(), result);
+            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
 
         // set atime
         if(0 != (result = ent->SetAtime(atime))){
-            S3FS_PRN_ERR("could not set atime to file(%s): result=%d", strpath.c_str(), result);
+            S3FS_PRN_ERR("could not set atime to file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
 
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
-            S3FS_PRN_ERR("could not upload file(%s): result=%d", strpath.c_str(), result);
+            S3FS_PRN_ERR("could not upload file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
     }
     S3FS_MALLOCTRIM(0);
 
@@ -2701,6 +2844,8 @@ static int s3fs_truncate(const char* _path, off_t size)
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
+
+            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
             StatCache::getStatCacheData()->DelStat(path);
         }
 #endif
@@ -2728,6 +2873,8 @@ static int s3fs_truncate(const char* _path, off_t size)
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             return result;
         }
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(path);
     }
     S3FS_MALLOCTRIM(0);
@@ -2756,6 +2903,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     //
     if(StatCache::getStatCacheData()->HasStat(path)){
         if(!FdManager::HasOpenEntityFd(path)){
+            // remove stat cache
             StatCache::getStatCacheData()->DelStat(path);
         }
     }
@@ -2810,6 +2958,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
     set_stat_to_timespec(st, stat_time_type::MTIME, st_mctime);
 
     if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, st_mctime, fi->flags, false, true, false))){
+        // remove stat cache
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
@@ -2825,6 +2974,8 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
         if(0 != (result = ent->RowFlush(autoent.GetPseudoFd(), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
+
+            // remove stat cache
             StatCache::getStatCacheData()->DelStat(path);
             return result;
         }
@@ -2886,6 +3037,8 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
         int flushres;
         if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
+
+            // remove stat cache
             StatCache::getStatCacheData()->DelStat(path);
             return flushres;
         }
@@ -3075,7 +3228,8 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         // [NOTE]
         // All opened file's stats is cached with no truncate flag.
         // Thus we unset it here.
-        StatCache::getStatCacheData()->ChangeNoTruncateFlag(path, false);
+        //
+        StatCache::getStatCacheData()->ClearNoTruncateFlag(std::string(path));
 
         // [NOTICE]
         // At first, we remove stats cache.
@@ -3130,14 +3284,26 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     return result;
 }
 
-static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
+// [NOTE]
+// strpath must end with '/'.
+//
+static int readdir_multi_head(const std::string& strpath, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
-    S3FS_PRN_INFO1("[path=%s][head=<%s>][filler=%p]", path, head.IsEmpty() ? "empty" : "not empty", filler);
+    S3FS_PRN_INFO1("[path=%s][head=<%s>][filler=%p]", strpath.c_str(), head.IsEmpty() ? "empty" : "not empty", filler);
 
     // Make base path list.
-    s3obj_list_t  headlist;
-    head.GetNameList(headlist, true, false);                                        // get name with "/".
-    StatCache::getStatCacheData()->GetNotruncateCache(path, headlist); // Add notruncate file name from stat cache
+    s3obj_type_map_t headmap;
+    head.GetNameMap(headmap, true, false);                                          // get name with "/".
+
+    // [NOTE]
+    // If there are leaf paths that only exist in the Stat Cache,
+    // they will be merged here.
+    // This means that for newly created file, the Stat Cache(NoTruncate)
+    // will exist before the actual file is uploaded.
+    //
+    if(!StatCache::getStatCacheData()->GetChildStatMap(strpath, headmap)){
+        S3FS_PRN_ERR("failed get child leaf list[path=%s], but continue...", strpath.c_str());
+    }
 
     // Initialize SyncFiller object
     SyncFiller syncfiller(buf, filler);
@@ -3151,15 +3317,15 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
     s3obj_list_t notfound_list;
 
     // Make single head request(with max).
-    for(auto iter = headlist.cbegin(); headlist.cend() != iter; ++iter){
-        std::string disppath = path + (*iter);
-        std::string etag     = head.GetETag((*iter).c_str());
+    for(auto iter = headmap.cbegin(); headmap.cend() != iter; ++iter){
+        std::string disppath = strpath + iter->first;
+        std::string etag     = head.GetETag(iter->first.c_str());
         struct stat st;
 
         // [NOTE]
         // If there is a cache hit, file stat is filled by filler at here.
         //
-        if(StatCache::getStatCacheData()->HasStat(disppath, &st, etag.c_str())){
+        if(StatCache::getStatCacheData()->GetStat(disppath, &st, etag.c_str())){
             std::string bpath = mybasename(disppath);
             if(use_wtf8){
                 bpath = s3fs_wtf8_decode(bpath);
@@ -3170,7 +3336,7 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
 
         // set one head request
         int result;
-        if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, req_result, multi_head_sem))){
+        if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, iter->second, req_result, multi_head_sem))){
             return result;
         }
         ++req_count;
@@ -3213,24 +3379,24 @@ static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf
             const std::string& dirpath = *reiter;
             if(-ENOTEMPTY == (dir_result = directory_empty(dirpath.c_str()))){
                 // Found objects under the path, so the path is directory.
+                std::string bpath = mybasename(dirpath);
+                if(use_wtf8){
+                    bpath = s3fs_wtf8_decode(bpath);
+                }
 
-                // Add stat cache
-                if(StatCache::getStatCacheData()->AddStat(dirpath, dummy_header, true)){    // set forcedir=true
-                    // Get stats from stats cache(for converting from meta), and fill
-                    std::string bpath = mybasename(dirpath);
-                    if(use_wtf8){
-                        bpath = s3fs_wtf8_decode(bpath);
-                    }
-
-                    struct stat st;
-                    if(StatCache::getStatCacheData()->GetStat(dirpath, &st)){
-                        syncfiller.Fill(bpath, &st, 0);
-                    }else{
-                        S3FS_PRN_INFO2("Could not find %s directory(no dir object) in stat cache.", dirpath.c_str());
-                        syncfiller.Fill(bpath, nullptr, 0);
-                    }
+                // Set stat structure
+                struct stat st;
+                if(!convert_header_to_stat(dirpath, dummy_header, st, true)){       // forcedir=true
+                    S3FS_PRN_ERR("failed convert headers to stat[path=%s], so fill empty stat.", dirpath.c_str());
+                    syncfiller.Fill(bpath, nullptr, 0);
                 }else{
-                    S3FS_PRN_ERR("failed adding stat cache [path=%s], but dontinue...", dirpath.c_str());
+                    // Add stat cache
+                    if(StatCache::getStatCacheData()->AddStat(dirpath, st, dummy_header, objtype_t::DIR_NOT_EXIST_OBJECT, false)){
+                        S3FS_PRN_ERR("failed adding stat cache [path=%s], so fill empty stat.", dirpath.c_str());
+                        syncfiller.Fill(bpath, nullptr, 0);
+                    }else{
+                        syncfiller.Fill(bpath, &st, 0);
+                    }
                 }
             }else{
                 S3FS_PRN_WARN("%s object does not have any object under it(errno=%d),", reiter->c_str(), dir_result);
@@ -3270,7 +3436,7 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     if(strcmp(path, "/") != 0){
         strpath += "/";
     }
-    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
+    if(0 != (result = readdir_multi_head(strpath, head, buf, filler))){
         S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
     }
     S3FS_MALLOCTRIM(0);
@@ -3657,32 +3823,32 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 }
 
 #if defined(__APPLE__)
-static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position)
+static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags, uint32_t position)
 #else
-static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags)
+static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags)
 #endif
 {
-    FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
-
     if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
     }
 
 #if defined(__APPLE__)
-    if (position != 0) {
+    if(position != 0){
         // No resource fork support
         return -EINVAL;
     }
 #endif
 
+    WTF8_ENCODE(path)
     int         result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
+    std::string curpath;
+    std::string normpath;
     headers_t   meta;
     struct stat stbuf;
-    dirtype     nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
+
+    FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -3692,27 +3858,29 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, &meta, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, &meta);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, &meta);
     }
     if(0 != result){
         return result;
     }
 
-    if(S_ISDIR(stbuf.st_mode) && (IS_REPLACEDIR(nDirType) || IS_CREATE_MP_STAT(path))){
-        if(IS_REPLACEDIR(nDirType)){
+    if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
+        if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
 
             // At first, remove directory old object
-            if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+            if(0 != (result = remove_old_type_dir(curpath, ObjType))){
                 return result;
             }
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -3722,17 +3890,16 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
             return result;
         }
 
         // need to set xattr header for directory.
-        strpath  = newpath;
-        nowcache = strpath;
+        curpath  = normpath;
     }
 
     // set xattr all object
-    std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+    std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
     headers_t   updatemeta;
     updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();
     updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
@@ -3747,7 +3914,7 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
+    if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
         // get xattr and make new xattr
         std::string strxattr;
         if(ent->GetXattr(strxattr)){
@@ -3770,17 +3937,32 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
             S3FS_PRN_INFO("meta pending until upload is complete");
             need_put_header = false;
 
-            // If there is data in the Stats cache, update the Stats cache.
-            StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
-
-            // [NOTE]
-            // There are cases where this function is called during the process of
-            // creating a new file (before uploading).
-            // In this case, a temporary cache exists in the Stat cache.
-            // So we need to update the cache, if it exists. (see. s3fs_create and s3fs_utimens)
-            //
-            if(!StatCache::getStatCacheData()->AddStat(strpath, updatemeta, false, true)){
+            // get current entity's meta headers
+            if(!ent->GetOrgMeta(meta)){
+                S3FS_PRN_ERR("failed get original meta from fd entity object");
                 return -EIO;
+            }
+
+            // set stat structure
+            if(!convert_header_to_stat(curpath, meta, stbuf, false)){
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]", curpath.c_str());
+                return -EIO;
+            }
+
+            // update cache(if exists)
+            if(!StatCache::getStatCacheData()->UpdateStat(curpath, stbuf, meta)){
+                // maybe cache is not found, so add new cache
+
+                // check object type(if UNKNOWN, to symbolic link or file)
+                if(is_symlink_fmt(meta)){
+                    ObjType = objtype_t::SYMLINK;
+                }else if(is_reg_fmt(meta)){
+                    ObjType = objtype_t::FILE;
+                }
+                if(!StatCache::getStatCacheData()->AddStat(curpath, stbuf, meta, ObjType, true)){     // [NOTICE] notruncate = true
+                    S3FS_PRN_ERR("failed add new stat cache [path=%s]", curpath.c_str());
+                    return -EIO;
+                }
             }
         }
     }
@@ -3794,12 +3976,13 @@ static int s3fs_setxattr(const char* path, const char* name, const char* value, 
         merge_headers(meta, updatemeta, true);
 
         // upload meta directly.
-        if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+        if(0 != (result = put_headers(curpath.c_str(), meta, true))){
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
-    }
 
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
+    }
     return 0;
 }
 
@@ -3937,22 +4120,22 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     return static_cast<int>(total);
 }
 
-static int s3fs_removexattr(const char* path, const char* name)
+static int s3fs_removexattr(const char* _path, const char* name)
 {
-    FUSE_CTX_INFO("[path=%s][name=%s]", path, name);
-
-    if(!path || !name){
+    if(!_path || !name){
         return -EIO;
     }
 
+    WTF8_ENCODE(path)
     int         result;
-    std::string strpath;
-    std::string newpath;
-    std::string nowcache;
+    std::string curpath;
+    std::string normpath;
     headers_t   meta;
     xattrs_t    xattrs;
     struct stat stbuf;
-    dirtype     nDirType = dirtype::UNKNOWN;
+    objtype_t   ObjType = objtype_t::UNKNOWN;
+
+    FUSE_CTX_INFO("[path=%s][name=%s]", path, name);
 
     if(0 == strcmp(path, "/")){
         S3FS_PRN_ERR("Could not change mode for mount point.");
@@ -3966,11 +4149,11 @@ static int s3fs_removexattr(const char* path, const char* name)
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        result = chk_dir_object_type(path, newpath, strpath, nowcache, &meta, &nDirType);
+        result = chk_dir_object_type(path, normpath, curpath, &meta, &ObjType);
     }else{
-        strpath  = path;
-        nowcache = strpath;
-        result   = get_object_attribute(strpath.c_str(), nullptr, &meta);
+        curpath  = path;
+        normpath = curpath;
+        result   = get_object_attribute(curpath.c_str(), nullptr, &meta);
     }
     if(0 != result){
         return result;
@@ -3998,15 +4181,17 @@ static int s3fs_removexattr(const char* path, const char* name)
 
     S3FS_PRN_DBG("Reset xattrs(after delete %s key) = %s", name, raw_build_xattrs(xattrs).c_str());
 
-    if(S_ISDIR(stbuf.st_mode) && IS_REPLACEDIR(nDirType)){
+    if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
         // Should rebuild directory object(except new type)
         // Need to remove old dir("dir" etc) and make new dir("dir/")
 
         // At first, remove directory old object
-        if(0 != (result = remove_old_type_dir(strpath, nDirType))){
+        if(0 != (result = remove_old_type_dir(curpath, ObjType))){
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
+
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
 
         // Make new directory object("dir/")
         struct timespec ts_atime;
@@ -4016,17 +4201,16 @@ static int s3fs_removexattr(const char* path, const char* name)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(newpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
             return result;
         }
 
         // need to set xattr header for directory.
-        strpath  = newpath;
-        nowcache = strpath;
+        curpath  = normpath;
     }
 
     // set xattr all object
-    std::string strSourcePath              = (mount_prefix.empty() && "/" == strpath) ? "//" : strpath;
+    std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
     headers_t   updatemeta;
     updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
@@ -4045,7 +4229,7 @@ static int s3fs_removexattr(const char* path, const char* name)
     AutoFdEntity autoent;
     FdEntity*    ent;
     bool         need_put_header = true;
-    if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
+    if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
         if(ent->MergeOrgMeta(updatemeta)){
             // meta is changed, but now uploading.
             //
@@ -4058,8 +4242,33 @@ static int s3fs_removexattr(const char* path, const char* name)
             S3FS_PRN_INFO("meta pending until upload is complete");
             need_put_header = false;
 
-            // If there is data in the Stats cache, update the Stats cache.
-            StatCache::getStatCacheData()->UpdateMetaStats(strpath, updatemeta);
+            // get current entity's meta headers
+            if(!ent->GetOrgMeta(meta)){
+                S3FS_PRN_ERR("failed get original meta from fd entity object");
+                return -EIO;
+            }
+
+            // set stat structure
+            if(!convert_header_to_stat(curpath, meta, stbuf, false)){
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]", curpath.c_str());
+                return -EIO;
+            }
+
+            // update cache(if exists)
+            if(!StatCache::getStatCacheData()->UpdateStat(curpath, stbuf, meta)){
+                // maybe cache is not found, so add new cache
+
+                // check object type(if UNKNOWN, to symbolic link or file)
+                if(is_symlink_fmt(meta)){
+                    ObjType = objtype_t::SYMLINK;
+                }else if(is_reg_fmt(meta)){
+                    ObjType = objtype_t::FILE;
+                }
+                if(!StatCache::getStatCacheData()->AddStat(curpath, stbuf, meta, ObjType, true)){     // [NOTICE] notruncate = true
+                    S3FS_PRN_ERR("failed add new stat cache [path=%s]", curpath.c_str());
+                    return -EIO;
+                }
+            }
         }
     }
     if(need_put_header){
@@ -4085,19 +4294,19 @@ static int s3fs_removexattr(const char* path, const char* name)
                 meta.erase(miter);
             }
         }
-
         merge_headers(meta, updatemeta, true);
 
         // upload meta directly.
-        if(0 != (result = put_headers(strpath.c_str(), meta, true))){
+        if(0 != (result = put_headers(curpath.c_str(), meta, true))){
             return result;
         }
-        StatCache::getStatCacheData()->DelStat(nowcache);
-    }
 
+        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        StatCache::getStatCacheData()->DelStat(normpath);
+    }
     return 0;
 }
-   
+
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
 // There's no way to pass an exit status to the high-level event loop API, so 
@@ -4986,23 +5195,23 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         else if(is_prefix(arg, "stat_cache_expire=")){
             auto expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), 10));
-            StatCache::getStatCacheData()->SetExpireTime(expr_time);
+            StatCacheNode::SetExpireTime(expr_time);
             return 0;
         }
         // [NOTE]
         // This option is for compatibility old version.
         else if(is_prefix(arg, "stat_cache_interval_expire=")){
             auto expr_time = static_cast<time_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10));
-            StatCache::getStatCacheData()->SetExpireTime(expr_time, true);
+            StatCacheNode::SetExpireTime(expr_time, true);
             return 0;
         }
         else if(0 == strcmp(arg, "enable_negative_cache") || 0 == strcmp(arg, "enable_noobj_cache")){
             S3FS_PRN_WARN("enable_negative_cache(enable_noobj_cache) is enabled by default and a future version will remove this option.");
-            StatCache::getStatCacheData()->EnableNegativeCache();
+            StatCacheNode::EnableNegativeCache();
             return 0;
         }
         else if(0 == strcmp(arg, "disable_negative_cache") || 0 == strcmp(arg, "disable_noobj_cache")){
-            StatCache::getStatCacheData()->DisableNegativeCache();
+            StatCacheNode::DisableNegativeCache();
             return 0;
         }
         else if(0 == strcmp(arg, "nodnscache")){
