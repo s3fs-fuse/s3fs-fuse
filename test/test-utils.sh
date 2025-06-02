@@ -357,6 +357,9 @@ function get_disk_avail_size() {
 }
 
 function aws_cli() {
+    # Remove any stale references to existing command
+    hash -r aws
+
     local FLAGS=""
     if [ -n "${S3FS_PROFILE}" ]; then
         FLAGS="--profile ${S3FS_PROFILE}"

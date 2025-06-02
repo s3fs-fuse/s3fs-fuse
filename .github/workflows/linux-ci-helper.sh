@@ -166,14 +166,12 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
 
     INSTALL_PACKAGES="automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-21-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr procps unzip"
 
-elif [ "${CONTAINER_FULLNAME}" = "alpine:3.21" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
     PACKAGE_MANAGER_BIN="apk"
     PACKAGE_UPDATE_OPTIONS="update --no-progress"
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
 
-    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk21 perl-test-harness-utils aws-cli"
-
-    AWSCLI_DIRECT_INSTALL=0
+    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl python3 coreutils procps attr sed mailcap openjdk21 perl-test-harness-utils"
 
 else
     echo "No container configured for: ${CONTAINER_FULLNAME}"
