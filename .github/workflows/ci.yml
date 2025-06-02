@@ -138,10 +138,9 @@ jobs:
 
       - name: Install awscli2
         run: |
-          cd /tmp
           # TODO: pin version to work around https://github.com/gaul/s3proxy/issues/760
-          curl "https://awscli.amazonaws.com/AWSCLIV2-2.22.35.pkg" -o "AWSCLIV2.pkg"
-          sudo installer -pkg AWSCLIV2.pkg -target /
+          curl "https://awscli.amazonaws.com/AWSCLIV2-2.22.35.pkg" -o /tmp/AWSCLIV2.pkg
+          sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
 
       - name: Build
         run: |
