@@ -2363,7 +2363,7 @@ bool S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
         return false;
     }
 
-    S3FS_PRN_INFO3("computing signature [%s] [%s] [%s] [%s]", op.c_str(), server_path.c_str(), query_string.c_str(), payload_hash.c_str());
+    S3FS_PRN_DBG("computing signature [%s] [%s] [%s] [%s]", op.c_str(), server_path.c_str(), query_string.c_str(), payload_hash.c_str());
     std::string strdate;
     std::string date8601;
     get_date_sigv3(strdate, date8601);

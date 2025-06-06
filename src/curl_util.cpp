@@ -210,7 +210,7 @@ bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::strin
 
 std::string prepare_url(const char* url)
 {
-    S3FS_PRN_INFO3("URL is %s", url);
+    S3FS_PRN_DBG("URL is %s", url);
 
     std::string uri;
     std::string hostname;
@@ -243,7 +243,7 @@ std::string prepare_url(const char* url)
 
     url_str = uri + hostname + path;
 
-    S3FS_PRN_INFO3("URL changed is %s", url_str.c_str());
+    S3FS_PRN_DBG("URL changed is %s", url_str.c_str());
 
     return url_str;
 }
