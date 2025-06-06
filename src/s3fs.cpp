@@ -3770,11 +3770,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
 #endif
 {
-#if defined(__APPLE__)
     FUSE_CTX_DBG("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
-#else
-    FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
-#endif
 
     if(!path || !name){
         return -EIO;
