@@ -662,7 +662,9 @@ bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(force_load){
-        SetAllStatusUnloaded();
+        if(!SetAllStatusUnloaded()){
+            return false;
+        }
     }
     //
     // TODO: possibly do background for delay loading
