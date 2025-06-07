@@ -26,6 +26,7 @@
 #include "common.h"
 #include "metaheader.h"
 #include "string_util.h"
+#include "s3fs_util.h"
 
 static constexpr struct timespec DEFAULT_TIMESPEC = {-1, 0};
 
@@ -205,6 +206,60 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
     return mode;
 }
 
+// [NOTE]
+// Gets a only FMT bit in mode from meta headers.
+// The processing is almost the same as get_mode().
+// This function is intended to be used from get_object_attribute().
+//
+static mode_t convert_meta_to_mode_fmt(const headers_t& meta)
+{
+    mode_t mode = 0;
+    bool   isS3sync = false;
+    headers_t::const_iterator iter;
+
+    if(meta.cend() != (iter = meta.find("x-amz-meta-mode"))){
+        mode = get_mode((*iter).second.c_str());
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
+        mode = get_mode((*iter).second.c_str());
+        isS3sync = true;
+    }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
+        mode = get_mode((*iter).second.c_str(), 8);
+    }
+
+    if(!(mode & S_IFMT)){
+        if(!isS3sync){
+            if(meta.cend() != (iter = meta.find("Content-Type"))){
+                std::string strConType = (*iter).second;
+                // Leave just the mime type, remove any optional parameters (eg charset)
+                std::string::size_type pos = strConType.find(';');
+                if(std::string::npos != pos){
+                    strConType.erase(pos);
+                }
+                if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
+                    // Nextcloud uses this MIME type for directory objects when mounting bucket as external Storage
+                    mode |= S_IFDIR;
+                }
+            }
+        }
+    }
+    return (mode & S_IFMT);
+}
+
+bool is_reg_fmt(const headers_t& meta)
+{
+    return S_ISREG(convert_meta_to_mode_fmt(meta));
+}
+
+bool is_symlink_fmt(const headers_t& meta)
+{
+    return S_ISLNK(convert_meta_to_mode_fmt(meta));
+}
+
+bool is_dir_fmt(const headers_t& meta)
+{
+    return S_ISDIR(convert_meta_to_mode_fmt(meta));
+}
+
 uid_t get_uid(const char *s)
 {
     return static_cast<uid_t>(cvt_strtoofft(s, /*base=*/ 0));
@@ -327,6 +382,72 @@ bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexis
         }
     }
     return added;
+}
+
+bool convert_header_to_stat(const std::string& strpath, const headers_t& meta, struct stat& stbuf, bool forcedir)
+{
+    stbuf = {};
+
+    // set hard link count always 1
+    stbuf.st_nlink = 1; // see fuse FAQ
+
+    // mode
+    stbuf.st_mode = get_mode(meta, strpath, true, forcedir);
+
+    // blocks
+    if(S_ISREG(stbuf.st_mode)){
+        stbuf.st_blocks = get_blocks(stbuf.st_size);
+    }
+    stbuf.st_blksize = 4096;
+
+    // mtime
+    struct timespec mtime = get_mtime(meta);
+    if(stbuf.st_mtime < 0){
+        stbuf.st_mtime = 0L;
+    }else{
+        if(mtime.tv_sec < 0){
+            mtime.tv_sec  = 0;
+            mtime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(stbuf, stat_time_type::MTIME, mtime);
+    }
+
+    // ctime
+    struct timespec ctime = get_ctime(meta);
+    if(stbuf.st_ctime < 0){
+        stbuf.st_ctime = 0L;
+    }else{
+        if(ctime.tv_sec < 0){
+            ctime.tv_sec  = 0;
+            ctime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(stbuf, stat_time_type::CTIME, ctime);
+    }
+
+    // atime
+    struct timespec atime = get_atime(meta);
+    if(stbuf.st_atime < 0){
+        stbuf.st_atime = 0L;
+    }else{
+        if(atime.tv_sec < 0){
+            atime.tv_sec  = 0;
+            atime.tv_nsec = 0;
+        }
+        set_timespec_to_stat(stbuf, stat_time_type::ATIME, atime);
+    }
+
+    // size
+    if(S_ISDIR(stbuf.st_mode)){
+        stbuf.st_size = 4096;
+    }else{
+        stbuf.st_size = get_size(meta);
+    }
+
+    // uid/gid
+    stbuf.st_uid = get_uid(meta);
+    stbuf.st_gid = get_gid(meta);
+
+    return true;
 }
 
 /*
