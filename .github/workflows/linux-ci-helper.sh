@@ -197,14 +197,9 @@ java -version
 if [ "${AWSCLI_DIRECT_INSTALL}" -eq 1 ]; then
     echo "${PRGNAME} [INFO] Install awscli2 package."
 
-    CURRENT_DIR=$(pwd)
-    cd /tmp || exit 1
-
-    curl "${AWSCLI_URI}" -o "${AWSCLI_ZIP_FILE}"
-    unzip  "${AWSCLI_ZIP_FILE}"
-    ./aws/install
-
-    cd "${CURRENT_DIR}" || exit 1
+    curl "${AWSCLI_URI}" -o "/tmp/${AWSCLI_ZIP_FILE}"
+    unzip "/tmp/${AWSCLI_ZIP_FILE}" -d /tmp
+    /tmp/aws/install
 fi
 
 #-----------------------------------------------------------
