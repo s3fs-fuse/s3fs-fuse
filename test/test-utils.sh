@@ -62,12 +62,10 @@ if [ "$(uname)" = "Darwin" ]; then
     export STDBUF_BIN="gstdbuf"
     export TRUNCATE_BIN="gtruncate"
     export SED_BIN="gsed"
-    export BASE64_BIN="gbase64"
 else
     export STDBUF_BIN="stdbuf"
     export TRUNCATE_BIN="truncate"
     export SED_BIN="sed"
-    export BASE64_BIN="base64"
 fi
 export SED_BUFFER_FLAG="--unbuffered"
 
@@ -397,12 +395,7 @@ function make_random_string() {
     else
         local END_POS=8
     fi
-    if [ "$(uname)" = "Darwin" ]; then
-        local BASE64_OPT="--break=0"
-    else
-        local BASE64_OPT="--wrap=0"
-    fi
-    "${BASE64_BIN}" "${BASE64_OPT}" < /dev/urandom 2>/dev/null | tr -d /+ | head -c "${END_POS}"
+    LC_ALL=C tr -cd A-Za-z0-9 < /dev/urandom | head -c "${END_POS}"
 
     return 0
 }
