@@ -88,7 +88,7 @@ class StatCache
         bool                   IsExpireIntervalType;    // if this flag is true, cache data is updated at last access time.
         time_t                 ExpireTime;
         unsigned long          CacheSize;
-        bool                   IsCacheNoObject;
+        bool                   UseNegativeCache;
         symlink_cache_t        symlink_cache GUARDED_BY(stat_cache_lock);
         notruncate_dir_map_t   notruncate_file_cache GUARDED_BY(stat_cache_lock);
 
@@ -98,12 +98,15 @@ class StatCache
         void Clear();
         bool GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce);
         // Truncate stat cache
-        bool TruncateCache() REQUIRES(StatCache::stat_cache_lock);
+        bool TruncateCache(bool check_only_oversize_case = false) REQUIRES(StatCache::stat_cache_lock);
         // Truncate symbolic link cache
-        bool TruncateSymlink() REQUIRES(StatCache::stat_cache_lock);
+        bool TruncateSymlink(bool check_only_oversize_case = false) REQUIRES(StatCache::stat_cache_lock);
 
         bool AddNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
         bool DelNotruncateCache(const std::string& key) REQUIRES(stat_cache_lock);
+
+        bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
+        bool DelSymlinkHasLock(const std::string& key) REQUIRES(stat_cache_lock);
 
     public:
         StatCache(const StatCache&) = delete;
@@ -123,18 +126,18 @@ class StatCache
         time_t GetExpireTime() const;
         time_t SetExpireTime(time_t expire, bool is_interval = false);
         time_t UnsetExpireTime();
-        bool SetCacheNoObject(bool flag);
-        bool EnableCacheNoObject()
+        bool SetNegativeCache(bool flag);
+        bool EnableNegativeCache()
         {
-            return SetCacheNoObject(true);
+            return SetNegativeCache(true);
         }
-        bool DisableCacheNoObject()
+        bool DisableNegativeCache()
         {
-            return SetCacheNoObject(false);
+            return SetNegativeCache(false);
         }
-        bool GetCacheNoObject() const
+        bool IsEnabledNegativeCache() const
         {
-            return IsCacheNoObject;
+            return UseNegativeCache;
         }
 
         // Get stat cache
@@ -182,7 +185,6 @@ class StatCache
             const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
             return DelStatHasLock(key);
         }
-        bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
 
         // Cache for symbolic link
         bool GetSymlink(const std::string& key, std::string& value);
@@ -191,16 +193,10 @@ class StatCache
             const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
             return DelSymlinkHasLock(key);
         }
-        bool DelSymlinkHasLock(const std::string& key) REQUIRES(stat_cache_lock);
 
         // Cache for Notruncate file
         bool GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list);
 };
-
-//-------------------------------------------------------------------
-// Functions
-//-------------------------------------------------------------------
-bool convert_header_to_stat(const char* path, const headers_t& meta, struct stat* pst, bool forcedir = false);
 
 #endif // S3FS_CACHE_H_
 
