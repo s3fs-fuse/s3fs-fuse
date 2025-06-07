@@ -397,12 +397,10 @@ function make_random_string() {
     else
         local END_POS=8
     fi
-    if [ "$(uname)" = "Darwin" ]; then
-        local BASE64_OPT="--break=0"
-    else
-        local BASE64_OPT="--wrap=0"
-    fi
-    "${BASE64_BIN}" "${BASE64_OPT}" < /dev/urandom 2>/dev/null | tr -d /+ | head -c "${END_POS}"
+    local READ_SIZE=$((END_POS * 2))
+    local BASE64_OPT="--wrap=0"
+
+    head -c "${READ_SIZE}" < /dev/urandom | "${BASE64_BIN}" "${BASE64_OPT}" | tr -d '/+' | head -c "${END_POS}"
 
     return 0
 }
