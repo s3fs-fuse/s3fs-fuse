@@ -373,7 +373,7 @@ function aws_cli() {
     # [NOTE]
     # AWS_EC2_METADATA_DISABLED for preventing the metadata service(to 169.254.169.254).
     # shellcheck disable=SC2086,SC2068
-    AWS_EC2_METADATA_DISABLED=true aws $@ --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem ${FLAGS}
+    AWS_EC2_METADATA_DISABLED=true aws $@ --endpoint-url "${S3_URL}" --ca-bundle /tmp/certs/public.crt ${FLAGS}
 }
 
 function wait_for_port() {
