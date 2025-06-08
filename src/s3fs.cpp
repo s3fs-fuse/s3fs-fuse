@@ -2959,7 +2959,19 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
             S3FS_PRN_ERR("could not update ctime file(%s)", path);
             return -EIO;
         }
-        result = ent->Flush(static_cast<int>(fi->fh), false);
+
+        if(0 == (result = ent->Flush(static_cast<int>(fi->fh), false))){
+            // [NOTE]
+            // If there is any meta information that needs to be updated, update it now.
+            // If waiting until s3fs_release is called, problems may occur if reading the
+            // meta information of the target path during that period.
+            // (This case is found in macos + nomultipart mode)
+            //
+            if(0 != (result = ent->UploadPending(static_cast<int>(fi->fh)))){
+                S3FS_PRN_ERR("could not upload pending data(meta, etc) for pseudo_fd(%llu) / path(%s) by result=%d, but continue...", (unsigned long long)(fi->fh), path, result);
+                return result;
+            }
+        }
         StatCache::getStatCacheData()->DelStat(path);
 
         if(is_new_file){
