@@ -49,7 +49,6 @@ BIG_FILE_LENGTH=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
 
 # Set locale because some tests check for English expressions
 export LC_ALL=en_US.UTF-8
-export RUN_DIR
 
 # [NOTE]
 # stdbuf, truncate and sed installed on macos do not work as
@@ -191,11 +190,10 @@ function rm_test_dir {
 }
 
 # Create and cd to a unique directory for this test run
-# Sets RUN_DIR to the name of the created directory
 function cd_run_dir {
     if [ "${TEST_BUCKET_MOUNT_POINT_1}" = "" ]; then
         echo "TEST_BUCKET_MOUNT_POINT_1 variable not set"
-        exit 1
+        return 1
     fi
     local RUN_DIR="${TEST_BUCKET_MOUNT_POINT_1}/${1}"
     mkdir -p "${RUN_DIR}"
@@ -203,6 +201,12 @@ function cd_run_dir {
 }
 
 function clean_run_dir {
+    if [ "${TEST_BUCKET_MOUNT_POINT_1}" = "" ]; then
+        echo "TEST_BUCKET_MOUNT_POINT_1 variable not set"
+        return 1
+    fi
+    local RUN_DIR="${TEST_BUCKET_MOUNT_POINT_1}/${1}"
+
     if [ -d "${RUN_DIR}" ]; then
         rm -rf "${RUN_DIR}" || echo "Error removing ${RUN_DIR}"
     fi
@@ -248,7 +252,11 @@ function describe {
 function run_suite {
    orig_dir="${PWD}"
    key_prefix="testrun-${RANDOM}"
-   cd_run_dir "${key_prefix}"
+
+   if ! cd_run_dir "${key_prefix}"; then
+       return 1
+   fi
+
    for t in "${TEST_LIST[@]}"; do
        # Ensure test input name differs every iteration
        TEST_TEXT_FILE="test-s3fs-${RANDOM}.txt"
@@ -275,8 +283,11 @@ function run_suite {
        fi
        set -o errexit
    done
+
    cd "${orig_dir}"
-   clean_run_dir
+   if ! clean_run_dir "${key_prefix}"; then
+       return 1
+   fi
 
    for t in "${TEST_PASSED_LIST[@]}"; do
        echo "PASS: ${t}"
