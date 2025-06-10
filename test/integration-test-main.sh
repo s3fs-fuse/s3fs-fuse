@@ -467,8 +467,8 @@ function test_update_metadata_external_small_object() {
     local TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     local TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     local TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
-    local TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
-    local TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
+    local TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_set_xattr.${TEST_FILE_EXT}"
+    local TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_rm_xattr.${TEST_FILE_EXT}"
 
     local TEST_INPUT="TEST_STRING_IN_SMALL_FILE"
 
@@ -503,16 +503,37 @@ function test_update_metadata_external_small_object() {
     echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
     set_xattr key value "${TEST_SETXATTR_FILE}"
     cmp "${TEST_SETXATTR_FILE}" <(echo "${TEST_INPUT}")
+    XATTR_VALUE=$(get_xattr key "${TEST_SETXATTR_FILE}")
+    if [ -z "${XATTR_VALUE}" ] || [ "${XATTR_VALUE}" != "value" ]; then
+        echo "could not read xattr(key) value."
+        return 1
+    fi
 
     #
     # remove xattr
     #
     # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
     #
-    OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
-    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
-    del_xattr key "${TEST_RMXATTR_FILE}"
-    cmp "${TEST_RMXATTR_FILE}" <(echo "${TEST_INPUT}")
+    # [FIXME]
+    # For macos, the xattrs value specified with the "--metadata" option cannot
+    # be set on the object. We confirmed this with the following versions:
+    #     aws-cli/2.27.35 Python/3.13.3 Darwin/22.6.0 exe/x86_64
+    # We also tried to run "aws s3api put-object", but the result was the same.
+    #
+    # Since xattrs cannot be set on objects uploaded with the aws command, this
+    # will be skipped for macos.
+    # If a solution is found in the future, we will test it on macos as well.
+    #
+    if ! uname | grep -q Darwin; then
+        OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
+        echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+        del_xattr key "${TEST_RMXATTR_FILE}"
+        cmp "${TEST_RMXATTR_FILE}" <(echo "${TEST_INPUT}")
+        if find_xattr key "${TEST_RMXATTR_FILE}"; then
+            echo "could read xattr(key) value after removing it."
+            return 1
+        fi
+    fi
 
     rm -f "${TEST_CHMOD_FILE}"
     rm -f "${TEST_CHOWN_FILE}"
@@ -531,8 +552,8 @@ function test_update_metadata_external_large_object() {
     local TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     local TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     local TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
-    local TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
-    local TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_xattr.${TEST_FILE_EXT}"
+    local TEST_SETXATTR_FILE="${TEST_TEXT_FILE}_set_xattr.${TEST_FILE_EXT}"
+    local TEST_RMXATTR_FILE="${TEST_TEXT_FILE}_rm_xattr.${TEST_FILE_EXT}"
 
     ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
 
@@ -567,16 +588,37 @@ function test_update_metadata_external_large_object() {
     aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
     set_xattr key value "${TEST_SETXATTR_FILE}"
     cmp "${TEST_SETXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
+    XATTR_VALUE=$(get_xattr key "${TEST_SETXATTR_FILE}")
+    if [ -z "${XATTR_VALUE}" ] || [ "${XATTR_VALUE}" != "value" ]; then
+        echo "could not read xattr(key) value."
+        return 1
+    fi
 
     #
     # remove xattr
     #
     # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
     #
-    OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
-    aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
-    del_xattr key "${TEST_RMXATTR_FILE}"
-    cmp "${TEST_RMXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
+    # [FIXME]
+    # For macos, the xattrs value specified with the "--metadata" option cannot
+    # be set on the object. We confirmed this with the following versions:
+    #     aws-cli/2.27.35 Python/3.13.3 Darwin/22.6.0 exe/x86_64
+    # We also tried to run "aws s3api put-object", but the result was the same.
+    #
+    # Since xattrs cannot be set on objects uploaded with the aws command, this
+    # will be skipped for macos.
+    # If a solution is found in the future, we will test it on macos as well.
+    #
+    if ! uname | grep -q Darwin; then
+        OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
+        aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+        del_xattr key "${TEST_RMXATTR_FILE}"
+        cmp "${TEST_RMXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
+        if find_xattr key "${TEST_RMXATTR_FILE}"; then
+            echo "could read xattr(key) value after removing it."
+            return 1
+        fi
+    fi
 
     rm -f "${TEMP_DIR}/${BIG_FILE}"
     rm -f "${TEST_CHMOD_FILE}"
