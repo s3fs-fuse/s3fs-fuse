@@ -411,14 +411,21 @@ bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
 
     // update only meta keys
     for(auto metaiter = meta.cbegin(); metaiter != meta.cend(); ++metaiter){
-        auto tag          = CaseInsensitiveStringView(metaiter->first);
-        const auto& value = metaiter->second;
-        if(tag == "content-type" ||
-           tag == "content-length" ||
-           tag == "etag" ||
-           tag == "last-modified" ||
-           tag.is_prefix("x-amz")){
-            ent->meta[metaiter->first] = value;
+        if(metaiter->second.empty()){
+            auto metaiter2 = ent->meta.find(metaiter->first);
+            if(metaiter2 != ent->meta.cend()){
+                ent->meta.erase(metaiter2);
+            }
+        }else{
+            auto tag = CaseInsensitiveStringView(metaiter->first);
+            if(tag == "content-type"   ||
+               tag == "content-length" ||
+               tag == "etag"           ||
+               tag == "last-modified"  ||
+               tag.is_prefix("x-amz")  )
+            {
+                ent->meta[metaiter->first] = metaiter->second;
+            }
         }
     }
 
