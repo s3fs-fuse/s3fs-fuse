@@ -69,8 +69,8 @@ fi
 
 start_s3proxy
 
-if ! aws_cli s3api head-bucket --bucket "${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"; then
-    aws_cli s3 mb "s3://${TEST_BUCKET_1}" --region "${S3_ENDPOINT}"
+if ! s3_head "${TEST_BUCKET_1}"; then
+    s3_mb "${TEST_BUCKET_1}"
 fi
 
 for flag in "${FLAGS[@]}"; do
