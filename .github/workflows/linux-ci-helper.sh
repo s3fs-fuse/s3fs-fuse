@@ -116,6 +116,20 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
 
     INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
 
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
+    PACKAGE_MANAGER_BIN="dnf"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
+    PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
+
+    # [NOTE]
+    # Rocky Linux 10 (or CentOS Stream 10) images may have curl installation issues that
+    # conflict with the curl-minimal package.
+    #
+    PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
+
+    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-21-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm"
+
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
