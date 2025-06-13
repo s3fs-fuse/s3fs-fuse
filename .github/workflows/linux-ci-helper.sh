@@ -116,7 +116,8 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
 
     INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
 
-elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux:10" -o \
+       "${CONTAINER_FULLNAME}" = "rockylinux:9"]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
