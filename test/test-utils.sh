@@ -78,6 +78,25 @@ else
     STAT_BIN=(stat)
 fi
 
+function find_xattr() {
+    local FIND_RESULT=0
+
+    set +o errexit
+    if [ "$(uname)" = "Darwin" ]; then
+        local LIST_XATTRS_KEYVALS; LIST_XATTRS_KEYVALS=$(xattr -l "$2" 2>/dev/null)
+        if ! echo "${LIST_XATTRS_KEYVALS}" | grep -q "$1"; then
+            FIND_RESULT=1
+        fi
+    else
+        if ! getfattr --absolute-names -n "$1" "$2" >/dev/null 2>&1; then
+            FIND_RESULT=1
+        fi
+    fi
+    set -o errexit
+
+    return "${FIND_RESULT}"
+}
+
 function get_xattr() {
     if [ "$(uname)" = "Darwin" ]; then
         xattr -p "$1" "$2"
