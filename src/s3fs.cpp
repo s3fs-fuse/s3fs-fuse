@@ -4048,7 +4048,13 @@ static int s3fs_removexattr(const char* path, const char* name)
     if(nullptr != (ent = autoent.OpenExistFdEntity(path))){
         if(ent->MergeOrgMeta(updatemeta)){
             // meta is changed, but now uploading.
-            // then the meta is pending and accumulated to be put after the upload is complete.
+            //
+            // [NOTE]
+            // Then the meta is pending and accumulated to be put after the upload is complete.
+            // If there is no need to hold it, need_put_header will remain true.
+            // Please note that if "x-amz-meta-xattr" in updatemeta is empty, it will be deleted
+            // by ent->MergeOrgMeta.
+            //
             S3FS_PRN_INFO("meta pending until upload is complete");
             need_put_header = false;
 
@@ -4057,10 +4063,27 @@ static int s3fs_removexattr(const char* path, const char* name)
         }
     }
     if(need_put_header){
-        // not found opened file.
+        // not found opened file or not have pending meta
+        //
+        // [NOTE]
+        // If "x-amz-meta-xattr" exists in updatemeta but its value is empty,
+        // this key will be deleted here.
+        // After that, if the "x-amz-meta-xattr" key does not exist,
+        // "x-amz-meta-xattr" will also be deleted from meta.
+        //
+        // Please note that ent->MergeOrgMeta() may be called before this
+        // process. In ent->MergeOrgMeta(), if "x-amz-meta-xattr" exists in
+        // updatemeta but its value is empty, it will be deleted first.
+        //
         auto iter = updatemeta.find("x-amz-meta-xattr");
         if(iter != updatemeta.end() && iter->second.empty()){
             updatemeta.erase(iter);
+        }
+        if(updatemeta.end() == updatemeta.find("x-amz-meta-xattr")){
+            auto miter = meta.find("x-amz-meta-xattr");
+            if(miter != meta.end()){
+                meta.erase(miter);
+            }
         }
 
         merge_headers(meta, updatemeta, true);
