@@ -100,7 +100,7 @@ jobs:
       - name: Test suite
         run: |
           make check -C src
-          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+          make ALL_TESTS=1 V=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   # [NOTE]
   # Using macos-fuse-t
@@ -135,11 +135,6 @@ jobs:
             if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi
           done
 
-      - name: Install awscli2
-        run: |
-          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o /tmp/AWSCLIV2.pkg
-          sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
-
       - name: Build
         run: |
           ./autogen.sh
@@ -162,7 +157,7 @@ jobs:
       - name: Test suite
         run: |
           make check -C src
-          make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+          make ALL_TESTS=1 V=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   MemoryTest:
     runs-on: ubuntu-latest
