@@ -401,14 +401,14 @@ function wait_for_port() {
     done
 }
 
-function make_random_string() {
-    if [ -n "$1" ]; then
-        local END_POS="$1"
-    else
-        local END_POS=8
-    fi
-    LC_ALL=C tr -cd A-Za-z0-9 < /dev/urandom | head -c "${END_POS}"
-
+# [NOTE][FIXME]
+# Makes <sec>.<nano sec>(ex. 1750690134.308 553 074) and returns nine decimal
+# digits from last three digits of seconds and microseconds.
+# This is a function instead of using /dev/urandom.
+# See the PR(Issue) for more details.
+#
+function make_dec_string_9() {
+    date +%s%N | cut -c 8-16
     return 0
 }
 
