@@ -463,7 +463,7 @@ function test_update_metadata_external_small_object() {
     # [NOTE]
     # Use the only filename in the test to avoid being affected by noobjcache.
     #
-    local TEST_FILE_EXT; TEST_FILE_EXT=$(make_random_string)
+    local TEST_FILE_EXT; TEST_FILE_EXT=$(mktemp "XXXXXXXXXX")
     local TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     local TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     local TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
@@ -527,7 +527,7 @@ function test_update_metadata_external_large_object() {
     # [NOTE]
     # Use the only filename in the test to avoid being affected by noobjcache.
     #
-    local TEST_FILE_EXT; TEST_FILE_EXT=$(make_random_string)
+    local TEST_FILE_EXT; TEST_FILE_EXT=$(mktemp "XXXXXXXXXX")
     local TEST_CHMOD_FILE="${TEST_TEXT_FILE}_chmod.${TEST_FILE_EXT}"
     local TEST_CHOWN_FILE="${TEST_TEXT_FILE}_chown.${TEST_FILE_EXT}"
     local TEST_UTIMENS_FILE="${TEST_TEXT_FILE}_utimens.${TEST_FILE_EXT}"
