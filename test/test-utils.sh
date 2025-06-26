@@ -401,17 +401,6 @@ function wait_for_port() {
     done
 }
 
-function make_random_string() {
-    if [ -n "$1" ]; then
-        local END_POS="$1"
-    else
-        local END_POS=8
-    fi
-    LC_ALL=C tr -cd A-Za-z0-9 < /dev/urandom | head -c "${END_POS}"
-
-    return 0
-}
-
 function s3fs_args() {
     if [ "$(uname)" = "Darwin" ]; then
         ps -o args -p "${S3FS_PID}" | tail -n +2
