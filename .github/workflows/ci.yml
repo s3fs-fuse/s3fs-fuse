@@ -54,6 +54,7 @@ jobs:
           - ubuntu:22.04
           - debian:bookworm
           - debian:bullseye
+          - rockylinux/rockylinux:10
           - rockylinux:9
           - rockylinux:8
           - fedora:42
