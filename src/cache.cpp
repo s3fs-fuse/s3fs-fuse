@@ -34,83 +34,6 @@
 #include "string_util.h"
 
 //-------------------------------------------------------------------
-// Utility
-//-------------------------------------------------------------------
-static void SetStatCacheTime(struct timespec& ts)
-{
-    if(-1 == clock_gettime(static_cast<clockid_t>(CLOCK_MONOTONIC_COARSE), &ts)){
-        S3FS_PRN_CRIT("clock_gettime failed: %d", errno);
-        abort();
-    }
-}
-
-static constexpr int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
-{
-    // return -1:  ts1 < ts2
-    //         0:  ts1 == ts2
-    //         1:  ts1 > ts2
-    if(ts1.tv_sec < ts2.tv_sec){
-        return -1;
-    }else if(ts1.tv_sec > ts2.tv_sec){
-        return 1;
-    }else{
-        if(ts1.tv_nsec < ts2.tv_nsec){
-            return -1;
-        }else if(ts1.tv_nsec > ts2.tv_nsec){
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static bool IsExpireStatCacheTime(const struct timespec& ts, time_t expire)
-{
-    struct timespec nowts;
-    SetStatCacheTime(nowts);
-    nowts.tv_sec -= expire;
-
-    return (0 < CompareStatCacheTime(nowts, ts));
-}
-
-//
-// For stats cache out 
-//
-typedef std::vector<stat_cache_t::iterator>   statiterlist_t;
-
-struct sort_statiterlist{
-    // ascending order
-    bool operator()(const stat_cache_t::iterator& src1, const stat_cache_t::iterator& src2) const
-    {
-        int result = CompareStatCacheTime(src1->second.cache_date, src2->second.cache_date);
-        if(0 == result){
-            if(src1->second.hit_count < src2->second.hit_count){
-                result = -1;
-            }
-        }
-        return (result < 0);
-    }
-};
-
-//
-// For symbolic link cache out 
-//
-typedef std::vector<symlink_cache_t::iterator>   symlinkiterlist_t;
-
-struct sort_symlinkiterlist{
-    // ascending order
-    bool operator()(const symlink_cache_t::iterator& src1, const symlink_cache_t::iterator& src2) const
-    {
-        int result = CompareStatCacheTime(src1->second.cache_date, src2->second.cache_date);  // use the same as Stats
-        if(0 == result){
-            if(src1->second.hit_count < src2->second.hit_count){
-                result = -1;
-            }
-        }
-        return (result < 0);
-    }
-};
-
-//-------------------------------------------------------------------
 // Static
 //-------------------------------------------------------------------
 StatCache       StatCache::singleton;
@@ -119,10 +42,10 @@ std::mutex      StatCache::stat_cache_lock;
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), ExpireTime(15 * 60), CacheSize(100'000), UseNegativeCache(true)
+StatCache::StatCache() : pMountPointDir(nullptr), CacheSize(100'000)
 {
     if(this == StatCache::getStatCacheData()){
-        stat_cache.clear();
+        pMountPointDir = std::make_shared<DirStatCache>("/");
     }else{
         abort();
     }
@@ -130,9 +53,7 @@ StatCache::StatCache() : IsExpireTime(true), IsExpireIntervalType(false), Expire
 
 StatCache::~StatCache()
 {
-    if(this == StatCache::getStatCacheData()){
-        Clear();
-    }else{
+    if(this != StatCache::getStatCacheData()){
         abort();
     }
 }
@@ -152,238 +73,70 @@ unsigned long StatCache::SetCacheSize(unsigned long size)
     return old;
 }
 
-time_t StatCache::GetExpireTime() const
-{
-    return (IsExpireTime ? ExpireTime : (-1));
-}
-
-time_t StatCache::SetExpireTime(time_t expire, bool is_interval)
-{
-    time_t old           = ExpireTime;
-    ExpireTime           = expire;
-    IsExpireTime         = true;
-    IsExpireIntervalType = is_interval;
-    return old;
-}
-
-time_t StatCache::UnsetExpireTime()
-{
-    time_t old           = IsExpireTime ? ExpireTime : (-1);
-    ExpireTime           = 0;
-    IsExpireTime         = false;
-    IsExpireIntervalType = false;
-    return old;
-}
-
-bool StatCache::SetNegativeCache(bool flag)
-{
-    bool old = UseNegativeCache;
-    UseNegativeCache = flag;
-    return old;
-}
-
-void StatCache::Clear()
+bool StatCache::GetStat(const std::string& key, struct stat* pstbuf, headers_t* pmeta, objtype_t* ptype, const char* petag)
 {
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    stat_cache.clear();
-    S3FS_MALLOCTRIM(0);
-}
-
-bool StatCache::GetStat(const std::string& key, struct stat* pst, headers_t* meta, bool overcheck, const char* petag, bool* pisforce)
-{
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-
-    std::string strpath = key;
-
-    // Search path in cache
-    auto iter = stat_cache.end();
-    if(overcheck && '/' != *strpath.rbegin()){
-        strpath += "/";
-        iter = stat_cache.find(strpath);
-    }
-    if(iter == stat_cache.end()){
-        strpath = key;
-        iter = stat_cache.find(strpath);
-    }
-    if(iter == stat_cache.end()){
-        // not hit
+    // find key(path) in cache
+    auto pStatCache = pMountPointDir->Find(key, petag);
+    if(!pStatCache){
         return false;
     }
 
-    // Stat cache entry object
-    stat_cache_entry* ent = &iter->second;
+    // [NOTE]
+    // The object type will always be set.
+    // This is useful for determining cache types(such as Negative type)
+    // where the caller receives false.
+    //
+    if(ptype){
+        *ptype = pStatCache->GetType();
+    }
 
-    // Check timeout
-    if(0L == ent->notruncate && IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
-        DelStatHasLock(strpath);
+    // check negative cache
+    if(pStatCache->isNegative()){
+        pStatCache->IncrementHitCount();
+        S3FS_PRN_DBG("Hit negative stat cache [path=%s][hit count=%lu]", key.c_str(), pStatCache->GetHitCount());
         return false;
     }
 
-    // No object
-    if(ent->noobjcache){
-        if(!UseNegativeCache){
-            // need to delete this cache.
-            DelStatHasLock(strpath);
-        }else{
-            // noobjcache = true means no object.
-        }
+    // set data
+    if(!pStatCache->Get(pmeta, pstbuf)){
         return false;
     }
 
-    // Need to check ETag (because hitted cache object without checking it)
-    if(petag){
-        // find ETag in hitted cache object
-        auto hiter = ent->meta.find("etag");
-        if(hiter != ent->meta.end()){
-            // compare ETag
-            std::string stretag = hiter->second;
-            if(petag != stretag){
-                // different ETag
-                S3FS_PRN_DBG("stat cache not hit by ETag[path=%s][time=%lld.%09ld][hit count=%lu][ETag(%s)!=(%s)]",
-                    strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count, petag ? petag : "null", stretag.c_str());
+    // hit cache
+    S3FS_PRN_DBG("Hit stat cache [path=%s][hit count=%lu]", key.c_str(), pStatCache->GetHitCount());
 
-                // remove hitted cache object
-                DelStatHasLock(strpath);
-                return false;
-            }
-        }
-    }
-
-    // Valid cache object
-    S3FS_PRN_DBG("stat cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
-        strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
-
-    // Copy elements and update cache object's data
-    if(pst!= nullptr){
-        *pst= ent->stbuf;
-    }
-    if(meta != nullptr){
-        *meta = ent->meta;
-    }
-    if(pisforce != nullptr){
-        (*pisforce) = ent->isforce;
-    }
-    ent->hit_count++;
-
-    if(IsExpireIntervalType){
-        SetStatCacheTime(ent->cache_date);
-    }
+    // for debug
+    //pMountPointDir->Dump(true);
 
     return true;
 }
 
-bool StatCache::IsNoObjectCache(const std::string& key, bool overcheck)
+bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate)
 {
-    if(!UseNegativeCache){
-        return false;
-    }
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-
-    std::string strpath = key;
-
-    // Search path in cache
-    auto iter = stat_cache.end();
-    if(overcheck && '/' != *strpath.rbegin()){
-        strpath += "/";
-        iter     = stat_cache.find(strpath);
-    }
-    if(iter == stat_cache.end()){
-        strpath = key;
-        iter    = stat_cache.find(strpath);
-    }
-    if(iter == stat_cache.end()){
-        // not hit
-        return false;
-    }
-
-    // Stat cache entry object
-    const stat_cache_entry* ent = &iter->second;
-
-    if(!ent->noobjcache){
-        // Hit but not no object cache
-        return false;
-    }
-
-    // Check timeout
-    if(0L == ent->notruncate && IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){
-        DelStatHasLock(strpath);
-        return false;
-    }
-
-    // Valid no object cache
-    S3FS_PRN_DBG("stat cache(no object) hit [path=%s][hit count=%lu]", strpath.c_str(), ent->hit_count);
-
-    if(IsExpireIntervalType){
-        SetStatCacheTime((*iter).second.cache_date);    // [NOTE] ent cannot be used because it is const
-    }
-    return true;
-}
-
-bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forcedir, bool no_truncate)
-{
-    if(!no_truncate && CacheSize< 1){
+    // [NOTE]
+    // If notruncate=true, force caching
+    //
+    if(GetCacheSize() < 1 && !notruncate){
         return true;
+    }
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+
+    // Add(overwrite) new cache
+    if(!pMountPointDir->Add(key, &stbuf, &meta, type, notruncate)){
+        S3FS_PRN_DBG("failed to add stat cache entry[path=%s]", key.c_str());
+        return false;
+    }
+
+    // Truncate cache(if over cache size)
+    if(!pMountPointDir->TruncateCache()){
+        S3FS_PRN_DBG("There was no cache to truncate.");
     }
     S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-
-    // if key is found, delete it
-    if(stat_cache.cend() != stat_cache.find(key)){
-        // found cache
-        DelStatHasLock(key);
-    }else{
-        // truncate cache (only when cache oversize)
-
-        // [MEMO] The following warning will be fixed later
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!TruncateCache(true)){
-            return false;
-        }
-    }
-
-    // make new
-    stat_cache_entry ent;
-    if(!convert_header_to_stat(key.c_str(), meta, &ent.stbuf, forcedir)){
-        return false;
-    }
-    ent.hit_count  = 0;
-    ent.isforce    = forcedir;
-    ent.noobjcache = false;
-    ent.notruncate = (no_truncate ? 1L : 0L);
-    ent.meta.clear();
-    SetStatCacheTime(ent.cache_date);    // Set time.
-
-    //copy only some keys
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto tag          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
-        if(tag == "content-type" ||
-           tag == "content-length" ||
-           tag == "etag" ||
-           tag == "last-modified" ||
-           tag.is_prefix("x-amz")){
-            ent.meta[iter->first] = value;
-        }
-    }
-
-    const auto& value = stat_cache[key] = std::move(ent);
-
-    // check symbolic link cache
-    if(!S_ISLNK(value.stbuf.st_mode)){
-        if(symlink_cache.cend() != symlink_cache.find(key)){
-            // if symbolic link cache has key, thus remove it.
-            DelSymlinkHasLock(key);
-        }
-    }
-
-    // If no_truncate flag is set, set file name to notruncate_file_cache
-    //
-    if(no_truncate){
-        AddNotruncateCache(key);
-    }
+    // for debug
+    //pMountPointDir->Dump(true);
 
     return true;
 }
@@ -395,394 +148,205 @@ bool StatCache::AddStat(const std::string& key, const headers_t& meta, bool forc
 // Since the file mode may change while the file is open, it is
 // updated as well.
 //
-bool StatCache::UpdateMetaStats(const std::string& key, const headers_t& meta)
+bool StatCache::UpdateStat(const std::string& key, const struct stat& stbuf, const headers_t& meta)
 {
-    if(CacheSize < 1){
-        return true;
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+
+    // search key cache
+    auto pCache = pMountPointDir->Find(key);
+    if(!pCache){
+        // Not found cache
+        return false;
+    }
+    if(!pCache->Update(stbuf, meta)){
+        S3FS_PRN_DBG("failed to update stat cache entry[path=%s]", key.c_str());
+        return false;
     }
     S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
 
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-    auto iter = stat_cache.find(key);
-    if(stat_cache.cend() == iter){
-        return true;
-    }
-    stat_cache_entry* ent = &iter->second;
-
-    // update only meta keys
-    for(auto metaiter = meta.cbegin(); metaiter != meta.cend(); ++metaiter){
-        if(metaiter->second.empty()){
-            auto metaiter2 = ent->meta.find(metaiter->first);
-            if(metaiter2 != ent->meta.cend()){
-                ent->meta.erase(metaiter2);
-            }
-        }else{
-            auto tag = CaseInsensitiveStringView(metaiter->first);
-            if(tag == "content-type"   ||
-               tag == "content-length" ||
-               tag == "etag"           ||
-               tag == "last-modified"  ||
-               tag.is_prefix("x-amz")  )
-            {
-                ent->meta[metaiter->first] = metaiter->second;
-            }
-        }
-    }
-
-    // Update time.
-    SetStatCacheTime(ent->cache_date);
-
-    // Update only mode
-    ent->stbuf.st_mode = get_mode(meta, key);
+    // for debug
+    //pMountPointDir->Dump(true);
 
     return true;
 }
 
-bool StatCache::AddNoObjectCache(const std::string& key)
+bool StatCache::AddNegativeStat(const std::string& key)
 {
-    if(!UseNegativeCache){
-        return true;    // pretend successful
-    }
-    if(CacheSize < 1){
-        return true;
-    }
-    S3FS_PRN_INFO3("add no object cache entry[path=%s]", key.c_str());
-
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    if(stat_cache.cend() != stat_cache.find(key)){
-        // found
-        DelStatHasLock(key);
-    }else{
-        // truncate cache (only when cache oversize)
-
-        // [MEMO] The following warning will be fixed later
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!TruncateCache(true)){
-            return false;
-        }
+    // [NOTE]
+    // Since Negative Cache exists regardless of cache size, first delete
+    // the cache if it exists.
+    //
+    auto pCache = pMountPointDir->Find(key);
+    if(pCache){
+        pMountPointDir->RemoveChild(key);
     }
 
-    // make new
-    stat_cache_entry ent{};
-    ent.hit_count  = 0;
-    ent.isforce    = false;
-    ent.noobjcache = true;
-    ent.notruncate = 0L;
-    ent.meta.clear();
-    SetStatCacheTime(ent.cache_date);    // Set time.
-
-    stat_cache[key] = std::move(ent);
-
-    // check symbolic link cache
-    if(symlink_cache.cend() != symlink_cache.find(key)){
-        // if symbolic link cache has key, thus remove it.
-        DelSymlinkHasLock(key);
+    if(GetCacheSize() < 1){
+        S3FS_PRN_INFO3("failed to add negative cache entry[path=%s], but returns true.", key.c_str());
+        return true;
     }
+
+    // Add cache
+    if(!pMountPointDir->Add(key, nullptr, nullptr, objtype_t::NEGATIVE)){
+        S3FS_PRN_INFO3("failed to add negative cache entry[path=%s]", key.c_str());
+        return false;
+    }
+
+    // Truncate cache(if over cache size)
+    if(!pMountPointDir->TruncateCache()){
+        S3FS_PRN_DBG("There was no cache to truncate.");
+    }
+    S3FS_PRN_INFO3("add negative cache entry[path=%s]", key.c_str());
+
+    // for debug
+    //pMountPointDir->Dump(true);
+
     return true;
 }
 
-void StatCache::ChangeNoTruncateFlag(const std::string& key, bool no_truncate)
+void StatCache::ClearNoTruncateFlag(const std::string& key)
 {
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-    auto iter = stat_cache.find(key);
 
-    if(stat_cache.cend() != iter){
-        stat_cache_entry* ent = &iter->second;
-        if(no_truncate){
-            if(0L == ent->notruncate){
-                // need to add no truncate cache.
-                AddNotruncateCache(key);
-            }
-            ++(ent->notruncate);
-        }else{
-            if(0L < ent->notruncate){
-                --(ent->notruncate);
-                if(0L == ent->notruncate){
-                    // need to delete from no truncate cache.
-                    DelNotruncateCache(key);
-                }
-            }
-        }
+    // search key cache
+    auto pCache = pMountPointDir->Find(key);
+    if(pCache){
+        // Clear NoTruncate Flag
+        pCache->ClearNoTruncate();
     }
 }
 
-// [NOTE]
-// If check_only_oversize_case=true, the process will only be performed
-// if the cache size is overflowing.
-// If false, the process of removing expired cache entries will
-// always be performed(if IsExpireTime is enabled).
 //
-bool StatCache::TruncateCache(bool check_only_oversize_case)
+// Cache truncation will be performed if check_only_oversize_case=true
+// or the cache size overflows.
+//
+// [NOTE]
+// If there are no expired caches, no cache truncation will occur.
+// Also, caches marked as NoTruncate and caches in non-empty directories
+// will never be deleted.
+// This behavior means that no truncation will occur and caches will
+// accumulate until one of the caches expires.
+//
+bool StatCache::TruncateCacheHasLock(bool check_only_oversize_case)
 {
-    if(stat_cache.empty() || (check_only_oversize_case && stat_cache.size() < CacheSize)){
+    if(check_only_oversize_case && StatCacheNode::GetCacheCount() <= GetCacheSize()){
         return true;
     }
-
-    // 1) erase over expire time
-    if(IsExpireTime){
-        for(auto iter = stat_cache.cbegin(); iter != stat_cache.cend(); ){
-            const stat_cache_entry* entry = &iter->second;
-            if(0L == entry->notruncate && IsExpireStatCacheTime(entry->cache_date, ExpireTime)){
-                iter = stat_cache.erase(iter);
-            }else{
-                ++iter;
-            }
-        }
+    if(!pMountPointDir->TruncateCache()){
+        S3FS_PRN_DBG("could not truncate any cache[current size=%lu, maximum size=%lu]", StatCacheNode::GetCacheCount(), GetCacheSize());
     }
 
-    // 2) check stat cache count
-    if(stat_cache.size() < CacheSize){
-        return true;
-    }
-
-    // 3) erase from the old cache in order
-    size_t            erase_count= stat_cache.size() - CacheSize + 1;
-    statiterlist_t    erase_iters;
-    for(auto iter = stat_cache.begin(); iter != stat_cache.end() && 0 < erase_count; ++iter){
-        // check no truncate
-        const stat_cache_entry* ent = &iter->second;
-        if(0L < ent->notruncate){
-            // skip for no truncate entry and keep extra counts for this entity.
-            if(0 < erase_count){
-                --erase_count;     // decrement
-            }
-        }else{
-            // iter is not have notruncate flag
-            erase_iters.push_back(iter);
-        }
-        if(erase_count < erase_iters.size()){
-            std::sort(erase_iters.begin(), erase_iters.end(), sort_statiterlist());
-            while(erase_count < erase_iters.size()){
-                erase_iters.pop_back();
-            }
-        }
-    }
-    for(auto iiter = erase_iters.cbegin(); iiter != erase_iters.cend(); ++iiter){
-        auto siter = *iiter;
-
-        S3FS_PRN_DBG("truncate stat cache[path=%s]", siter->first.c_str());
-        stat_cache.erase(siter);
-    }
-    S3FS_MALLOCTRIM(0);
+    // for debug
+    //pMountPointDir->Dump(true);
 
     return true;
 }
 
 bool StatCache::DelStatHasLock(const std::string& key)
 {
-    S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key.c_str());
-
-    // Search key in cache
-    stat_cache_t::iterator iter;
-    if(stat_cache.cend() != (iter = stat_cache.find(key))){
-        stat_cache.erase(iter);
-        DelNotruncateCache(key);
-    }
-
-    // Search again key with(without) "/" character in cache
-    if(!key.empty() && key != "/"){
-        std::string strpath = key;
-        if('/' == *strpath.rbegin()){
-            // If there is "path" cache, delete it.
-            strpath.erase(strpath.length() - 1);
-        }else{
-            // If there is "path/" cache, delete it.
-            strpath += "/";
+    // remove cache(can not remove mount point)
+    if(key == pMountPointDir->Get()){
+        if(!pMountPointDir->ClearData()){
+            S3FS_PRN_DBG("Failed to clear cache data for maount point.");
+            return false;
         }
-        if(stat_cache.cend() != (iter = stat_cache.find(strpath))){
-            stat_cache.erase(iter);
-            DelNotruncateCache(strpath);
-        }
-    }
-    S3FS_MALLOCTRIM(0);
+    }else if(!pMountPointDir->RemoveChild(key)){
+        // not found key in cache(already removed)
+        S3FS_PRN_DBG("not found stat cache entry[path=%s]", key.c_str());
+    }else{
+        S3FS_PRN_INFO3("delete stat cache entry[path=%s]", key.c_str());
 
+        // for debug
+        //pMountPointDir->Dump(true);
+    }
     return true;
+}
+
+bool StatCache::DelStat(const std::string& key)
+{
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    return DelStatHasLock(key);
 }
 
 bool StatCache::GetSymlink(const std::string& key, std::string& value)
 {
+    if(GetCacheSize() < 1){
+        return true;
+    }
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    const std::string& strpath = key;
-
-    // Search path in cache
-    auto iter = symlink_cache.find(strpath);
-    if(symlink_cache.cend() == iter){
+    // search key cache
+    auto pCache = pMountPointDir->Find(key);
+    if(!pCache){
+        // Not found cache
         return false;
     }
 
-    // Symlink cache entry object
-    symlink_cache_entry* ent = &iter->second;
-
-    // Check timeout
-    if(IsExpireTime && IsExpireStatCacheTime(ent->cache_date, ExpireTime)){     // use the same as Stats
-        DelSymlinkHasLock(strpath);
+    if(!pCache->isSymlink()){
+        // Cache object is not symlink.
+        //
+        // [NOTE]
+        // If updating this cache(key) as a Symlink, the caller must
+        // delete or overwrite it.
+        //
         return false;
     }
 
-    // Valid symlink object cache
-    S3FS_PRN_DBG("symbolic link cache hit [path=%s][time=%lld.%09ld][hit count=%lu]",
-        strpath.c_str(), static_cast<long long>(ent->cache_date.tv_sec), ent->cache_date.tv_nsec, ent->hit_count);
-
-    value = ent->link;
-
-    ent->hit_count++;
-    if(IsExpireIntervalType){
-        SetStatCacheTime(ent->cache_date);
+    if(!pCache->GetExtra(value)){
+        return false;
     }
+    S3FS_PRN_INFO3("get symbolic link cache entry[path=%s]", key.c_str());
+
+    // for debug
+    //pMountPointDir->Dump(true);
 
     return true;
 }
 
-bool StatCache::AddSymlink(const std::string& key, const std::string& value)
+bool StatCache::AddSymlink(const std::string& key, const struct stat& stbuf, const headers_t& meta, const std::string& value)
 {
-    if(CacheSize< 1){
-        return true;
-    }
-    S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
-
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    if(symlink_cache.cend() != symlink_cache.find(key)){
-        // found
-        DelSymlinkHasLock(key);
-    }else{
-        // truncate symlink cache (only when cache oversize)
+    // find in cache
+    auto pCache = pMountPointDir->Find(key);
+    if(pCache && !pCache->isSymlink()){
+        // found stat cache is not symlink type, remove it.
+        pMountPointDir->RemoveChild(key);
+        pCache = pMountPointDir->Find(key);     // = nullptr
+    }
 
-        // [MEMO] The following warning will be fixed later
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!TruncateSymlink(true)){
+    // add new cache if not found in cache
+    if(!pCache){
+        // add symlink stat cache
+        if(!pMountPointDir->Add(key, &stbuf, &meta, objtype_t::SYMLINK, false)){
+            S3FS_PRN_DBG("failed to add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
+            return false;
+        }
+
+        // re-get symlink stat cache
+        if(nullptr == (pCache = pMountPointDir->Find(key))){
+            S3FS_PRN_ERR("Symlink stat cache not found even though it was added[path=%s]", key.c_str());
             return false;
         }
     }
 
-    // make new
-    symlink_cache_entry ent;
-    ent.link       = value;
-    ent.hit_count  = 0;
-    SetStatCacheTime(ent.cache_date);    // Set time(use the same as Stats).
-
-    symlink_cache[key] = std::move(ent);
-
-    return true;
-}
-
-// [NOTE]
-// If check_only_oversize_case=true, the process will only be performed
-// if the cache size is overflowing.
-// If false, the process of removing expired cache entries will
-// always be performed(if IsExpireTime is enabled).
-//
-bool StatCache::TruncateSymlink(bool check_only_oversize_case)
-{
-    if(stat_cache.empty() || (check_only_oversize_case && symlink_cache.size() < CacheSize)){
-        return true;
-    }
-
-    // 1) erase over expire time
-    if(IsExpireTime){
-        for(auto iter = symlink_cache.cbegin(); iter != symlink_cache.cend(); ){
-            const symlink_cache_entry* entry = &iter->second;
-            if(IsExpireStatCacheTime(entry->cache_date, ExpireTime)){  // use the same as Stats
-                iter = symlink_cache.erase(iter);
-            }else{
-                ++iter;
-            }
-        }
-    }
-
-    // 2) check stat cache count
-    if(symlink_cache.size() < CacheSize){
-        return true;
-    }
-
-    // 3) erase from the old cache in order
-    size_t            erase_count= symlink_cache.size() - CacheSize + 1;
-    symlinkiterlist_t erase_iters;
-    for(auto iter = symlink_cache.begin(); iter != symlink_cache.end(); ++iter){
-        erase_iters.push_back(iter);
-        sort(erase_iters.begin(), erase_iters.end(), sort_symlinkiterlist());
-        if(erase_count < erase_iters.size()){
-            erase_iters.pop_back();
-        }
-    }
-    for(auto iiter = erase_iters.cbegin(); iiter != erase_iters.cend(); ++iiter){
-        auto siter = *iiter;
-
-        S3FS_PRN_DBG("truncate symbolic link  cache[path=%s]", siter->first.c_str());
-        symlink_cache.erase(siter);
-    }
-    S3FS_MALLOCTRIM(0);
-
-    return true;
-}
-
-bool StatCache::DelSymlinkHasLock(const std::string& key)
-{
-    S3FS_PRN_INFO3("delete symbolic link cache entry[path=%s]", key.c_str());
-
-	return (0 < symlink_cache.erase(key));
-}
-
-bool StatCache::AddNotruncateCache(const std::string& key)
-{
-    if(key.empty() || '/' == *key.rbegin()){
+    // add(update) symlink path
+    if(!pCache->Update(value)){
+        S3FS_PRN_ERR("failed to add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
         return false;
     }
 
-    std::string parentdir = mydirname(key);
-    std::string filename  = mybasename(key);
-    if(parentdir.empty() || filename.empty()){
-        return false;
+    // Truncate cache(if over cache size)
+    if(!pMountPointDir->TruncateCache()){
+        S3FS_PRN_DBG("There was no cache to truncate.");
     }
-    parentdir += '/';       // directory path must be '/' termination.
+    S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
 
-    auto iter = notruncate_file_cache.find(parentdir);
-    if(iter == notruncate_file_cache.cend()){
-        // add new list
-        notruncate_filelist_t list;
-        list.push_back(filename);
-        notruncate_file_cache[parentdir] = list;
-    }else{
-        // add filename to existed list
-        notruncate_filelist_t& filelist = iter->second;
-        auto fiter = std::find(filelist.cbegin(), filelist.cend(), filename);
-        if(fiter == filelist.cend()){
-            filelist.push_back(filename);
-        }
-    }
-    return true;
-}
+    // for debug
+    //pMountPointDir->Dump(true);
 
-bool StatCache::DelNotruncateCache(const std::string& key)
-{
-    if(key.empty() || '/' == *key.rbegin()){
-        return false;
-    }
-
-    std::string parentdir = mydirname(key);
-    std::string filename  = mybasename(key);
-    if(parentdir.empty() || filename.empty()){
-        return false;
-    }
-    parentdir += '/';       // directory path must be '/' termination.
-
-    auto iter = notruncate_file_cache.find(parentdir);
-    if(iter != notruncate_file_cache.cend()){
-        // found directory in map
-        notruncate_filelist_t& filelist = iter->second;
-        auto fiter = std::find(filelist.begin(), filelist.end(), filename);
-        if(fiter != filelist.cend()){
-            // found filename in directory file list
-            filelist.erase(fiter);
-            if(filelist.empty()){
-                notruncate_file_cache.erase(parentdir);
-            }
-        }
-    }
     return true;
 }
 
@@ -797,38 +361,69 @@ bool StatCache::DelNotruncateCache(const std::string& key)
 // called to maintain the cache for readdir and return its value.
 //
 // [NOTE]
-// Add the file names under parentdir to the list.
+// Add the file names under "dir" to the list.
 // However, if the same file name exists in the list, it will not be added.
-// parentdir must be terminated with a '/'.
+// "dir" must be terminated with a '/'.
 //
-bool StatCache::GetNotruncateCache(const std::string& parentdir, notruncate_filelist_t& list)
+bool StatCache::RawGetChildStats(const std::string& dir, s3obj_list_t* plist, s3obj_type_map_t* pobjmap)
 {
-    if(parentdir.empty()){
+    if(dir.empty()){
+        return false;
+    }
+    if(!plist && !pobjmap){
         return false;
     }
 
-    std::string dirpath = parentdir;
-    if('/' != *dirpath.rbegin()){
-        dirpath += '/';
-    }
+    S3FS_PRN_INFO3("get child stat cache list[path=%s]", dir.c_str());
 
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    auto iter = notruncate_file_cache.find(dirpath);
-    if(iter == notruncate_file_cache.cend()){
-        // not found directory map
+    // [NOTE]
+    // Since Negative Cache exists regardless of cache size, first delete
+    // the cache if it exists.
+    //
+    auto pCache = pMountPointDir->Find(dir);
+    if(!pCache){
+        // not found directory stat cache
         return true;
     }
 
-    // found directory in map
-    const notruncate_filelist_t& filelist = iter->second;
-    for(auto fiter = filelist.cbegin(); fiter != filelist.cend(); ++fiter){
-        if(list.cend() == std::find(list.cbegin(), list.cend(), *fiter)){
-           // found notuncate file that does not exist in the list, so add it.
-           list.push_back(*fiter);
+    // get child leaf path list
+    s3obj_type_map_t childmap;
+    if(0 == pCache->GetChildMap(childmap)){
+        return true;
+    }
+
+    // merge list
+    for(auto iter = childmap.cbegin(); iter != childmap.cend(); ++iter){
+        if(plist){
+            if(plist->cend() == std::find(plist->cbegin(), plist->cend(), iter->first)){
+               plist->push_back(iter->first);
+            }
+        }
+        if(pobjmap){
+            if(pobjmap->cend() == pobjmap->find(iter->first)){
+                (*pobjmap)[iter->first] = iter->second;
+            }
         }
     }
     return true;
+}
+
+bool StatCache::GetChildStatList(const std::string& dir, s3obj_list_t& list)
+{
+    return RawGetChildStats(dir, &list, nullptr);
+}
+
+bool StatCache::GetChildStatMap(const std::string& dir, s3obj_type_map_t& objmap)
+{
+    return RawGetChildStats(dir, nullptr, &objmap);
+}
+
+void StatCache::Dump(bool detail)
+{
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    pMountPointDir->Dump(detail);
 }
 
 /*

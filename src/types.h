@@ -347,6 +347,109 @@ struct case_insensitive_compare_func
 typedef std::map<std::string, std::string, case_insensitive_compare_func> mimes_t;
 
 //-------------------------------------------------------------------
+// S3 Object Type Enum : objtype_t
+//-------------------------------------------------------------------
+// The type defines what files, symlinks, and directories can be
+// represented in S3.
+// The stats cache has a negative cache, which also defines its type.
+// Directory objects can have multiple types depending on the client
+// that created them.
+// To accommodate these, this enumeration also defines the type of the
+// original object.
+//
+enum class objtype_t : int8_t {
+    UNKNOWN                 = -1,
+    FILE                    = 0,
+    SYMLINK                 = 1,
+    DIR_NORMAL              = 2,
+    DIR_NOT_TERMINATE_SLASH = 3,
+    DIR_FOLFER_SUFFIX       = 4,
+    DIR_NOT_EXIST_OBJECT    = 5,
+    NEGATIVE                = 6     // Negative type means an object does not exist in Stats cache.
+};
+
+constexpr bool IS_FILE_OBJ(objtype_t type)
+{
+    return (objtype_t::FILE == type);
+}
+
+constexpr bool IS_SYMLINK_OBJ(objtype_t type)
+{
+    return (objtype_t::SYMLINK == type);
+}
+
+constexpr bool IS_NORMALDIR_OBJ(objtype_t type)
+{
+    return (objtype_t::DIR_NORMAL == type);
+}
+
+constexpr bool IS_DIR_OBJ(objtype_t type)
+{
+    return (objtype_t::DIR_NORMAL == type || objtype_t::DIR_NOT_TERMINATE_SLASH == type || objtype_t::DIR_FOLFER_SUFFIX == type || objtype_t::DIR_NOT_EXIST_OBJECT == type);
+}
+
+constexpr bool IS_NEGATIVE_OBJ(objtype_t type)
+{
+    return (objtype_t::NEGATIVE == type);
+}
+
+constexpr bool IS_SAME_OBJ(objtype_t type1, objtype_t type2)
+{
+    if(type1 == type2){
+        return true;
+    }
+    if(IS_DIR_OBJ(type1) && IS_DIR_OBJ(type2)){
+        return true;
+    }
+    return false;
+}
+
+constexpr bool NEED_REPLACEDIR_OBJ(objtype_t type)
+{
+    return (objtype_t::DIR_NOT_TERMINATE_SLASH == type || objtype_t::DIR_FOLFER_SUFFIX == type || objtype_t::DIR_NOT_EXIST_OBJECT == type);
+}
+
+constexpr bool NEED_RMDIR_OBJ(objtype_t type)
+{
+    return (objtype_t::DIR_NOT_TERMINATE_SLASH == type || objtype_t::DIR_FOLFER_SUFFIX == type);
+}
+
+inline std::string STR_OBJTYPE(objtype_t type)
+{
+    std::string strType;
+    switch(type){
+        case objtype_t::UNKNOWN:
+            strType = "UNKNOWN(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::FILE:
+            strType = "FILE(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::SYMLINK:
+            strType = "SYMLINK(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::DIR_NORMAL:
+            strType = "DIR_NORMAL(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::DIR_NOT_TERMINATE_SLASH:
+            strType = "DIR_NOT_TERMINATE_SLASH(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::DIR_FOLFER_SUFFIX:
+            strType = "DIR_FOLFER_SUFFIX(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::DIR_NOT_EXIST_OBJECT:
+            strType = "DIR_NOT_EXIST_OBJECT(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        case objtype_t::NEGATIVE:
+            strType = "NEGATIVE(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+        default:
+            strType = "not defined value(" + std::to_string(static_cast<int>(type)) + ")";
+            break;
+    }
+    return strType;
+}
+
+//-------------------------------------------------------------------
 // Typedefs specialized for use
 //-------------------------------------------------------------------
 typedef std::vector<std::string>           readline_t;
