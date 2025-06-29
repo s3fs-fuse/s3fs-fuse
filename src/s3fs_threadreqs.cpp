@@ -62,18 +62,6 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         return reinterpret_cast<void*>(-EIO);
     }
 
-    // Check retry max count and print debug message
-    {
-        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-
-        S3FS_PRN_INFO3("Multi Head Request [filler=%p][thparam_lock=%p][retrycount=%d][notfound_list=%p][wtf8=%s][path=%s]", pthparam->psyncfiller, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->pnotfound_list, pthparam->use_wtf8 ? "true" : "false", pthparam->path.c_str());
-
-        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
-            S3FS_PRN_ERR("Head request(%s) reached the maximum number of retry count(%d).", pthparam->path.c_str(), *(pthparam->pretrycount));
-            return reinterpret_cast<void*>(-EIO);
-        }
-    }
-
     s3fscurl.SetUseAhbe(false);
 
     // loop for head request
@@ -420,18 +408,6 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     std::unique_ptr<multipart_put_head_req_thparam> pthparam(static_cast<multipart_put_head_req_thparam*>(arg));
     if(!pthparam || !pthparam->ppartdata || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
         return reinterpret_cast<void*>(-EIO);
-    }
-
-    // Check retry max count and print debug message
-    {
-        const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-
-        S3FS_PRN_INFO3("Multipart Put Head Request [from=%s][to=%s][upload_id=%s][part_number=%d][filepart=%p][thparam_lock=%p][retrycount=%d][from=%s][to=%s]", pthparam->from.c_str(), pthparam->to.c_str(), pthparam->upload_id.c_str(), pthparam->part_number, pthparam->ppartdata, pthparam->pthparam_lock, *(pthparam->pretrycount), pthparam->from.c_str(), pthparam->to.c_str());
-
-        if(S3fsCurl::GetRetries() < *(pthparam->pretrycount)){
-            S3FS_PRN_ERR("Multipart Put Head request(%s->%s) reached the maximum number of retry count(%d).", pthparam->from.c_str(), pthparam->to.c_str(), *(pthparam->pretrycount));
-            return reinterpret_cast<void*>(-EIO);
-        }
     }
 
     s3fscurl.SetUseAhbe(true);
