@@ -53,7 +53,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
     std::string::size_type pos = orgname.find("_$folder$");
     if(std::string::npos != pos){
         newname = orgname.substr(0, pos);
-        type    = objtype_t::DIR_FOLFER_SUFFIX;
+        type    = objtype_t::DIR_FOLDER_SUFFIX;
     }else{
         newname = orgname;
     }

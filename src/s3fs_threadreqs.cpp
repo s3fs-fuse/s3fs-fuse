@@ -105,7 +105,7 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
                             if('/' != *(pthparam->path.rbegin())){
                                 ObjType = objtype_t::DIR_NOT_TERMINATE_SLASH;
                             }else if(std::string::npos != pthparam->path.find("_$folder$", 0)){
-                                ObjType = objtype_t::DIR_FOLFER_SUFFIX;
+                                ObjType = objtype_t::DIR_FOLDER_SUFFIX;
                             }else{
                                 ObjType = objtype_t::DIR_NORMAL;
                             }

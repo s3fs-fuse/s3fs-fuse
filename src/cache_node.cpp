@@ -106,7 +106,7 @@ unsigned long StatCacheNode::GetCacheCount(objtype_t type)
 {
     // [NOTE]
     // To get counter of directories, specify one of the following:
-    // DIR_NORMAL, DIR_NOT_TERMINATE_SLASH, DIR_FOLFER_SUFFIX, DIR_NOT_EXIST_OBJECT
+    // DIR_NORMAL, DIR_NOT_TERMINATE_SLASH, DIR_FOLDER_SUFFIX, DIR_NOT_EXIST_OBJECT
     //
     std::lock_guard<std::mutex> cntlock(StatCacheNode::counter_lock);
     return counter[stat_counter_pos(type)];
