@@ -234,7 +234,7 @@ static int chk_dir_object_type(const char* path, std::string& normpath, std::str
         if(objtype_t::DIR_NOT_TERMINATE_SLASH == *pObjType){
             curpath = normpath;
             curpath.erase(normpath.length() - 1);
-        }else if(objtype_t::DIR_FOLFER_SUFFIX == *pObjType){
+        }else if(objtype_t::DIR_FOLDER_SUFFIX == *pObjType){
             curpath = normpath;
             curpath.erase(normpath.length() - 1);
             curpath += "_$folder$";
@@ -328,7 +328,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // it will be searched as "dir/".
     //
     if(std::string::npos != strpath.find("_$folder$", 0)){
-        *pObjType = objtype_t::DIR_FOLFER_SUFFIX;
+        *pObjType = objtype_t::DIR_FOLDER_SUFFIX;
     }else if('/' == *strpath.rbegin()){
         *pObjType = objtype_t::DIR_NORMAL;
     }else{      // '/' != *strpath.rbegin()
@@ -433,7 +433,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
                 // cppcheck-suppress knownConditionTrueFalse
                 if(0 == result){
                     // found "object_$folder$"
-                    *pObjType = objtype_t::DIR_FOLFER_SUFFIX;
+                    *pObjType = objtype_t::DIR_FOLDER_SUFFIX;
                 }else{
                     // cut "_$folder$" for over checking "no dir object" after here
                     if(std::string::npos != (Pos = strpath.find("_$folder$", 0))){
@@ -1347,7 +1347,7 @@ static int s3fs_rmdir(const char* _path)
                 strpath += "/";
                 StatCache::getStatCacheData()->DelStat(strpath);
 
-            }else if(objtype_t::DIR_FOLFER_SUFFIX == ObjType){
+            }else if(objtype_t::DIR_FOLDER_SUFFIX == ObjType){
                 // delete request
                 std::string strtmp = strpath + "_$folder$";
                 result = delete_request(strtmp);
