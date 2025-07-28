@@ -54,7 +54,7 @@ extern std::string    instance_name;
 //-------------------------------------------------------------------
 // For clang -Wthread-safety
 //-------------------------------------------------------------------
-#if defined(__clang__)
+#ifdef __clang__
 #define THREAD_ANNOTATION_ATTRIBUTE(x)   __attribute__((x))
 #else
 #define THREAD_ANNOTATION_ATTRIBUTE(x)   // no-op
