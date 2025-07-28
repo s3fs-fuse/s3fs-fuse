@@ -5507,15 +5507,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         else if(is_prefix(arg, "dbglevel=")){
             const char* strlevel = strchr(arg, '=') + sizeof(char);
             if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_CRIT);
+                S3fsLog::SetLogLevel(S3fsLog::Level::CRIT);
             }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_ERR);
+                S3fsLog::SetLogLevel(S3fsLog::Level::ERR);
             }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_WARN);
+                S3fsLog::SetLogLevel(S3fsLog::Level::WARN);
             }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
+                S3fsLog::SetLogLevel(S3fsLog::Level::INFO);
             }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
+                S3fsLog::SetLogLevel(S3fsLog::Level::DBG);
             }else{
                 S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
                 return -1;
@@ -5525,11 +5525,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         //
         // debug option
         //
-        // S3fsLog level is LEVEL_INFO, after second -d is passed to fuse.
+        // S3fsLog level is INFO, after second -d is passed to fuse.
         //
         else if(0 == strcmp(arg, "-d") || 0 == strcmp(arg, "--debug")){
             if(!S3fsLog::IsS3fsLogInfo() && !S3fsLog::IsS3fsLogDbg()){
-                S3fsLog::SetLogLevel(S3fsLog::LEVEL_INFO);
+                S3fsLog::SetLogLevel(S3fsLog::Level::INFO);
                 return 0;
             }
             if(0 == strcmp(arg, "--debug")){
@@ -5539,9 +5539,9 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }
         }
         // "f2" is not used no more.
-        // (set S3fsLog::LEVEL_DBG)
+        // (set S3fsLog::Level::DBG)
         else if(0 == strcmp(arg, "f2")){
-            S3fsLog::SetLogLevel(S3fsLog::LEVEL_DBG);
+            S3fsLog::SetLogLevel(S3fsLog::Level::DBG);
             return 0;
         }
         else if(0 == strcmp(arg, "curldbg")){
