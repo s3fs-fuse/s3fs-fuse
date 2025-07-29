@@ -43,12 +43,12 @@
 class S3fsLog
 {
     public:
-        enum s3fs_log_level : uint8_t {
-            LEVEL_CRIT = 0,          // LEVEL_CRIT
-            LEVEL_ERR  = 1,          // LEVEL_ERR
-            LEVEL_WARN = 3,          // LEVEL_WARNING
-            LEVEL_INFO = 7,          // LEVEL_INFO
-            LEVEL_DBG  = 15          // LEVEL_DEBUG
+        enum class Level : uint8_t {
+            CRIT = 0,          // LEVEL_CRIT
+            ERR  = 1,          // LEVEL_ERR
+            WARN = 3,          // LEVEL_WARNING
+            INFO = 7,          // LEVEL_INFO
+            DBG  = 15          // LEVEL_DEBUG
         };
 
     protected:
@@ -58,7 +58,7 @@ class S3fsLog
         static constexpr char        MSGTIMESTAMP[] = "S3FS_MSGTIMESTAMP";
 
         static S3fsLog*       pSingleton;
-        static s3fs_log_level debug_level;
+        static Level          debug_level;
         static FILE*          logfp;
         static std::string    logfile;
         static bool           time_stamp;
@@ -66,33 +66,35 @@ class S3fsLog
     protected:
         bool LowLoadEnv();
         bool LowSetLogfile(const char* pfile);
-        s3fs_log_level LowSetLogLevel(s3fs_log_level level);
-        s3fs_log_level LowBumpupLogLevel() const;
+        Level LowSetLogLevel(Level level);
+        Level LowBumpupLogLevel() const;
 
     public:
-        static bool IsS3fsLogLevel(s3fs_log_level level);
-        static bool IsS3fsLogCrit()  { return IsS3fsLogLevel(LEVEL_CRIT); }
-        static bool IsS3fsLogErr()   { return IsS3fsLogLevel(LEVEL_ERR);  }
-        static bool IsS3fsLogWarn()  { return IsS3fsLogLevel(LEVEL_WARN); }
-        static bool IsS3fsLogInfo()  { return IsS3fsLogLevel(LEVEL_INFO); }
-        static bool IsS3fsLogDbg()   { return IsS3fsLogLevel(LEVEL_DBG);  }
+        static bool IsS3fsLogLevel(Level level);
+        static bool IsS3fsLogCrit()  { return IsS3fsLogLevel(Level::CRIT); }
+        static bool IsS3fsLogErr()   { return IsS3fsLogLevel(Level::ERR);  }
+        static bool IsS3fsLogWarn()  { return IsS3fsLogLevel(Level::WARN); }
+        static bool IsS3fsLogInfo()  { return IsS3fsLogLevel(Level::INFO); }
+        static bool IsS3fsLogDbg()   { return IsS3fsLogLevel(Level::DBG);  }
 
-        static constexpr int GetSyslogLevel(s3fs_log_level level)
+        static constexpr int GetSyslogLevel(Level level)
         {
-            return ( LEVEL_DBG  == (level & LEVEL_DBG) ? LOG_DEBUG   :
-                     LEVEL_INFO == (level & LEVEL_DBG) ? LOG_INFO    :
-                     LEVEL_WARN == (level & LEVEL_DBG) ? LOG_WARNING :
-                     LEVEL_ERR  == (level & LEVEL_DBG) ? LOG_ERR     : LOG_CRIT );
+            int masked = static_cast<int>(level) & static_cast<int>(Level::DBG);
+            return ( static_cast<int>(Level::DBG)  == masked ? LOG_DEBUG   :
+                     static_cast<int>(Level::INFO) == masked ? LOG_INFO    :
+                     static_cast<int>(Level::WARN) == masked ? LOG_WARNING :
+                     static_cast<int>(Level::ERR)  == masked ? LOG_ERR     : LOG_CRIT );
         }
 
         static std::string GetCurrentTime();
 
-        static constexpr const char* GetLevelString(s3fs_log_level level)
+        static constexpr const char* GetLevelString(Level level)
         {
-            return ( LEVEL_DBG  == (level & LEVEL_DBG) ? "[DBG] " :
-                     LEVEL_INFO == (level & LEVEL_DBG) ? "[INF] " :
-                     LEVEL_WARN == (level & LEVEL_DBG) ? "[WAN] " :
-                     LEVEL_ERR  == (level & LEVEL_DBG) ? "[ERR] " : "[CRT] " );
+            int masked = static_cast<int>(level) & static_cast<int>(Level::DBG);
+            return ( static_cast<int>(Level::DBG)  == masked ? "[DBG] " :
+                     static_cast<int>(Level::INFO) == masked ? "[INF] " :
+                     static_cast<int>(Level::WARN) == masked ? "[WAN] " :
+                     static_cast<int>(Level::ERR)  == masked ? "[ERR] " : "[CRT] " );
         }
 
         static constexpr const char* GetS3fsLogNest(int nest)
@@ -131,8 +133,8 @@ class S3fsLog
 
         static bool SetLogfile(const char* pfile);
         static bool ReopenLogfile();
-        static s3fs_log_level SetLogLevel(s3fs_log_level level);
-        static s3fs_log_level BumpupLogLevel();
+        static Level SetLogLevel(Level level);
+        static Level BumpupLogLevel();
         static bool SetTimeStamp(bool value);
 
         explicit S3fsLog();
@@ -146,13 +148,13 @@ class S3fsLog
 //-------------------------------------------------------------------
 // Debug macros
 //-------------------------------------------------------------------
-void s3fs_low_logprn(S3fsLog::s3fs_log_level level, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 5, 6)));
+void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 5, 6)));
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
         do{ \
             s3fs_low_logprn(level, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
         }while(0)
 
-void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 6, 7)));
+void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 6, 7)));
 #define S3FS_LOW_LOGPRN2(level, nest, fmt, ...) \
         do{ \
             s3fs_low_logprn2(level, nest, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
@@ -165,7 +167,7 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
                 fprintf(S3fsLog::GetOutputLogFile(), "%s[CURL DBG] " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), __VA_ARGS__); \
                 S3fsLog::Flush(); \
             }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
         }while(0)
 
@@ -177,7 +179,7 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
                 S3fsLog::Flush(); \
             }else{ \
                 fprintf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
         }while(0)
 
@@ -186,10 +188,10 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
                 S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::LEVEL_INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
+                fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
                 S3fsLog::Flush(); \
             }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_INFO), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), __VA_ARGS__, ""); \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), __VA_ARGS__, ""); \
             } \
         }while(0)
 
@@ -197,10 +199,10 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
                 S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::LEVEL_INFO), __VA_ARGS__, ""); \
+                fprintf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), __VA_ARGS__, ""); \
                 S3fsLog::Flush(); \
             }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_INFO), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__, ""); \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__, ""); \
             } \
         }while(0)
 
@@ -212,7 +214,7 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
                 fprintf(fp, fmt "%s\n", __VA_ARGS__); \
                 S3fsLog::Flush(); \
             }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::LEVEL_INFO), "%s: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
+                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
         }while(0)
 
@@ -220,14 +222,14 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
 // small trick for VA_ARGS
 //
 #define S3FS_PRN_EXIT(fmt, ...)   S3FS_LOW_LOGPRN_EXIT(fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_CRIT(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_CRIT, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_ERR(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_ERR,  fmt, ##__VA_ARGS__)
-#define S3FS_PRN_WARN(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::LEVEL_WARN, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_DBG(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::LEVEL_DBG,  fmt, ##__VA_ARGS__)
-#define S3FS_PRN_INFO(fmt, ...)   S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 0, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 1, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 2, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::LEVEL_INFO, 3, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_CRIT(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::Level::CRIT, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_ERR(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::Level::ERR,  fmt, ##__VA_ARGS__)
+#define S3FS_PRN_WARN(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::Level::WARN, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_DBG(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::Level::DBG,  fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO(fmt, ...)   S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 0, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 1, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 2, fmt, ##__VA_ARGS__)
+#define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 3, fmt, ##__VA_ARGS__)
 #define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
 #define S3FS_PRN_CACHE(fp, ...)   S3FS_LOW_CACHE(fp, ##__VA_ARGS__, "")
 
@@ -248,15 +250,15 @@ void s3fs_low_logprn2(S3fsLog::s3fs_log_level level, int nest, const char* file,
 } while (0)
 
 #define FUSE_CTX_INFO(fmt, ...) do {                            \
-    PRINT_FUSE_CTX(S3fsLog::LEVEL_INFO, 0, fmt, ##__VA_ARGS__); \
+    PRINT_FUSE_CTX(S3fsLog::Level::INFO, 0, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #define FUSE_CTX_INFO1(fmt, ...) do {                           \
-    PRINT_FUSE_CTX(S3fsLog::LEVEL_INFO, 1, fmt, ##__VA_ARGS__); \
+    PRINT_FUSE_CTX(S3fsLog::Level::INFO, 1, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #define FUSE_CTX_DBG(fmt, ...) do {                                 \
-    PRINT_FUSE_CTX(S3fsLog::LEVEL_DBG, 0, fmt, ##__VA_ARGS__);  \
+    PRINT_FUSE_CTX(S3fsLog::Level::DBG, 0, fmt, ##__VA_ARGS__);  \
 } while (0)
 
 #endif // S3FS_LOGGER_H_
