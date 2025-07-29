@@ -39,9 +39,12 @@ static constexpr char SPACES[] = " \t\r\n";
 //-------------------------------------------------------------------
 class CaseInsensitiveStringView {
 public:
+    explicit CaseInsensitiveStringView(const char *str) : str(str) {}
     explicit CaseInsensitiveStringView(const std::string &str) : str(str.c_str()) {}
     bool operator==(const char *other) const { return strcasecmp(str, other) == 0; }
+    bool operator!=(const char *other) const { return !(*this == other); }
     bool is_prefix(const char *prefix) const { return strncasecmp(str, prefix, strlen(prefix)) == 0; }
+    const char *c_str() const { return str; }
 private:
     const char *str;
 };

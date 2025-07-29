@@ -1076,11 +1076,12 @@ bool S3fsCurl::SetIPResolveType(const char* value)
     if(!value){
         return false;
     }
-    if(0 == strcasecmp(value, "ipv4")){
+    auto type = CaseInsensitiveStringView(value);
+    if(type == "ipv4"){
         S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V4;
-    }else if(0 == strcasecmp(value, "ipv6")){
+    }else if(type == "ipv6"){
         S3fsCurl::ipresolve_type = CURL_IPRESOLVE_V6;
-    }else if(0 == strcasecmp(value, "whatever")){       // = default type
+    }else if(type == "whatever"){       // = default type
         S3fsCurl::ipresolve_type = CURL_IPRESOLVE_WHATEVER;
     }else{
         return false;
@@ -1428,7 +1429,8 @@ bool S3fsCurl::ResetHandle()
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLCERT, S3fsCurl::client_cert.c_str())){
             return false;
         }
-        if(!S3fsCurl::client_cert_type.empty() && 0 != strcasecmp(S3fsCurl::client_cert_type.c_str(), "PEM")){              // "PEM" is default
+        auto cert_type = CaseInsensitiveStringView(S3fsCurl::client_cert_type);
+        if(!S3fsCurl::client_cert_type.empty() && cert_type != "PEM"){              // "PEM" is default
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLCERTTYPE, S3fsCurl::client_cert_type.c_str())){
                 return false;
             }
@@ -1439,7 +1441,7 @@ bool S3fsCurl::ResetHandle()
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLKEY, S3fsCurl::client_priv_key.c_str())){
                 return false;
             }
-            if(!S3fsCurl::client_priv_key_type.empty() && 0 != strcasecmp(S3fsCurl::client_priv_key_type.c_str(), "PEM")){  // "PEM" is default
+            if(!S3fsCurl::client_priv_key_type.empty() && cert_type != "PEM"){  // "PEM" is default
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSLKEYTYPE, S3fsCurl::client_priv_key_type.c_str())){
                     return false;
                 }
