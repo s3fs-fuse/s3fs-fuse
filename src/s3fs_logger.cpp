@@ -24,11 +24,11 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <strings.h>
 #include <sys/time.h>
 
 #include "common.h"
 #include "s3fs_logger.h"
+#include "string_util.h"
 
 //-------------------------------------------------------------------
 // S3fsLog class : variables
@@ -169,9 +169,10 @@ bool S3fsLog::LowLoadEnv()
         }
     }
     if(nullptr != (pEnvVal = getenv(S3fsLog::MSGTIMESTAMP))){
-        if(0 == strcasecmp(pEnvVal, "true") || 0 == strcasecmp(pEnvVal, "yes") || 0 == strcasecmp(pEnvVal, "1")){
+        auto env_val = CaseInsensitiveStringView(pEnvVal);
+        if(env_val == "true" || env_val == "yes" || env_val == "1"){
             S3fsLog::time_stamp = true;
-        }else if(0 == strcasecmp(pEnvVal, "false") || 0 == strcasecmp(pEnvVal, "no") || 0 == strcasecmp(pEnvVal, "0")){
+        }else if(env_val == "false" || env_val == "no" || env_val == "0"){
             S3fsLog::time_stamp = false;
         }else{
             S3FS_PRN_WARN("Unknown %s environment value(%s) is specified, skip to set time stamp mode.", S3fsLog::MSGTIMESTAMP, pEnvVal);

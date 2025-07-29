@@ -814,13 +814,14 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
     ssetype = sse_type_t::SSE_DISABLE;
     ssevalue.clear();
     for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        std::string key = (*iter).first;
-        if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption") && 0 == strcasecmp((*iter).second.c_str(), "AES256")){
+        auto key = CaseInsensitiveStringView(iter->first);
+        auto value = CaseInsensitiveStringView(iter->second);
+        if(key == "x-amz-server-side-encryption" && value == "AES256"){
             ssetype  = sse_type_t::SSE_S3;
-        }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-aws-kms-key-id")){
+        }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
             ssetype  = sse_type_t::SSE_KMS;
             ssevalue = (*iter).second;
-        }else if(0 == strcasecmp(key.c_str(), "x-amz-server-side-encryption-customer-key-md5")){
+        }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
             ssetype  = sse_type_t::SSE_C;
             ssevalue = (*iter).second;
         }
@@ -5685,19 +5686,19 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         // debug level option
         //
         else if(is_prefix(arg, "dbglevel=")){
-            const char* strlevel = strchr(arg, '=') + sizeof(char);
-            if(0 == strcasecmp(strlevel, "silent") || 0 == strcasecmp(strlevel, "critical") || 0 == strcasecmp(strlevel, "crit")){
+            auto strlevel = CaseInsensitiveStringView(strchr(arg, '=') + sizeof(char));
+            if(strlevel == "silent" || strlevel == "critical" || strlevel == "crit"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::CRIT);
-            }else if(0 == strcasecmp(strlevel, "error") || 0 == strcasecmp(strlevel, "err")){
+            }else if(strlevel == "error" || strlevel == "err"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::ERR);
-            }else if(0 == strcasecmp(strlevel, "wan") || 0 == strcasecmp(strlevel, "warn") || 0 == strcasecmp(strlevel, "warning")){
+            }else if(strlevel == "wan" || strlevel == "warn" || strlevel == "warning"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::WARN);
-            }else if(0 == strcasecmp(strlevel, "inf") || 0 == strcasecmp(strlevel, "info") || 0 == strcasecmp(strlevel, "information")){
+            }else if(strlevel == "inf" || strlevel == "info" || strlevel == "information"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::INFO);
-            }else if(0 == strcasecmp(strlevel, "dbg") || 0 == strcasecmp(strlevel, "debug")){
+            }else if(strlevel == "dbg" || strlevel == "debug"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::DBG);
             }else{
-                S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel);
+                S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel.c_str());
                 return -1;
             }
             return 0;
@@ -5728,14 +5729,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetVerbose(true);
             return 0;
         }else if(is_prefix(arg, "curldbg=")){
-            const char* strlevel = strchr(arg, '=') + sizeof(char);
-            if(0 == strcasecmp(strlevel, "normal")){
+            auto strlevel = CaseInsensitiveStringView(strchr(arg, '=') + sizeof(char));
+            if(strlevel == "normal"){
                 S3fsCurl::SetVerbose(true);
-            }else if(0 == strcasecmp(strlevel, "body")){
+            }else if(strlevel == "body"){
                 S3fsCurl::SetVerbose(true);
                 S3fsCurl::SetDumpBody(true);
             }else{
-                S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel);
+                S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel.c_str());
                 return -1;
             }
             return 0;
