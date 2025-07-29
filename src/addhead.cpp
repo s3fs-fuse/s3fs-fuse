@@ -201,7 +201,6 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
         list = curl_slist_sort_insert(list, iter->first.c_str(), iter->second.c_str());
     }
     meta.clear();
-    S3FS_MALLOCTRIM(0);
     return list;
 }
 
