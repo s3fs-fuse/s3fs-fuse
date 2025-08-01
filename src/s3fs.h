@@ -33,32 +33,6 @@
             } \
         }while(0)
 
-// [NOTE]
-// s3fs use many small allocated chunk in heap area for stats
-// cache and parsing xml, etc. The OS may decide that giving
-// this little memory back to the kernel will cause too much
-// overhead and delay the operation.
-// Address of gratitude, this workaround quotes a document of
-// libxml2.( http://xmlsoft.org/xmlmem.html )
-//
-// When valgrind is used to test memory leak of s3fs, a large
-// amount of chunk may be reported. You can check the memory
-// release accurately by defining the S3FS_MALLOC_TRIM flag
-// and building it. Also, when executing s3fs, you can define
-// the MMAP_THRESHOLD environment variable and check more
-// accurate memory leak.( see, man 3 free )
-//
-#ifdef S3FS_MALLOC_TRIM
-#ifdef HAVE_MALLOC_TRIM
-#include <malloc.h>
-#define S3FS_MALLOCTRIM(pad)    malloc_trim(pad)
-#else   // HAVE_MALLOC_TRIM
-#define S3FS_MALLOCTRIM(pad)
-#endif  // HAVE_MALLOC_TRIM
-#else   // S3FS_MALLOC_TRIM
-#define S3FS_MALLOCTRIM(pad)
-#endif  // S3FS_MALLOC_TRIM
-
 #endif // S3FS_S3FS_H_
 
 /*

@@ -918,7 +918,6 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
 
         S3FS_PRN_DBG("[path=%s] uid=%u, gid=%u, mode=%04o", path, (unsigned int)(stbuf->st_uid), (unsigned int)(stbuf->st_gid), stbuf->st_mode);
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -1025,8 +1024,6 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     strncpy(buf, strValue.c_str(), size - 1);
     buf[size - 1] = '\0';
 
-    S3FS_MALLOCTRIM(0);
-
     return 0;
 }
 
@@ -1077,8 +1074,6 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
     if(0 != (update_result = update_mctime_parent_directory(path))){
         S3FS_PRN_ERR("succeed to mknod the file(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
     }
-
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -1155,8 +1150,6 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     }
     ent->MarkDirtyNewFile();
     fi->fh = autoent.Detach();       // KEEP fdentity open;
-
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -1239,8 +1232,6 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         S3FS_PRN_ERR("succeed to create the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
     }
 
-    S3FS_MALLOCTRIM(0);
-
     return result;
 }
 
@@ -1269,8 +1260,6 @@ static int s3fs_unlink(const char* _path)
     if(0 != (update_result = update_mctime_parent_directory(strPath.c_str()))){
         S3FS_PRN_ERR("succeed to remove the file(%s), but could not update timestamp of its parent directory(result=%d).", strPath.c_str(), update_result);
     }
-
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -1373,8 +1362,6 @@ static int s3fs_rmdir(const char* _path)
         S3FS_PRN_ERR("succeed to remove the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
     }
 
-    S3FS_MALLOCTRIM(0);
-
     return result;
 }
 
@@ -1461,8 +1448,6 @@ static int s3fs_symlink(const char* _from, const char* _to)
     if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
         S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
     }
-
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -1905,8 +1890,6 @@ static int s3fs_rename(const char* _from, const char* _to)
         S3FS_PRN_ERR("succeed to create the file/directory(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
     }
 
-    S3FS_MALLOCTRIM(0);
-
     return result;
 }
 
@@ -2047,7 +2030,6 @@ static int s3fs_chmod(const char* _path, mode_t mode)
             StatCache::getStatCacheData()->DelStat(normpath);
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -2142,7 +2124,6 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-    S3FS_MALLOCTRIM(0);
   
     return result;
 }
@@ -2282,7 +2263,6 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
             StatCache::getStatCacheData()->DelStat(normpath);
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -2384,7 +2364,6 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-    S3FS_MALLOCTRIM(0);
   
     return result;
 }
@@ -2499,7 +2478,6 @@ static int update_mctime_parent_directory(const char* _path)
         // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -2662,7 +2640,6 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             }
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -2771,7 +2748,6 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
         // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -2877,7 +2853,6 @@ static int s3fs_truncate(const char* _path, off_t size)
         // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(path);
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -2981,8 +2956,6 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         }
     }
     fi->fh = autoent.Detach();       // KEEP fdentity open;
-
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -3135,7 +3108,6 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
             }
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -3185,7 +3157,6 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
             }
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     // Issue 320: Delete stat cache entry because st_size may have changed.
     StatCache::getStatCacheData()->DelStat(path);
@@ -3263,7 +3234,6 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
             S3FS_PRN_DBG("file(%s) is still opened(another pseudo fd is opened).", path);
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -3279,7 +3249,6 @@ static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
     if(0 == (result = check_object_access(path, mask, nullptr))){
         result = check_parent_object_access(path, X_OK);
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -3439,7 +3408,6 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     if(0 != (result = readdir_multi_head(strpath, head, buf, filler))){
         S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
     }
-    S3FS_MALLOCTRIM(0);
 
     return result;
 }
@@ -3551,7 +3519,6 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
             break;
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return 0;
 }
@@ -4396,7 +4363,6 @@ static int s3fs_access(const char* path, int mask)
             (mask == F_OK) ? "F_OK" : "");
 
     int result = check_object_access(path, mask, nullptr);
-    S3FS_MALLOCTRIM(0);
     return result;
 }
 
@@ -4624,7 +4590,6 @@ static int s3fs_check_service()
             return EXIT_FAILURE;
         }
     }
-    S3FS_MALLOCTRIM(0);
 
     return EXIT_SUCCESS;
 }
@@ -5961,7 +5926,6 @@ int main(int argc, char* argv[])
 
     // cleanup xml2
     xmlCleanupParser();
-    S3FS_MALLOCTRIM(0);
 
     exit(fuse_res);
 }

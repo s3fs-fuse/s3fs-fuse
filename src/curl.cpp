@@ -1583,8 +1583,6 @@ bool S3fsCurl::ClearInternalData()
 
     fpLazySetup          = nullptr;
 
-    S3FS_MALLOCTRIM(0);
-
     return true;
 }
 
