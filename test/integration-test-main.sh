@@ -98,7 +98,7 @@ function test_truncate_shrink_file {
     local BIG_TRUNCATE_TEST_FILE="big-truncate-test.bin"
     local t_size=$((1024 * 1024 * 32 + 64))
 
-    dd if=/dev/urandom of="${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" bs=1024 count=$((1024 * 64))
+    ../../junk_data $((64 * 1024 * 1024)) > "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}"
     cp "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" "${BIG_TRUNCATE_TEST_FILE}"
 
     "${TRUNCATE_BIN}" "${TEMP_DIR}/${BIG_TRUNCATE_TEST_FILE}" -s "${t_size}"
