@@ -1002,6 +1002,22 @@ bool FdEntity::SetContentType(const char* path)
     return true;
 }
 
+//
+// Converts the internal meta header into a stat structure and returns it.
+//
+bool FdEntity::GetStatsFromMeta(struct stat& st) const
+{
+    const std::lock_guard<std::mutex> lock(fdent_lock);
+    if(!convert_header_to_stat(path, orgmeta, st, false)){
+        return false;
+    }
+
+    const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
+    st.st_size = pagelist.Size();      // set current file size
+
+    return true;
+}
+
 bool FdEntity::SetAllStatus(bool is_loaded)
 {
     S3FS_PRN_INFO3("[path=%s][physical_fd=%d][%s]", path.c_str(), physical_fd, is_loaded ? "loaded" : "unloaded");

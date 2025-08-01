@@ -58,6 +58,7 @@ class StatCache
         StatCache();
         ~StatCache();
 
+        bool AddStatHasLock(const std::string& key, const struct stat* pstbuf, const headers_t* pmeta, objtype_t type, bool notruncate) REQUIRES(StatCache::stat_cache_lock);
         bool TruncateCacheHasLock(bool check_only_oversize_case = true) REQUIRES(StatCache::stat_cache_lock);
         bool DelStatHasLock(const std::string& key) REQUIRES(StatCache::stat_cache_lock);
         bool RawGetChildStats(const std::string& dir, s3obj_list_t* plist, s3obj_type_map_t* pobjmap);
@@ -103,6 +104,7 @@ class StatCache
 
         // Add stat cache
         bool AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate = false);
+        bool AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate = false);
         bool AddNegativeStat(const std::string& key);
 
         // Update meta stats

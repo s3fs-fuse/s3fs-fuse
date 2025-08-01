@@ -172,6 +172,10 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return UploadPendingHasLock(fd);
         }
+        bool HaveUploadPending(){
+            const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
+            return (pending_status_t::NO_UPDATE_PENDING != pending_status);
+        }
 
         bool GetStats(struct stat& st) const {
             const std::lock_guard<std::mutex> lock(fdent_lock);
@@ -219,6 +223,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         }
         bool SetGIdHasLock(gid_t gid) REQUIRES(FdEntity::fdent_lock);
         bool SetContentType(const char* path);
+        bool GetStatsFromMeta(struct stat& st) const;
 
         int Load(off_t start, off_t size, bool is_modified_flag = false) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);  // size=0 means loading to end
 

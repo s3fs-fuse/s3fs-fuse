@@ -113,18 +113,10 @@ bool StatCache::GetStat(const std::string& key, struct stat* pstbuf, headers_t* 
     return true;
 }
 
-bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate)
+bool StatCache::AddStatHasLock(const std::string& key, const struct stat* pstbuf, const headers_t* pmeta, objtype_t type, bool notruncate)
 {
-    // [NOTE]
-    // If notruncate=true, force caching
-    //
-    if(GetCacheSize() < 1 && !notruncate){
-        return true;
-    }
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
-
     // Add(overwrite) new cache
-    if(!pMountPointDir->Add(key, &stbuf, &meta, type, notruncate)){
+    if(!pMountPointDir->Add(key, pstbuf, pmeta, type, notruncate)){
         S3FS_PRN_DBG("failed to add stat cache entry[path=%s]", key.c_str());
         return false;
     }
@@ -139,6 +131,32 @@ bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, const 
     //pMountPointDir->Dump(true);
 
     return true;
+}
+
+bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate)
+{
+    // [NOTE]
+    // If notruncate=true, force caching
+    //
+    if(GetCacheSize() < 1 && !notruncate){
+        return true;
+    }
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+
+    return AddStatHasLock(key, &stbuf, &meta, type, notruncate);
+}
+
+bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate)
+{
+    // [NOTE]
+    // If notruncate=true, force caching
+    //
+    if(GetCacheSize() < 1 && !notruncate){
+        return true;
+    }
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+
+    return AddStatHasLock(key, &stbuf, nullptr, type, notruncate);
 }
 
 // [NOTE]
