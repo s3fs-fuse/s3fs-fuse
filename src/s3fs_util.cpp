@@ -442,7 +442,7 @@ int compare_timespec(const struct stat& st, stat_time_type type, const struct ti
 void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts)
 {
     if(stat_time_type::ATIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
             st.st_atime             = ts.tv_sec;
             st.st_atimespec.tv_nsec = ts.tv_nsec;
         #else
@@ -450,7 +450,7 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
             st.st_atim.tv_nsec      = ts.tv_nsec;
         #endif
     }else if(stat_time_type::MTIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
             st.st_mtime             = ts.tv_sec;
             st.st_mtimespec.tv_nsec = ts.tv_nsec;
         #else
@@ -458,7 +458,7 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
             st.st_mtim.tv_nsec      = ts.tv_nsec;
         #endif
     }else if(stat_time_type::CTIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
             st.st_ctime             = ts.tv_sec;
             st.st_ctimespec.tv_nsec = ts.tv_nsec;
         #else
@@ -473,21 +473,21 @@ void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct tim
 struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts)
 {
     if(stat_time_type::ATIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
            ts.tv_sec  = st.st_atime;
            ts.tv_nsec = st.st_atimespec.tv_nsec;
         #else
            ts         = st.st_atim;
         #endif
     }else if(stat_time_type::MTIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
            ts.tv_sec  = st.st_mtime;
            ts.tv_nsec = st.st_mtimespec.tv_nsec;
         #else
            ts         = st.st_mtim;
         #endif
     }else if(stat_time_type::CTIME == type){
-        #if defined(__APPLE__)
+        #ifdef __APPLE__
            ts.tv_sec  = st.st_ctime;
            ts.tv_nsec = st.st_ctimespec.tv_nsec;
         #else

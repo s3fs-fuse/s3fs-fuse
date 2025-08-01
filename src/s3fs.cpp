@@ -62,7 +62,7 @@
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
-#if !defined(ENOATTR)
+#ifndef ENOATTR
 #define ENOATTR                   ENODATA
 #endif
 
@@ -172,7 +172,7 @@ static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
 static int s3fs_access(const char* path, int mask);
 static void* s3fs_init(struct fuse_conn_info* conn);
 static void s3fs_destroy(void*);
-#if defined(__APPLE__)
+#ifdef __APPLE__
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position);
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position);
 #else
@@ -886,7 +886,7 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf)
     WTF8_ENCODE(path)
     int result;
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
     FUSE_CTX_DBG("[path=%s]", path);
 #else
     FUSE_CTX_INFO("[path=%s]", path);
@@ -2834,7 +2834,7 @@ static int s3fs_truncate(const char* _path, off_t size)
             return -EIO;
         }
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
         // [NOTE]
         // Only for macos, this truncate calls to "size=0" do not reflect size.
         // The cause is unknown now, but it can be avoided by flushing the file.
@@ -3057,7 +3057,7 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
     stbuf->f_bsize   = s3fs_block_size;
     stbuf->f_namemax = NAME_MAX;
 
-#if defined(__MSYS__)
+#ifdef __MSYS__
     // WinFsp resolves the free space from f_bfree * f_frsize, and the total space from f_blocks * f_frsize (in bytes).
     stbuf->f_blocks = bucket_block_count;
     stbuf->f_frsize = stbuf->f_bsize;
@@ -3792,14 +3792,14 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
     headers_t::iterator iter;
     if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
-#if defined(XATTR_REPLACE)
+#ifdef XATTR_REPLACE
         if(XATTR_REPLACE == (flags & XATTR_REPLACE)){
             // there is no xattr header but flags is replace, so failure.
             return -ENOATTR;
         }
 #endif
     }else{
-#if defined(XATTR_CREATE)
+#ifdef XATTR_CREATE
         if(XATTR_CREATE == (flags & XATTR_CREATE)){
             // found xattr header but flags is only creating, so failure.
             return -EEXIST;
@@ -3822,7 +3822,7 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     return 0;
 }
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags, uint32_t position)
 #else
 static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags)
@@ -3833,7 +3833,7 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
         return 0;
     }
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
     if(position != 0){
         // No resource fork support
         return -EINVAL;
@@ -3986,7 +3986,7 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
     return 0;
 }
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
 #else
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
@@ -3998,7 +3998,7 @@ static int s3fs_getxattr(const char* path, const char* name, char* value, size_t
         return -EIO;
     }
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
     if (position != 0) {
         // No resource fork support
         return -EINVAL;
