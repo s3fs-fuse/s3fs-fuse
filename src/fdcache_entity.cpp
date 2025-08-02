@@ -645,7 +645,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const struct timespec& ts
 
 // [NOTE]
 // This method is called for only nocopyapi functions.
-// So we do not check disk space for this option mode, if there is no enough
+// So we do not check disk space for this option mode, if there is not enough
 // disk space this method will be failed.
 //
 bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
@@ -1443,7 +1443,7 @@ int FdEntity::RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tp
     if(0 < restsize){
         // check disk space
         if(!ReserveDiskSpace(restsize)){
-            // no enough disk space
+            // not enough disk space
             S3FS_PRN_WARN("Not enough local storage to flush: [path=%s][pseudo_fd=%d][physical_fd=%d]", (tpath ? tpath : path.c_str()), pseudo_obj->GetPseudoFd(), physical_fd);
             return -ENOSPC;   // No space left on device
         }
@@ -1526,7 +1526,7 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
         // Check rest size and free disk space
         if(0 < restsize && !ReserveDiskSpace(restsize)){
-           // no enough disk space
+           // not enough disk space
            if(0 != (result = NoCachePreMultipartUploadRequest(pseudo_obj))){
                S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                return result;
@@ -1654,7 +1654,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
         // Check rest size and free disk space
         if(0 < restsize && !ReserveDiskSpace(restsize)){
-           // no enough disk space
+           // not enough disk space
            if(0 != (result = NoCachePreMultipartUploadRequest(pseudo_obj))){
                S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                return result;
@@ -1868,7 +1868,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             // Check if there is enough free disk space for the total download size
             //
             if(!ReserveDiskSpace(total_download_size)){
-                // no enough disk space
+                // not enough disk space
                 //
                 // [NOTE]
                 // Because there is no left space size to download, we can't solve this anymore
@@ -2159,7 +2159,7 @@ ssize_t FdEntity::WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* b
     // check disk space
     off_t restsize = pagelist.GetTotalUnloadedPageSize(0, start) + size;
     if(!ReserveDiskSpace(restsize)){
-        // no enough disk space
+        // not enough disk space
         S3FS_PRN_WARN("Not enough local storage to cache write request: [path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
         return -ENOSPC;   // No space left on device
     }
@@ -2226,7 +2226,7 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
                 return result;
             }
         }else{
-            // no enough disk space
+            // not enough disk space
             if((start + static_cast<off_t>(size)) <= S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("Not enough local storage to cache write request till multipart upload can start: [path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
                 return -ENOSPC;   // No space left on device
@@ -2310,7 +2310,7 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
             // enough disk space
             FdManager::FreeReservedDiskSpace(restsize);
         }else{
-            // no enough disk space
+            // not enough disk space
             if((start + static_cast<off_t>(size)) <= S3fsCurl::GetMultipartSize()){
                 S3FS_PRN_WARN("Not enough local storage to cache write request till multipart upload can start: [path=%s][physical_fd=%d][offset=%lld][size=%zu]", path.c_str(), physical_fd, static_cast<long long int>(start), size);
                 return -ENOSPC;   // No space left on device
