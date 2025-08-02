@@ -333,7 +333,7 @@ bool FdManager::IsSafeDiskSpace(const char* path, off_t size, bool withmsg)
 
     if(fsize < needsize){
         if(withmsg){
-            S3FS_PRN_EXIT("There is no enough disk space for used as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", static_cast<double>(needsize) / 1024 / 1024, static_cast<double>(fsize) / 1024 / 1024);
+            S3FS_PRN_EXIT("There is not enough disk space for use as cache(or temporary) directory by s3fs. Requires %.3f MB, already has %.3f MB.", static_cast<double>(needsize) / 1024 / 1024, static_cast<double>(fsize) / 1024 / 1024);
         }
         return false;
     }

@@ -5859,7 +5859,7 @@ int main(int argc, char* argv[])
         // Check free disk space for maultipart request
         if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * ThreadPoolMan::GetWorkerCount())){
             // Try to clean cache dir and retry
-            S3FS_PRN_WARN("No enough disk space for s3fs, try to clean cache dir");
+            S3FS_PRN_WARN("Not enough disk space for s3fs, try to clean cache dir");
             FdManager::get()->CleanupCacheDir();
 
             if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * ThreadPoolMan::GetWorkerCount(), true)){
