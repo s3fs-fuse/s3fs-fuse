@@ -265,6 +265,8 @@ class DirStatCache : public StatCacheNode
 
         bool TruncateCacheHasLock() override REQUIRES(StatCacheNode::cache_lock);
 
+        bool GetChildLeafNameHasLock(const std::string& strpath, std::string& strLeafName, bool& hasNestedChildren) REQUIRES(StatCacheNode::cache_lock);
+
         void DumpHasLock(const std::string& indent, bool detail, std::ostringstream& oss) override REQUIRES(StatCacheNode::cache_lock);
 
     public:
