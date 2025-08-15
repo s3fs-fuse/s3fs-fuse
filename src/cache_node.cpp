@@ -1176,6 +1176,8 @@ bool DirStatCache::IsExpiredHasLock()
 
 bool DirStatCache::TruncateCacheHasLock()
 {
+    bool isTruncated = false;
+
     // check self
     if(StatCacheNode::IsExpiredHasLock()){
         // [NOTE]
@@ -1186,22 +1188,20 @@ bool DirStatCache::TruncateCacheHasLock()
             return false;
         }
     }
-    bool isTruncated = false;
 
     // Check all children
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     for(auto iter = children.begin(); iter != children.end(); ){
-        std::shared_ptr<DirStatCache> pDirCache = ConvertStatCacheObject<DirStatCache>(iter->second);
-        if(pDirCache){
+        if(iter->second->isDirectoryHasLock()){
             // [NOTE]
             // It is checked only if the expire time has passed since the last check.
             //
-            if(pDirCache->NeedTruncateProcessing()){
-                if(pDirCache->TruncateCacheHasLock()){
+            if(iter->second->IsExpireStatCacheTimeHasLock()){
+                if(iter->second->TruncateCacheHasLock()){
                     // Some files and directories under the directory have been deleted.
                     isTruncated = true;
 
-                    if(pDirCache->IsExpiredHasLock()){
+                    if(iter->second->IsExpiredHasLock()){
                         // This child directory is now empty and can be deleted.
                         S3FS_PRN_DBG("Remove stat cache [directory path=%s]", iter->first.c_str());
 
