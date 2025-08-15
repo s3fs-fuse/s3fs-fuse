@@ -823,28 +823,22 @@ bool DirStatCache::RemoveChildHasLock(const std::string& strpath)
     }
 
     // make key(leaf name without slash) for children map
-    std::string            child_leaf  = strpath.substr(GetPathHasLock().size());
-    bool                   under_child = false;
-    std::string::size_type slash_pos   = child_leaf.find_first_of('/');
-
-    if(slash_pos == (child_leaf.size() - 1)){
-        // strpath is my sub-directory 
-        child_leaf.resize(slash_pos);
-    }else if(slash_pos != std::string::npos){
-        child_leaf.resize(slash_pos);
-        under_child = true;
+    std::string strLeafName;
+    bool        hasNestedChildren = false;
+    if(!GetChildLeafNameHasLock(strpath, strLeafName, hasNestedChildren)){
+        return false;
     }
 
     // Search in children
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    auto iter = children.find(child_leaf);
+    auto iter = children.find(strLeafName);
     if(iter == children.cend()){
         // not found
         return false;
     }
 
     // found
-    if(under_child){
+    if(hasNestedChildren){
         // type must be directory
         if(!iter->second->isDirectoryHasLock()){
             return false;
@@ -919,25 +913,19 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
     }
 
     // make key(leaf name without slash) for children map
-    std::string            child_leaf  = strpath.substr(GetPathHasLock().size());
-    bool                   under_child = false;
-    std::string::size_type slash_pos   = child_leaf.find_first_of('/');
-
-    if(slash_pos == (child_leaf.size() - 1)){
-        // strpath is my sub-directory 
-        child_leaf.resize(slash_pos);
-    }else if(slash_pos != std::string::npos){
-        child_leaf.resize(slash_pos);
-        under_child = true;
+    std::string strLeafName;
+    bool        hasNestedChildren = false;
+    if(!GetChildLeafNameHasLock(strpath, strLeafName, hasNestedChildren)){
+        return false;
     }
 
     // Search in children
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    auto iter = children.find(child_leaf);
+    auto iter = children.find(strLeafName);
     if(iter != children.end()){
         if(iter->second->isNegativeHasLock()){
             // found negative type
-            if(under_child){
+            if(hasNestedChildren){
                 // strpath is an under child.
 
                 // [NOTE]
@@ -959,7 +947,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
         }else{
             // found not negative type
-            if(!under_child && IS_NEGATIVE_OBJ(type)){
+            if(!hasNestedChildren && IS_NEGATIVE_OBJ(type)){
                 // strpath is a direct child as negative cache
                 children.erase(iter);
                 iter = children.end();
@@ -969,7 +957,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
 
     if(iter != children.end()){
         // found
-        if(under_child){
+        if(hasNestedChildren){
             // Add an under child
             return iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate);
         }else{
@@ -987,9 +975,9 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
         }
     }else{
         // not found, add as a new object
-        if(under_child){
+        if(hasNestedChildren){
             // First add directory child, and add an under child
-            std::string subdir     = GetPathHasLock() + child_leaf + "/";    // terminate with "/". (if not terminated, it will added automatically.)
+            std::string subdir     = GetPathHasLock() + strLeafName + "/";  // terminate with "/". (if not terminated, it will added automatically.)
             auto        pstatcache = std::make_shared<DirStatCache>(subdir.c_str());
 
             if(!pstatcache->AddHasLock(strpath, pstat, pmeta, type, is_notruncate)){
@@ -997,7 +985,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
 
             // add as a child
-            children[child_leaf] = std::move(pstatcache);
+            children[strLeafName] = std::move(pstatcache);
 
         }else{
             // create and add as a direct child
@@ -1059,7 +1047,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
 
             // add as a child
-            children[child_leaf] = std::move(pstatcache);
+            children[strLeafName] = std::move(pstatcache);
         }
     }
     return true;
@@ -1109,30 +1097,24 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
     }
 
     // make key(leaf name without slash) for children map
-    std::string            child_leaf  = strpath.substr(GetPathHasLock().size());
-    bool                   under_child = false;
-    std::string::size_type slash_pos   = child_leaf.find_first_of('/');
-
-    if(slash_pos == (child_leaf.size() - 1)){
-        // strpath is my sub-directory 
-        child_leaf.resize(slash_pos);
-    }else if(slash_pos != std::string::npos){
-        child_leaf.resize(slash_pos);
-        under_child = true;
+    std::string strLeafName;
+    bool        hasNestedChildren = false;
+    if(!GetChildLeafNameHasLock(strpath, strLeafName, hasNestedChildren)){
+        return std::shared_ptr<StatCacheNode>();
     }
 
     std::shared_ptr<StatCacheNode> pstatcache;
     bool isRemovePath = false;
     {
         std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-        auto iter = children.find(child_leaf);
+        auto iter = children.find(strLeafName);
         if(iter == children.cend()){
             // not found in children
             return std::shared_ptr<StatCacheNode>();
         }
 
         // found in children
-        if(under_child){
+        if(hasNestedChildren){
             // search in found child
             bool childTruncate = false;     // Not use in this method
             return iter->second->FindHasLock(strpath, petagval, childTruncate);
@@ -1248,6 +1230,33 @@ bool DirStatCache::TruncateCacheHasLock()
     }
 
     return isTruncated;
+}
+
+bool DirStatCache::GetChildLeafNameHasLock(const std::string& strpath, std::string& strLeafName, bool& hasNestedChildren)
+{
+    if(strpath.size() < GetPathHasLock().size()){
+        return false;
+    }
+
+    strLeafName = strpath.substr(GetPathHasLock().size());
+    if(strLeafName.empty()){
+        return false;
+    }
+
+    std::string::size_type slash_pos = strLeafName.find_first_of('/');
+    if(slash_pos == (strLeafName.size() - 1)){
+        // strpath is my sub-directory leaf
+        strLeafName.resize(slash_pos);
+        hasNestedChildren = false;
+    }else if(slash_pos != std::string::npos){
+        // strpath is at least two levels deep within this directory.
+        strLeafName.resize(slash_pos);
+        hasNestedChildren = true;
+    }else{
+        // strpath is my child file leaf
+        hasNestedChildren = false;
+    }
+    return true;
 }
 
 void DirStatCache::DumpHasLock(const std::string& indent, bool detail, std::ostringstream& oss)
