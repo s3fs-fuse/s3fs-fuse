@@ -871,10 +871,40 @@ bool DirStatCache::isRemovableHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!children.empty()){
+    if(HasExistedChildHasLock()){
         return false;
     }
     return true;
+}
+
+bool DirStatCache::HasExistedChildHasLock()
+{
+    // [FIXME]
+    // This for statement will result in an error saying that it can be
+    // replaced with std::any_of using clang-tidy.
+    // However, if we replace this loop with std::any_of as shown below,
+    // an error will occur in thread_safety.
+    //
+    //    std::any_of(children.begin(), children.end(), [](const auto& pair){ return !pair.second->isNegativeHasLock(); });
+    //
+    // This is because that when using as std::any_of algorithms with
+    // lambda expressions, static analysis assumes that "the lambda may
+    // be called outside the scope of the caller."
+    // As a result, it concludes that there is no guarantee that the
+    // mutex is held within the lambda (a limitation of the analysis).
+    //
+    // Therefore, until this false positive is resolved, we use
+    // NOLINTNEXTLINE(readability-use-anyofallof) to avoid clang-tidy
+    // errors.
+    //
+
+    // NOLINTNEXTLINE(readability-use-anyofallof)
+    for(const auto& pair: children){
+        if(!pair.second->isNegativeHasLock()){
+            return true;
+        }
+    }
+    return false;
 }
 
 bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate)
@@ -1168,7 +1198,7 @@ bool DirStatCache::IsExpiredHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!HasStatHasLock() && !HasMetaHasLock() && children.empty()){
+    if(!HasStatHasLock() && !HasMetaHasLock() && !HasExistedChildHasLock()){
         // this cache is empty
         return true;
     }
