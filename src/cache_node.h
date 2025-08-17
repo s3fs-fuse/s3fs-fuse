@@ -79,6 +79,8 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static time_t           ExpireTime;
         static bool             UseNegativeCache;
         static std::mutex       cache_lock;                                                // for internal data
+        static unsigned long    DisableCheckingExpire GUARDED_BY(cache_lock);              // If greater than 0, it disables the expiration check, which allows disabling checks during processing.
+        static struct timespec  DisableExpireDate GUARDED_BY(cache_lock);                  // Data registerd after this time will not be truncated(if 0 < DisableCheckingExpire)
 
     private:
         objtype_t               cache_type GUARDED_BY(StatCacheNode::cache_lock) = objtype_t::UNKNOWN;  // object type is set in the constructor(except dir).
@@ -97,6 +99,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static void IncrementCacheCount(objtype_t type);
         static void DecrementCacheCount(objtype_t type);
         static bool SetNegativeCache(bool flag);
+        static bool NeedExpireCheckHasLock(const struct timespec& ts) REQUIRES(StatCacheNode::cache_lock);
 
         // Cache Type
         bool isSameObjectTypeHasLock(objtype_t type) const REQUIRES(StatCacheNode::cache_lock);
@@ -156,6 +159,8 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static bool EnableNegativeCache() { return SetNegativeCache(true); }
         static bool DisableNegativeCache() { return SetNegativeCache(false); }
         static bool IsEnabledNegativeCache() { return UseNegativeCache; }
+        static bool PreventExpireCheck();
+        static bool ResumeExpireCheck();
 
         // Constructor/Destructor
         explicit StatCacheNode(const char* path = nullptr, objtype_t type = objtype_t::UNKNOWN);
@@ -319,6 +324,28 @@ class NegativeStatCache : public StatCacheNode
         NegativeStatCache(NegativeStatCache&&) = delete;
         NegativeStatCache& operator=(const NegativeStatCache&) = delete;
         NegativeStatCache& operator=(NegativeStatCache&&) = delete;
+};
+
+//-------------------------------------------------------------------
+// Utility Class : PreventStatCacheExpire
+//-------------------------------------------------------------------
+class PreventStatCacheExpire
+{
+    public:
+        explicit PreventStatCacheExpire()
+        {
+            StatCacheNode::PreventExpireCheck();
+        }
+
+        ~PreventStatCacheExpire()
+        {
+            StatCacheNode::ResumeExpireCheck();
+        }
+
+        PreventStatCacheExpire(const PreventStatCacheExpire&) = delete;
+        PreventStatCacheExpire(PreventStatCacheExpire&&) = delete;
+        PreventStatCacheExpire& operator=(const PreventStatCacheExpire&) = delete;
+        PreventStatCacheExpire& operator=(PreventStatCacheExpire&&) = delete;
 };
 
 #endif // S3FS_CACHE_NODE_H_
