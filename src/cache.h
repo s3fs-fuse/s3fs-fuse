@@ -101,11 +101,13 @@ class StatCache
         {
             return GetStat(key, nullptr, nullptr, nullptr, petag);
         }
+        bool GetS3ObjList(const std::string& key, S3ObjList& list);
 
         // Add stat cache
         bool AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate = false);
         bool AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate = false);
         bool AddNegativeStat(const std::string& key);
+        bool AddS3ObjList(const std::string& key, const S3ObjList& list);
 
         // Update meta stats
         bool UpdateStat(const std::string& key, const struct stat& stbuf, const headers_t& meta);

@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <algorithm>
 
 #include "s3objlist.h"
 
@@ -253,6 +254,70 @@ bool S3ObjList::GetNameList(s3obj_list_t& list, bool OnlyNormalized, bool CutSla
 bool S3ObjList::GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized, bool CutSlash) const
 {
     return RawGetNames(nullptr, &objmap, OnlyNormalized, CutSlash);
+}
+
+bool S3ObjList::HasName(const std::string& strName)
+{
+    std::string strWitoutSlash;
+    std::string strWithSlash;
+
+    if('/' == strName.back()){
+        strWitoutSlash = strName.substr(strName.size() - 1);
+        strWithSlash   = strName;
+    }else{
+        strWitoutSlash = strName;
+        strWithSlash   = strName + '/';
+    }
+    if(objects.end() != objects.find(strWitoutSlash) || objects.end() != objects.find(strWithSlash)){
+        return true;
+    }
+    return false;
+}
+
+bool S3ObjList::Remove(const std::string& strName)
+{
+    std::string strWitoutSlash;
+    std::string strWithSlash;
+
+    if('/' == strName.back()){
+        strWitoutSlash = strName.substr(strName.size() - 1);
+        strWithSlash   = strName;
+    }else{
+        strWitoutSlash = strName;
+        strWithSlash   = strName + '/';
+    }
+    objects.erase(strWitoutSlash);
+    objects.erase(strWithSlash);
+    common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWitoutSlash), common_prefixes.end());
+    common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWithSlash), common_prefixes.end());
+
+    return true;
+}
+
+void S3ObjList::Dump(const std::string& indent, std::ostringstream& oss) const
+{
+    std::string child_indent        = indent + "  ";
+    std::string child_member_indent = child_indent + "  ";
+
+    oss << indent << "S3ObjList::objects = {" << std::endl;
+    for(auto oiter = objects.cbegin(); objects.cend() != oiter; ++oiter){
+        oss << child_indent << "[" << oiter->first << "] = {" << std::endl;
+        oss << child_member_indent << "normalname = " << oiter->second.normalname        << std::endl;
+        oss << child_member_indent << "orgname    = " << oiter->second.orgname           << std::endl;
+        oss << child_member_indent << "etag       = " << oiter->second.etag              << std::endl;
+        oss << child_member_indent << "type       = " << STR_OBJTYPE(oiter->second.type) << std::endl;
+        oss << child_indent << "}" << std::endl;
+    }
+    oss << indent << "}" << std::endl;
+
+    std::string strtmp;
+    for(auto citer = common_prefixes.cbegin(); common_prefixes.cend() != citer; ++citer){
+        if(!strtmp.empty()){
+            strtmp += ", ";
+        }
+        strtmp += *citer;
+    }
+    oss << indent << "S3ObjList::common_prefixes = {" << strtmp << "}" << std::endl;
 }
 
 typedef std::map<std::string, bool> s3obj_h_t;
