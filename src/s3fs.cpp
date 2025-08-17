@@ -1302,17 +1302,27 @@ static int s3fs_unlink(const char* _path)
 
 static int directory_empty(const char* path)
 {
-    int result;
+    int       result = 0;
     S3ObjList head;
 
-    if((result = list_bucket(path, head, "/", true)) != 0){
-        S3FS_PRN_ERR("list_bucket returns error.");
-        return result;
+    // check s3objlist in cache
+    if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+        if((result = list_bucket(path, head, "/", true)) != 0){
+            S3FS_PRN_ERR("list_bucket returns error.");
+            return result;
+        }
+        if(!head.IsEmpty()){
+            if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
+                S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
+            }
+            result = -ENOTEMPTY;
+        }
+    }else{
+        if(!head.IsEmpty()){
+            result = -ENOTEMPTY;
+        }
     }
-    if(!head.IsEmpty()){
-        return -ENOTEMPTY;
-    }
-    return 0;
+    return result;
 }
 
 static int s3fs_rmdir(const char* _path)
@@ -1772,9 +1782,16 @@ static int rename_directory(const char* from, const char* to)
     //
     // No delimiter is specified, the result(head) is all object keys.
     // (CommonPrefixes is empty, but all object is listed in Key.)
-    if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
-        S3FS_PRN_ERR("list_bucket returns error.");
-        return result; 
+    //
+    if(!StatCache::getStatCacheData()->GetS3ObjList(basepath, head)){
+        // get a list of all the objects
+        if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
+            S3FS_PRN_ERR("list_bucket returns error.");
+            return result;
+        }
+        if(!StatCache::getStatCacheData()->AddS3ObjList(basepath, head)){
+            S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", basepath.c_str());
+        }
     }
     head.GetNameList(headlist);                                             // get name without "/".
 
@@ -3500,10 +3517,17 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
         return result;
     }
 
-    // get a list of all the objects
-    if((result = list_bucket(path, head, "/")) != 0){
-        S3FS_PRN_ERR("list_bucket returns error(%d).", result);
-        return result;
+    // check s3objlist in cache
+    if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+        // get a list of all the objects
+        if((result = list_bucket(path, head, "/")) != 0){
+            S3FS_PRN_ERR("list_bucket returns error(%d).", result);
+            return result;
+        }
+
+        if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
+            S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
+        }
     }
 
     // force to add "." and ".." name.
