@@ -99,6 +99,8 @@ bool            StatCacheNode::IsExpireIntervalType            = false;
 time_t          StatCacheNode::ExpireTime                      = 15 * 60;
 bool            StatCacheNode::UseNegativeCache                = true;
 std::mutex      StatCacheNode::cache_lock;
+unsigned long   StatCacheNode::DisableCheckingExpire           = 0L;
+struct timespec StatCacheNode::DisableExpireDate               = {0, 0};
 
 //
 // Class Methods
@@ -160,6 +162,57 @@ bool StatCacheNode::SetNegativeCache(bool flag)
     bool old = UseNegativeCache;
     UseNegativeCache = flag;
     return old;
+}
+
+bool StatCacheNode::NeedExpireCheckHasLock(const struct timespec& ts)
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+
+    // [NOTE]
+    // If the expiration date check is disabled(0 < DisableCheckingExpire)
+    // and the date is later than DisableExpireDate, it is determined that
+    // checking is not necessary.
+    //
+    if(0L < StatCacheNode::DisableCheckingExpire){
+        if(0 >= CompareStatCacheTime(StatCacheNode::DisableExpireDate, ts)){
+            return false;
+        }
+    }
+    return true;
+}
+
+bool StatCacheNode::PreventExpireCheck()
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+
+    ++StatCacheNode::DisableCheckingExpire;
+
+    if(0 == StatCacheNode::DisableExpireDate.tv_sec){
+        SetCurrentTime(StatCacheNode::DisableExpireDate);
+        StatCacheNode::DisableExpireDate.tv_sec -= StatCacheNode::GetExpireTime();
+    }
+    return true;
+}
+
+bool StatCacheNode::ResumeExpireCheck()
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+
+    if(0 < StatCacheNode::DisableCheckingExpire){
+        --StatCacheNode::DisableCheckingExpire;
+    }
+    if(0 == StatCacheNode::DisableCheckingExpire){
+        StatCacheNode::DisableExpireDate = {0, 0};
+    }
+    return true;
 }
 
 //-------------------------------------------------------------------
@@ -654,7 +707,7 @@ s3obj_type_map_t::size_type StatCacheNode::GetChildMap(s3obj_type_map_t& childma
 
 bool StatCacheNode::IsExpireStatCacheTimeHasLock() const
 {
-    if(StatCacheNode::IsEnableExpireTime()){
+    if(NeedExpireCheckHasLock(cache_date)){
         if(IsExpireStatCacheTime(cache_date, StatCacheNode::GetExpireTime())){
             // this cache is expired
             return true;
@@ -1182,11 +1235,12 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
 
 bool DirStatCache::NeedTruncateProcessing()
 {
-    if(!StatCacheNode::IsEnableExpireTime()){
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+    if(!NeedExpireCheckHasLock(cache_date)){
         return false;
     }
-    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
 
+    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     return IsExpireStatCacheTime(last_check_date, StatCacheNode::GetExpireTime());
 }
 
