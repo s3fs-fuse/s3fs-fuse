@@ -48,11 +48,11 @@ func_usage()
 
 PRGNAME=$(basename "$0")
 
-if [ "X$1" = "X-h" ] || [ "X$1" = "X-H" ]; then
+if [ "$1" = "-h" ] || [ "$1" = "-H" ]; then
     func_usage "${PRGNAME}"
     exit 0
 fi
-if [ "X$1" = "X" ] || [ "X$2" = "X" ] || [ "X$3" = "X" ]; then
+if [ "$1" = "" ] || [ "$2" = "" ] || [ "$3" = "" ]; then
     func_usage "${PRGNAME}"
     exit 1
 fi
@@ -61,7 +61,7 @@ BUCKET="$1"
 CDIR="$2"
 LIMIT="$3"
 SILENT=0
-if [ "X$4" = "X-silent" ]; then
+if [ "$4" = "-silent" ]; then
     SILENT=1
 fi
 FILES_CDIR="${CDIR}/${BUCKET}"
