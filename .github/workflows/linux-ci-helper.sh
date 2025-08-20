@@ -67,7 +67,7 @@ AWSCLI_ZIP_FILE="awscliv2.zip"
 # Parameters for configure(set environments)
 #-----------------------------------------------------------
 CXX="g++"
-CXXFLAGS="-O -DS3FS_PTHREAD_ERRORCHECK=1"
+CXXFLAGS="-O"
 LDFLAGS=""
 CONFIGURE_OPTIONS="--prefix=/usr --with-openssl"
 
