@@ -47,15 +47,15 @@ ALLYES="no"
 DIRPARAM=""
 
 while [ "$1" != "" ]; do
-    if [ "X$1" = "X-help" ] || [ "X$1" = "X-h" ] || [ "X$1" = "X-H" ]; then
+    if [ "$1" = "-help" ] || [ "$1" = "-h" ] || [ "$1" = "-H" ]; then
         UsageFunction "${OWNNAME}"
         exit 0
-    elif [ "X$1" = "X-y" ] || [ "X$1" = "X-Y" ]; then
+    elif [ "$1" = "-y" ] || [ "$1" = "-Y" ]; then
         AUTOYES="yes"
-    elif [ "X$1" = "X-all" ] || [ "X$1" = "X-ALL" ]; then
+    elif [ "$1" = "-all" ] || [ "$1" = "-ALL" ]; then
         ALLYES="yes"
     else
-        if [ "X$DIRPARAM" != "X" ]; then
+        if [ "$DIRPARAM" != "" ]; then
             echo "*** Input error."
             echo ""
             UsageFunction "${OWNNAME}"
@@ -65,7 +65,7 @@ while [ "$1" != "" ]; do
     fi
     shift
 done
-if [ "X$DIRPARAM" = "X" ]; then
+if [ "$DIRPARAM" = "" ]; then
     echo "*** Input error."
     echo ""
     UsageFunction "${OWNNAME}"
@@ -138,11 +138,11 @@ for DIR in $DIRLIST; do
     if [ "${AUTOYES}" = "yes" ]; then
         ANSWER="y"
     fi
-    while [ "X${ANSWER}" != "XY" ] && [ "X${ANSWER}" != "Xy" ] && [ "X${ANSWER}" != "XN" ] && [ "X${ANSWER}" != "Xn" ]; do
+    while [ "${ANSWER}" != "Y" ] && [ "${ANSWER}" != "y" ] && [ "${ANSWER}" != "N" ] && [ "${ANSWER}" != "n" ]; do
         printf "%s" "Do you merge ${DIR} ? (y/n): "
         read -r ANSWER
     done
-    if [ "X${ANSWER}" != "XY" ] && [ "X${ANSWER}" != "Xy" ]; then
+    if [ "${ANSWER}" != "Y" ] && [ "${ANSWER}" != "y" ]; then
         continue
     fi
 

@@ -36,9 +36,9 @@ SUITELOG="${TOPDIR}/test-suite.log"
 TMP_LINENO_FILE="/tmp/.lineno.tmp"
 
 while [ $# -ne 0 ]; do
-    if [ "X$1" = "X" ]; then
+    if [ "$1" = "" ]; then
         break
-    elif [ "X$1" = "X-h" ] || [ "X$1" = "X-H" ] || [ "X$1" = "X--help" ] || [ "X$1" = "X--HELP" ]; then
+    elif [ "$1" = "-h" ] || [ "$1" = "-H" ] || [ "$1" = "--help" ] || [ "$1" = "--HELP" ]; then
         func_usage "${PRGNAME}"
         exit 0
     else
