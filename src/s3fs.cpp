@@ -116,8 +116,8 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 static int list_bucket(const char* path, S3ObjList& head, const char* delimiter, bool check_content_only = false);
 static int directory_empty(const char* path);
 static int rename_large_object(const char* from, const char* to);
-static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid);
-static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue);
+static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid, struct stat* pstbuf = nullptr);
+static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue, struct stat* pstbuf = nullptr);
 static int rename_object(const char* from, const char* to, bool update_ctime);
 static int rename_object_nocopy(const char* from, const char* to, bool update_ctime);
 static int clone_directory_object(const char* from, const char* to, bool update_ctime, const char* pxattrvalue);
@@ -254,7 +254,8 @@ static int remove_old_type_dir(const std::string& path, objtype_t ObjType)
         if(0 != (result = delete_request(path))){
             return result;
         }
-        // succeed removing or not found the directory
+        // succeed removing or not found the directory, then remove stat cache as well
+        StatCache::getStatCacheData()->DelStat(path);
     }else{
         // nothing to do
     }
@@ -932,7 +933,6 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     std::string strValue;
     objtype_t   ObjType = objtype_t::UNKNOWN;
     struct stat stbuf   = {};
-    headers_t   meta;
 
     FUSE_CTX_INFO("[path=%s]", strPath.c_str());
 
@@ -943,7 +943,7 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
 
     // check if there is a valid cache
     bool found_cache = false;
-    if(StatCache::getStatCacheData()->GetStat(strPath, &stbuf, &meta, &ObjType)){
+    if(StatCache::getStatCacheData()->GetStat(strPath, &stbuf, nullptr, &ObjType)){
         if(IS_SYMLINK_OBJ(ObjType)){
             // found symlink stat cache
             found_cache = true;
@@ -993,7 +993,8 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
         }
 
         // make meta and stat
-        bool add_cache = true;
+        headers_t meta;
+        bool      add_cache = true;
         if(!found_cache){
             // make headers for symlink
             std::string strnow       = s3fs_str_realtime();
@@ -1027,8 +1028,12 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     return 0;
 }
 
-// common function for creation of a plain object
-static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid)
+// Common function for creation of a plain object
+//
+// [NOTE]
+// Currently this is only called by s3fs_mknod.
+//
+static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gid, struct stat* pstbuf)
 {
     S3FS_PRN_INFO2("[path=%s][mode=%04o]", path, mode);
 
@@ -1046,6 +1051,13 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
     if(0 != (result = put_request(SAFESTRPTR(path), meta, -1, true/* ahbe */))){
         return result;
     }
+
+    if(pstbuf){
+        if(!convert_header_to_stat(std::string(path), meta, *pstbuf)){
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]", path);
+            return -EIO;
+        }
+    }
     return 0;
 }
 
@@ -1054,6 +1066,7 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
     WTF8_ENCODE(path)
     int       result;
     struct fuse_context* pcxt;
+    struct stat stbuf;
 
     FUSE_CTX_INFO("[path=%s][mode=%04o][dev=%llu]", path, mode, (unsigned long long)rdev);
 
@@ -1061,13 +1074,15 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
         return -EIO;
     }
 
-    if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid))){
+    if(0 != (result = create_file_object(path, mode, pcxt->uid, pcxt->gid, &stbuf))){
         S3FS_PRN_ERR("could not create object for special file(result=%d)", result);
         return result;
     }
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-    StatCache::getStatCacheData()->DelStat(path);
+    // Add only stat structure to stat cache
+    if(!StatCache::getStatCacheData()->AddStat(std::string(path), stbuf, objtype_t::FILE)){
+        S3FS_PRN_ERR("succeed to mknod the file(%s), but could not add stat cache.", path);
+    }
 
     // update parent directory timestamp
     int update_result;
@@ -1154,7 +1169,7 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     return 0;
 }
 
-static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue)
+static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue, struct stat* pstbuf)
 {
     S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%s][mtime=%s][ctime=%s][uid=%u][gid=%u]", path, mode, str(ts_atime).c_str(), str(ts_mtime).c_str(), str(ts_ctime).c_str(), (unsigned int)uid, (unsigned int)gid);
 
@@ -1185,6 +1200,13 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
     if(0 != (result = put_request(tpath, meta, -1, false/* ahbe */))){
         return result;
     }
+
+    if(pstbuf){
+        if(!convert_header_to_stat(tpath, meta, *pstbuf)){       // There is no need to worry if the tpath is "//"
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]", path);
+            return -EIO;
+        }
+    }
     return 0;
 }
 
@@ -1193,6 +1215,7 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
     WTF8_ENCODE(path)
     int result;
     struct fuse_context* pcxt;
+    struct stat stbuf;
 
     FUSE_CTX_INFO("[path=%s][mode=%04o]", path, mode);
 
@@ -1221,10 +1244,12 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
 
     struct timespec now;
     s3fs_realtime(now);
-    result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid, pxattrvalue);
+    result = create_directory_object(path, mode, now, now, now, pcxt->uid, pcxt->gid, pxattrvalue, &stbuf);
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-    StatCache::getStatCacheData()->DelStat(path);
+    // Add only stat structure to stat cache
+    if(!StatCache::getStatCacheData()->AddStat(std::string(path), stbuf, objtype_t::DIR_NORMAL)){
+        S3FS_PRN_ERR("succeed to create the directory(%s), but could not add stat cache.", path);
+    }
 
     // update parent directory timestamp
     int update_result;
@@ -1456,7 +1481,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
 {
     int         result;
     headers_t   meta;
-    struct stat buf;
+    struct stat stbuf;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
 
@@ -1468,7 +1493,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
         // not permit removing "from" object parent dir.
         return result;
     }
-    if(0 != (result = get_object_attribute(from, &buf, &meta))){
+    if(0 != (result = get_object_attribute(from, &stbuf, &meta))){
         return result;
     }
 
@@ -1526,7 +1551,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
                 // This does not affect the rename process, but the cache information in
                 // the "modified" state remains, making it impossible to read the file correctly.
                 //
-                ent = autoent.Open(from, &meta, buf.st_size, mtime, O_RDONLY, false, true, false);
+                ent = autoent.Open(from, &meta, stbuf.st_size, mtime, O_RDONLY, false, true, false);
             }
             if(ent){
                 if(0 != (result = ent->SetMCtime(mtime, ctime))){
@@ -1549,8 +1574,18 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     // Remove file
     result = s3fs_unlink(from);
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-    StatCache::getStatCacheData()->DelStat(to);
+    // Add only stat structure to stat cache
+    stbuf = {};
+    if(convert_header_to_stat(std::string(to), meta, stbuf)){
+        objtype_t ObjType = derive_object_type(std::string(to), meta, objtype_t::FILE);
+        if(!StatCache::getStatCacheData()->AddStat(std::string(to), stbuf, ObjType)){
+            S3FS_PRN_ERR("succeed to rename %s to %s, but could not add stat cache. So remove stat cache.", from, to);
+            StatCache::getStatCacheData()->DelStat(std::string(to));
+        }
+    }else{
+        S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", to);
+        StatCache::getStatCacheData()->DelStat(std::string(to));
+    }
 
     return result;
 }
@@ -1603,7 +1638,9 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
     // Remove file
     result = s3fs_unlink(from);
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+    // [NOTE]
+    // Not have a copy API (nocopy), the stat cache will be removed.
+    //
     StatCache::getStatCacheData()->DelStat(to);
 
     return result;
@@ -1612,7 +1649,7 @@ static int rename_object_nocopy(const char* from, const char* to, bool update_ct
 static int rename_large_object(const char* from, const char* to)
 {
     int         result;
-    struct stat buf;
+    struct stat stbuf;
     headers_t   meta;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from , to);
@@ -1625,11 +1662,11 @@ static int rename_large_object(const char* from, const char* to)
         // not permit removing "from" object parent dir.
         return result;
     }
-    if(0 != (result = get_object_attribute(from, &buf, &meta, false))){
+    if(0 != (result = get_object_attribute(from, &stbuf, &meta, false))){
         return result;
     }
 
-    if(0 != (result = multipart_put_head_request(from, to, buf.st_size, meta))){
+    if(0 != (result = multipart_put_head_request(from, to, stbuf.st_size, meta))){
         return result;
     }
 
@@ -1639,8 +1676,18 @@ static int rename_large_object(const char* from, const char* to)
     // Remove file
     result = s3fs_unlink(from);
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-    StatCache::getStatCacheData()->DelStat(to);
+    // Add only stat structure to stat cache
+    stbuf = {};
+    if(convert_header_to_stat(std::string(to), meta, stbuf)){
+        objtype_t ObjType = derive_object_type(std::string(to), meta, objtype_t::FILE);
+        if(!StatCache::getStatCacheData()->AddStat(std::string(to), stbuf, ObjType)){
+            S3FS_PRN_ERR("succeed to rename %s to %s, but could not add stat cache. So remove stat cache.", from, to);
+            StatCache::getStatCacheData()->DelStat(std::string(to));
+        }
+    }else{
+        S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", to);
+        StatCache::getStatCacheData()->DelStat(std::string(to));
+    }
 
     return result;
 }
@@ -1649,6 +1696,7 @@ static int clone_directory_object(const char* from, const char* to, bool update_
 {
     int result = -1;
     struct stat stbuf;
+    struct stat newbuf;
 
     S3FS_PRN_INFO1("[from=%s][to=%s]", from, to);
 
@@ -1667,10 +1715,13 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     }else{
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
     }
-    result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue);
+    result = create_directory_object(to, stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newbuf);
 
-    // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-    StatCache::getStatCacheData()->DelStat(to);
+    // Add only stat structure to stat cache
+    if(!StatCache::getStatCacheData()->AddStat(std::string(to), newbuf, objtype_t::DIR_NORMAL)){
+        S3FS_PRN_ERR("succeed to rename %s to %s directory, but could not add stat cache. So remove stat cache.", from, to);
+        StatCache::getStatCacheData()->DelStat(std::string(to));
+    }
 
     return result;
 }
@@ -1909,6 +1960,7 @@ static int s3fs_chmod(const char* _path, mode_t mode)
     std::string normpath;
     headers_t   meta;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][mode=%04o]", path, mode);
@@ -1949,9 +2001,6 @@ static int s3fs_chmod(const char* _path, mode_t mode)
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -1960,8 +2009,14 @@ static int s3fs_chmod(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to change mode for directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         // normal object or directory object of newer version
@@ -2026,8 +2081,17 @@ static int s3fs_chmod(const char* _path, mode_t mode)
                 return result;
             }
 
-            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-            StatCache::getStatCacheData()->DelStat(normpath);
+            // Add only stat structure to stat cache
+            if(convert_header_to_stat(curpath, meta, newstbuf)){
+                ObjType = derive_object_type(curpath, meta, objtype_t::FILE);
+                if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                    S3FS_PRN_ERR("succeed to change mode for %s, but could not add stat cache. So remove stat cache.", curpath.c_str());
+                    StatCache::getStatCacheData()->DelStat(curpath);
+                }
+            }else{
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
         }
     }
 
@@ -2041,6 +2105,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
     std::string curpath;
     std::string normpath;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][mode=%04o]", path, mode);
@@ -2083,9 +2148,6 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -2094,8 +2156,14 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to change mode for directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         // normal object or directory object of newer version
@@ -2121,7 +2189,9 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode)
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        // [NOTE]
+        // Not have a copy API (nocopy), the stat cache will be removed.
+        //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
   
@@ -2136,6 +2206,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
     std::string normpath;
     headers_t   meta;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
@@ -2182,9 +2253,6 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -2193,8 +2261,14 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to chown for directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
@@ -2259,8 +2333,17 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid)
                 return result;
             }
 
-            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-            StatCache::getStatCacheData()->DelStat(normpath);
+            // Add only stat structure to stat cache
+            if(convert_header_to_stat(curpath, meta, newstbuf)){
+                ObjType = derive_object_type(curpath, meta, objtype_t::FILE);
+                if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                    S3FS_PRN_ERR("succeed to chown for %s, but could not add stat cache. So remove stat cache.", curpath.c_str());
+                    StatCache::getStatCacheData()->DelStat(curpath);
+                }
+            }else{
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
         }
     }
 
@@ -2274,6 +2357,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
     std::string curpath;
     std::string normpath;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][uid=%u][gid=%u]", path, (unsigned int)uid, (unsigned int)gid);
@@ -2322,9 +2406,6 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -2333,8 +2414,14 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         s3fs_realtime(ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, uid, gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to chown for directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         // normal object or directory object of newer version
@@ -2361,7 +2448,9 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid)
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        // [NOTE]
+        // Not have a copy API (nocopy), the stat cache will be removed.
+        //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
   
@@ -2394,6 +2483,7 @@ static int update_mctime_parent_directory(const char* _path)
     std::string     normpath;       // normalized directory path(ex. "dir/")
     headers_t       meta;
     struct stat     stbuf;
+    struct stat newstbuf;
     struct timespec mctime;
     struct timespec atime;
     objtype_t       ObjType = objtype_t::UNKNOWN;
@@ -2450,14 +2540,15 @@ static int update_mctime_parent_directory(const char* _path)
             }
         }
 
-        if(!normpath.empty()){
-            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-            StatCache::getStatCacheData()->DelStat(normpath);
+        // Make new directory object("dir/")
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mctime, mctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newstbuf))){
+            return result;
         }
 
-        // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mctime, mctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
-            return result;
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to change mctime for parent(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
@@ -2475,8 +2566,16 @@ static int update_mctime_parent_directory(const char* _path)
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
+        if(convert_header_to_stat(curpath, meta, newstbuf)){
+            ObjType = derive_object_type(curpath, meta, objtype_t::DIR_NORMAL);
+            if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                S3FS_PRN_ERR("succeed to change mctime for parent(%s), but could not add stat cache. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
+        }else{
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+            StatCache::getStatCacheData()->DelStat(curpath);
+        }
     }
 
     return 0;
@@ -2490,6 +2589,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
     std::string normpath;
     headers_t   meta;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
@@ -2546,12 +2646,15 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to set utimens directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
@@ -2630,8 +2733,17 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
                 return result;
             }
 
-            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-            StatCache::getStatCacheData()->DelStat(normpath);
+            // Add only stat structure to stat cache
+            if(convert_header_to_stat(curpath, meta, newstbuf)){
+                ObjType = derive_object_type(curpath, meta, objtype_t::FILE);
+                if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                    S3FS_PRN_ERR("succeed to set utimens for %s, but could not add stat cache. So remove stat cache.", curpath.c_str());
+                    StatCache::getStatCacheData()->DelStat(curpath);
+                }
+            }else{
+                S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
 
             if(keep_mtime){
                 if(!ent->SetHoldingMtime(mtime)){
@@ -2651,6 +2763,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
     std::string curpath;
     std::string normpath;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
@@ -2709,12 +2822,15 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, atime, mtime, ctime, stbuf.st_uid, stbuf.st_gid, pxattrvalue, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to set utimens directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
     }else{
         // normal object or directory object of newer version
@@ -2745,7 +2861,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
+        // [NOTE]
+        // Not have a copy API (nocopy), the stat cache will be removed.
+        //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
 
@@ -2820,8 +2938,6 @@ static int s3fs_truncate(const char* _path, off_t size)
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
-
-            // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
             StatCache::getStatCacheData()->DelStat(path);
         }
 #endif
@@ -2849,8 +2965,6 @@ static int s3fs_truncate(const char* _path, off_t size)
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
             return result;
         }
-
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
         StatCache::getStatCacheData()->DelStat(path);
     }
 
@@ -3813,6 +3927,7 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
     std::string normpath;
     headers_t   meta;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][name=%s][value=%p][size=%zu][flags=0x%x]", path, name, value, size, flags);
@@ -3846,9 +3961,6 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
             }
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -3857,8 +3969,14 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to set xattrs directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
 
         // need to set xattr header for directory.
@@ -3947,8 +4065,17 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
+        // Add only stat structure to stat cache
+        if(convert_header_to_stat(curpath, meta, newstbuf)){
+            ObjType = derive_object_type(curpath, meta, objtype_t::FILE);
+            if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                S3FS_PRN_ERR("succeed to set xattrs for %s, but could not add stat cache. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
+        }else{
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+            StatCache::getStatCacheData()->DelStat(curpath);
+        }
     }
     return 0;
 }
@@ -4100,6 +4227,7 @@ static int s3fs_removexattr(const char* _path, const char* name)
     headers_t   meta;
     xattrs_t    xattrs;
     struct stat stbuf;
+    struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
     FUSE_CTX_INFO("[path=%s][name=%s]", path, name);
@@ -4157,9 +4285,6 @@ static int s3fs_removexattr(const char* _path, const char* name)
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
-
         // Make new directory object("dir/")
         struct timespec ts_atime;
         struct timespec ts_mtime;
@@ -4168,8 +4293,14 @@ static int s3fs_removexattr(const char* _path, const char* name)
         set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
         set_stat_to_timespec(stbuf, stat_time_type::CTIME, ts_ctime);
 
-        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr))){
+        if(0 != (result = create_directory_object(normpath.c_str(), stbuf.st_mode, ts_atime, ts_mtime, ts_ctime, stbuf.st_uid, stbuf.st_gid, nullptr, &newstbuf))){
             return result;
+        }
+
+        // Add only stat structure to stat cache
+        if(!StatCache::getStatCacheData()->AddStat(normpath, newstbuf, objtype_t::DIR_NORMAL)){
+            S3FS_PRN_ERR("succeed to remove xattrs directory(%s), but could not add stat cache. So remove stat cache.", normpath.c_str());
+            StatCache::getStatCacheData()->DelStat(normpath);
         }
 
         // need to set xattr header for directory.
@@ -4268,8 +4399,17 @@ static int s3fs_removexattr(const char* _path, const char* name)
             return result;
         }
 
-        // [TODO][TBD] Plan to overwrite the temporary stat(no meta header) as a cache.
-        StatCache::getStatCacheData()->DelStat(normpath);
+        // Add only stat structure to stat cache
+        if(convert_header_to_stat(curpath, meta, newstbuf)){
+            ObjType = derive_object_type(curpath, meta, objtype_t::FILE);
+            if(!StatCache::getStatCacheData()->AddStat(curpath, newstbuf, ObjType)){
+                S3FS_PRN_ERR("succeed to remove xattrs for %s, but could not add stat cache. So remove stat cache.", curpath.c_str());
+                StatCache::getStatCacheData()->DelStat(curpath);
+            }
+        }else{
+            S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
+            StatCache::getStatCacheData()->DelStat(curpath);
+        }
     }
     return 0;
 }

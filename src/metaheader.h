@@ -45,6 +45,7 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
 bool is_reg_fmt(const headers_t& meta);
 bool is_symlink_fmt(const headers_t& meta);
 bool is_dir_fmt(const headers_t& meta);
+objtype_t derive_object_type(const std::string& strpath, const headers_t& meta, objtype_t default_type = objtype_t::UNKNOWN);
 uid_t get_uid(const char *s);
 uid_t get_uid(const headers_t& meta);
 gid_t get_gid(const char *s);
