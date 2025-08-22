@@ -416,37 +416,27 @@ constexpr bool NEED_RMDIR_OBJ(objtype_t type)
 
 inline std::string STR_OBJTYPE(objtype_t type)
 {
-    std::string strType;
+    auto type_str = std::to_string(static_cast<int>(type));
     switch(type){
-        case objtype_t::UNKNOWN:
-            strType = "UNKNOWN(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::FILE:
-            strType = "FILE(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::SYMLINK:
-            strType = "SYMLINK(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::DIR_NORMAL:
-            strType = "DIR_NORMAL(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::DIR_NOT_TERMINATE_SLASH:
-            strType = "DIR_NOT_TERMINATE_SLASH(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::DIR_FOLDER_SUFFIX:
-            strType = "DIR_FOLDER_SUFFIX(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::DIR_NOT_EXIST_OBJECT:
-            strType = "DIR_NOT_EXIST_OBJECT(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        case objtype_t::NEGATIVE:
-            strType = "NEGATIVE(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
-        default:
-            strType = "not defined value(" + std::to_string(static_cast<int>(type)) + ")";
-            break;
+    case objtype_t::UNKNOWN:
+        return "UNKNOWN(" + type_str + ")";
+    case objtype_t::FILE:
+        return "FILE(" + type_str + ")";
+    case objtype_t::SYMLINK:
+        return "SYMLINK(" + type_str + ")";
+    case objtype_t::DIR_NORMAL:
+        return "DIR_NORMAL(" + type_str + ")";
+    case objtype_t::DIR_NOT_TERMINATE_SLASH:
+        return "DIR_NOT_TERMINATE_SLASH(" + type_str + ")";
+    case objtype_t::DIR_FOLDER_SUFFIX:
+        return "DIR_FOLDER_SUFFIX(" + type_str + ")";
+    case objtype_t::DIR_NOT_EXIST_OBJECT:
+        return "DIR_NOT_EXIST_OBJECT(" + type_str + ")";
+    case objtype_t::NEGATIVE:
+        return "NEGATIVE(" + type_str + ")";
+    default:
+        return "not defined value(" + type_str + ")";
     }
-    return strType;
 }
 
 //-------------------------------------------------------------------
