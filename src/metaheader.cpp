@@ -260,6 +260,51 @@ bool is_dir_fmt(const headers_t& meta)
     return S_ISDIR(convert_meta_to_mode_fmt(meta));
 }
 
+// [NOTE]
+// For directory types, detailed judgment is not possible.
+// DIR_NORMAL is always returned.
+//
+// Objects uploaded using clients other than s3fs has a Content-Type
+// of application/unknown and dose not have x-amz-meta-mode header.
+// In this case, you can specify objtype_t as default_type.
+//
+objtype_t derive_object_type(const std::string& strpath, const headers_t& meta, objtype_t default_type)
+{
+    mode_t mode = convert_meta_to_mode_fmt(meta);
+
+    if(S_ISDIR(mode)){
+        if('/' != *strpath.rbegin()){
+            return objtype_t::DIR_NOT_TERMINATE_SLASH;
+        }else if(std::string::npos != strpath.find("_$folder$", 0)){
+            return objtype_t::DIR_FOLDER_SUFFIX;
+        }else{
+            // [NOTE]
+            // It returns DIR_NORMAL, although it could be DIR_NOT_EXIST_OBJECT.
+            //
+            return objtype_t::DIR_NORMAL;
+        }
+    }else if(S_ISLNK(mode)){
+        return objtype_t::SYMLINK;
+    }else if(S_ISREG(mode)){
+        return objtype_t::FILE;
+    }else if(0 == mode){
+        // If the x-amz-meta-mode header is not present, mode is 0.
+        headers_t::const_iterator iter;
+        if(meta.cend() != (iter = meta.find("Content-Type"))){
+            std::string strConType = iter->second;
+            // Leave just the mime type, remove any optional parameters (eg charset)
+            std::string::size_type pos = strConType.find(';');
+            if(std::string::npos != pos){
+                strConType.erase(pos);
+            }
+            if(strConType == "application/unknown"){
+                return default_type;
+            }
+        }
+    }
+    return objtype_t::UNKNOWN;
+}
+
 uid_t get_uid(const char *s)
 {
     return static_cast<uid_t>(cvt_strtoofft(s, /*base=*/ 0));
