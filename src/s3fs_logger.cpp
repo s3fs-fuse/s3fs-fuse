@@ -18,12 +18,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cstdarg>
 #include <cstdlib>
 #include <iomanip>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <strings.h>
+#include <sys/time.h>
 
 #include "common.h"
 #include "s3fs_logger.h"

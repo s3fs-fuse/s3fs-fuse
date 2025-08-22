@@ -21,7 +21,6 @@
 #include <iomanip>
 #include <sstream>
 
-#include "s3fs.h"
 #include "s3fs_logger.h"
 #include "cache_node.h"
 #include "string_util.h"

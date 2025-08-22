@@ -270,7 +270,7 @@ jobs:
   static-checks:
     runs-on: ubuntu-latest
     container:
-      image: fedora:42
+      image: fedora:43
 
     steps:
       - name: Checkout source code
@@ -278,7 +278,7 @@ jobs:
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:42
+          .github/workflows/linux-ci-helper.sh fedora:43
 
       - name: Install extra packages
         run: |

@@ -20,8 +20,6 @@
 
 #include <sstream>
 
-#include "common.h"
-#include "s3fs.h"
 #include "s3fs_threadreqs.h"
 #include "threadpoolman.h"
 #include "curl_util.h"

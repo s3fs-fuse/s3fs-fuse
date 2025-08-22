@@ -23,7 +23,6 @@
 
 #include <fcntl.h>
 
-#include "common.h"
 #include "metaheader.h"
 #include "filetimes.h"
 

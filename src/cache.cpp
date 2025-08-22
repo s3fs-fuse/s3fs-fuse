@@ -19,19 +19,13 @@
  */
 
 #include <algorithm>
-#include <cerrno>
-#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <utility>
-#include <vector>
 
-#include "s3fs.h"
 #include "s3fs_logger.h"
-#include "s3fs_util.h"
 #include "cache.h"
-#include "string_util.h"
 
 //-------------------------------------------------------------------
 // Static

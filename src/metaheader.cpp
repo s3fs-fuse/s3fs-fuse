@@ -26,7 +26,6 @@
 #include "common.h"
 #include "metaheader.h"
 #include "string_util.h"
-#include "s3fs_util.h"
 #include "filetimes.h"
 
 static constexpr struct timespec ERROR_TIMESPEC = {-1, 0};

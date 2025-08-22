@@ -28,11 +28,8 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
-#include <vector>
 
 #include "common.h"
-#include "fdcache_page.h"
 #include "metaheader.h"
 #include "s3fs_util.h"
 #include "types.h"

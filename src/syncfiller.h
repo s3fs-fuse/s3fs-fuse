@@ -26,7 +26,7 @@
 #include <vector>
 #include <set>
 
-#include "s3fs.h"
+#include "s3fs.h"  // NOLINT(misc-include-cleaner)
 
 //----------------------------------------------
 // class SyncFiller

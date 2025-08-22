@@ -21,12 +21,9 @@
 #ifndef S3FS_CACHE_H_
 #define S3FS_CACHE_H_
 
-#include <cstring>
-#include <map>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
-#include <vector>
 
 #include "common.h"
 #include "metaheader.h"

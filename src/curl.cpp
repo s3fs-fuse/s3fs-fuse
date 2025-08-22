@@ -32,7 +32,6 @@
 #include <utility>
 
 #include "common.h"
-#include "s3fs.h"
 #include "s3fs_logger.h"
 #include "curl.h"
 #include "curl_share.h"
@@ -42,7 +41,6 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "addhead.h"
-#include "s3fs_threadreqs.h"
 #include "s3fs_xml.h"
 
 //-------------------------------------------------------------------

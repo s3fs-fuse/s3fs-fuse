@@ -18,9 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cstdio>
-#include <csignal>
 #include <memory>
+#include <signal.h>  // NOLINT(modernize-deprecated-headers)
 #include <thread>
 #include <utility>
 
