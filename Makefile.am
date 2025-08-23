@@ -38,7 +38,7 @@ clang-tidy:
 cppcheck:
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
-            --std=c++14 \
+            --std=@CPP_VERSION@ \
             --xml \
             -D HAVE_ATTR_XATTR_H \
             -D HAVE_SYS_EXTATTR_H \
