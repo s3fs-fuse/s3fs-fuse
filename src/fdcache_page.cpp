@@ -845,7 +845,10 @@ bool PageList::Serialize(CacheFileStat& file, ino_t inode)
         S3FS_PRN_ERR("failed to write stats(%d)", errno);
         return false;
     }
-
+    if(0 != fsync(file.GetFd())){
+        S3FS_PRN_ERR("failed to sync stats(%d), but continue...", errno);
+        return false;
+    }
     return true;
 }
 
