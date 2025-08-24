@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # s3fs - FUSE-based file system backed by Amazon S3
 #
@@ -81,47 +81,121 @@ PACKAGE_ENABLE_REPO_OPTIONS=""
 PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
 AWSCLI_DIRECT_INSTALL=1
 
-if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.04" ]; then
+if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.04" ] ||
+   [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mailcap libtool pkg-config libssl-dev attr curl python3-pip unzip"
-
-elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
-    PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mailcap libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        autotools-dev
+        build-essential
+        curl
+        fuse
+        g++
+        git
+        jq
+        libcurl4-openssl-dev
+        libfuse-dev
+        libssl-dev
+        libtool
+        libxml2-dev
+        locales-all
+        mailcap
+        openjdk-21-jre-headless
+        pkg-config
+        python3
+        unzip
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl python3-pip unzip"
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        autotools-dev
+        build-essential
+        curl
+        fuse
+        g++
+        git
+        jq
+        libcurl4-openssl-dev
+        libfuse-dev
+        libssl-dev
+        libtool
+        libxml2-dev
+        locales-all
+        mime-support
+        openjdk-21-jre-headless
+        pkg-config
+        python3
+        unzip
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-21-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mailcap libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        autotools-dev
+        build-essential
+        curl
+        fuse
+        g++
+        git
+        jq
+        libcurl4-openssl-dev
+        libfuse-dev
+        libssl-dev
+        libtool
+        libxml2-dev
+        locales-all
+        mailcap
+        openjdk-21-jre-headless
+        pkg-config
+        procps
+        python3
+        unzip
+    )
 
-elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
+     [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
-
-elif [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
-    PACKAGE_MANAGER_BIN="apt-get"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    INSTALL_PACKAGES="autoconf autotools-dev openjdk-17-jre-headless fuse jq libfuse-dev libcurl4-openssl-dev libxml2-dev locales-all mime-support libtool pkg-config libssl-dev attr curl procps python3-pip unzip"
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        autotools-dev
+        build-essential
+        curl
+        fuse
+        g++
+        git
+        jq
+        libcurl4-openssl-dev
+        libfuse-dev
+        libssl-dev
+        libtool
+        libxml2-dev
+        locales-all
+        mime-support
+        openjdk-17-jre-headless
+        pkg-config
+        procps
+        python3
+        unzip
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
     PACKAGE_MANAGER_BIN="dnf"
@@ -135,7 +209,34 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-21-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm"
+    INSTALL_PACKAGES=(
+        attr
+        automake
+        clang-tools-extra
+        curl
+        curl-devel
+        diffutils
+        fuse
+        fuse-devel
+        gcc
+        gcc-c++
+        git
+        glibc-langpack-en
+        java-21-openjdk-headless
+        jq
+        libstdc++-devel
+        libxml2-devel
+        mailcap
+        make
+        openssl
+        openssl-devel
+        perl-Test-Harness
+        procps
+        python3
+        unzip
+        xz
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
@@ -149,42 +250,157 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-21-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 procps unzip xz https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+    INSTALL_PACKAGES=(
+        attr
+        automake
+        clang-tools-extra
+        curl
+        curl-devel
+        diffutils
+        fuse
+        fuse-devel
+        gcc
+        gcc-c++
+        git
+        glibc-langpack-en
+        java-21-openjdk-headless
+        jq
+        libstdc++-devel
+        libxml2-devel
+        mailcap
+        make
+        openssl
+        openssl-devel
+        perl-Test-Harness
+        procps
+        python3
+        unzip
+        xz
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang-tools-extra curl-devel fuse fuse-devel gcc libstdc++-devel gcc-c++ glibc-langpack-en java-21-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness attr diffutils curl python3 unzip"
+    INSTALL_PACKAGES=(
+        attr
+        automake
+        clang-tools-extra
+        curl
+        curl-devel
+        diffutils
+        fuse
+        fuse-devel
+        gcc
+        gcc-c++
+        git
+        glibc-langpack-en
+        java-21-openjdk-headless
+        jq
+        libstdc++-devel
+        libxml2-devel
+        mailcap
+        make
+        openssl
+        openssl-devel
+        perl-Test-Harness
+        python3
+        unzip
+    )
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
+     [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gawk gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl openssl-devel perl-Test-Harness curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
-
-elif [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
-    PACKAGE_MANAGER_BIN="dnf"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-
-    INSTALL_PACKAGES="clang clang-tools-extra cppcheck curl-devel fuse fuse-devel gawk gcc libstdc++-devel gcc-c++ glibc-langpack-en java-latest-openjdk-headless jq libxml2-devel mailcap git automake make openssl perl-Test-Harness openssl-devel curl attr diffutils procps python3-pip unzip libcxx libcxx-devel ShellCheck"
+    INSTALL_PACKAGES=(
+        attr
+        automake
+        clang
+        clang-tools-extra
+        cppcheck
+        curl
+        curl-devel
+        diffutils
+        fuse
+        fuse-devel
+        gawk
+        gcc
+        gcc-c++
+        git
+        glibc-langpack-en
+        java-latest-openjdk-headless
+        jq
+        libcxx
+        libcxx-devel
+        libstdc++-devel
+        libxml2-devel
+        mailcap
+        make
+        openssl
+        openssl-devel
+        perl-Test-Harness
+        procps
+        ShellCheck
+        unzip
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
     PACKAGE_INSTALL_OPTIONS="install -y"
 
-    INSTALL_PACKAGES="automake clang-tools curl-devel fuse fuse-devel gcc-c++ java-21-openjdk-headless jq libxml2-devel make openssl openssl-devel python3-pip curl attr procps unzip"
+    INSTALL_PACKAGES=(
+        attr
+        automake
+        clang-tools
+        curl
+        curl-devel
+        fuse
+        fuse-devel
+        gcc-c++
+        java-21-openjdk-headless
+        jq
+        libxml2-devel
+        make
+        openssl
+        openssl-devel
+        procps
+        unzip
+    )
 
 elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
     PACKAGE_MANAGER_BIN="apk"
     PACKAGE_UPDATE_OPTIONS="update --no-progress"
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
 
-    INSTALL_PACKAGES="bash clang-extra-tools curl g++ make automake autoconf libtool git curl-dev fuse-dev jq libxml2-dev openssl coreutils procps attr sed mailcap openjdk21 perl-test-harness-utils aws-cli"
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        automake
+        aws-cli
+        clang-extra-tools
+        coreutils
+        curl
+        curl-dev
+        fuse-dev
+        g++
+        git
+        jq
+        libtool
+        libxml2-dev
+        mailcap
+        make
+        openjdk21
+        openssl
+        perl-test-harness-utils
+        procps
+        python3
+        sed
+    )
 
     AWSCLI_DIRECT_INSTALL=0
 
@@ -206,7 +422,7 @@ echo "${PRGNAME} [INFO] Updates."
 # Install packages
 #
 echo "${PRGNAME} [INFO] Install packages."
-/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} ${PACKAGE_INSTALL_OPTIONS} ${PACKAGE_INSTALL_ADDITIONAL_OPTIONS} ${INSTALL_PACKAGES}"
+/bin/sh -c "${PACKAGE_MANAGER_BIN} ${PACKAGE_ENABLE_REPO_OPTIONS} ${PACKAGE_INSTALL_OPTIONS} ${PACKAGE_INSTALL_ADDITIONAL_OPTIONS} ${INSTALL_PACKAGES[*]}"
 
 # Check Java version
 java -version

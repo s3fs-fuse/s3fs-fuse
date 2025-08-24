@@ -77,10 +77,13 @@ jobs:
       # [NOTE]
       # On openSUSE, tar and gzip must be installed before action/checkout.
       #
-      - name: Install packages before checkout
+      - name: Install openSUSE packages before checkout
         if: matrix.container == 'opensuse/leap:15'
-        run: |
-          zypper install -y tar gzip
+        run: zypper install -y tar gzip
+
+      - name: Install Alpine packages before checkout
+        if: matrix.container == 'alpine:3.22'
+        run: apk add --no-progress --no-cache bash
 
       - name: Checkout source code
         uses: actions/checkout@v4
