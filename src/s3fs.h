@@ -21,12 +21,18 @@
 #ifndef S3FS_S3FS_H_
 #define S3FS_S3FS_H_
 
+#if __APPLE__
+#define FUSE_USE_VERSION      26
+#else
 #define FUSE_USE_VERSION      30
+#endif
 
 #include <fuse.h>
 
+#if FUSE_USE_VERSION >= 30
 // FUSE_FILL_DIR_DEFAULTS requirse FUSE 3.17
 static constexpr fuse_fill_dir_flags S3FS_FUSE_FILL_DIR_DEFAULTS = static_cast<fuse_fill_dir_flags>(0);  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
+#endif
 
 #define S3FS_FUSE_EXIT() \
         do{ \
