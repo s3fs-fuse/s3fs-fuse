@@ -1419,6 +1419,24 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
         FdManager::DeleteCacheFile(tpath);
     }
 
+    // [NOTE]
+    // Normally, when client finishes editing a file and gets the file attributes,
+    // FUSE calls flush->relaase, and then getsattr.
+    // In other words, we expect that getattr will not be called between flush->release.
+    // However, because FUSE does not wait for the release process to be complete,
+    // the case of flush->getattr->release occurs.
+    // Therefore, we make sure to serialize the pagelist here.
+    //
+    if(0 == result && !cachepath.empty()){
+        ino_t cur_inode = GetInode();
+        if(0 != cur_inode && cur_inode == inode){
+            CacheFileStat cfstat(path.c_str());
+            if(!pagelist.Serialize(cfstat, inode)){
+                S3FS_PRN_WARN("failed to save cache stat file(%s).", path.c_str());
+            }
+        }
+    }
+
     return result;
 }
 
