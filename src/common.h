@@ -21,6 +21,7 @@
 #ifndef S3FS_COMMON_H_
 #define S3FS_COMMON_H_
 
+#include <atomic>
 #include <string>
 #include <sys/types.h>
 
@@ -45,6 +46,17 @@ extern std::string    mount_prefix;
 extern std::string    region;
 extern std::string    cipher_suites;
 extern std::string    instance_name;
+
+extern std::atomic<long long unsigned> num_requests_head_object;
+extern std::atomic<long long unsigned> num_requests_put_object;
+extern std::atomic<long long unsigned> num_requests_get_object;
+extern std::atomic<long long unsigned> num_requests_delete_object;
+extern std::atomic<long long unsigned> num_requests_list_bucket;
+extern std::atomic<long long unsigned> num_requests_mpu_initiate;
+extern std::atomic<long long unsigned> num_requests_mpu_complete;
+extern std::atomic<long long unsigned> num_requests_mpu_abort;
+extern std::atomic<long long unsigned> num_requests_mpu_upload_part;
+extern std::atomic<long long unsigned> num_requests_mpu_copy_part;
 
 //-------------------------------------------------------------------
 // For weak attribute

@@ -2473,6 +2473,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
 
     op = "DELETE";
     type = REQTYPE::DELETE;
+    ++num_requests_delete_object;
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
@@ -2767,6 +2768,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
 
     op = "HEAD";
     type = REQTYPE::HEAD;
+    ++num_requests_head_object;
 
     // set lazy function
     fpLazySetup = PreHeadRequestSetCurlOpts;
@@ -2889,6 +2891,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
 
     op = "PUT";
     type = REQTYPE::PUTHEAD;
+    ++num_requests_head_object;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3019,6 +3022,7 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
 
     op = "PUT";
     type = REQTYPE::PUT;
+    ++num_requests_put_object;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3090,6 +3094,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
 
     op = "GET";
     type = REQTYPE::GET;
+    ++num_requests_get_object;
 
     // set lazy function
     fpLazySetup = PreGetObjectRequestSetCurlOpts;
@@ -3243,6 +3248,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 
     op = "GET";
     type = REQTYPE::LISTBUCKET;
+    ++num_requests_list_bucket;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3267,7 +3273,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
 }
 
 //
-// Initialize multipart upload
+// Initiate multipart upload
 //
 // Example :
 //   POST /example-object?uploads HTTP/1.1
@@ -3338,6 +3344,7 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
 
     op = "POST";
     type = REQTYPE::PREMULTIPOST;
+    ++num_requests_mpu_initiate;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3496,6 +3503,7 @@ int S3fsCurl::MultipartUploadComplete(const char* tpath, const std::string& uplo
 
     op = "POST";
     type = REQTYPE::COMPLETEMULTIPOST;
+    ++num_requests_mpu_complete;
 
     // setopt
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
@@ -3613,6 +3621,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
 
     op = "DELETE";
     type = REQTYPE::ABORTMULTIUPLOAD;
+    ++num_requests_mpu_abort;
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
         return -EIO;
@@ -3694,6 +3703,7 @@ int S3fsCurl::MultipartUploadContentPartSetup(const char* tpath, int part_num, c
 
     op = "PUT";
     type = REQTYPE::UPLOADMULTIPOST;
+    ++num_requests_mpu_upload_part;
 
     // set lazy function
     fpLazySetup = MultipartUploadPartSetCurlOpts;
@@ -3757,6 +3767,7 @@ int S3fsCurl::MultipartUploadCopyPartSetup(const char* from, const char* to, int
 
     op = "PUT";
     type = REQTYPE::COPYMULTIPOST;
+    ++num_requests_mpu_copy_part;
 
     // set lazy function
     fpLazySetup = CopyMultipartUploadSetCurlOpts;

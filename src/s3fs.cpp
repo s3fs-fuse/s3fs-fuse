@@ -5927,6 +5927,17 @@ int main(int argc, char* argv[])
     // cleanup xml2
     xmlCleanupParser();
 
+    S3FS_PRN_DBG("Number of head object requests: %llu", num_requests_head_object.load());
+    S3FS_PRN_DBG("Number of put object requests: %llu", num_requests_put_object.load());
+    S3FS_PRN_DBG("Number of get object requests: %llu", num_requests_get_object.load());
+    S3FS_PRN_DBG("Number of delete object requests: %llu", num_requests_delete_object.load());
+    S3FS_PRN_DBG("Number of list bucket requests: %llu", num_requests_list_bucket.load());
+    S3FS_PRN_DBG("Number of initiate MPU requests: %llu", num_requests_mpu_initiate.load());
+    S3FS_PRN_DBG("Number of complete MPU requests: %llu", num_requests_mpu_complete.load());
+    S3FS_PRN_DBG("Number of abort MPU requests: %llu", num_requests_mpu_abort.load());
+    S3FS_PRN_DBG("Number of upload MPU part requests: %llu", num_requests_mpu_upload_part.load());
+    S3FS_PRN_DBG("Number of copy MPU part requests: %llu", num_requests_mpu_copy_part.load());
+
     exit(fuse_res);
 }
 
