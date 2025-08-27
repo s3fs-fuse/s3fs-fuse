@@ -197,7 +197,13 @@ jobs:
       - name: Install packages
         run: |
           .github/workflows/linux-ci-helper.sh fedora:42
-          dnf install -y clang
+
+      - name: Install clang
+        run: |
+          dnf install -y \
+            clang \
+            libcxx \
+            libcxx-devel
 
       - name: Install Valgrind
         if: matrix.checktype == 'valgrind'
