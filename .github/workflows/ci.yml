@@ -209,13 +209,11 @@ jobs:
       - name: Install packages
         run: |
           .github/workflows/linux-ci-helper.sh fedora:42
-
-      - name: Install clang
-        run: |
           dnf install -y clang
-          if [ "${{ matrix.checktype }}" = "valgrind" ]; then
-              dnf install -y valgrind
-          fi
+
+      - name: Install Valgrind
+        if: matrix.checktype == 'valgrind'
+        run: dnf install -y valgrind
 
       #
       # Set CXX/CXXFLAGS and Variables for test
