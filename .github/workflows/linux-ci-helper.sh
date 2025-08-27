@@ -189,14 +189,15 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
 
     CURL_DIRECT_INSTALL=1
 
-elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
+     [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
     PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
 
     # [NOTE]
-    # Rocky Linux 10 (or CentOS Stream 10) images may have curl installation issues that
+    # Rocky Linux 9/10 (or CentOS Stream 9/10) images may have curl installation issues that
     # conflict with the curl-minimal package.
     #
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
@@ -224,45 +225,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
         perl-Test-Harness
         procps
         xz
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
-    )
-
-elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
-    PACKAGE_MANAGER_BIN="dnf"
-    PACKAGE_UPDATE_OPTIONS="update -y -qq"
-    PACKAGE_INSTALL_OPTIONS="install -y"
-    PACKAGE_ENABLE_REPO_OPTIONS="--enablerepo=crb"
-
-    # [NOTE]
-    # Rocky Linux 9 (or CentOS Stream 9) images may have curl installation issues that
-    # conflict with the curl-minimal package.
-    #
-    PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
-
-    INSTALL_PACKAGES=(
-        attr
-        automake
-        curl
-        curl-devel
-        diffutils
-        fuse
-        fuse-devel
-        gcc
-        gcc-c++
-        git
-        glibc-langpack-en
-        java-21-openjdk-headless
-        jq
-        libstdc++-devel
-        libxml2-devel
-        mailcap
-        make
-        openssl
-        openssl-devel
-        perl-Test-Harness
-        procps
-        xz
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
     )
 
     CURL_DIRECT_INSTALL=1
