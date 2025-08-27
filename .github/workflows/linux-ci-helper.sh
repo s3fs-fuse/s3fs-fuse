@@ -208,7 +208,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
     INSTALL_PACKAGES=(
         attr
         automake
-        clang-tools-extra
         curl
         curl-devel
         diffutils
@@ -248,7 +247,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
     INSTALL_PACKAGES=(
         attr
         automake
-        clang-tools-extra
         curl
         curl-devel
         diffutils
@@ -283,7 +281,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     INSTALL_PACKAGES=(
         attr
         automake
-        clang-tools-extra
         curl
         curl-devel
         diffutils
@@ -317,8 +314,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
         attr
         automake
         clang
-        clang-tools-extra
-        cppcheck
         curl
         curl-devel
         diffutils
@@ -341,7 +336,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
         openssl-devel
         perl-Test-Harness
         procps
-        ShellCheck
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
@@ -352,7 +346,6 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
     INSTALL_PACKAGES=(
         attr
         automake
-        clang-tools
         curl
         curl-devel
         fuse
@@ -365,6 +358,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
         openssl
         openssl-devel
         procps
+        python3
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
@@ -377,7 +371,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
         autoconf
         automake
         aws-cli
-        clang-extra-tools
         coreutils
         curl
         curl-dev
