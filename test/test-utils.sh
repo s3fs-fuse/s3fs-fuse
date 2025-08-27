@@ -363,7 +363,10 @@ function get_user_and_group() {
 
 function check_content_type() {
     local INFO_STR
-    INFO_STR=$(aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "$1" | jq -r .ContentType)
+    TEMPNAME="$(mktemp)"
+    s3_head "${TEST_BUCKET_1}/$1" --dump-header "$TEMPNAME"
+    INFO_STR=$(sed -n 's/^Content-Type: //pi' "$TEMPNAME" | tr -d '\r\n')
+    rm -f "$TEMPNAME"
     if [ "${INFO_STR}" != "$2" ]
     then
         echo "Expected Content-Type: $2 but got: ${INFO_STR}"
@@ -377,27 +380,34 @@ function get_disk_avail_size() {
     echo "${DISK_AVAIL_SIZE}"
 }
 
-function aws_cli() {
-    local FLAGS=""
-    if [ -n "${S3FS_PROFILE}" ]; then
-        FLAGS="--profile ${S3FS_PROFILE}"
-    fi
+function s3_head() {
+    local S3_PATH=$1
+    shift
+    curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+        --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
+        "$@" \
+        --head "$S3_URL/$S3_PATH"
+}
 
-    if [ "$1" = "s3" ] && [ "$2" != "ls" ] && [ "$2" != "mb" ]; then
-        if s3fs_args | grep -q use_sse=custom; then
-            FLAGS="${FLAGS} --sse-c AES256 --sse-c-key fileb:///tmp/ssekey.bin"
-        fi
-    elif [ "$1" = "s3api" ] && [ "$2" != "head-bucket" ]; then
-        if s3fs_args | grep -q use_sse=custom; then
-            FLAGS="${FLAGS} --sse-customer-algorithm AES256 --sse-customer-key $(cat /tmp/ssekey) --sse-customer-key-md5 $(cat /tmp/ssekeymd5)"
-        fi
-    fi
+function s3_mb() {
+    local S3_BUCKET=$1
+    curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+        --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
+        --request PUT "$S3_URL/$S3_BUCKET"
+}
 
-    # [NOTE]
-    # AWS_EC2_METADATA_DISABLED for preventing the metadata service(to 169.254.169.254).
-    # shellcheck disable=SC2086,SC2068
-    # TODO: disable checksums to work around https://github.com/gaul/s3proxy/issues/760
-    AWS_EC2_METADATA_DISABLED=true AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED aws $@ --endpoint-url "${S3_URL}" --ca-bundle /tmp/keystore.pem ${FLAGS}
+function s3_cp() {
+    local S3_PATH=$1
+    shift
+    TEMPNAME="$(mktemp)"
+    cat > "$TEMPNAME"
+    # TODO: use filenames instead of stdin?
+    curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+        --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
+        --header "Content-Length: $(wc -c < "$TEMPNAME")" \
+        "$@" \
+        --request PUT --data-binary "@$TEMPNAME" "$S3_URL/$S3_PATH"
+    rm -f "$TEMPNAME"
 }
 
 function wait_for_port() {

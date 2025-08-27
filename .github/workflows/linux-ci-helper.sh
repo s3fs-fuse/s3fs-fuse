@@ -57,11 +57,7 @@ CONTAINER_OSNAME=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f1)
 # shellcheck disable=SC2034
 CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f2)
 
-#-----------------------------------------------------------
-# Common variables for awscli2
-#-----------------------------------------------------------
-AWSCLI_URI="https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
-AWSCLI_ZIP_FILE="awscliv2.zip"
+CURL_DIRECT_URL="https://github.com/moparisthebest/static-curl/releases/latest/download/curl-$(uname -m | sed -e s/x86_64/amd64/)"
 
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
@@ -79,7 +75,7 @@ CONFIGURE_OPTIONS="--prefix=/usr --with-openssl"
 #
 PACKAGE_ENABLE_REPO_OPTIONS=""
 PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
-AWSCLI_DIRECT_INSTALL=1
+CURL_DIRECT_INSTALL=0
 
 if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.04" ] ||
    [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
@@ -107,7 +103,6 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.04" ] ||
         openjdk-21-jre-headless
         pkg-config
         python3
-        unzip
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
@@ -135,8 +130,9 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
         openjdk-21-jre-headless
         pkg-config
         python3
-        unzip
     )
+
+    CURL_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
@@ -164,7 +160,6 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
         pkg-config
         procps
         python3
-        unzip
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
@@ -194,8 +189,9 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
         pkg-config
         procps
         python3
-        unzip
     )
+
+    CURL_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
     PACKAGE_MANAGER_BIN="dnf"
@@ -233,7 +229,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
         perl-Test-Harness
         procps
         python3
-        unzip
         xz
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
     )
@@ -274,10 +269,11 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
         perl-Test-Harness
         procps
         python3
-        unzip
         xz
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
     )
+
+    CURL_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
@@ -307,8 +303,9 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
         openssl-devel
         perl-Test-Harness
         python3
-        unzip
     )
+
+    CURL_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
      [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
@@ -345,7 +342,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
         perl-Test-Harness
         procps
         ShellCheck
-        unzip
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
@@ -369,7 +365,6 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ]; then
         openssl
         openssl-devel
         procps
-        unzip
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
@@ -402,8 +397,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
         sed
     )
 
-    AWSCLI_DIRECT_INSTALL=0
-
 else
     echo "No container configured for: ${CONTAINER_FULLNAME}"
     exit 1
@@ -427,16 +420,21 @@ echo "${PRGNAME} [INFO] Install packages."
 # Check Java version
 java -version
 
-#
-# Install awscli
-#
-if [ "${AWSCLI_DIRECT_INSTALL}" -eq 1 ]; then
-    echo "${PRGNAME} [INFO] Install awscli2 package."
+# Install newer curl for older distributions
+if [ "${CURL_DIRECT_INSTALL}" -eq 1 ]; then
+    echo "${PRGNAME} [INFO] Install newer curl package."
 
-    curl "${AWSCLI_URI}" -o "/tmp/${AWSCLI_ZIP_FILE}"
-    unzip "/tmp/${AWSCLI_ZIP_FILE}" -d /tmp
-    /tmp/aws/install
+    curl --fail --location --silent --output "/usr/local/bin/curl" "${CURL_DIRECT_URL}"
+    chmod +x "/usr/local/bin/curl"
+
+    # Rocky Linux 8 and 9 have a different certificate path
+    if [ ! -f /etc/ssl/certs/ca-certificates.crt ]; then
+        ln -s /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/certs/ca-certificates.crt
+    fi
 fi
+
+# Check curl version
+curl --version
 
 #-----------------------------------------------------------
 # Set environment for configure

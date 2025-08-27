@@ -33,7 +33,7 @@ function test_create_empty_file {
 
     check_file_size "${TEST_TEXT_FILE}" 0
 
-    aws_cli s3api head-object --bucket "${TEST_BUCKET_1}" --key "${OBJECT_NAME}"
+    s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}"
 
     rm_test_file
 }
@@ -381,7 +381,7 @@ function test_remove_nonempty_directory {
 function test_external_directory_creation {
     describe "Test external directory creation ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/directory/"${TEST_TEXT_FILE}"
-    echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "data" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     # shellcheck disable=SC2010
     ls | grep -q directory
     stat directory >/dev/null 2>&1
@@ -406,7 +406,7 @@ function test_external_modification {
     sleep 1
 
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo "new new" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "new new" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
 
     cmp "${TEST_TEXT_FILE}" <(echo "new new")
     rm -f "${TEST_TEXT_FILE}"
@@ -425,7 +425,7 @@ function test_external_creation {
     # If noobj_cache is enabled, we cannot be sure that it is registered in that cache.
     # That's because an error will occur if the upload by aws cli takes more than 1 second.
     #
-    echo "data" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "data" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
 
     wait_ostype 1
 
@@ -437,7 +437,7 @@ function test_external_creation {
 function test_read_external_object() {
     describe "create objects via aws CLI and read via s3fs ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "test" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     cmp "${TEST_TEXT_FILE}" <(echo "test")
     rm -f "${TEST_TEXT_FILE}"
 }
@@ -448,7 +448,7 @@ function test_read_external_dir_object() {
     local SUB_DIR_TEST_FILE; SUB_DIR_TEST_FILE="${SUB_DIR_NAME}/${TEST_TEXT_FILE}"
     local OBJECT_NAME;       OBJECT_NAME=$(basename "${PWD}")/"${SUB_DIR_TEST_FILE}"
 
-    echo "test" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "test" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
 
     if stat "${SUB_DIR_NAME}" | grep -q '1969-12-31[[:space:]]23:59:59[.]000000000'; then
         echo "sub directory a/c/m time is underflow(-1)."
@@ -476,7 +476,7 @@ function test_update_metadata_external_small_object() {
     # chmod
     #
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_CHMOD_FILE}"
-    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "${TEST_INPUT}" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     chmod +x "${TEST_CHMOD_FILE}"
     cmp "${TEST_CHMOD_FILE}" <(echo "${TEST_INPUT}")
 
@@ -484,7 +484,7 @@ function test_update_metadata_external_small_object() {
     # chown
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_CHOWN_FILE}"
-    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "${TEST_INPUT}" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     chown "${UID}" "${TEST_CHOWN_FILE}"
     cmp "${TEST_CHOWN_FILE}" <(echo "${TEST_INPUT}")
 
@@ -492,7 +492,7 @@ function test_update_metadata_external_small_object() {
     # utimens
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_UTIMENS_FILE}"
-    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "${TEST_INPUT}" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     touch "${TEST_UTIMENS_FILE}"
     cmp "${TEST_UTIMENS_FILE}" <(echo "${TEST_INPUT}")
 
@@ -500,7 +500,7 @@ function test_update_metadata_external_small_object() {
     # set xattr
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_SETXATTR_FILE}"
-    echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo "${TEST_INPUT}" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
     set_xattr key value "${TEST_SETXATTR_FILE}"
     cmp "${TEST_SETXATTR_FILE}" <(echo "${TEST_INPUT}")
     XATTR_VALUE=$(get_xattr key "${TEST_SETXATTR_FILE}")
@@ -526,7 +526,7 @@ function test_update_metadata_external_small_object() {
     #
     if ! uname | grep -q Darwin; then
         OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
-        echo "${TEST_INPUT}" | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+        echo "${TEST_INPUT}" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-xattr: %7B%22key%22%3A%22dmFsdWU%3D%22%7D"
         del_xattr key "${TEST_RMXATTR_FILE}"
         cmp "${TEST_RMXATTR_FILE}" <(echo "${TEST_INPUT}")
         if find_xattr key "${TEST_RMXATTR_FILE}"; then
@@ -561,7 +561,7 @@ function test_update_metadata_external_large_object() {
     # chmod
     #
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_CHMOD_FILE}"
-    aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" < "${TEMP_DIR}/${BIG_FILE}"
     chmod +x "${TEST_CHMOD_FILE}"
     cmp "${TEST_CHMOD_FILE}" "${TEMP_DIR}/${BIG_FILE}"
 
@@ -569,7 +569,7 @@ function test_update_metadata_external_large_object() {
     # chown
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_CHOWN_FILE}"
-    aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" < "${TEMP_DIR}/${BIG_FILE}"
     chown "${UID}" "${TEST_CHOWN_FILE}"
     cmp "${TEST_CHOWN_FILE}" "${TEMP_DIR}/${BIG_FILE}"
 
@@ -577,7 +577,7 @@ function test_update_metadata_external_large_object() {
     # utimens
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_UTIMENS_FILE}"
-    aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" < "${TEMP_DIR}/${BIG_FILE}"
     touch "${TEST_UTIMENS_FILE}"
     cmp "${TEST_UTIMENS_FILE}" "${TEMP_DIR}/${BIG_FILE}"
 
@@ -585,7 +585,7 @@ function test_update_metadata_external_large_object() {
     # set xattr
     #
     OBJECT_NAME=$(basename "${PWD}")/"${TEST_SETXATTR_FILE}"
-    aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" < "${TEMP_DIR}/${BIG_FILE}"
     set_xattr key value "${TEST_SETXATTR_FILE}"
     cmp "${TEST_SETXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
     XATTR_VALUE=$(get_xattr key "${TEST_SETXATTR_FILE}")
@@ -611,7 +611,7 @@ function test_update_metadata_external_large_object() {
     #
     if ! uname | grep -q Darwin; then
         OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
-        aws_cli s3 cp "${TEMP_DIR}/${BIG_FILE}" "s3://${TEST_BUCKET_1}/${OBJECT_NAME}" --no-progress --metadata xattr=%7B%22key%22%3A%22dmFsdWU%3D%22%7D
+        s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-xattr: %7B%22key%22%3A%22dmFsdWU%3D%22%7D" < "${TEMP_DIR}/${BIG_FILE}"
         del_xattr key "${TEST_RMXATTR_FILE}"
         cmp "${TEST_RMXATTR_FILE}" "${TEMP_DIR}/${BIG_FILE}"
         if find_xattr key "${TEST_RMXATTR_FILE}"; then
@@ -954,7 +954,7 @@ function test_update_time_chmod() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -981,7 +981,7 @@ function test_update_time_chown() {
     #
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime=${t0}" --header "x-amz-meta-ctime=${t0}" --header "x-amz-meta-mtime=${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1024,7 +1024,7 @@ function test_update_time_xattr() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1061,7 +1061,7 @@ function test_update_time_touch() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1085,7 +1085,7 @@ function test_update_time_touch_a() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1121,7 +1121,7 @@ function test_update_time_append() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1145,7 +1145,7 @@ function test_update_time_cp_p() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1171,7 +1171,7 @@ function test_update_time_mv() {
 
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | aws_cli s3 cp --metadata="atime=${t0},ctime=${t0},mtime=${t0}" - "s3://${TEST_BUCKET_1}/${OBJECT_NAME}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
@@ -1205,7 +1205,7 @@ function test_update_directory_time_chmod() {
     #
     local t0=1000000000  # 9 September 2001
     local DIRECTORY_NAME; DIRECTORY_NAME=$(basename "${PWD}")/"${TEST_DIR}"
-    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=${t0},ctime=${t0},mtime=${t0}" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+    s3_cp "${TEST_BUCKET_1}/${DIRECTORY_NAME}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
 
     local base_atime; base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_DIR}")
@@ -1231,7 +1231,7 @@ function test_update_directory_time_chown {
 
     local t0=1000000000  # 9 September 2001
     local DIRECTORY_NAME; DIRECTORY_NAME=$(basename "${PWD}")/"${TEST_DIR}"
-    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=${t0},ctime=${t0},mtime=${t0}" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+    s3_cp "${TEST_BUCKET_1}/${DIRECTORY_NAME}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
 
     local base_atime; base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_DIR}")
@@ -1267,7 +1267,7 @@ function test_update_directory_time_set_xattr {
 
     local t0=1000000000  # 9 September 2001
     local DIRECTORY_NAME; DIRECTORY_NAME=$(basename "${PWD}")/"${TEST_DIR}"
-    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=${t0},ctime=${t0},mtime=${t0}" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+    s3_cp "${TEST_BUCKET_1}/${DIRECTORY_NAME}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
 
     local base_atime; base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_DIR}")
@@ -1303,7 +1303,7 @@ function test_update_directory_time_touch {
 
     local t0=1000000000  # 9 September 2001
     local DIRECTORY_NAME; DIRECTORY_NAME=$(basename "${PWD}")/"${TEST_DIR}"
-    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=${t0},ctime=${t0},mtime=${t0}" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+    s3_cp "${TEST_BUCKET_1}/${DIRECTORY_NAME}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
 
     local base_atime; base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_DIR}")
@@ -1328,7 +1328,7 @@ function test_update_directory_time_touch_a {
 
     local t0=1000000000  # 9 September 2001
     local DIRECTORY_NAME; DIRECTORY_NAME=$(basename "${PWD}")/"${TEST_DIR}"
-    aws_cli s3api put-object --content-type="application/x-directory" --metadata="atime=${t0},ctime=${t0},mtime=${t0}" --bucket "${TEST_BUCKET_1}" --key "$DIRECTORY_NAME/"
+    s3_cp "${TEST_BUCKET_1}/${DIRECTORY_NAME}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
 
     local base_atime; base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_DIR}")
@@ -2379,8 +2379,8 @@ function test_not_existed_dir_obj() {
     #
     local OBJECT_NAME_1; OBJECT_NAME_1="${DIR_NAME}/not_existed_dir_single/${TEST_TEXT_FILE}"
     local OBJECT_NAME_2; OBJECT_NAME_2="${DIR_NAME}/not_existed_dir_parent/not_existed_dir_child/${TEST_TEXT_FILE}"
-    echo data1 | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME_1}"
-    echo data2 | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${OBJECT_NAME_2}"
+    echo data1 | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME_1}"
+    echo data2 | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME_2}"
 
     # Top directory
     # shellcheck disable=SC2010
@@ -2744,7 +2744,7 @@ function test_file_names_longer_than_posix() {
     fi
     rm -f "${a256}"
 
-    echo data | aws_cli s3 cp - "s3://${TEST_BUCKET_1}/${DIR_NAME}/${a256}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${DIR_NAME}/${a256}"
     files=(*)
     if [ "${#files[@]}" = 0 ]; then
         echo "failed to list long file name"
