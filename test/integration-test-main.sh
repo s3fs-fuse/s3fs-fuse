@@ -981,7 +981,7 @@ function test_update_time_chown() {
     #
     local t0=1000000000  # 9 September 2001
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
-    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime=${t0}" --header "x-amz-meta-ctime=${t0}" --header "x-amz-meta-mtime=${t0}"
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
     local base_atime; base_atime=$(get_atime "${TEST_TEXT_FILE}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local base_mtime; base_mtime=$(get_mtime "${TEST_TEXT_FILE}")
