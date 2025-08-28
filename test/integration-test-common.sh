@@ -90,9 +90,11 @@ export TEST_SCRIPT_DIR
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
 S3PROXY_VERSION="2.7.0"
+S3PROXY_HASH="1a13c27f78902b57db871a2e638f520f439811b1c98b2208ff71ba64b61c4f3f"
 S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
+CHAOS_HTTP_PROXY_HASH="9ad1b9ac6569e99b2db3e7edfdd78fae0ea5c83069beccdf6bceebc848add2e7"
 CHAOS_HTTP_PROXY_BINARY="chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}"
 
 PJDFSTEST_HASH="c711b5f6b666579846afba399a998f74f60c488b"
@@ -159,7 +161,9 @@ function start_s3proxy {
     then
         if [ ! -e "${S3PROXY_BINARY}" ]; then
             curl "https://github.com/gaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
-                --fail --location --silent --output "${S3PROXY_BINARY}"
+                --fail --location --silent --output "/tmp/${S3PROXY_BINARY}"
+            echo "$S3PROXY_HASH" "/tmp/${S3PROXY_BINARY}" | sha256sum --check
+            mv "/tmp/${S3PROXY_BINARY}" "${S3PROXY_BINARY}"
             chmod +x "${S3PROXY_BINARY}"
         fi
 
@@ -187,7 +191,9 @@ function start_s3proxy {
     if [ -n "${CHAOS_HTTP_PROXY}" ] || [ -n "${CHAOS_HTTP_PROXY_OPT}" ]; then
         if [ ! -e "${CHAOS_HTTP_PROXY_BINARY}" ]; then
             curl "https://github.com/bouncestorage/chaos-http-proxy/releases/download/chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}/chaos-http-proxy" \
-                --fail --location --silent --output "${CHAOS_HTTP_PROXY_BINARY}"
+                --fail --location --silent --output "/tmp/${CHAOS_HTTP_PROXY_BINARY}"
+            echo "$CHAOS_HTTP_PROXY_HASH" "/tmp/${CHAOS_HTTP_PROXY_BINARY}" | sha256sum --check
+            mv "/tmp/${CHAOS_HTTP_PROXY_BINARY}" "${CHAOS_HTTP_PROXY_BINARY}"
             chmod +x "${CHAOS_HTTP_PROXY_BINARY}"
         fi
 
