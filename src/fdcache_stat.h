@@ -56,6 +56,7 @@ class CacheFileStat
         bool Release();
         bool SetPath(const char* tpath, bool is_open = true);
         int GetFd() const { return fd; }
+        bool OverWriteFile(const std::string& strall) const;
 };
 
 #endif // S3FS_FDCACHE_STAT_H_

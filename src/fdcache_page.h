@@ -94,7 +94,7 @@ class PageList
 
         void Clear();
         bool Parse(off_t new_pos);
-        bool Serialize(CacheFileStat& file, ino_t inode);
+        bool Serialize(const CacheFileStat& file, ino_t inode) const;
 
     public:
         static void FreeList(fdpage_list_t& list);
