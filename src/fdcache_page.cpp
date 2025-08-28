@@ -820,32 +820,21 @@ bool PageList::ClearAllModified()
     return Compress();
 }
 
-bool PageList::Serialize(CacheFileStat& file, ino_t inode)
+bool PageList::Serialize(const CacheFileStat& file, ino_t inode) const
 {
-    if(!file.Open()){
-        return false;
-    }
-
-    //
-    // put to file
-    //
+    // make contents
     std::ostringstream ssall;
     ssall << inode << ":" << Size();
 
     for(auto iter = pages.cbegin(); iter != pages.cend(); ++iter){
         ssall << "\n" << iter->offset << ":" << iter->bytes << ":" << (iter->loaded ? "1" : "0") << ":" << (iter->modified ? "1" : "0");
     }
-
-    if(-1 == ftruncate(file.GetFd(), 0)){
-        S3FS_PRN_ERR("failed to truncate file(to 0) for stats(%d)", errno);
-        return false;
-    }
     std::string strall = ssall.str();
-    if(0 >= pwrite(file.GetFd(), strall.c_str(), strall.length(), 0)){
-        S3FS_PRN_ERR("failed to write stats(%d)", errno);
+
+    // over write
+    if(!file.OverWriteFile(strall)){
         return false;
     }
-
     return true;
 }
 

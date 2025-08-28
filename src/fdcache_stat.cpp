@@ -193,6 +193,49 @@ bool CacheFileStat::SetPath(const char* tpath, bool is_open)
     return Open();
 }
 
+// [NOTE]
+// There is no need to check whether the file is open because using rename().
+//
+bool CacheFileStat::OverWriteFile(const std::string& strall) const
+{
+    // make temporary file path(in same cache directory)
+    std::string sfile_path;
+    if(0 != CacheFileStat::MakeCacheFileStatPath(path.c_str(), sfile_path, true)){
+        S3FS_PRN_ERR("failed to create cache stat file path(%s)", path.c_str());
+        return false;
+    }
+    std::string strTmpFile = mydirname(sfile_path) + "/.tmpstat.XXXXXX";
+    strTmpFile.push_back('\0');     // terminate with a null character and allocate space for it.
+
+    // open temporary file(mode: 0600)
+    //
+    // [TODO]
+    // Currently, use "&str[pos]" to make it possible to build with C++14.
+    // Once we support C++17 or later, we will use "str.data()".
+    //
+    int tmpfd;
+    if(-1 == (tmpfd = mkstemp(&strTmpFile[0]))){    // NOLINT(readability-container-data-pointer)
+        S3FS_PRN_ERR("failed to create temporary cache stat file path(%s) for %s cache", strTmpFile.c_str(), sfile_path.c_str());
+        return false;
+    }
+
+    // write contents
+    if(0 >= pwrite(tmpfd, strall.c_str(), strall.length(), 0)){
+        S3FS_PRN_ERR("failed to write stats to temporary file(%d)", errno);
+        close(tmpfd);
+        return false;
+    }
+    close(tmpfd);
+
+    // rename
+    if(0 != rename(strTmpFile.c_str(), sfile_path.c_str())){
+        S3FS_PRN_ERR("failed to rename temporary cache stat file path(%s) to %s cache", strTmpFile.c_str(), sfile_path.c_str());
+        unlink(strTmpFile.c_str());
+        return false;
+    }
+    return true;
+}
+
 bool CacheFileStat::RawOpen(bool readonly)
 {
     if(path.empty()){
