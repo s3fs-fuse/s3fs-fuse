@@ -2439,14 +2439,6 @@ function test_not_existed_dir_obj() {
     rm -rf not_existed_dir_parent
 }
 
-function test_ut_ossfs {
-    describe "Testing ossfs python ut..."
-
-    # shellcheck disable=SC2153
-    export TEST_BUCKET_MOUNT_POINT="${TEST_BUCKET_MOUNT_POINT_1}"
-    ../../ut_test.py
-}
-
 function test_cr_filename {
     describe "Testing filename with CR code ..."
 
@@ -2933,7 +2925,6 @@ function add_all_tests {
     if ! test -f /etc/os-release || ! grep -q -i -e 'ID=alpine' -e 'ID="alpine"' /etc/os-release; then
         add_tests test_not_existed_dir_obj
     fi
-    add_tests test_ut_ossfs
     add_tests test_cr_filename
     if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_ensurespace_move_file

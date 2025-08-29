@@ -102,7 +102,6 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.04" ] ||
         mailcap
         openjdk-21-jre-headless
         pkg-config
-        python3
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
@@ -129,7 +128,6 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
         mime-support
         openjdk-21-jre-headless
         pkg-config
-        python3
     )
 
     CURL_DIRECT_INSTALL=1
@@ -159,7 +157,6 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
         openjdk-21-jre-headless
         pkg-config
         procps
-        python3
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
@@ -188,7 +185,6 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
         openjdk-17-jre-headless
         pkg-config
         procps
-        python3
     )
 
     CURL_DIRECT_INSTALL=1
@@ -228,7 +224,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ]; then
         openssl-devel
         perl-Test-Harness
         procps
-        python3
         xz
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
     )
@@ -268,7 +263,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
         openssl-devel
         perl-Test-Harness
         procps
-        python3
         xz
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
     )
@@ -302,7 +296,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
         openssl
         openssl-devel
         perl-Test-Harness
-        python3
     )
 
     CURL_DIRECT_INSTALL=1
@@ -393,7 +386,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
         openssl
         perl-test-harness-utils
         procps
-        python3
         sed
     )
 
