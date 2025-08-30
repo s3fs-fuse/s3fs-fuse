@@ -264,6 +264,7 @@ jobs:
       - name: Install packages
         run: |
           .github/workflows/linux-ci-helper.sh fedora:42
+          dnf install -y python3
 
       - name: Install extra packages
         run: |
