@@ -325,7 +325,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
         attr
         autoconf
         automake
-        aws-cli
         coreutils
         curl
         curl-dev
