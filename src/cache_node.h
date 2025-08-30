@@ -21,8 +21,8 @@
 #ifndef S3FS_CACHE_NODE_H_
 #define S3FS_CACHE_NODE_H_
 
+#include <iosfwd>
 #include <memory>
-#include <sstream>
 #include <mutex>
 
 #include "common.h"
