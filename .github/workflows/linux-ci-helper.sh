@@ -306,7 +306,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
     INSTALL_PACKAGES=(
         attr
         automake
-        clang
         curl
         curl-devel
         diffutils
@@ -319,8 +318,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
         glibc-langpack-en
         java-latest-openjdk-headless
         jq
-        libcxx
-        libcxx-devel
         libstdc++-devel
         libxml2-devel
         mailcap
