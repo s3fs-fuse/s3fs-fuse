@@ -403,7 +403,14 @@ function test_external_modification {
     # cache will be read out.
     # Therefore, we need to wait over 1 second here.
     #
+    # In particular, on MacOS, getattrs may be called after a file is
+    # uploaded(released).
+    # This extends the expiration date of the target file(1 sec by
+    # stat_cache_interval_expire option).
+    # Therefore, on MacOS, you need to add an additional 1 sec.
+    #
     sleep 1
+    wait_ostype 1 "Darwin"
 
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_TEXT_FILE}"
     echo "new new" | s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}"
