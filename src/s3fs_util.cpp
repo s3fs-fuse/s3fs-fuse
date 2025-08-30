@@ -186,9 +186,13 @@ std::string mydirname(const char* path)
         return "";
     }
 
-    char *buf = strdup(path);
-    std::string result = dirname(buf);
-    free(buf);
+    // [TODO]
+    // Currently, use "&str[pos]" to make it possible to build with C++14.
+    // Once we support C++17 or later, we will use "str.data()".
+    //
+    std::string strPath = path;
+    strPath.push_back('\0');                    // terminate with a null character and allocate space for it.
+    std::string result = dirname(&strPath[0]);  // NOLINT(readability-container-data-pointer)
     return result;
 }
 
@@ -207,9 +211,13 @@ std::string mybasename(const char* path)
         return "";
     }
 
-    char *buf = strdup(path);
-    std::string result = basename(buf);
-    free(buf);
+    // [TODO]
+    // Currently, use "&str[pos]" to make it possible to build with C++14.
+    // Once we support C++17 or later, we will use "str.data()".
+    //
+    std::string strPath = path;
+    strPath.push_back('\0');                    // terminate with a null character and allocate space for it.
+    std::string result = basename(&strPath[0]); // NOLINT(readability-container-data-pointer)
     return result;
 }
 
