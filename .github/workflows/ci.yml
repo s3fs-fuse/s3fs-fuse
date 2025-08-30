@@ -147,17 +147,10 @@ jobs:
           make --jobs=$(sysctl -n hw.ncpu)
 
       - name: Cppcheck
-        run: |
-          # specify the version range to run cppcheck (cppcheck version number is x.y or x.y.z)
-          if cppcheck --version | sed -e 's/\./ /g' | awk '{if (($2 * 1000 + $3) <= 2004) { exit(1) } }'; then
-            make cppcheck
-          fi
+        run: make cppcheck
 
       - name: Shellcheck
-        run: |
-          if shellcheck --version | awk -F '[ .]' '/version:/ && ($2 * 1000 + $3 <= 7) { exit(1) }'; then
-            make shellcheck
-          fi
+        run: make shellcheck
 
       - name: Test suite
         run: |
@@ -271,6 +264,13 @@ jobs:
       - name: Install packages
         run: |
           .github/workflows/linux-ci-helper.sh fedora:42
+
+      - name: Install extra packages
+        run: |
+          dnf install -y \
+            clang-tools-extra \
+            cppcheck \
+            ShellCheck
 
       - name: Build
         run: |
