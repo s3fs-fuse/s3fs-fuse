@@ -57,7 +57,10 @@ CONTAINER_OSNAME=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f1)
 # shellcheck disable=SC2034
 CONTAINER_OSVERSION=$(echo "${CONTAINER_FULLNAME}" | cut -d: -f2)
 
-CURL_DIRECT_URL="https://github.com/moparisthebest/static-curl/releases/latest/download/curl-$(uname -m | sed -e s/x86_64/amd64/)"
+CURL_DIRECT_VERSION="v8.11.0"
+CURL_DIRECT_URL="https://github.com/moparisthebest/static-curl/releases/download/${CURL_DIRECT_VERSION}/curl-$(uname -m | sed -e s/x86_64/amd64/)"
+CURL_HASH_X86_64="d18aa1f4e03b50b649491ca2c401cd8c5e89e72be91ff758952ad2ab5a83135d"
+CURL_HASH_AARCH64="1b050abd1669f9a2ac29b34eb022cdeafb271dce5a4fb57d8ef8fadff6d7be1f"
 
 #-----------------------------------------------------------
 # Parameters for configure(set environments)
@@ -368,7 +371,14 @@ java -version
 if [ "${CURL_DIRECT_INSTALL}" -eq 1 ]; then
     echo "${PRGNAME} [INFO] Install newer curl package."
 
-    curl --fail --location --silent --output "/usr/local/bin/curl" "${CURL_DIRECT_URL}"
+    curl --fail --location --silent --output "/tmp/curl" "${CURL_DIRECT_URL}"
+    case "$(uname -m)" in
+        x86_64)  curl_hash="$CURL_HASH_X86_64" ;;
+        aarch64) curl_hash="$CURL_HASH_AARCH64" ;;
+        *)       exit 1 ;;
+    esac
+    echo "$curl_hash" "/tmp/curl" | sha256sum --check
+    mv "/tmp/curl" "/usr/local/bin/curl"
     chmod +x "/usr/local/bin/curl"
 
     # Rocky Linux 8 and 9 have a different certificate path
