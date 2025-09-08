@@ -2775,41 +2775,122 @@ function test_statvfs() {
     fi
 }
 
-function test_pjdfstest() {
+function test_pjdfstest_chflags() {
+    describe "Testing the pjdfstest : chflags..."
+
+    prove -rv ../../pjdfstest/tests/chflags/*.t
+}
+
+function test_pjdfstest_chmod() {
+    describe "Testing the pjdfstest : chmod..."
+
+    prove -rv ../../pjdfstest/tests/chmod/0[4689].t \
+              ../../pjdfstest/tests/chmod/10.t
+}
+
+function test_pjdfstest_chown() {
+    describe "Testing the pjdfstest : chown..."
+
+    prove -rv ../../pjdfstest/tests/chown/0[4689].t \
+              ../../pjdfstest/tests/chown/10.t
+}
+
+function test_pjdfstest_ftruncate() {
+    describe "Testing the pjdfstest : ftruncate..."
+
+    prove -rv ../../pjdfstest/tests/ftruncate/0[147-9].t \
+              ../../pjdfstest/tests/ftruncate/1[0134].t
+}
+
+function test_pjdfstest_granular() {
+    describe "Testing the pjdfstest : granular..."
+
+    prove -rv ../../pjdfstest/tests/granular/*.t
+}
+
+function test_pjdfstest_link() {
+    describe "Testing the pjdfstest : link..."
+
+    prove -rv ../../pjdfstest/tests/link/*.t
+}
+
+function test_pjdfstest_mkdir() {
+    describe "Testing the pjdfstest : mkdir..."
+
+    prove -rv ../../pjdfstest/tests/mkdir/0[347-9].t \
+              ../../pjdfstest/tests/mkdir/1[12]*.t
+}
+
+function test_pjdfstest_mkfifo() {
+    describe "Testing the pjdfstest : mkfifo..."
+
+    prove -rv ../../pjdfstest/tests/mkfifo/0[3478].t \
+              ../../pjdfstest/tests/mkfifo/1*.t
+}
+
+function test_pjdfstest_mknod() {
+    describe "Testing the pjdfstest : mknod..."
+
+    prove -rv ../../pjdfstest/tests/mknod/0[479].t \
+              ../../pjdfstest/tests/mknod/10.t
+}
+
+function test_pjdfstest_open() {
+    describe "Testing the pjdfstest : open..."
+
+    prove -rv ../../pjdfstest/tests/open/0[49].t \
+              ../../pjdfstest/tests/open/1*.t \
+              ../../pjdfstest/tests/open/2[0-134].t
+}
+
+function test_pjdfstest_posix_fallocate() {
+    describe "Testing the pjdfstest : posix_fallocate..."
+
+    prove -rv ../../pjdfstest/tests/posix_fallocate/*.t
+}
+
+function test_pjdfstest_rename() {
+    describe "Testing the pjdfstest : rename..."
+
+    prove -rv ../../pjdfstest/tests/rename/0[2-36-8].t \
+              ../../pjdfstest/tests/rename/1[15-9].t \
+              ../../pjdfstest/tests/rename/22.t
+}
+
+function test_pjdfstest_rmdir() {
+    describe "Testing the pjdfstest : rmdir..."
+
     # TODO: explain exclusions
     # fails with -o use_cache: ../../pjdfstest/tests/rmdir/01.t
-    prove -rv \
-        ../../pjdfstest/tests/chflags/*.t \
-        ../../pjdfstest/tests/chmod/0[4689].t \
-        ../../pjdfstest/tests/chmod/10.t \
-        ../../pjdfstest/tests/chown/0[4689].t \
-        ../../pjdfstest/tests/chown/10.t \
-        ../../pjdfstest/tests/ftruncate/0[147-9].t \
-        ../../pjdfstest/tests/ftruncate/1[0134].t \
-        ../../pjdfstest/tests/granular/*.t \
-        ../../pjdfstest/tests/link/*.t \
-        ../../pjdfstest/tests/mkdir/0[347-9].t \
-        ../../pjdfstest/tests/mkdir/1[12]*.t \
-        ../../pjdfstest/tests/mkfifo/0[3478].t \
-        ../../pjdfstest/tests/mkfifo/1*.t \
-        ../../pjdfstest/tests/mknod/0[479].t \
-        ../../pjdfstest/tests/mknod/10.t \
-        ../../pjdfstest/tests/open/0[49].t \
-        ../../pjdfstest/tests/open/1*.t \
-        ../../pjdfstest/tests/open/2[0-134].t \
-        ../../pjdfstest/tests/posix_fallocate/*.t \
-        ../../pjdfstest/tests/rename/0[2-36-8].t \
-        ../../pjdfstest/tests/rename/1[15-9].t \
-        ../../pjdfstest/tests/rename/22.t \
-        ../../pjdfstest/tests/rmdir/0[3-59].t \
-        ../../pjdfstest/tests/rmdir/1[02-5].t \
-        ../../pjdfstest/tests/symlink/0[13479].t \
-        ../../pjdfstest/tests/symlink/1*.t \
-        ../../pjdfstest/tests/truncate/0[147-9].t \
-        ../../pjdfstest/tests/truncate/1[0134].t \
-        ../../pjdfstest/tests/unlink/0[47-8].t \
-        ../../pjdfstest/tests/unlink/1[02-4].t \
-        ../../pjdfstest/tests/utimensat/0[1-58-9].t
+    prove -rv ../../pjdfstest/tests/rmdir/0[3-59].t \
+              ../../pjdfstest/tests/rmdir/1[02-5].t
+}
+
+function test_pjdfstest_symlink() {
+    describe "Testing the pjdfstest : symlink..."
+
+    prove -rv ../../pjdfstest/tests/symlink/0[13479].t \
+              ../../pjdfstest/tests/symlink/1*.t
+}
+
+function test_pjdfstest_truncate() {
+    describe "Testing the pjdfstest : truncate..."
+
+    prove -rv ../../pjdfstest/tests/truncate/0[147-9].t \
+              ../../pjdfstest/tests/truncate/1[0134].t
+}
+
+function test_pjdfstest_unlink() {
+    describe "Testing the pjdfstest : unlink..."
+
+    prove -rv ../../pjdfstest/tests/unlink/0[47-8].t \
+              ../../pjdfstest/tests/unlink/1[02-4].t
+}
+
+function test_pjdfstest_utimensat() {
+    describe "Testing the pjdfstest : utimensat..."
+
+    prove -rv ../../pjdfstest/tests/utimensat/0[1-58-9].t
 }
 
 function add_all_tests {
@@ -2948,7 +3029,23 @@ function add_all_tests {
     add_tests test_statvfs
 
     if ! uname | grep -q Darwin; then
-        add_tests test_pjdfstest
+        add_tests test_pjdfstest_chflags
+        add_tests test_pjdfstest_chmod
+        add_tests test_pjdfstest_chown
+        add_tests test_pjdfstest_ftruncate
+        add_tests test_pjdfstest_granular
+        add_tests test_pjdfstest_link
+        add_tests test_pjdfstest_mkdir
+        add_tests test_pjdfstest_mkfifo
+        add_tests test_pjdfstest_mknod
+        add_tests test_pjdfstest_open
+        add_tests test_pjdfstest_posix_fallocate
+        add_tests test_pjdfstest_rename
+        add_tests test_pjdfstest_rmdir
+        add_tests test_pjdfstest_symlink
+        add_tests test_pjdfstest_truncate
+        add_tests test_pjdfstest_unlink
+        add_tests test_pjdfstest_utimensat
     fi
 }
 
