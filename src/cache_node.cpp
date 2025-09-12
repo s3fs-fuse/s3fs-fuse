@@ -871,10 +871,40 @@ bool DirStatCache::isRemovableHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!children.empty()){
+    if(HasExistedChildHasLock()){
         return false;
     }
     return true;
+}
+
+bool DirStatCache::HasExistedChildHasLock()
+{
+    // [FIXME]
+    // This for statement will result in an error saying that it can be
+    // replaced with std::any_of using clang-tidy.
+    // However, if we replace this loop with std::any_of as shown below,
+    // an error will occur in thread_safety.
+    //
+    //    std::any_of(children.begin(), children.end(), [](const auto& pair){ return !pair.second->isNegativeHasLock(); });
+    //
+    // This is because that when using as std::any_of algorithms with
+    // lambda expressions, static analysis assumes that "the lambda may
+    // be called outside the scope of the caller."
+    // As a result, it concludes that there is no guarantee that the
+    // mutex is held within the lambda (a limitation of the analysis).
+    //
+    // Therefore, until this false positive is resolved, we use
+    // NOLINTNEXTLINE(readability-use-anyofallof) to avoid clang-tidy
+    // errors.
+    //
+
+    // NOLINTNEXTLINE(readability-use-anyofallof)
+    for(const auto& pair: children){
+        if(!pair.second->isNegativeHasLock()){
+            return true;
+        }
+    }
+    return false;
 }
 
 bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate)
@@ -948,7 +978,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
         }else{
             // found not negative type
-            if(!hasNestedChildren && IS_NEGATIVE_OBJ(type)){
+            if(!hasNestedChildren && (IS_NEGATIVE_OBJ(type) || !iter->second->isSameObjectTypeHasLock(type))){
                 // strpath is a direct child as negative cache
                 children.erase(iter);
                 iter = children.end();
@@ -960,18 +990,18 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
         // found
         if(hasNestedChildren){
             // Add an under child
-            return iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate);
+            if(!iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate)){
+                return false;
+            }
         }else{
             // Add as a child
             if(!iter->second->isSameObjectTypeHasLock(type)){
                 // The type(other than negative type) of object found is different
                 return false;
-            }else{
-                // Already has strpath child, so set stat and meta.
-                if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
-                    return false;
-                }
-                return true;
+            }
+            // Already has strpath child, so set stat and meta.
+            if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
+                return false;
             }
         }
     }else{
@@ -1051,6 +1081,10 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             children[strLeafName] = std::move(pstatcache);
         }
     }
+
+    if(!UpdateHasLock()){
+        return false;
+    }
     return true;
 }
 
@@ -1060,7 +1094,9 @@ s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& c
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     for(const auto& pair: children){
-        childmap[pair.first] = pair.second->GetTypeHasLock();
+        if(!pair.second->isNegativeHasLock()){
+            childmap[pair.first] = pair.second->GetTypeHasLock();
+        }
     }
     return childmap.size();
 }
@@ -1168,7 +1204,7 @@ bool DirStatCache::IsExpiredHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!HasStatHasLock() && !HasMetaHasLock() && children.empty()){
+    if(!HasStatHasLock() && !HasMetaHasLock() && !HasExistedChildHasLock()){
         // this cache is empty
         return true;
     }
