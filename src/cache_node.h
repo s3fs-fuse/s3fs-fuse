@@ -79,6 +79,8 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static time_t           ExpireTime;
         static bool             UseNegativeCache;
         static std::mutex       cache_lock;                                                // for internal data
+        static unsigned long    DisableCheckingExpire GUARDED_BY(cache_lock);              // If greater than 0, it disables the expiration check, which allows disabling checks during processing.
+        static struct timespec  DisableExpireDate GUARDED_BY(cache_lock);                  // Data registerd after this time will not be truncated(if 0 < DisableCheckingExpire)
 
     private:
         objtype_t               cache_type GUARDED_BY(StatCacheNode::cache_lock) = objtype_t::UNKNOWN;  // object type is set in the constructor(except dir).
@@ -97,6 +99,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static void IncrementCacheCount(objtype_t type);
         static void DecrementCacheCount(objtype_t type);
         static bool SetNegativeCache(bool flag);
+        static bool NeedExpireCheckHasLock(const struct timespec& ts) REQUIRES(StatCacheNode::cache_lock);
 
         // Cache Type
         bool isSameObjectTypeHasLock(objtype_t type) const REQUIRES(StatCacheNode::cache_lock);
@@ -113,6 +116,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
 
         // Add
         virtual bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) REQUIRES(StatCacheNode::cache_lock);
+        virtual bool AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list) REQUIRES(StatCacheNode::cache_lock);
 
         // Update(Set)
         bool UpdateHasLock(objtype_t type) REQUIRES(StatCacheNode::cache_lock);
@@ -132,6 +136,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         virtual bool GetHasLock(headers_t* pmeta, struct stat* pst) REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetExtraHasLock(std::string& value) REQUIRES(StatCacheNode::cache_lock);
         virtual s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) REQUIRES(StatCacheNode::cache_lock);
+        virtual bool GetS3ObjListHasLock(S3ObjList& list) REQUIRES(StatCacheNode::cache_lock);
 
         // Find
         virtual bool CheckETagValueHasLock(const char* petagval) const REQUIRES(StatCacheNode::cache_lock);
@@ -156,6 +161,8 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static bool EnableNegativeCache() { return SetNegativeCache(true); }
         static bool DisableNegativeCache() { return SetNegativeCache(false); }
         static bool IsEnabledNegativeCache() { return UseNegativeCache; }
+        static bool PreventExpireCheck();
+        static bool ResumeExpireCheck();
 
         // Constructor/Destructor
         explicit StatCacheNode(const char* path = nullptr, objtype_t type = objtype_t::UNKNOWN);
@@ -181,6 +188,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         // Add
         bool Add(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate = false);
         bool AddExtra(const std::string& value);
+        bool AddS3ObjList(const std::string& strpath, const S3ObjList& list);
 
         // Update(Set)
         bool Update(const struct stat& stbuf, const headers_t& meta);
@@ -201,6 +209,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         unsigned long IncrementHitCount();
         bool GetExtra(std::string& value);
         s3obj_type_map_t::size_type GetChildMap(s3obj_type_map_t& childmap);
+        bool GetS3ObjList(S3ObjList& list);
 
         // Find
         std::shared_ptr<StatCacheNode> Find(const std::string& strpath, const char* petagval = nullptr);
@@ -248,15 +257,22 @@ class DirStatCache : public StatCacheNode
         struct timespec last_check_date GUARDED_BY(dir_cache_lock) = {0, 0};
         objtype_t       dir_cache_type  GUARDED_BY(dir_cache_lock) = objtype_t::UNKNOWN;    // [NOTE] backup for use in destructors only
         statcache_map_t children        GUARDED_BY(dir_cache_lock);
+        bool            has_s3obj       GUARDED_BY(dir_cache_lock) = false;
+        S3ObjList       s3obj           GUARDED_BY(dir_cache_lock);
 
     protected:
         bool ClearHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        bool ClearS3ObjListHasLock() REQUIRES(dir_cache_lock);
         bool RemoveChildHasLock(const std::string& strpath) override REQUIRES(StatCacheNode::cache_lock);
+        bool RemoveChildInS3ObjListHasLock(const std::string& strChildLeaf) REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
         bool isRemovableHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        bool HasExistedChildHasLock() REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
 
         bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) override REQUIRES(StatCacheNode::cache_lock);
+        bool AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list) override REQUIRES(StatCacheNode::cache_lock);
 
         s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) override REQUIRES(StatCacheNode::cache_lock);
+        bool GetS3ObjListHasLock(S3ObjList& list) override REQUIRES(StatCacheNode::cache_lock);
 
         std::shared_ptr<StatCacheNode> FindHasLock(const std::string& strpath, const char* petagval, bool& needTruncate) override REQUIRES(StatCacheNode::cache_lock);
 
@@ -318,6 +334,28 @@ class NegativeStatCache : public StatCacheNode
         NegativeStatCache(NegativeStatCache&&) = delete;
         NegativeStatCache& operator=(const NegativeStatCache&) = delete;
         NegativeStatCache& operator=(NegativeStatCache&&) = delete;
+};
+
+//-------------------------------------------------------------------
+// Utility Class : PreventStatCacheExpire
+//-------------------------------------------------------------------
+class PreventStatCacheExpire
+{
+    public:
+        explicit PreventStatCacheExpire()
+        {
+            StatCacheNode::PreventExpireCheck();
+        }
+
+        ~PreventStatCacheExpire()
+        {
+            StatCacheNode::ResumeExpireCheck();
+        }
+
+        PreventStatCacheExpire(const PreventStatCacheExpire&) = delete;
+        PreventStatCacheExpire(PreventStatCacheExpire&&) = delete;
+        PreventStatCacheExpire& operator=(const PreventStatCacheExpire&) = delete;
+        PreventStatCacheExpire& operator=(PreventStatCacheExpire&&) = delete;
 };
 
 #endif // S3FS_CACHE_NODE_H_

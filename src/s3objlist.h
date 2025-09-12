@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sstream>
 
 #include "types.h"
 
@@ -70,6 +71,9 @@ class S3ObjList
         bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetLastName(std::string& lastname) const;
+        bool HasName(const std::string& strName);
+        bool Remove(const std::string& strName);
+        void Dump(const std::string& indent, std::ostringstream& oss) const;
 
         static bool MakeHierarchizedList(s3obj_list_t& list, bool haveSlash);
 };

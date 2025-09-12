@@ -99,6 +99,8 @@ bool            StatCacheNode::IsExpireIntervalType            = false;
 time_t          StatCacheNode::ExpireTime                      = 15 * 60;
 bool            StatCacheNode::UseNegativeCache                = true;
 std::mutex      StatCacheNode::cache_lock;
+unsigned long   StatCacheNode::DisableCheckingExpire           = 0L;
+struct timespec StatCacheNode::DisableExpireDate               = {0, 0};
 
 //
 // Class Methods
@@ -160,6 +162,57 @@ bool StatCacheNode::SetNegativeCache(bool flag)
     bool old = UseNegativeCache;
     UseNegativeCache = flag;
     return old;
+}
+
+bool StatCacheNode::NeedExpireCheckHasLock(const struct timespec& ts)
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+
+    // [NOTE]
+    // If the expiration date check is disabled(0 < DisableCheckingExpire)
+    // and the date is later than DisableExpireDate, it is determined that
+    // checking is not necessary.
+    //
+    if(0L < StatCacheNode::DisableCheckingExpire){
+        if(0 >= CompareStatCacheTime(StatCacheNode::DisableExpireDate, ts)){
+            return false;
+        }
+    }
+    return true;
+}
+
+bool StatCacheNode::PreventExpireCheck()
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+
+    ++StatCacheNode::DisableCheckingExpire;
+
+    if(0 == StatCacheNode::DisableExpireDate.tv_sec){
+        SetCurrentTime(StatCacheNode::DisableExpireDate);
+        StatCacheNode::DisableExpireDate.tv_sec -= StatCacheNode::GetExpireTime();
+    }
+    return true;
+}
+
+bool StatCacheNode::ResumeExpireCheck()
+{
+    if(!StatCacheNode::IsEnableExpireTime()){
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+
+    if(0 < StatCacheNode::DisableCheckingExpire){
+        --StatCacheNode::DisableCheckingExpire;
+    }
+    if(0 == StatCacheNode::DisableCheckingExpire){
+        StatCacheNode::DisableExpireDate = {0, 0};
+    }
+    return true;
 }
 
 //-------------------------------------------------------------------
@@ -301,6 +354,17 @@ bool StatCacheNode::Add(const std::string& strpath, const struct stat* pstat, co
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return AddHasLock(strpath, pstat, pmeta, type, is_notruncate);
+}
+
+bool StatCacheNode::AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list)
+{
+    return false;
+}
+
+bool StatCacheNode::AddS3ObjList(const std::string& strpath, const S3ObjList& list)
+{
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+    return AddS3ObjListHasLock(strpath, list);
 }
 
 bool StatCacheNode::UpdateHasLock(objtype_t type)
@@ -652,9 +716,34 @@ s3obj_type_map_t::size_type StatCacheNode::GetChildMap(s3obj_type_map_t& childma
     return GetChildMapHasLock(childmap);
 }
 
+bool StatCacheNode::GetS3ObjListHasLock(S3ObjList& list)
+{
+    // [NOTE]
+    // This base class (and all types other than Directory) do not have
+    // an S3ObjList, so this operation will always fail.
+    //
+    return false;
+}
+
+bool StatCacheNode::GetS3ObjList(S3ObjList& list)
+{
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+
+    if(!GetS3ObjListHasLock(list)){
+        return false;
+    }
+
+    if(StatCacheNode::IsExpireIntervalType){
+        SetCurrentTime(cache_date);
+    }
+    ++hit_count;
+
+    return true;
+}
+
 bool StatCacheNode::IsExpireStatCacheTimeHasLock() const
 {
-    if(StatCacheNode::IsEnableExpireTime()){
+    if(NeedExpireCheckHasLock(cache_date)){
         if(IsExpireStatCacheTime(cache_date, StatCacheNode::GetExpireTime())){
             // this cache is expired
             return true;
@@ -808,8 +897,16 @@ bool DirStatCache::ClearHasLock()
     {
         std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
         children.clear();
+        ClearS3ObjListHasLock();        // always true
     }
     return StatCacheNode::ClearHasLock();
+}
+
+bool DirStatCache::ClearS3ObjListHasLock()
+{
+    s3obj     = S3ObjList();    // Hope using default move assignment operator
+    has_s3obj = false;
+    return true;
 }
 
 bool DirStatCache::RemoveChildHasLock(const std::string& strpath)
@@ -832,34 +929,53 @@ bool DirStatCache::RemoveChildHasLock(const std::string& strpath)
 
     // Search in children
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    auto iter = children.find(strLeafName);
-    if(iter == children.cend()){
-        // not found
-        return false;
-    }
+    bool result = true;
+    auto iter   = children.find(strLeafName);
 
     // found
     if(hasNestedChildren){
         // type must be directory
-        if(!iter->second->isDirectoryHasLock()){
-            return false;
-        }
-        if(!iter->second->RemoveChildHasLock(strpath)){
-            return false;
-        }
-        if(iter->second->isRemovableHasLock()){
-            children.erase(iter);
-        }
-    }else{
-        if(iter->second->isDirectoryHasLock()){
-            // if it is a directory type, first clear the data.
-            if(!iter->second->UpdateHasLock(nullptr, nullptr, true) || !iter->second->UpdateHasLock(false) || !iter->second->UpdateHasLock()){
-                return false;
+        if(iter != children.cend()){
+            if(iter->second->isDirectoryHasLock()){
+                if(!iter->second->RemoveChildHasLock(strpath)){
+                    result = false;
+                }
+                if(iter->second->isRemovableHasLock()){
+                    children.erase(iter);
+
+                    if(!RemoveChildInS3ObjListHasLock(strLeafName)){
+                        result = false;
+                    }
+                }
+            }else{
+                result = false;
             }
         }
-        if(iter->second->isRemovableHasLock()){
-            children.erase(iter);
+    }else{
+        if(iter != children.cend()){
+            if(!iter->second->isDirectoryHasLock()){
+                children.erase(iter);
+            }else{
+                // if it is a directory type, first clear the data.
+                if(!iter->second->UpdateHasLock(nullptr, nullptr, true) || !iter->second->UpdateHasLock(false) || !iter->second->UpdateHasLock()){
+                    result = false;
+                }
+            }
         }
+        if(!RemoveChildInS3ObjListHasLock(strLeafName)){
+            result = false;
+        }
+    }
+    return result;
+}
+
+bool DirStatCache::RemoveChildInS3ObjListHasLock(const std::string& strChildLeaf)
+{
+    if(!has_s3obj){
+        return true;
+    }
+    if(!s3obj.Remove(strChildLeaf) || !UpdateHasLock()){
+        return false;
     }
     return true;
 }
@@ -871,10 +987,40 @@ bool DirStatCache::isRemovableHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!children.empty()){
+    if(HasExistedChildHasLock()){
         return false;
     }
     return true;
+}
+
+bool DirStatCache::HasExistedChildHasLock()
+{
+    // [FIXME]
+    // This for statement will result in an error saying that it can be
+    // replaced with std::any_of using clang-tidy.
+    // However, if we replace this loop with std::any_of as shown below,
+    // an error will occur in thread_safety.
+    //
+    //    std::any_of(children.begin(), children.end(), [](const auto& pair){ return !pair.second->isNegativeHasLock(); });
+    //
+    // This is because that when using as std::any_of algorithms with
+    // lambda expressions, static analysis assumes that "the lambda may
+    // be called outside the scope of the caller."
+    // As a result, it concludes that there is no guarantee that the
+    // mutex is held within the lambda (a limitation of the analysis).
+    //
+    // Therefore, until this false positive is resolved, we use
+    // NOLINTNEXTLINE(readability-use-anyofallof) to avoid clang-tidy
+    // errors.
+    //
+
+    // NOLINTNEXTLINE(readability-use-anyofallof)
+    for(const auto& pair: children){
+        if(!pair.second->isNegativeHasLock()){
+            return true;
+        }
+    }
+    return false;
 }
 
 bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate)
@@ -902,6 +1048,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
         }else{
             std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
             dir_cache_type = GetTypeHasLock();
+            ClearS3ObjListHasLock();
         }
         if(!UpdateHasLock(pstat, pmeta, true) || !UpdateHasLock(is_notruncate) || !UpdateHasLock()){
             return false;
@@ -948,7 +1095,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
         }else{
             // found not negative type
-            if(!hasNestedChildren && IS_NEGATIVE_OBJ(type)){
+            if(!hasNestedChildren && (IS_NEGATIVE_OBJ(type) || !iter->second->isSameObjectTypeHasLock(type))){
                 // strpath is a direct child as negative cache
                 children.erase(iter);
                 iter = children.end();
@@ -960,18 +1107,21 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
         // found
         if(hasNestedChildren){
             // Add an under child
-            return iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate);
+            if(!iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate)){
+                return false;
+            }
         }else{
             // Add as a child
             if(!iter->second->isSameObjectTypeHasLock(type)){
                 // The type(other than negative type) of object found is different
                 return false;
-            }else{
-                // Already has strpath child, so set stat and meta.
-                if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
-                    return false;
-                }
-                return true;
+            }
+            // Already has strpath child, so set stat and meta.
+            if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
+                return false;
+            }
+            if(has_s3obj && !s3obj.HasName(strLeafName)){
+                ClearS3ObjListHasLock();        // always true
             }
         }
     }else{
@@ -1045,12 +1195,79 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
                 if(!pstatcache->UpdateHasLock(pstat, pmeta, true) || !pstatcache->UpdateHasLock(is_notruncate) || !pstatcache->UpdateHasLock()){
                     return false;
                 }
+                if(has_s3obj && !s3obj.HasName(strLeafName)){
+                    ClearS3ObjListHasLock();        // always true
+                }
             }
 
             // add as a child
             children[strLeafName] = std::move(pstatcache);
         }
     }
+
+    if(!UpdateHasLock()){
+        return false;
+    }
+    return true;
+}
+
+bool DirStatCache::AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list)
+{
+    // Check size
+    if(strpath.size() < GetPathHasLock().size()){          // fullpath includes the terminating slash, but strpath may not.
+        return false;
+    }
+
+    //
+    // Check path (itself or contains itself)
+    //
+    // [NOTE]
+    // Directory paths must end with a slash, but strpath does not.
+    //
+    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
+
+    if(GetPathHasLock() == strpath || GetPathHasLock().substr(0, GetPathHasLock().size() - 1) == strpath){
+        // Own path
+        if(!isDirectoryHasLock()){
+            // The path matched but the object type is not a directory
+            return false;
+        }
+        // Set
+        s3obj     = list;
+        has_s3obj = true;
+
+    }else if(strpath.substr(0, GetPathHasLock().size()) != GetPathHasLock()){
+        // The path does not include the path of this object.
+        return false;
+
+    }else{
+        // make key(leaf name without slash) for children map
+        std::string strLeafName;
+        bool        hasNestedChildren = false;      // not used
+        if(!GetChildLeafNameHasLock(strpath, strLeafName, hasNestedChildren)){
+            return false;
+        }
+
+        // Search in children
+        auto iter = children.find(strLeafName);
+        if(iter == children.end()){
+            // Not found child
+            return false;
+        }
+        if(!iter->second->isDirectoryHasLock()){
+            // Found child is not directory cache
+            return false;
+        }
+
+        // Call child method
+        if(!iter->second->AddS3ObjListHasLock(strpath, list)){
+            return false;
+        }
+    }
+
+    if(!UpdateHasLock()){
+        return false;
+     }
     return true;
 }
 
@@ -1060,9 +1277,25 @@ s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& c
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     for(const auto& pair: children){
-        childmap[pair.first] = pair.second->GetTypeHasLock();
+        if(!pair.second->isNegativeHasLock()){
+            childmap[pair.first] = pair.second->GetTypeHasLock();
+        }
     }
     return childmap.size();
+}
+
+bool DirStatCache::GetS3ObjListHasLock(S3ObjList& list)
+{
+    if(!GetNoTruncateHasLock() && IsExpireStatCacheTimeHasLock()){
+        return false;
+    }
+
+    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
+    if(!has_s3obj){
+        return false;
+    }
+    list = s3obj;
+    return true;
 }
 
 std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strpath, const char* petagval, bool& needTruncate)
@@ -1146,11 +1379,12 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
 
 bool DirStatCache::NeedTruncateProcessing()
 {
-    if(!StatCacheNode::IsEnableExpireTime()){
+    std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
+    if(!NeedExpireCheckHasLock(cache_date)){
         return false;
     }
-    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
 
+    std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     return IsExpireStatCacheTime(last_check_date, StatCacheNode::GetExpireTime());
 }
 
@@ -1168,7 +1402,7 @@ bool DirStatCache::IsExpiredHasLock()
     }
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    if(!HasStatHasLock() && !HasMetaHasLock() && children.empty()){
+    if(!HasStatHasLock() && !HasMetaHasLock() && !HasExistedChildHasLock() && (!has_s3obj || s3obj.IsEmpty())){
         // this cache is empty
         return true;
     }
@@ -1193,6 +1427,12 @@ bool DirStatCache::TruncateCacheHasLock()
     // Check all children
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     for(auto iter = children.begin(); iter != children.end(); ){
+        std::string strLeafName;
+        bool        hasNestedChildren = false;
+        if(!GetChildLeafNameHasLock(iter->second->GetPathHasLock(), strLeafName, hasNestedChildren)){
+            continue;
+        }
+
         if(iter->second->isDirectoryHasLock()){
             // [NOTE]
             // It is checked only if the expire time has passed since the last check.
@@ -1207,6 +1447,7 @@ bool DirStatCache::TruncateCacheHasLock()
                         S3FS_PRN_DBG("Remove stat cache [directory path=%s]", iter->first.c_str());
 
                         iter = children.erase(iter);
+                        RemoveChildInS3ObjListHasLock(strLeafName);
                         continue;
                     }
                 }
@@ -1219,6 +1460,7 @@ bool DirStatCache::TruncateCacheHasLock()
 
                 isTruncated = true;
                 iter = children.erase(iter);
+                RemoveChildInS3ObjListHasLock(strLeafName);
                 continue;
             }
         }
@@ -1287,6 +1529,12 @@ void DirStatCache::DumpHasLock(const std::string& indent, bool detail, std::ostr
             pstatcache->DumpHasLock(in_child_indent, detail, oss);
         }else{
             oss << in_child_indent << child_fullpath << "(NO STAT OBJECT)" << std::endl;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
+        if(has_s3obj){
+            s3obj.Dump(child_indent, oss);
         }
     }
     oss << child_indent << "]" << std::endl;
