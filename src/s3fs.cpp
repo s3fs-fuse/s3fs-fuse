@@ -825,6 +825,7 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     struct stat stobj;
     FdEntity*   ent;
     headers_t   meta;
+    FileTimes   ts_times;       // default: all timespecs are UTIME_OMIT
 
     S3FS_PRN_INFO2("[path=%s]", path);
 
@@ -833,15 +834,12 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     }
 
     // open
-    struct timespec st_mctime;
-    if(!S_ISREG(stobj.st_mode) && !S_ISLNK(stobj.st_mode)){
-        st_mctime = S3FS_OMIT_TS;
-    }else{
-        set_stat_to_timespec(stobj, stat_time_type::MTIME, st_mctime);
+    if(S_ISREG(stobj.st_mode) || S_ISLNK(stobj.st_mode)){
+        ts_times.SetAll(stobj);
     }
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, st_mctime, flags, force_tmpfile, true, false))){
+    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, ts_times, flags, force_tmpfile, true, false))){
         S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
         return -EIO;
     }
@@ -1173,8 +1171,9 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    int error = 0;
-    if(nullptr == (ent = autoent.Open(strpath.c_str(), &meta, 0, S3FS_OMIT_TS, fi->flags, false, true, false, &error))){
+    int          error = 0;
+    FileTimes    ts_times;
+    if(nullptr == (ent = autoent.Open(strpath.c_str(), &meta, 0, ts_times, fi->flags, false, true, false, &error))){
         // remove from cache
         StatCache::getStatCacheData()->DelStat(strpath);
         return error;
@@ -1447,10 +1446,12 @@ static int s3fs_symlink(const char* _from, const char* _to)
     {   // scope for AutoFdEntity
         AutoFdEntity autoent;
         FdEntity*    ent;
-        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, S3FS_OMIT_TS, O_RDWR, true, true, false))){
+        FileTimes    ts_times;      // Default: all time values are set UTIME_OMIT
+        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, ts_times, O_RDWR, true, true, false))){
             S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
             return -errno;
         }
+
         // write(without space words)
         auto from_size = static_cast<ssize_t>(strFrom.length());
         ssize_t ressize;
@@ -1543,38 +1544,28 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
             struct timespec mtime = get_mtime(meta);
             struct timespec ctime = get_ctime(meta);
             struct timespec atime = get_atime(meta);
-            if(mtime.tv_sec < 0){
-                mtime.tv_sec = 0L;
-                mtime.tv_nsec = 0L;
-            }
-            if(ctime.tv_sec < 0){
-                ctime.tv_sec = 0L;
-                ctime.tv_nsec = 0L;
-            }
-            if(atime.tv_sec < 0){
-                atime.tv_sec = 0L;
-                atime.tv_nsec = 0L;
-            }
 
             if(FdManager::IsCacheDir()){
                 // create cache file if be needed
                 //
                 // [NOTE]
-                // Do not specify "S3FS_OMIT_TS" for mctime parameter.
+                // Do not specify "UTIME_OMIT" for ts_time parameter.
                 // This is because if the cache file does not exist, the pagelist for it
                 // will be recreated, but the entire file area indicated by this pagelist
                 // will be in the "modified" state.
                 // This does not affect the rename process, but the cache information in
                 // the "modified" state remains, making it impossible to read the file correctly.
                 //
-                ent = autoent.Open(from, &meta, stbuf.st_size, mtime, O_RDONLY, false, true, false);
+                FileTimes ts_times;
+                ts_times.SetAll(ctime, atime, mtime, false);
+
+                ent = autoent.Open(from, &meta, stbuf.st_size, ts_times, O_RDONLY, false, true, false);
             }
             if(ent){
-                if(0 != (result = ent->SetMCtime(mtime, ctime))){
-                    S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", from, result);
+                if(0 != (result = ent->SetMtime(mtime)) || 0 != (result = ent->SetCtime(ctime)) || 0 != (result = ent->SetAtime(atime))){
+                    S3FS_PRN_ERR("could not set mtime/ctime/atime to file(%s): result=%d", from, result);
                     return result;
                 }
-                ent->SetAtime(atime);
             }
         }
     }
@@ -1592,6 +1583,7 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
 
     // Add only stat structure to stat cache
     std::string strTo = to;
+
     stbuf = {};
     if(convert_header_to_stat(strTo, meta, stbuf)){
         objtype_t ObjType = derive_object_type(strTo, meta, objtype_t::FILE);
@@ -2691,16 +2683,12 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
         AutoFdEntity autoent;
         FdEntity*    ent;
         bool         need_put_header = true;
-        bool         keep_mtime      = false;
         if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
             if(ent->MergeOrgMeta(updatemeta)){
                 // meta is changed, but now uploading.
                 // then the meta is pending and accumulated to be put after the upload is complete.
                 S3FS_PRN_INFO("meta pending until upload is complete");
                 need_put_header = false;
-                if(!ent->SetHoldingMtime(mtime)){
-                    return -EIO;
-                }
 
                 // get current entity's meta headers
                 if(!ent->GetOrgMeta(meta)){
@@ -2732,13 +2720,6 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
 
             }else{
                 S3FS_PRN_INFO("meta is not pending, but need to keep current mtime.");
-
-                // [NOTE]
-                // Depending on the order in which write/flush and utimens are called,
-                // the mtime updated here may be overwritten at the time of flush.
-                // To avoid that, set a special flag.
-                //
-                keep_mtime = true;
             }
         }
         if(need_put_header){
@@ -2760,12 +2741,6 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2])
             }else{
                 S3FS_PRN_ERR("failed convert headers to stat[path=%s]. So remove stat cache.", curpath.c_str());
                 StatCache::getStatCacheData()->DelStat(curpath);
-            }
-
-            if(keep_mtime){
-                if(!ent->SetHoldingMtime(mtime)){
-                    return -EIO;
-                }
             }
         }
     }
@@ -2860,15 +2835,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2])
             return result;
         }
 
-        // set mtime/ctime
-        if(0 != (result = ent->SetMCtime(mtime, ctime))){
-            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", curpath.c_str(), result);
-            return result;
-        }
-
-        // set atime
-        if(0 != (result = ent->SetAtime(atime))){
-            S3FS_PRN_ERR("could not set atime to file(%s): result=%d", curpath.c_str(), result);
+        // set mtime/ctime/atime
+        if(0 != (result = ent->SetMtime(mtime)) || 0 != (result = ent->SetCtime(ctime)) || 0 != (result = ent->SetAtime(atime))){
+            S3FS_PRN_ERR("could not set mtime/ctime/atime to file(%s): result=%d", curpath.c_str(), result);
             return result;
         }
 
@@ -2936,12 +2905,9 @@ static int s3fs_truncate(const char* _path, off_t size)
             ignore_modify = true;
         }
 
-        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, false, true, ignore_modify))){
-            S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
-            return -EIO;
-        }
-        if(!ent->UpdateCtime()){
-            S3FS_PRN_ERR("could not update ctime file(%s)", path);
+        FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify))){
+            S3FS_PRN_ERR("could not open file(%s): errno=%d(ent is null(%p))", path, errno, ent);   // [NOTE] read ent to avoid errors with cppcheck etc
             return -EIO;
         }
 
@@ -2974,7 +2940,8 @@ static int s3fs_truncate(const char* _path, off_t size)
         meta["x-amz-meta-uid"]   = std::to_string(pcxt->uid);
         meta["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
 
-        if(nullptr == (ent = autoent.Open(path, &meta, size, S3FS_OMIT_TS, O_RDWR, true, true, false))){
+        FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, true, true, false))){
             S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
             return -EIO;
         }
@@ -3052,28 +3019,23 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
             }
         }
     }
-    if(!S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)){
-        st.st_mtime = -1;
-    }
 
     if(0 != (result = get_object_attribute(path, nullptr, &meta, true, nullptr, true))){    // no truncate cache
-      return result;
+        return result;
     }
 
-    struct timespec st_mctime;
-    set_stat_to_timespec(st, stat_time_type::MTIME, st_mctime);
-
-    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, st_mctime, fi->flags, false, true, false))){
+    FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
+    ts_times.SetAll(st);
+    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, ts_times, fi->flags, false, true, false))){
         // remove stat cache
         StatCache::getStatCacheData()->DelStat(path);
         return -EIO;
     }
 
     if (needs_flush){
-        struct timespec ts;
-        s3fs_realtime(ts);
-
-        if(0 != (result = ent->SetMCtime(ts, ts))){
+        struct timespec ts_now;
+        s3fs_realtime(ts_now);
+        if(0 != (result = ent->SetCtime(ts_now)) || 0 != (result = ent->SetMtime(ts_now))){
             S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
             return result;
         }
@@ -3135,6 +3097,14 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     if(0 > (res = ent->Write(static_cast<int>(fi->fh), buf, offset, size))){
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
+    }
+
+    int    result;
+    struct timespec ts_now;
+    s3fs_realtime(ts_now);
+    if(0 != (result = ent->SetCtime(ts_now)) || 0 != (result = ent->SetMtime(ts_now))){
+        S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
+        return result;
     }
 
     if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
@@ -3208,15 +3178,6 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
     if(nullptr != (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         bool is_new_file = ent->IsDirtyNewFile();
 
-        if(!ent->UpdateMtime()){         // clear the flag not to update mtime.
-            S3FS_PRN_ERR("could not update mtime file(%s)", path);
-            return -EIO;
-        }
-        if(!ent->UpdateCtime()){
-            S3FS_PRN_ERR("could not update ctime file(%s)", path);
-            return -EIO;
-        }
-
         if(0 == (result = ent->Flush(static_cast<int>(fi->fh), false))){
             // [NOTE]
             // If there is any meta information that needs to be updated, update it now.
@@ -3269,16 +3230,6 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
     if(nullptr != (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
         bool is_new_file = ent->IsDirtyNewFile();
 
-        if(0 == datasync){
-            if(!ent->UpdateMtime()){
-                S3FS_PRN_ERR("could not update mtime file(%s)", path);
-                return -EIO;
-            }
-            if(!ent->UpdateCtime()){
-                S3FS_PRN_ERR("could not update ctime file(%s)", path);
-                return -EIO;
-            }
-        }
         result = ent->Flush(static_cast<int>(fi->fh), false);
 
         if(0 != datasync){
