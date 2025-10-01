@@ -53,6 +53,7 @@ s3fs_SOURCES = \
     fdcache_fdinfo.cpp \
     fdcache_pseudofd.cpp \
     fdcache_untreated.cpp \
+    filetimes.cpp \
     addhead.cpp \
     sighandlers.cpp \
     threadpoolman.cpp \

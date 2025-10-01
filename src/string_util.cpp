@@ -27,24 +27,28 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include "s3fs_logger.h"
 #include "string_util.h"
 
 //-------------------------------------------------------------------
-// Global variables
-//-------------------------------------------------------------------
-
-//-------------------------------------------------------------------
 // Functions
 //-------------------------------------------------------------------
-
 std::string str(const struct timespec& value)
 {
     std::ostringstream s;
-    s << value.tv_sec;
-    if(value.tv_nsec != 0){
-        s << "." << std::setfill('0') << std::setw(9) << value.tv_nsec;
+
+    if(UTIME_OMIT == value.tv_nsec){
+        s << "UTIME_OMIT";
+    }else if(UTIME_NOW == value.tv_nsec){
+        s << "UTIME_NOW";
+    }else{
+        s << value.tv_sec;
+        if(value.tv_nsec != 0){
+            s << "." << std::setfill('0') << std::setw(9) << value.tv_nsec;
+        }
     }
     return s.str();
 }

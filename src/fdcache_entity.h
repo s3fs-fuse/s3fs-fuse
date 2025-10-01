@@ -32,6 +32,7 @@
 #include "fdcache_untreated.h"
 #include "metaheader.h"
 #include "s3fs_util.h"
+#include "filetimes.h"
 
 //----------------------------------------------
 // Typedef
@@ -60,25 +61,24 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         static bool     streamupload;   // whether stream uploading.
 
         mutable std::mutex fdent_lock;
-        std::string     path            GUARDED_BY(fdent_lock);       // object path
-        int             physical_fd     GUARDED_BY(fdent_lock);       // physical file(cache or temporary file) descriptor
-        UntreatedParts  untreated_list  GUARDED_BY(fdent_lock);       // list of untreated parts that have been written and not yet uploaded(for streamupload)
-        fdinfo_map_t    pseudo_fd_map   GUARDED_BY(fdent_lock);       // pseudo file descriptor information map
+        std::string        path            GUARDED_BY(fdent_lock);       // object path
+        int                physical_fd     GUARDED_BY(fdent_lock);       // physical file(cache or temporary file) descriptor
+        UntreatedParts     untreated_list  GUARDED_BY(fdent_lock);       // list of untreated parts that have been written and not yet uploaded(for streamupload)
+        fdinfo_map_t       pseudo_fd_map   GUARDED_BY(fdent_lock);       // pseudo file descriptor information map
         std::unique_ptr<FILE, decltype(&s3fs_fclose)> pfile GUARDED_BY(fdent_lock) = {nullptr, &s3fs_fclose};  // file pointer(tmp file or cache file)
-        ino_t           inode           GUARDED_BY(fdent_lock);       // inode number for cache file
-        headers_t       orgmeta         GUARDED_BY(fdent_lock);       // original headers at opening
-        off_t           size_orgmeta    GUARDED_BY(fdent_lock);       // original file size in original headers
+        ino_t              inode           GUARDED_BY(fdent_lock);       // inode number for cache file
+        headers_t          orgmeta         GUARDED_BY(fdent_lock);       // original headers at opening
+        off_t              size_orgmeta    GUARDED_BY(fdent_lock);       // original file size in original headers
 
-        mutable std::mutex fdent_data_lock ACQUIRED_AFTER(fdent_lock);// protects the following members
-        PageList         pagelist       GUARDED_BY(fdent_data_lock);
-        std::string      cachepath      GUARDED_BY(fdent_data_lock);  // local cache file path
-                                                                      // (if this is empty, does not load/save pagelist.)
-        std::string      mirrorpath     GUARDED_BY(fdent_data_lock);  // mirror file path to local cache file path
-        pending_status_t pending_status GUARDED_BY(fdent_data_lock);  // status for new file creation and meta update
-        struct timespec  holding_mtime  GUARDED_BY(fdent_data_lock);  // if mtime is updated while the file is open, it is set time_t value
-
-        mutable std::mutex ro_path_lock;                              // for only the ro_path variable
-        std::string        ro_path      GUARDED_BY(ro_path_lock);     // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
+        mutable std::mutex fdent_data_lock ACQUIRED_AFTER(fdent_lock);   // protects the following members
+        PageList           pagelist       GUARDED_BY(fdent_data_lock);
+        std::string        cachepath      GUARDED_BY(fdent_data_lock);   // local cache file path
+                                                                         // (if this is empty, does not load/save pagelist.)
+        std::string        mirrorpath     GUARDED_BY(fdent_data_lock);   // mirror file path to local cache file path
+        pending_status_t   pending_status GUARDED_BY(fdent_data_lock);   // status for new file creation and meta update
+        FileTimes          timestamps     GUARDED_BY(fdent_data_lock);   // file timestamps(atime/ctime/mtime)
+        mutable std::mutex ro_path_lock;                                 // for only the ro_path variable
+        std::string        ro_path        GUARDED_BY(ro_path_lock);      // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -90,6 +90,10 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
         bool IsUploading() REQUIRES(FdEntity::fdent_lock);
+        int SetCtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        int SetAtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        int SetMtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        int SetFileTimesHasLock(const FileTimes& ts_times) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
         int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
@@ -143,7 +147,8 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
             return ro_path;
         }
-        int Open(const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags);
+        int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
+
         bool LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
@@ -182,28 +187,23 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             return GetStatsHasLock(st);
         }
         bool GetStatsHasLock(struct stat& st) const REQUIRES(FdEntity::fdent_lock);
+
         int SetCtime(struct timespec time) {
-            const std::lock_guard<std::mutex> lock(fdent_lock);
-            return SetCtimeHasLock(time);
+           const std::lock_guard<std::mutex> lock(fdent_lock);
+           const std::lock_guard<std::mutex> lock2(fdent_data_lock);
+           return SetCtimeHasLock(time);
         }
-        int SetCtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock);
         int SetAtime(struct timespec time) {
-            const std::lock_guard<std::mutex> lock(fdent_lock);
-            return SetAtimeHasLock(time);
+           const std::lock_guard<std::mutex> lock(fdent_lock);
+           const std::lock_guard<std::mutex> lock2(fdent_data_lock);
+           return SetAtimeHasLock(time);
         }
-        int SetAtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock);
-        int SetMCtime(struct timespec mtime, struct timespec ctime) {
-            const std::lock_guard<std::mutex> lock(fdent_lock);
-            const std::lock_guard<std::mutex> lock2(fdent_data_lock);
-            return SetMCtimeHasLock(mtime, ctime);
+        int SetMtime(struct timespec time) {
+           const std::lock_guard<std::mutex> lock(fdent_lock);
+           const std::lock_guard<std::mutex> lock2(fdent_data_lock);
+           return SetMtimeHasLock(time);
         }
-        int SetMCtimeHasLock(struct timespec mtime, struct timespec ctime) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        bool UpdateCtime();
-        bool UpdateAtime();
-        bool UpdateMtime(bool clear_holding_mtime = false);
-        bool UpdateMCtime();
-        bool SetHoldingMtime(struct timespec mtime);
-        bool ClearHoldingMtime() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+
         bool GetSize(off_t& size) const;
         bool GetXattr(std::string& xattr) const;
         bool SetXattr(const std::string& xattr);

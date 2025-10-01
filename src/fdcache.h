@@ -111,7 +111,7 @@ class FdManager
           return GetFdEntityHasLock(path, existfd, newfd);
       }
       FdEntity* GetFdEntityHasLock(const char* path, int& existfd, bool newfd = true) REQUIRES(FdManager::fd_manager_lock);
-      FdEntity* Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const struct timespec& ts_mctime, int flags, bool force_tmpfile, bool is_create, bool ignore_modify);
+      FdEntity* Open(int& fd, const char* path, const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags, bool force_tmpfile, bool is_create, bool ignore_modify);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
       FdEntity* OpenExistFdEntity(const char* path, int& fd, int flags = O_RDONLY);
       void Rename(const std::string &from, const std::string &to);
