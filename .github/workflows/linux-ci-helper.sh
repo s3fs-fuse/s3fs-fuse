@@ -193,7 +193,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
     CURL_DIRECT_INSTALL=1
 
 elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
-     [ "${CONTAINER_FULLNAME}" = "rockylinux:9" ]; then
+     [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:9" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
@@ -232,7 +232,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
 
     CURL_DIRECT_INSTALL=1
 
-elif [ "${CONTAINER_FULLNAME}" = "rockylinux:8" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"

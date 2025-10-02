@@ -56,8 +56,8 @@ jobs:
           - debian:bookworm
           - debian:bullseye
           - rockylinux/rockylinux:10
-          - rockylinux:9
-          - rockylinux:8
+          - rockylinux/rockylinux:9
+          - rockylinux/rockylinux:8
           - fedora:42
           - fedora:41
           - opensuse/leap:15
