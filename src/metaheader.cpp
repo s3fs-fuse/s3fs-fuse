@@ -27,8 +27,10 @@
 #include "metaheader.h"
 #include "string_util.h"
 #include "s3fs_util.h"
+#include "filetimes.h"
 
-static constexpr struct timespec DEFAULT_TIMESPEC = {-1, 0};
+static constexpr struct timespec ERROR_TIMESPEC = {-1, 0};
+static constexpr struct timespec OMIT_TIMESPEC  = {0, UTIME_OMIT};
 
 //-------------------------------------------------------------------
 // Utility functions for convert
@@ -59,52 +61,53 @@ static struct timespec get_time(const headers_t& meta, const char *header)
 {
     headers_t::const_iterator iter;
     if(meta.cend() == (iter = meta.find(header))){
-        return DEFAULT_TIMESPEC;
+        return ERROR_TIMESPEC;
     }
     return cvt_string_to_time((*iter).second.c_str());
 }
 
 struct timespec get_mtime(const headers_t& meta, bool overcheck)
 {
-    struct timespec t = get_time(meta, "x-amz-meta-mtime");
-    if(0 < t.tv_sec){
-        return t;
+    struct timespec mtime = get_time(meta, "x-amz-meta-mtime");
+    if(0 <= mtime.tv_sec && UTIME_OMIT != mtime.tv_nsec){
+        return mtime;
     }
-    t = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
-    if(0 < t.tv_sec){
-        return t;
+
+    mtime = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
+    if(0 <= mtime.tv_sec && UTIME_OMIT != mtime.tv_nsec){
+        return mtime;
     }
     if(overcheck){
-        struct timespec ts = {get_lastmodified(meta), 0};
-        return ts;
+        mtime = {get_lastmodified(meta), 0};
+        return mtime;
     }
-    return DEFAULT_TIMESPEC;
+    return OMIT_TIMESPEC;
 }
 
 struct timespec get_ctime(const headers_t& meta, bool overcheck)
 {
-    struct timespec t = get_time(meta, "x-amz-meta-ctime");
-    if(0 < t.tv_sec){
-        return t;
+    struct timespec ctime = get_time(meta, "x-amz-meta-ctime");
+    if(0 <= ctime.tv_sec && UTIME_OMIT != ctime.tv_nsec){
+        return ctime;
     }
     if(overcheck){
-        struct timespec ts = {get_lastmodified(meta), 0};
-        return ts;
+        ctime = {get_lastmodified(meta), 0};
+        return ctime;
     }
-    return DEFAULT_TIMESPEC;
+    return OMIT_TIMESPEC;
 }
 
 struct timespec get_atime(const headers_t& meta, bool overcheck)
 {
-    struct timespec t = get_time(meta, "x-amz-meta-atime");
-    if(0 < t.tv_sec){
-        return t;
+    struct timespec atime = get_time(meta, "x-amz-meta-atime");
+    if(0 <= atime.tv_sec && UTIME_OMIT != atime.tv_nsec){
+        return atime;
     }
     if(overcheck){
-        struct timespec ts = {get_lastmodified(meta), 0};
-        return ts;
+        atime = {get_lastmodified(meta), 0};
+        return atime;
     }
-    return DEFAULT_TIMESPEC;
+    return OMIT_TIMESPEC;
 }
 
 off_t get_size(const char *s)
@@ -447,39 +450,24 @@ bool convert_header_to_stat(const std::string& strpath, const headers_t& meta, s
 
     // mtime
     struct timespec mtime = get_mtime(meta);
-    if(stbuf.st_mtime < 0){
-        stbuf.st_mtime = 0L;
-    }else{
-        if(mtime.tv_sec < 0){
-            mtime.tv_sec  = 0;
-            mtime.tv_nsec = 0;
-        }
-        set_timespec_to_stat(stbuf, stat_time_type::MTIME, mtime);
+    if(mtime.tv_sec < 0){
+        mtime = {0, 0};
     }
+    set_timespec_to_stat(stbuf, stat_time_type::MTIME, mtime);
 
     // ctime
     struct timespec ctime = get_ctime(meta);
-    if(stbuf.st_ctime < 0){
-        stbuf.st_ctime = 0L;
-    }else{
-        if(ctime.tv_sec < 0){
-            ctime.tv_sec  = 0;
-            ctime.tv_nsec = 0;
-        }
-        set_timespec_to_stat(stbuf, stat_time_type::CTIME, ctime);
+    if(ctime.tv_sec < 0){
+        ctime = {0, 0};
     }
+    set_timespec_to_stat(stbuf, stat_time_type::CTIME, ctime);
 
     // atime
     struct timespec atime = get_atime(meta);
-    if(stbuf.st_atime < 0){
-        stbuf.st_atime = 0L;
-    }else{
-        if(atime.tv_sec < 0){
-            atime.tv_sec  = 0;
-            atime.tv_nsec = 0;
-        }
-        set_timespec_to_stat(stbuf, stat_time_type::ATIME, atime);
+    if(atime.tv_sec < 0){
+        atime = {0, 0};
     }
+    set_timespec_to_stat(stbuf, stat_time_type::ATIME, atime);
 
     // size
     if(S_ISDIR(stbuf.st_mode)){
