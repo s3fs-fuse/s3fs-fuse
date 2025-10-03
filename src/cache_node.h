@@ -253,6 +253,7 @@ class DirStatCache : public StatCacheNode
         bool ClearHasLock() override REQUIRES(StatCacheNode::cache_lock);
         bool RemoveChildHasLock(const std::string& strpath) override REQUIRES(StatCacheNode::cache_lock);
         bool isRemovableHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        bool HasExistedChildHasLock() REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
 
         bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) override REQUIRES(StatCacheNode::cache_lock);
 
