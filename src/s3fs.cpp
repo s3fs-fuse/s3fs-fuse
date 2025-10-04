@@ -289,7 +289,6 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     headers_t    tmpHead;
     objtype_t    tmpObjType           = objtype_t::UNKNOWN;
     bool         need_meta            = (nullptr != pmeta); // required for stat cache checking
-    objtype_t*   parm_pObjType        = pObjType;           // keep origin for using at stat cache checking
     bool         is_mountpoint        = false;              // path is the mount point
     bool         is_bucket_mountpoint = false;              // path is the mount point which is the bucket root
     std::string::size_type Pos;
@@ -352,30 +351,24 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // [NOTE]
     // For mount points("/"), the Stat cache key name is "/".
     //
-    if(!need_meta){
-        // [NOTE]
-        // Normally, if the object's stat cache exists but has only stat
-        // structure(no meta header), a HEAD request will be sent for
-        // loading meta header.
-        // But if this function is called with pmeta as nullptr, we can
-        // suppress the HEAD request by setting the meta header pointer
-        // to nullptr and making  GetStat() call.
-        //
-        if(StatCache::getStatCacheData()->GetStat(strpath, pstbuf, nullptr, parm_pObjType)){
-            return 0;
-        }
+    // [MEMO]
+    // If pmeta is specified when calling this function, and the stat
+    // cache only has a stat structure and no meta information, a HEAD
+    // request will occur in subsequent processing.
+    // In other words, if pmeta is nullptr and the stat cache has a stat
+    // structure, no HEAD request will occur, even if it does not have
+    // meta information.
+    //
+    if(StatCache::getStatCacheData()->GetStat(strpath, pstbuf, (need_meta ? pmeta : nullptr), pObjType)){
+        return 0;
     }else{
-        if(StatCache::getStatCacheData()->GetStat(strpath, pstbuf, pmeta, pObjType)){
-            return 0;
-        }else{
-            // [NOTE]
-            // In the case of a Negative Cache, GetStat() returns false and
-            // objtype_t::NEGATIVE is set.
-            //
-            if(objtype_t::NEGATIVE == *pObjType){
-                // When not hit cache and the reason is negative cache.
-                return -ENOENT;
-            }
+        // [NOTE]
+        // In the case of a Negative Cache, GetStat() returns false and
+        // objtype_t::NEGATIVE is set.
+        //
+        if(objtype_t::NEGATIVE == *pObjType){
+            // When not hit cache and the reason is negative cache.
+            return -ENOENT;
         }
     }
 
