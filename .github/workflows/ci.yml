@@ -49,7 +49,7 @@ jobs:
       #
       matrix:
         container:
-          - ubuntu:25.04
+          - ubuntu:25.10
           - ubuntu:24.04
           - ubuntu:22.04
           - debian:trixie
