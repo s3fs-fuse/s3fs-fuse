@@ -61,6 +61,7 @@ jobs:
           - fedora:42
           - fedora:41
           - opensuse/leap:15
+          - opensuse/leap:16.0
           - alpine:3.22
 
     container:
@@ -78,7 +79,7 @@ jobs:
       # On openSUSE, tar and gzip must be installed before action/checkout.
       #
       - name: Install openSUSE packages before checkout
-        if: matrix.container == 'opensuse/leap:15'
+        if: matrix.container == 'opensuse/leap:15' || matrix.container == 'opensuse/leap:16.0'
         run: zypper install -y tar gzip
 
       - name: Install Alpine packages before checkout
