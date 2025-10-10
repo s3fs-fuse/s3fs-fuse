@@ -122,8 +122,8 @@ bool StatCache::AddStatHasLock(const std::string& key, const struct stat* pstbuf
     }
 
     // Truncate cache(if over cache size)
-    if(!pMountPointDir->TruncateCache()){
-        S3FS_PRN_DBG("There was no cache to truncate.");
+    if(TruncateCacheHasLock(true)){
+        S3FS_PRN_DBG("Some expired caches have been truncated.");
     }
     S3FS_PRN_INFO3("add stat cache entry[path=%s]", key.c_str());
 
@@ -213,8 +213,8 @@ bool StatCache::AddNegativeStat(const std::string& key)
     }
 
     // Truncate cache(if over cache size)
-    if(!pMountPointDir->TruncateCache()){
-        S3FS_PRN_DBG("There was no cache to truncate.");
+    if(TruncateCacheHasLock(true)){
+        S3FS_PRN_DBG("Some expired caches have been truncated.");
     }
     S3FS_PRN_INFO3("add negative cache entry[path=%s]", key.c_str());
 
@@ -250,10 +250,11 @@ void StatCache::ClearNoTruncateFlag(const std::string& key)
 bool StatCache::TruncateCacheHasLock(bool check_only_oversize_case)
 {
     if(check_only_oversize_case && StatCacheNode::GetCacheCount() <= GetCacheSize()){
-        return true;
+        return false;
     }
     if(!pMountPointDir->TruncateCache()){
         S3FS_PRN_DBG("could not truncate any cache[current size=%lu, maximum size=%lu]", StatCacheNode::GetCacheCount(), GetCacheSize());
+        return false;
     }
 
     // for debug
@@ -357,8 +358,8 @@ bool StatCache::AddSymlink(const std::string& key, const struct stat& stbuf, con
     }
 
     // Truncate cache(if over cache size)
-    if(!pMountPointDir->TruncateCache()){
-        S3FS_PRN_DBG("There was no cache to truncate.");
+    if(TruncateCacheHasLock(true)){
+        S3FS_PRN_DBG("Some expired caches have been truncated.");
     }
     S3FS_PRN_INFO3("add symbolic link cache entry[path=%s, value=%s]", key.c_str(), value.c_str());
 
