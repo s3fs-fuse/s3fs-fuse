@@ -451,11 +451,16 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
 {
     bool result = false;
 
-    if(!data || !key){
+    if(!data || !key || 0 == len){
         return false;
     }
     value.clear();
 
+    // [NOTE]
+    // If data is not nullptr and len is 0, this function will output the message
+    // ":1: parser error : Document is empty" to stderr.
+    // Make sure len is not 0 beforehand.
+    //
     std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(data, static_cast<int>(len), "", nullptr, 0), xmlFreeDoc);
     if(nullptr == doc){
         return false;

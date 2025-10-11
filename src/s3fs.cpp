@@ -3586,6 +3586,16 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         //
         std::string encbody = get_encoded_cr_code(responseBody.c_str());
 
+        // [NOTE]
+        // If encbody is empty, xmlReadMemory will output the message
+        // ":1: parser error : Document is empty" to stderr.
+        // Make sure encbody is not empty beforehand.
+        //
+        if(encbody.empty()){
+            S3FS_PRN_ERR("The data length passed to xmlReadMemory is 0.");
+            return -EIO;
+        }
+
         // xmlDocPtr
         std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0), xmlFreeDoc);
         if(nullptr == doc){
