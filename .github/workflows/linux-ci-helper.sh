@@ -304,6 +304,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ] ||
         automake
         curl
         curl-devel
+        diffutils
         fuse
         fuse-devel
         gcc-c++
