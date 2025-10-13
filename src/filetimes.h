@@ -90,7 +90,7 @@ class FileTimes
         void GetATime(struct timespec& time) const { GetTime(stat_time_type::ATIME, time); }
         void GetMTime(struct timespec& time) const { GetTime(stat_time_type::MTIME, time); }
 
-        void RefrectFileTimes(struct stat& st) const;
+        void ReflectFileTimes(struct stat& st) const;
 
         // Set value
         void SetCTime(struct timespec time) { SetTime(stat_time_type::CTIME, time); }

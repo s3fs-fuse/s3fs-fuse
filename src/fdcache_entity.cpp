@@ -394,7 +394,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
     S3FS_PRN_DBG("[path=%s][physical_fd=%d][size=%lld][ctime=%s,atime=%s,mtime=%s][flags=0x%x]", path.c_str(), physical_fd, static_cast<long long>(size), str(ts_times.ctime()).c_str(), str(ts_times.atime()).c_str(), str(ts_times.mtime()).c_str(), flags);
 
     // [NOTE]
-    // When the file size is incremental by truncating, it must be keeped
+    // When the file size is incremental by truncating, it must be kept
     // as an untreated area, and this area is set to these variables.
     //
     off_t truncated_start = 0;
@@ -754,7 +754,7 @@ bool FdEntity::GetStatsHasLock(struct stat& st) const
     }
 
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
-    timestamps.RefrectFileTimes(st);
+    timestamps.ReflectFileTimes(st);
 
     return true;
 }
@@ -796,7 +796,7 @@ int FdEntity::SetMtimeHasLock(struct timespec time)
 }
 
 // [NOTE]
-// This method updates timespecs(atime/mtime) and origianl meta heders
+// This method updates timespecs(atime/mtime) and original meta heders
 //
 int FdEntity::SetFileTimesHasLock(const FileTimes& ts_times)
 {
@@ -925,7 +925,7 @@ bool FdEntity::GetStatsFromMeta(struct stat& st) const
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
     st.st_size = pagelist.Size();      // set current file size
 
-    timestamps.RefrectFileTimes(st);
+    timestamps.ReflectFileTimes(st);
 
     return true;
 }
@@ -1349,7 +1349,7 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
 
     // [NOTE]
     // Normally, when client finishes editing a file and gets the file attributes,
-    // FUSE calls flush->relaase, and then getsattr.
+    // FUSE calls flush->release, and then getsattr.
     // In other words, we expect that getattr will not be called between flush->release.
     // However, because FUSE does not wait for the release process to be complete,
     // the case of flush->getattr->release occurs.

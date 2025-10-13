@@ -80,7 +80,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static bool             UseNegativeCache;
         static std::mutex       cache_lock;                                                // for internal data
         static unsigned long    DisableCheckingExpire GUARDED_BY(cache_lock);              // If greater than 0, it disables the expiration check, which allows disabling checks during processing.
-        static struct timespec  DisableExpireDate GUARDED_BY(cache_lock);                  // Data registerd after this time will not be truncated(if 0 < DisableCheckingExpire)
+        static struct timespec  DisableExpireDate GUARDED_BY(cache_lock);                  // Data registered after this time will not be truncated(if 0 < DisableCheckingExpire)
 
     private:
         objtype_t               cache_type GUARDED_BY(StatCacheNode::cache_lock) = objtype_t::UNKNOWN;  // object type is set in the constructor(except dir).
@@ -88,9 +88,9 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         unsigned long           hit_count  GUARDED_BY(StatCacheNode::cache_lock) = 0L;     // hit count
         struct timespec         cache_date GUARDED_BY(StatCacheNode::cache_lock) = {0, 0}; // registration/renewal time
         bool                    notruncate GUARDED_BY(StatCacheNode::cache_lock) = false;  // If true, not remove automatically at checking truncate.
-        bool                    has_stat   GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid stat information flag (for case only path registeration and no stat information)
+        bool                    has_stat   GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid stat information flag (for case only path registration and no stat information)
         struct stat             stbuf      GUARDED_BY(StatCacheNode::cache_lock) = {};     // stat data
-        bool                    has_meta   GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid meta headers information flag (for case only path registeration and no meta headers)
+        bool                    has_meta   GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid meta headers information flag (for case only path registration and no meta headers)
         headers_t               meta       GUARDED_BY(StatCacheNode::cache_lock);          // meta list
         bool                    has_extval GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid extra value flag
         std::string             extvalue   GUARDED_BY(StatCacheNode::cache_lock);          // extra value for key(ex. used for symlink)

@@ -178,7 +178,7 @@ class S3fsCurl
         off_t                postdata_remaining;   // use by post method and read callback function.
         filepart             partdata;             // use by multipart upload/get object callback
         bool                 is_use_ahbe;          // additional header by extension
-        int                  retry_count;          // retry count, this is used only sleep time before retring
+        int                  retry_count;          // retry count, this is used only sleep time before retrying
         std::unique_ptr<FILE, decltype(&s3fs_fclose)> b_infile = {nullptr, &s3fs_fclose};  // backup for retrying
         const unsigned char* b_postdata;           // backup for retrying
         off_t                b_postdata_remaining; // backup for retrying

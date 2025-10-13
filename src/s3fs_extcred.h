@@ -88,8 +88,8 @@ extern bool FreeS3fsCredential(char** pperrstr) S3FS_FUNCATTR_WEAK;
 //
 // char** ppaccess_key_id     : Allocate and set "Access Key ID" string
 //                              area to *ppaccess_key_id.
-// char** ppserect_access_key : Allocate and set "Access Secret Key ID"
-//                              string area to *ppserect_access_key.
+// char** ppsecret_access_key : Allocate and set "Access Secret Key ID"
+//                              string area to *ppsecret_access_key.
 // char** ppaccess_token      : Allocate and set "Token" string area to
 //                              *ppaccess_token.
 // long long* ptoken_expire   : Set token expire time(time_t) value to
@@ -105,7 +105,7 @@ extern bool FreeS3fsCredential(char** pperrstr) S3FS_FUNCATTR_WEAK;
 // For all argument of the character string pointer(char **) set the
 // allocated string area. The allocated area is freed by the caller.
 //
-extern bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr) S3FS_FUNCATTR_WEAK;
+extern bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppsecret_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr) S3FS_FUNCATTR_WEAK;
 
 //---------------------------------------------------------
 // Typedef Prototype function
@@ -126,9 +126,9 @@ typedef bool (*fp_InitS3fsCredential)(const char* popts, char** pperrstr);
 typedef bool (*fp_FreeS3fsCredential)(char** pperrstr);
 
 //
-// bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr)
+// bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppsecret_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr)
 //
-typedef bool (*fp_UpdateS3fsCredential)(char** ppaccess_key_id, char** ppserect_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr);
+typedef bool (*fp_UpdateS3fsCredential)(char** ppaccess_key_id, char** ppsecret_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr);
 
 }   // extern "C"
 
