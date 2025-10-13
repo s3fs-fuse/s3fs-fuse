@@ -25,6 +25,8 @@
 #include <libxml/parser.h>  // [NOTE] nessetially include this header in some environments
 #include <memory>
 #include <string>
+#include <array>
+#include <cstring>
 
 #include "mpu_util.h"
 
@@ -34,6 +36,44 @@ typedef std::unique_ptr<xmlChar, decltype(xmlFree)> unique_ptr_xmlChar;
 typedef std::unique_ptr<xmlXPathObject, decltype(&xmlXPathFreeObject)> unique_ptr_xmlXPathObject;
 typedef std::unique_ptr<xmlXPathContext, decltype(&xmlXPathFreeContext)> unique_ptr_xmlXPathContext;
 typedef std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> unique_ptr_xmlDoc;
+
+//-------------------------------------------------------------------
+// Utility Class
+//-------------------------------------------------------------------
+class s3fsXmlBufferParserError
+{
+    private:
+        static constexpr int  ERROR_BUFFER_SIZE = 1024;
+        std::array<char, ERROR_BUFFER_SIZE> error_buffer{};
+
+        static void ParserErrorHandler(void* ctx, const char *msg, ...)
+        {
+            auto* errbuf = static_cast<char*>(ctx);
+            if(errbuf){
+                va_list args;
+                va_start(args, msg);
+                vsnprintf(errbuf + strlen(errbuf), ERROR_BUFFER_SIZE - strlen(errbuf) - 1, msg, args);
+                va_end(args);
+            }
+        }
+
+    public:
+        void SetXmlParseError()
+        {
+            error_buffer.fill(0);
+            xmlSetGenericErrorFunc(error_buffer.data(), s3fsXmlBufferParserError::ParserErrorHandler);
+        }
+
+        std::string GetXmlParseError() const
+        {
+            return strlen(error_buffer.data()) ? error_buffer.data() : "";
+        }
+
+        bool IsXmlParseError() const
+        {
+            return (0 < strlen(error_buffer.data()));
+        }
+};
 
 //-------------------------------------------------------------------
 // Functions

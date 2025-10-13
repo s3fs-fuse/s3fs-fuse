@@ -461,8 +461,16 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     // ":1: parser error : Document is empty" to stderr.
     // Make sure len is not 0 beforehand.
     //
+    s3fsXmlBufferParserError parserError;
+    parserError.SetXmlParseError();
+
     std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(data, static_cast<int>(len), "", nullptr, 0), xmlFreeDoc);
     if(nullptr == doc){
+        if(parserError.IsXmlParseError()){
+            S3FS_PRN_ERR("xmlReadMemory returns with error: %s", parserError.GetXmlParseError().c_str());
+        }else{
+            S3FS_PRN_ERR("xmlReadMemory returns with error.");
+        }
         return false;
     }
 
