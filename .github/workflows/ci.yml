@@ -253,7 +253,7 @@ jobs:
         run: |
           ./autogen.sh
           /bin/sh -c "CXX=${CXX} CXXFLAGS=\"${CXXFLAGS}\" LDFLAGS=\"${LDFLAGS}\" ./configure --prefix=/usr --with-openssl"
-          make
+          make --jobs=$(nproc)
 
       - name: Test suite
         run: |
