@@ -116,8 +116,15 @@ jobs:
   #   This job doesn't work with GitHub Actions using macOS 11+ because "load_osxfuse" returns
   #   "exit code = 1".(requires OS reboot)
   #
-  macos-13:
-    runs-on: macos-13
+  macos-14:
+    runs-on: macos-14
+
+    # [NOTE]
+    # In macos-14 (and maybe later), the location of the CA certificate is different and you need to specify it.
+    # We give the CA path as an environment variable.
+    #
+    env:
+        CURL_CA_BUNDLE: "/opt/homebrew/etc/ca-certificates/cert.pem"
 
     steps:
       - name: Checkout source code
@@ -132,6 +139,7 @@ jobs:
 
       - name: Install fuse-t
         run: |
+          if [ ! -d /usr/local/include ]; then sudo mkdir -p /usr/local/include; echo "Created /usr/local/include directory"; fi
           HOMEBREW_NO_AUTO_UPDATE=1 brew install fuse-t
 
       - name: Install brew other packages

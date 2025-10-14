@@ -118,6 +118,16 @@ if [ ! -d "${TEST_BUCKET_MOUNT_POINT_1}" ]; then
 	mkdir -p "${TEST_BUCKET_MOUNT_POINT_1}"
 fi
 
+# [NOTE]
+# For the Github Actions macos-14 Runner,
+# Set variables for when stdbuf is used and when it is not.
+#
+if [ -n "${STDBUF_BIN}" ]; then
+    STDBUF_COMMAND_LINE=("${STDBUF_BIN}" -oL -eL)
+else
+    STDBUF_COMMAND_LINE=()
+fi
+
 # This function execute the function parameters $1 times
 # before giving up, with 1 second delays.
 function retry {
@@ -181,7 +191,7 @@ function start_s3proxy {
             S3PROXY_CACERT_FILE=""
         fi
 
-        "${STDBUF_BIN}" -oL -eL java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
+        "${STDBUF_COMMAND_LINE[@]}" java -jar "${S3PROXY_BINARY}" --properties "${S3PROXY_CONFIG}" &
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
@@ -197,7 +207,7 @@ function start_s3proxy {
             chmod +x "${CHAOS_HTTP_PROXY_BINARY}"
         fi
 
-        "${STDBUF_BIN}" -oL -eL java -jar "${CHAOS_HTTP_PROXY_BINARY}" --properties chaos-http-proxy.conf &
+        "${STDBUF_COMMAND_LINE[@]}" java -jar "${CHAOS_HTTP_PROXY_BINARY}" --properties chaos-http-proxy.conf &
         CHAOS_HTTP_PROXY_PID=$!
 
         # wait for Chaos HTTP Proxy to start
@@ -317,7 +327,7 @@ function start_s3fs {
     (
         set -x 
         CURL_CA_BUNDLE="${S3PROXY_CACERT_FILE}" \
-        ${STDBUF_BIN} -oL -eL \
+        "${STDBUF_COMMAND_LINE[@]}" \
             ${VALGRIND_EXEC} \
             ${S3FS} \
             ${TEST_BUCKET_1} \
@@ -340,7 +350,7 @@ function start_s3fs {
             -f \
             "${@}" &
         echo $! >&3
-    ) 3>pid | "${STDBUF_BIN}" -oL -eL "${SED_BIN}" "${SED_BUFFER_FLAG}" "s/^/s3fs: /" &
+    ) 3>pid | "${STDBUF_COMMAND_LINE[@]}" "${SED_BIN}" "${SED_BUFFER_FLAG}" "s/^/s3fs: /" &
     sleep 1
     S3FS_PID=$(<pid)
     export S3FS_PID

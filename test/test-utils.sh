@@ -58,7 +58,18 @@ export LC_ALL=en_US.UTF-8
 # Set your PATH appropriately so that you can find these commands.
 #
 if [ "$(uname)" = "Darwin" ]; then
-    export STDBUF_BIN="gstdbuf"
+    # [NOTE][TODO]
+    # In macos-14(and maybe later), currently coreutils' gstdbuf doesn't
+    # work with the Github Actions Runner.
+    # This is because libstdbuf.so is arm64, when arm64e is required.
+    # To resolve this case, we'll avoid making calls to stdbuf. This can
+    # result in mixed log output, but there is currently no workaround.
+    #
+    if lipo -archs /opt/homebrew/Cellar/coreutils/9.8/libexec/coreutils/libstdbuf.so 2>/dev/null | grep -q 'arm64e'; then
+        export STDBUF_BIN="gstdbuf"
+    else
+        export STDBUF_BIN=""
+    fi
     export TRUNCATE_BIN="gtruncate"
     export SED_BIN="gsed"
 else
