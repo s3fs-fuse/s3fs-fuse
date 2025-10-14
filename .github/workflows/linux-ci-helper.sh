@@ -262,8 +262,8 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
 
     CURL_DIRECT_INSTALL=1
 
-elif [ "${CONTAINER_FULLNAME}" = "fedora:42" ] ||
-     [ "${CONTAINER_FULLNAME}" = "fedora:41" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "fedora:43" ] ||
+     [ "${CONTAINER_FULLNAME}" = "fedora:42" ]; then
     PACKAGE_MANAGER_BIN="dnf"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
