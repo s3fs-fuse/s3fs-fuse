@@ -318,10 +318,26 @@ function run_suite {
    fi
 }
 
+# [TODO]
+# Temporary Solution for Ubuntu 25.10 Only
+# 
+# As of October 2025, the stat command in uutils coreutils (Rust) in Ubuntu 25.10
+# truncates the decimal point when retrieving atime/ctime individually.
+# We will take special measures to avoid this.
+# We will revert this once this issue is fixed.
+#
+TIME_FROM_FULL_STAT=$([ -f /etc/os-release ] && awk '/^ID=ubuntu/{os=1} /^VERSION_ID="25.10"/{version=1} END{print (os && version)}' /etc/os-release || echo 0)
+
 function get_ctime() {
     # ex: "1657504903.019784214"
     if [ "$(uname)" = "Darwin" ]; then
         "${STAT_BIN[@]}" -f "%Fc" "$1"
+
+    elif [ "${TIME_FROM_FULL_STAT}" -eq 1 ]; then
+        TEMP_ATIME=$(stat "$1" | grep '^Change:' | awk '{print $2" "$3}')
+        TEMP_ATIME_SEC=$(date -d "${TEMP_ATIME}" +"%s")
+        TEMP_ATIME_NSEC=$(stat "$1" | awk '/^Change:/{print $3}' | cut -d'.' -f2)
+        printf '%s.%s' "${TEMP_ATIME_SEC}" "${TEMP_ATIME_NSEC}"
     else
         "${STAT_BIN[@]}" --format "%.9Z" "$1"
     fi
@@ -340,6 +356,12 @@ function get_atime() {
     # ex: "1657504903.019784214"
     if [ "$(uname)" = "Darwin" ]; then
         "${STAT_BIN[@]}" -f "%Fa" "$1"
+
+    elif [ "${TIME_FROM_FULL_STAT}" -eq 1 ]; then
+        TEMP_ATIME=$(stat "$1" | grep '^Access:' | grep -v 'Uid:' | awk '{print $2" "$3}')
+        TEMP_ATIME_SEC=$(date -d "${TEMP_ATIME}" +"%s")
+        TEMP_ATIME_NSEC=$(stat "$1" | grep -v 'Uid:' | awk '/^Access:/{print $3}' | cut -d'.' -f2)
+        printf '%s.%s' "${TEMP_ATIME_SEC}" "${TEMP_ATIME_NSEC}"
     else
         "${STAT_BIN[@]}" --format "%.9X" "$1"
     fi
