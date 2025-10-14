@@ -173,7 +173,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
     }
 
     if(!S3fsCurlShare::DestroyCurlShareHandleForThread()){
-        S3FS_PRN_WARN("Failed to destory curl share handle for this thread, but continue...");
+        S3FS_PRN_WARN("Failed to destroy curl share handle for this thread, but continue...");
     }
 
     promise.set_value(0);

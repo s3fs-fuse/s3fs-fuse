@@ -1014,7 +1014,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
 
                 // [NOTE]
                 // The strpath is an under child, so the found child must be a directory.
-                // However, it is currently a negative type, so it shuold be deleted.
+                // However, it is currently a negative type, so it should be deleted.
                 //
                 children.erase(iter);
                 iter = children.end();

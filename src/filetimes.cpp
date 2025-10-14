@@ -199,7 +199,7 @@ void FileTimes::GetTime(stat_time_type type, struct timespec& time) const
     }
 }
 
-void FileTimes::RefrectFileTimes(struct stat& st) const
+void FileTimes::ReflectFileTimes(struct stat& st) const
 {
     if(!IsOmitCTime()){
         set_timespec_to_stat(st, stat_time_type::CTIME, ft_ctime);

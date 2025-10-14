@@ -3283,7 +3283,7 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         int result;
         if(ent->IsModified()){
             if(0 != (result = ent->Flush(static_cast<int>(fi->fh), false))){
-                S3FS_PRN_ERR("failed to upload file contentsfor pseudo_fd(%llu) / path(%s) by result(%d)", (unsigned long long)(fi->fh), path, result);
+                S3FS_PRN_ERR("failed to upload file contents for pseudo_fd(%llu) / path(%s) by result(%d)", (unsigned long long)(fi->fh), path, result);
                 return result;
             }
         }
@@ -4760,7 +4760,7 @@ static bool set_mountpoint_attribute(struct stat& mpst)
     mp_mode = S_IFDIR | (allow_other ? (is_mp_umask ? (~mp_umask & (S_IRWXU | S_IRWXG | S_IRWXO)) : (S_IRWXU | S_IRWXG | S_IRWXO)) : S_IRWXU);
 
 // In MSYS2 environment with WinFsp, it is not supported to change mode of mount point.
-// Doing that forcely will occurs permission problem, so disabling it.
+// Doing that forcibly will create a permission problem, so disabling it.
 #ifdef __MSYS__
     return true;
 #else
@@ -5993,7 +5993,7 @@ int main(int argc, char* argv[])
     // Free disk space
     if(-1 != fake_diskfree_size){
         // Case: Set fake disk space
-        //       Not check free disk space for maultipart request
+        //       Not check free disk space for multipart request
         FdManager::InitFakeUsedDiskSize(fake_diskfree_size);
 
     }else{
@@ -6012,7 +6012,7 @@ int main(int argc, char* argv[])
             FdManager::SetEnsureFreeDiskSpace(dfsize);
         }
 
-        // Check free disk space for maultipart request
+        // Check free disk space for multipart request
         if(!FdManager::IsSafeDiskSpace(nullptr, S3fsCurl::GetMultipartSize() * ThreadPoolMan::GetWorkerCount())){
             // Try to clean cache dir and retry
             S3FS_PRN_WARN("Not enough disk space for s3fs, try to clean cache dir");

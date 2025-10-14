@@ -268,7 +268,7 @@ bool StatCache::DelStatHasLock(const std::string& key)
     // remove cache(can not remove mount point)
     if(key == pMountPointDir->Get()){
         if(!pMountPointDir->ClearData()){
-            S3FS_PRN_DBG("Failed to clear cache data for maount point.");
+            S3FS_PRN_DBG("Failed to clear cache data for mount point.");
             return false;
         }
     }else if(!pMountPointDir->RemoveChild(key)){

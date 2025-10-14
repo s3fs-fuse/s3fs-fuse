@@ -93,9 +93,9 @@ bool FreeS3fsCredential(char** pperrstr)
     return true;
 }
 
-bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr)
+bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppsecret_access_key, char** ppaccess_token, long long* ptoken_expire, char** pperrstr)
 {
-    S3FS_PRN_INFO("Parameters : ppaccess_key_id=%p, ppserect_access_key=%p, ppaccess_token=%p, ptoken_expire=%p", ppaccess_key_id, ppserect_access_key, ppaccess_token, ptoken_expire);
+    S3FS_PRN_INFO("Parameters : ppaccess_key_id=%p, ppsecret_access_key=%p, ppaccess_token=%p, ptoken_expire=%p", ppaccess_key_id, ppsecret_access_key, ppaccess_token, ptoken_expire);
 
     if(pperrstr){
         *pperrstr = strdup("Check why built-in function was called, the external credential library must have UpdateS3fsCredential function.");
@@ -106,8 +106,8 @@ bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppserect_access_key, ch
     if(ppaccess_key_id){
         *ppaccess_key_id = nullptr;
     }
-    if(ppserect_access_key){
-        *ppserect_access_key = nullptr;
+    if(ppsecret_access_key){
+        *ppsecret_access_key = nullptr;
     }
     if(ppaccess_token){
         *ppaccess_token = nullptr;
@@ -788,7 +788,7 @@ bool S3fsCred::ReadS3fsPasswdFile()
         if(-1 == result){
             return false;
         }else if(1 == result){
-            // found ascess(secret) keys
+            // found access(secret) keys
             if(!SetAccessKey(access_key_id.c_str(), secret_access_key.c_str())){
                 S3FS_PRN_EXIT("failed to set access key/secret key.");
                 return false;
@@ -1314,26 +1314,26 @@ bool S3fsCred::UpdateExtCredentials()
     }
 
     char* paccess_key_id     = nullptr;
-    char* pserect_access_key = nullptr;
+    char* psecret_access_key = nullptr;
     char* paccess_token      = nullptr;
     char* perrstr            = nullptr;
     long long token_expire   = 0;
 
-    bool result = (*pFuncCredUpdate)(&paccess_key_id, &pserect_access_key, &paccess_token, &token_expire, &perrstr);
+    bool result = (*pFuncCredUpdate)(&paccess_key_id, &psecret_access_key, &paccess_token, &token_expire, &perrstr);
     if(!result){
         // error occurred
         S3FS_PRN_ERR("Could not update credential by \"UpdateS3fsCredential\" function : %s", perrstr ? perrstr : "unknown");
 
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse
-    }else if(!paccess_key_id || !pserect_access_key || !paccess_token || token_expire <= 0){
+    }else if(!paccess_key_id || !psecret_access_key || !paccess_token || token_expire <= 0){
         // some variables are wrong
-        S3FS_PRN_ERR("After updating credential by \"UpdateS3fsCredential\" function, but some variables are wrong : paccess_key_id=%p, pserect_access_key=%p, paccess_token=%p, token_expire=%lld", paccess_key_id, pserect_access_key, paccess_token, token_expire);
+        S3FS_PRN_ERR("After updating credential by \"UpdateS3fsCredential\" function, but some variables are wrong : paccess_key_id=%p, psecret_access_key=%p, paccess_token=%p, token_expire=%lld", paccess_key_id, psecret_access_key, paccess_token, token_expire);
         result = false;
     }else{
         // succeed updating
         AWSAccessKeyId       = paccess_key_id;
-        AWSSecretAccessKey   = pserect_access_key;
+        AWSSecretAccessKey   = psecret_access_key;
         AWSAccessToken       = paccess_token;
         AWSAccessTokenExpire = token_expire;
     }
@@ -1346,8 +1346,8 @@ bool S3fsCred::UpdateExtCredentials()
     }
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse
-    if(pserect_access_key){
-        free(pserect_access_key);
+    if(psecret_access_key){
+        free(psecret_access_key);
     }
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse

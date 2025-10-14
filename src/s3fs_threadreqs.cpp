@@ -158,11 +158,11 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
             }
 
         }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
-            S3FS_PRN_ERR("Head Request(%s) is timeouted.", pthparam->path.c_str());
+            S3FS_PRN_ERR("Head Request(%s) is timed out.", pthparam->path.c_str());
             isResetOffset= false;
 
         }else if(CURLE_PARTIAL_FILE == curlCode){
-            S3FS_PRN_WARN("Head Request(%s) is recieved data does not match the given size.", pthparam->path.c_str());
+            S3FS_PRN_WARN("Head Request(%s) is received data does not match the given size.", pthparam->path.c_str());
             isResetOffset= false;
 
         }else{
@@ -487,11 +487,11 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
             }
 
         }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
-            S3FS_PRN_ERR("Put Head Request(%s->%s) is timeouted.", pthparam->from.c_str(), pthparam->to.c_str());
+            S3FS_PRN_ERR("Put Head Request(%s->%s) is timed out.", pthparam->from.c_str(), pthparam->to.c_str());
             isResetOffset= false;
 
         }else if(CURLE_PARTIAL_FILE == curlCode){
-            S3FS_PRN_WARN("Put Head Request(%s->%s) is recieved data does not match the given size.", pthparam->from.c_str(), pthparam->to.c_str());
+            S3FS_PRN_WARN("Put Head Request(%s->%s) is received data does not match the given size.", pthparam->from.c_str(), pthparam->to.c_str());
             isResetOffset= false;
 
         }else{
@@ -601,11 +601,11 @@ void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
             }
 
         }else if(CURLE_OPERATION_TIMEDOUT == curlCode){
-            S3FS_PRN_ERR("Get Object Request(%s) is timeouted.", pthparam->path.c_str());
+            S3FS_PRN_ERR("Get Object Request(%s) is timed out.", pthparam->path.c_str());
             isResetOffset= false;
 
         }else if(CURLE_PARTIAL_FILE == curlCode){
-            S3FS_PRN_WARN("Get Object Request(%s) is recieved data does not match the given size.", pthparam->path.c_str());
+            S3FS_PRN_WARN("Get Object Request(%s) is received data does not match the given size.", pthparam->path.c_str());
             isResetOffset= false;
 
         }else{
@@ -1496,7 +1496,7 @@ int get_iamrole_request(const std::string& strurl, const std::string& striamtoke
 //
 int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, std::string& cred)
 {
-    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secrect access key=%s]", strurl.c_str(), striamtoken.c_str(), stribmsecret.c_str());
+    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), striamtoken.c_str(), stribmsecret.c_str());
 
     S3fsCurl s3fscurl;
     int      result = 0;
