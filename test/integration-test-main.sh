@@ -3035,17 +3035,27 @@ function add_all_tests {
         add_tests test_pjdfstest_ftruncate
         add_tests test_pjdfstest_granular
         add_tests test_pjdfstest_link
-        add_tests test_pjdfstest_mkdir
-        add_tests test_pjdfstest_mkfifo
         add_tests test_pjdfstest_mknod
         add_tests test_pjdfstest_open
         add_tests test_pjdfstest_posix_fallocate
-        add_tests test_pjdfstest_rename
-        add_tests test_pjdfstest_rmdir
-        add_tests test_pjdfstest_symlink
         add_tests test_pjdfstest_truncate
         add_tests test_pjdfstest_unlink
         add_tests test_pjdfstest_utimensat
+
+        # [NOTE][TODO]
+        # Temporary error workaround in Ubuntu 25.10
+        # In Ubuntu 25.10, there are test cases where the request header size exceeds
+        # 8192 bytes.
+        # Currently bypass running the below tests as s3proxy returns an error response.
+        # If s3proxy increases the allowed header size, we will resume these tests.
+        #
+        if ! ( . /etc/os-release 2>/dev/null && [ "${ID}" = "ubuntu" ] && [ "${VERSION_ID}" = "25.10" ] ); then
+            add_tests test_pjdfstest_mkdir
+            add_tests test_pjdfstest_mkfifo
+            add_tests test_pjdfstest_rename
+            add_tests test_pjdfstest_rmdir
+            add_tests test_pjdfstest_symlink
+        fi
     fi
 }
 
