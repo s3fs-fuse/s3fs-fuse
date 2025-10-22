@@ -208,13 +208,8 @@ bool CacheFileStat::OverWriteFile(const std::string& strall) const
     strTmpFile.push_back('\0');     // terminate with a null character and allocate space for it.
 
     // open temporary file(mode: 0600)
-    //
-    // [TODO]
-    // Currently, use "&str[pos]" to make it possible to build with C++14.
-    // Once we support C++17 or later, we will use "str.data()".
-    //
     int tmpfd;
-    if(-1 == (tmpfd = mkstemp(&strTmpFile[0]))){    // NOLINT(readability-container-data-pointer)
+    if(-1 == (tmpfd = mkstemp(strTmpFile.data()))){
         S3FS_PRN_ERR("failed to create temporary cache stat file path(%s) for %s cache", strTmpFile.c_str(), sfile_path.c_str());
         return false;
     }

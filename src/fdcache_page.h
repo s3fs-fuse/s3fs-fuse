@@ -115,7 +115,7 @@ class PageList
         bool FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const;
         off_t GetTotalUnloadedPageSize(off_t start = 0, off_t size = 0, off_t limit_size = 0) const;   // size=0 is checking to end of list
         size_t GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start = 0, off_t size = 0) const;  // size=0 is checking to end of list
-        bool GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize);
+        std::pair<fdpage_list_t, fdpage_list_t> GetPageListsForMultipartUpload(off_t max_partsize);
         bool GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start = 0, size_t size = 0);
 
         off_t BytesModified() const;
