@@ -26,17 +26,15 @@
 #include <limits>
 #include <memory>
 #include <mutex>
-#include <set>
 #include <string>
 #include <unistd.h>
 #include <utility>
 #include <dirent.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <getopt.h>
+#include <getopt.h>  // NOLINT(misc-include-cleaner)
 
 #include "common.h"
-#include "s3fs.h"
+#include "s3fs.h"  // NOLINT(misc-include-cleaner)
 #include "s3fs_logger.h"
 #include "metaheader.h"
 #include "fdcache.h"

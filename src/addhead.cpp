@@ -26,9 +26,7 @@
 #include <string>
 #include <strings.h>
 #include <utility>
-#include <vector>
 
-#include "s3fs.h"
 #include "addhead.h"
 #include "curl_util.h"
 #include "s3fs_logger.h"

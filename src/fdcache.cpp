@@ -21,7 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
-#include <climits>
+#include <climits>  // NOLINT(misc-include-cleaner)
 #include <unistd.h>
 #include <dirent.h>
 #include <mutex>

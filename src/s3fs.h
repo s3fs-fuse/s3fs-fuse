@@ -23,7 +23,7 @@
 
 #define FUSE_USE_VERSION      26
 
-#include <fuse.h>
+#include <fuse.h>  // NOLINT(misc-include-cleaner)
 
 #define S3FS_FUSE_EXIT() \
         do{ \

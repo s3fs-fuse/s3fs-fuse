@@ -21,14 +21,12 @@
 #ifndef S3FS_LOGGER_H_
 #define S3FS_LOGGER_H_
 
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <syslog.h>
-#include <sys/time.h>
 
-#include "common.h"
+#include "common.h"  // NOLINT(misc-include-cleaner)
 
 #ifdef CLOCK_MONOTONIC_COARSE
 #define S3FS_CLOCK_MONOTONIC    CLOCK_MONOTONIC_COARSE

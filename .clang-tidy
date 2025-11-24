@@ -45,7 +45,6 @@ Checks: '
     -llvm-*,
     -llvmlibc-*,
     -misc-const-correctness,
-    -misc-include-cleaner,
     -misc-no-recursion,
     -misc-non-private-member-variables-in-classes,
     -misc-redundant-expression,
@@ -79,5 +78,6 @@ Checks: '
     -readability-suspicious-call-argument'
 CheckOptions:
     cppcoreguidelines-narrowing-conversions.WarnOnEquivalentBitWidth: 'false'
+    misc-include-cleaner.MissingIncludes: 'false'
     readability-implicit-bool-conversion.AllowIntegerConditions: 'true'
     readability-implicit-bool-conversion.AllowPointerConditions: 'true'

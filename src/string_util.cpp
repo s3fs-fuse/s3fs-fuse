@@ -28,7 +28,7 @@
 #include <string>
 #include <utility>
 #include <fcntl.h>
-#include <sys/stat.h>
+#include <sys/stat.h>  // NOLINT(misc-include-cleaner)
 
 #include "s3fs_logger.h"
 #include "string_util.h"

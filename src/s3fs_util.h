@@ -21,10 +21,8 @@
 #ifndef S3FS_S3FS_UTIL_H_
 #define S3FS_S3FS_UTIL_H_
 
-#include <cstdint>
 #include <functional>
 #include <string>
-#include <sys/stat.h>
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME          0
