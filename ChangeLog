@@ -1,6 +1,13 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.96 -- 24 Nov, 2025 (major changes only)
+#1867 - Require FUSE 3 on Linux
+#2596 - Require C++14
+#2623 - Improve IO concurrency
+#2669 - Rename `-o endpoint` to `-o region` for clarity
+#2728 - #2731 - #2736 - Avoid HeadObject calls with improved stats cache usage
+
 Version 1.95 -- 25 Oct, 2024 (major changes only)
 #2424 - Add ipresolve option to select IPv4- or IPv6-only
 #2443 - Retry request on HTTP 429 error
