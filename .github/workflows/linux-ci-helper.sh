@@ -92,12 +92,12 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.10" ] ||
         autotools-dev
         build-essential
         curl
-        fuse
+        fuse3
         g++
         git
         jq
         libcurl4-openssl-dev
-        libfuse-dev
+        libfuse3-dev
         libssl-dev
         libtool
         libxml2-dev
@@ -118,12 +118,12 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
         autotools-dev
         build-essential
         curl
-        fuse
+        fuse3
         g++
         git
         jq
         libcurl4-openssl-dev
-        libfuse-dev
+        libfuse3-dev
         libssl-dev
         libtool
         libxml2-dev
@@ -146,12 +146,12 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
         autotools-dev
         build-essential
         curl
-        fuse
+        fuse3
         g++
         git
         jq
         libcurl4-openssl-dev
-        libfuse-dev
+        libfuse3-dev
         libssl-dev
         libtool
         libxml2-dev
@@ -174,12 +174,12 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
         autotools-dev
         build-essential
         curl
-        fuse
+        fuse3
         g++
         git
         jq
         libcurl4-openssl-dev
-        libfuse-dev
+        libfuse3-dev
         libssl-dev
         libtool
         libxml2-dev
@@ -211,8 +211,8 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
         curl
         curl-devel
         diffutils
-        fuse
-        fuse-devel
+        fuse3
+        fuse3-devel
         gcc
         gcc-c++
         git
@@ -243,8 +243,8 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
         curl
         curl-devel
         diffutils
-        fuse
-        fuse-devel
+        fuse3
+        fuse3-devel
         gcc
         gcc-c++
         git
@@ -274,8 +274,8 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:43" ] ||
         curl
         curl-devel
         diffutils
-        fuse
-        fuse-devel
+        fuse3
+        fuse3-devel
         gawk
         gcc
         gcc-c++
@@ -305,8 +305,8 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ] ||
         curl
         curl-devel
         diffutils
-        fuse
-        fuse-devel
+        fuse3
+        fuse3-devel
         gcc-c++
         java-21-openjdk-headless
         jq
@@ -330,7 +330,8 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.22" ]; then
         coreutils
         curl
         curl-dev
-        fuse-dev
+        fuse3
+        fuse3-dev
         g++
         git
         jq
