@@ -80,8 +80,33 @@ PACKAGE_ENABLE_REPO_OPTIONS=""
 PACKAGE_INSTALL_ADDITIONAL_OPTIONS=""
 CURL_DIRECT_INSTALL=0
 
-if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.10" ] ||
-   [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
+if [ "${CONTAINER_FULLNAME}" = "ubuntu:25.10" ]; then
+    PACKAGE_MANAGER_BIN="apt-get"
+    PACKAGE_UPDATE_OPTIONS="update -y -qq"
+    PACKAGE_INSTALL_OPTIONS="install -y"
+
+    INSTALL_PACKAGES=(
+        attr
+        autoconf
+        autotools-dev
+        build-essential
+        curl
+        fuse3
+        g++
+        git
+        jq
+        libcurl4-openssl-dev
+        libfuse3-dev
+        libssl-dev
+        libtool
+        libxml2-dev
+        locales-all
+        mailcap
+        openjdk-25-jre-headless
+        pkg-config
+    )
+
+elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"
