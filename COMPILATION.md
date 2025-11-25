@@ -10,9 +10,11 @@ Keep in mind using the pre-built packages when available.
 
 ### Ensure your system satisfies build and runtime dependencies for:
 
-* fuse >= 2.8.4
+* fuse >= 3.0.0
 * automake
-* gcc-c++
+* C++14 compiler
+    - gcc-c++ >= 5
+    - clang++ >= 3.5
 * make
 * libcurl
 * libxml2
@@ -53,12 +55,11 @@ Keep in mind using the pre-built packages when available.
 
 ### NOTE - The required libraries/components required to run s3fs are:
 
-* fuse >= 2.8.4
+* fuse >= 3.0.0
 * libcurl
 * libxml2
 * openssl/gnutls/nss
 * mime.types (the package providing depends on the OS)
-
 
 ## Compilation on Windows (using MSYS2)
 
