@@ -118,7 +118,7 @@ class S3fsCurl
 
         // class variables
         static std::atomic<bool> curl_warnings_once;  // emit older curl warnings only once
-        static std::mutex       curl_handles_lock;
+        static inline std::mutex curl_handles_lock;
         static struct callback_locks_t {
             std::mutex      dns;
             std::mutex      ssl_session;
@@ -345,7 +345,7 @@ class S3fsCurl
         int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
 
         // methods(variables)
-        const std::string& GetPath() const { return path; }
+        [[ nodiscard ]] const std::string& GetPath() const { return path; }
         const std::string& GetUrl() const { return url; }
         const std::string& GetOp() const { return op; }
         const headers_t* GetResponseHeaders() const { return &responseHeaders; }

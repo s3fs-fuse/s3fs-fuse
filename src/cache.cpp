@@ -69,7 +69,7 @@ unsigned long StatCache::SetCacheSize(unsigned long size)
 
 bool StatCache::GetStat(const std::string& key, struct stat* pstbuf, headers_t* pmeta, objtype_t* ptype, const char* petag)
 {
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+    const std::scoped_lock<std::mutex> lock(StatCache::stat_cache_lock);
 
     // find key(path) in cache
     auto pStatCache = pMountPointDir->Find(key, petag);

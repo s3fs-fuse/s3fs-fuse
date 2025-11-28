@@ -95,7 +95,6 @@ template<typename Arg> CURLcode curl_easy_getinfo(const CurlUniquePtr& handle, C
 // Class S3fsCurl
 //-------------------------------------------------------------------
 constexpr char   S3fsCurl::S3FS_SSL_PRIVKEY_PASSWORD[];
-std::mutex       S3fsCurl::curl_handles_lock;
 S3fsCurl::callback_locks_t S3fsCurl::callback_locks;
 bool             S3fsCurl::is_initglobal_done  = false;
 bool             S3fsCurl::is_cert_check       = true; // default

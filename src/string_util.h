@@ -76,6 +76,7 @@ const char* s3fs_strptime(const char* s, const char* f, struct tm* tm);
 // Convert string to off_t.  Returns false on bad input.
 // Replacement for C++11 std::stoll.
 //
+// TODO: convert callers to std::from_chars but openSUSE Leap 15 lacks <charconv>
 bool s3fs_strtoofft(off_t* value, const char* str, int base = 0);
 //
 // This function returns 0 if a value that cannot be converted is specified.

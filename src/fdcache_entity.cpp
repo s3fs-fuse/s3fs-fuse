@@ -247,7 +247,7 @@ int FdEntity::DupWithLock(int fd)
     const PseudoFdInfo* org_pseudoinfo = iter->second.get();
     auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
     int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]       = std::move(ppseudoinfo);
+    pseudo_fd_map.insert_or_assign(pseudo_fd, std::move(ppseudoinfo));
 
     return pseudo_fd;
 }
@@ -1631,12 +1631,7 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
 
                 // This is to ensure that each part is 5MB or more.
                 // If the part is less than 5MB, download it.
-                fdpage_list_t dlpages;
-                fdpage_list_t mixuppages;
-                if(!pagelist.GetPageListsForMultipartUpload(dlpages, mixuppages, S3fsCurl::GetMultipartSize())){
-                    S3FS_PRN_ERR("something error occurred during getting download pagelist.");
-                    return -1;
-                }
+                auto [ dlpages, mixuppages ] = pagelist.GetPageListsForMultipartUpload(S3fsCurl::GetMultipartSize());
 
                 // [TODO] should use parallel downloading
                 //
