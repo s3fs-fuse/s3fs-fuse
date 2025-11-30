@@ -83,7 +83,6 @@ static std::unique_ptr<S3fsCred> ps3fscred; // using only in this file
 static std::string mimetype_file;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
-static bool nonempty              = false;
 static bool allow_other           = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
@@ -5051,23 +5050,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 S3FS_PRN_EXIT("MOUNTPOINT: %s permission denied.", mountpoint.c_str());
                 return -1;
             }
-
-            if(!nonempty){
-                const struct dirent *ent;
-                DIR *dp = opendir(mountpoint.c_str());
-                if(dp == nullptr){
-                    S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
-                    return -1;
-                }
-                while((ent = readdir(dp)) != nullptr){
-                    if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
-                        closedir(dp);
-                        S3FS_PRN_EXIT("MOUNTPOINT directory %s is not empty. if you are sure this is safe, can use the 'nonempty' mount option.", mountpoint.c_str());
-                        return -1;
-                    }
-                }
-                closedir(dp);
-            }
 #endif
             return 1;
         }
@@ -5157,10 +5139,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         else if(0 == strcmp(arg, "del_cache")){
             is_remove_cache = true;
             return 0;
-        }
-        else if(0 == strcmp(arg, "nonempty")){
-            nonempty = true;
-            return 1; // need to continue for fuse.
         }
         else if(0 == strcmp(arg, "nomultipart")){
             nomultipart = true;
