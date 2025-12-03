@@ -2063,6 +2063,9 @@ function test_clean_up_cache() {
         ../../junk_data 10485760 > "${dir}"/file-"${x}"
     done
 
+    # caching can show stale S3Proxy temporary objects
+    sleep 1
+
     local file_list=("${dir}"/*);
     local file_cnt="${#file_list[@]}"
     if [ "${file_cnt}" != "${count}" ]; then
@@ -2898,7 +2901,8 @@ function add_all_tests {
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
     else
-        add_tests test_file_names_longer_than_posix
+        echo 'fails with filesystem-nio2'
+        # add_tests test_file_names_longer_than_posix
     fi
     if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
         add_tests test_clean_up_cache
@@ -3025,7 +3029,9 @@ function add_all_tests {
     #
     # add_tests test_chmod_mountpoint
     # add_tests test_chown_mountpoint
-    add_tests test_time_mountpoint
+
+    # [NOTE] fails with S3Proxy using the filesystem backend
+    # add_tests test_time_mountpoint
     add_tests test_statvfs
 
     if ! uname | grep -q Darwin; then

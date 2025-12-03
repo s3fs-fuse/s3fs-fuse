@@ -144,7 +144,7 @@ jobs:
 
       - name: Install brew other packages
         run: |
-          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed shellcheck jq';
+          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils gnu-sed openjdk@17 shellcheck jq';
           for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
             if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi
           done
