@@ -77,7 +77,6 @@ else
     export TRUNCATE_BIN="truncate"
     export SED_BIN="sed"
 fi
-export SED_BUFFER_FLAG="--unbuffered"
 
 # [NOTE]
 # Specifying cache disable option depending on stat(coreutils) version
