@@ -29,7 +29,7 @@
 #include <string>
 #include <unistd.h>
 #include <utility>
-#include <dirent.h>
+#include <dirent.h>  // NOLINT(misc-include-cleaner)
 #include <sys/types.h>
 #include <getopt.h>  // NOLINT(misc-include-cleaner)
 
@@ -83,7 +83,9 @@ static std::unique_ptr<S3fsCred> ps3fscred; // using only in this file
 static std::string mimetype_file;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
+#if FUSE_USE_VERSION < 30
 static bool nonempty              = false;
+#endif
 static bool allow_other           = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
@@ -5052,6 +5054,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 return -1;
             }
 
+#if FUSE_USE_VERSION < 30
             if(!nonempty){
                 const struct dirent *ent;
                 DIR *dp = opendir(mountpoint.c_str());
@@ -5068,6 +5071,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 }
                 closedir(dp);
             }
+#endif
 #endif
             return 1;
         }
@@ -5158,10 +5162,12 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_remove_cache = true;
             return 0;
         }
+#if FUSE_USE_VERSION < 30
         else if(0 == strcmp(arg, "nonempty")){
             nonempty = true;
             return 1; // need to continue for fuse.
         }
+#endif
         else if(0 == strcmp(arg, "nomultipart")){
             nomultipart = true;
             return 0;
