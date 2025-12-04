@@ -188,7 +188,7 @@ bool FdManager::MakeCachePath(const char* path, std::string& cache_path, bool is
 
     if(is_create_dir){
         int result;
-        if(0 != (result = mkdirp(resolved_path + mydirname(path), 0777))){
+        if(0 != (result = mkdirp(resolved_path + (path == nullptr ? "" : mydirname(path)), 0777))){
             S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
             return false;
         }
