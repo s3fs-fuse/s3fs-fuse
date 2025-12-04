@@ -262,8 +262,8 @@ function test_redirects {
 
     echo "123456" >> "${TEST_TEXT_FILE}"
 
-    local LINE1; LINE1=$("${SED_BIN}" -n '1,1p' "${TEST_TEXT_FILE}")
-    local LINE2; LINE2=$("${SED_BIN}" -n '2,2p' "${TEST_TEXT_FILE}")
+    local LINE1; LINE1=$(sed -n '1,1p' "${TEST_TEXT_FILE}")
+    local LINE2; LINE2=$(sed -n '2,2p' "${TEST_TEXT_FILE}")
 
     if [ "${LINE1}" != "XYZ" ]; then
        echo "LINE1 was not as expected, got ${LINE1}, expected XYZ"
@@ -1979,7 +1979,7 @@ function test_concurrent_directory_updates {
         for i in $(seq 5); do
             local file
             # shellcheck disable=SC2012,SC2046
-            file=$(ls $(seq 5) | "${SED_BIN}" -n "$((RANDOM % 5 + 1))p")
+            file=$(ls $(seq 5) | sed -n "$((RANDOM % 5 + 1))p")
             cat "${file}" >/dev/null || true
             rm -f "${file}"
             echo "foo" > "${file}" || true
@@ -2151,8 +2151,8 @@ function test_cache_file_stat() {
     #
     # get lines from cache stat file
     #
-    local CACHE_FILE_STAT_LINE_1; CACHE_FILE_STAT_LINE_1=$("${SED_BIN}" -n 1p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
-    local CACHE_FILE_STAT_LINE_2; CACHE_FILE_STAT_LINE_2=$("${SED_BIN}" -n 2p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
+    local CACHE_FILE_STAT_LINE_1; CACHE_FILE_STAT_LINE_1=$(sed -n 1p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
+    local CACHE_FILE_STAT_LINE_2; CACHE_FILE_STAT_LINE_2=$(sed -n 2p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
     if [ -z "${CACHE_FILE_STAT_LINE_1}" ] || [ -z "${CACHE_FILE_STAT_LINE_2}" ]; then
         echo "could not get first or second line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
         return 1;
@@ -2194,7 +2194,7 @@ function test_cache_file_stat() {
     #
     # get lines from cache stat file
     #
-    CACHE_FILE_STAT_LINE_1=$("${SED_BIN}" -n 1p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
+    CACHE_FILE_STAT_LINE_1=$(sed -n 1p "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}")
     local CACHE_FILE_STAT_LINE_E; CACHE_FILE_STAT_LINE_E=$(tail -1 "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}" 2>/dev/null)
     if [ -z "${CACHE_FILE_STAT_LINE_1}" ] || [ -z "${CACHE_FILE_STAT_LINE_E}" ]; then
         echo "could not get first or end line from cache file stat: ${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${BIG_FILE}"
