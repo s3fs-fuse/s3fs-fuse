@@ -350,7 +350,7 @@ function start_s3fs {
             -f \
             "${@}" &
         echo $! >&3
-    ) 3>pid | "${STDBUF_COMMAND_LINE[@]}" "${SED_BIN}" "${SED_BUFFER_FLAG}" "s/^/s3fs: /" &
+    ) 3>pid | "${STDBUF_COMMAND_LINE[@]}" awk "{print \"s3fs: \" \$0}" &
     sleep 1
     S3FS_PID=$(<pid)
     export S3FS_PID
