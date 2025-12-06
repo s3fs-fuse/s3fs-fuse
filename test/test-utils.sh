@@ -71,11 +71,9 @@ if [ "$(uname)" = "Darwin" ]; then
         export STDBUF_BIN=""
     fi
     export TRUNCATE_BIN="gtruncate"
-    export SED_BIN="gsed"
 else
     export STDBUF_BIN="stdbuf"
     export TRUNCATE_BIN="truncate"
-    export SED_BIN="sed"
 fi
 
 # [NOTE]
