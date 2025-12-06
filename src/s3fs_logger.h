@@ -149,13 +149,17 @@ class S3fsLog
 void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 5, 6)));
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
         do{ \
-            s3fs_low_logprn(level, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
+            if(S3fsLog::IsS3fsLogLevel(level)){ \
+                s3fs_low_logprn(level, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
+            } \
         }while(0)
 
 void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 6, 7)));
 #define S3FS_LOW_LOGPRN2(level, nest, fmt, ...) \
         do{ \
-            s3fs_low_logprn2(level, nest, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
+            if(S3fsLog::IsS3fsLogLevel(level)){ \
+                s3fs_low_logprn2(level, nest, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__); \
+            } \
         }while(0)
 
 #define S3FS_LOW_CURLDBG(fmt, ...) \

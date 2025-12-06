@@ -255,48 +255,44 @@ S3fsLog::Level S3fsLog::LowBumpupLogLevel() const
 
 void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...)
 {
-    if(S3fsLog::IsS3fsLogLevel(level)){
-        va_list va;
-        va_start(va, fmt);
-        size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
-        va_end(va);
+    va_list va;
+    va_start(va, fmt);
+    size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
+    va_end(va);
 
-        auto message = std::make_unique<char[]>(len);
-        va_start(va, fmt);
-        vsnprintf(message.get(), len, fmt, va);
-        va_end(va);
+    auto message = std::make_unique<char[]>(len);
+    va_start(va, fmt);
+    vsnprintf(message.get(), len, fmt, va);
+    va_end(va);
 
-        if(foreground || S3fsLog::IsSetLogFile()){
-            S3fsLog::SeekEnd();
-            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message.get());
-            S3fsLog::Flush();
-        }else{
-            // TODO: why does this differ from s3fs_low_logprn2?
-            syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): %s", instance_name.c_str(), file, func, line, message.get());
-        }
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::SeekEnd();
+        fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message.get());
+        S3fsLog::Flush();
+    }else{
+        // TODO: why does this differ from s3fs_low_logprn2?
+        syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): %s", instance_name.c_str(), file, func, line, message.get());
     }
 }
 
 void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const char *func, int line, const char *fmt, ...)
 {
-    if(S3fsLog::IsS3fsLogLevel(level)){
-        va_list va;
-        va_start(va, fmt);
-        size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
-        va_end(va);
+    va_list va;
+    va_start(va, fmt);
+    size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
+    va_end(va);
 
-        auto message = std::make_unique<char[]>(len);
-        va_start(va, fmt);
-        vsnprintf(message.get(), len, fmt, va);
-        va_end(va);
+    auto message = std::make_unique<char[]>(len);
+    va_start(va, fmt);
+    vsnprintf(message.get(), len, fmt, va);
+    va_end(va);
 
-        if(foreground || S3fsLog::IsSetLogFile()){
-            S3fsLog::SeekEnd();
-            fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
-            S3fsLog::Flush();
-        }else{
-            syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message.get());
-        }
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::SeekEnd();
+        fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
+        S3fsLog::Flush();
+    }else{
+        syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message.get());
     }
 }
 

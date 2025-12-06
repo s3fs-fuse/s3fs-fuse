@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
@@ -38,19 +39,20 @@
 //-------------------------------------------------------------------
 std::string str(const struct timespec& value)
 {
-    std::ostringstream s;
-
     if(UTIME_OMIT == value.tv_nsec){
-        s << "UTIME_OMIT";
+        return "UTIME_OMIT";
     }else if(UTIME_NOW == value.tv_nsec){
-        s << "UTIME_NOW";
+        return "UTIME_NOW";
     }else{
-        s << value.tv_sec;
-        if(value.tv_nsec != 0){
-            s << "." << std::setfill('0') << std::setw(9) << value.tv_nsec;
+        char buf[64];
+        size_t len;
+        if(value.tv_nsec == 0){
+            len = std::snprintf(buf, sizeof(buf), "%ld", value.tv_sec);
+        }else{
+            len = std::snprintf(buf, sizeof(buf), "%ld.%09ld", value.tv_sec, value.tv_nsec);
         }
+        return std::string(buf, len);
     }
-    return s.str();
 }
 
 // This source code is from https://gist.github.com/jeremyfromearth/5694aa3a66714254752179ecf3c95582 .
@@ -159,8 +161,7 @@ static constexpr char encode_query_except_chars[]   = ".-_~=&%"; // For query pa
 static std::string rawUrlEncode(const std::string &s, const char* except_chars)
 {
     std::string result;
-    for (size_t i = 0; i < s.length(); ++i) {
-        unsigned char c = s[i];
+    for(unsigned char c : s){
         if((except_chars && nullptr != strchr(except_chars, c)) ||
            (c >= 'a' && c <= 'z') ||
            (c >= 'A' && c <= 'Z') ||

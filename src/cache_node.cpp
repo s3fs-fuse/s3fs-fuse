@@ -1311,7 +1311,7 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
     // [NOTE]
     // Directory paths must end with a slash, but strpath does not.
     //
-    if(GetPathHasLock() == strpath || GetPathHasLock().substr(0, GetPathHasLock().size() - 1) == strpath){
+    if(GetPathHasLock() == strpath || GetPathHasLock().compare(0, GetPathHasLock().size() - 1, strpath) == 0){
         if(IsExpiredHasLock()){
             // this cache is expired
             needTruncate = true;
@@ -1325,7 +1325,7 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
     }
 
     // Checks whether the path of this object is included
-    if(strpath.substr(0, GetPathHasLock().size()) != GetPathHasLock()){
+    if(strpath.compare(0, GetPathHasLock().size(), GetPathHasLock()) != 0){
         return std::shared_ptr<StatCacheNode>();
     }
 
@@ -1480,7 +1480,7 @@ bool DirStatCache::GetChildLeafNameHasLock(const std::string& strpath, std::stri
         return false;
     }
 
-    strLeafName = strpath.substr(GetPathHasLock().size());
+    strLeafName.assign(strpath, GetPathHasLock().size());
     if(strLeafName.empty()){
         return false;
     }

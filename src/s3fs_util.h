@@ -43,10 +43,8 @@ void init_sysconf_vars();
 std::string get_username(uid_t uid);
 int is_uid_include_group(uid_t uid, gid_t gid);
 
-std::string mydirname(const char* path);
-std::string mydirname(const std::string& path);
-std::string mybasename(const char* path);
-std::string mybasename(const std::string& path);
+std::string mydirname(std::string path);
+std::string mybasename(std::string path);
 
 int mkdirp(const std::string& path, mode_t mode);
 std::string get_exist_directory_path(const std::string& path);

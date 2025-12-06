@@ -129,7 +129,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list)
         std::string strkey = list->data;
         size_t pos;
         if(std::string::npos != (pos = strkey.find(':', 0))){
-            if (trim(strkey.substr(pos + 1)).empty()) {
+            if(std::string::npos == strkey.find_first_not_of(SPACES, pos + 1)){
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
             }
@@ -138,7 +138,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list)
         if(!sorted_headers.empty()){
             sorted_headers += ";";
         }
-        sorted_headers += lower(strkey);
+        sorted_headers += lower(std::move(strkey));
     }
 
     return sorted_headers;
@@ -182,7 +182,7 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
                 // skip empty-value headers (as they are discarded by libcurl)
                 continue;
             }
-            strhead = strkey;
+            strhead = std::move(strkey);
             strhead += ":";
             strhead += strval;
         }else{

@@ -171,18 +171,13 @@ int is_uid_include_group(uid_t uid, gid_t gid)
 //
 static std::mutex basename_lock;
 
-std::string mydirname(const std::string& path)
+// safe variant of dirname
+// dirname clobbers path so let it operate on a tmp copy
+std::string mydirname(std::string path)
 {
     const std::lock_guard<std::mutex> lock(basename_lock);
 
-    return mydirname(path.c_str());
-}
-
-// safe variant of dirname
-// dirname clobbers path so let it operate on a tmp copy
-std::string mydirname(const char* path)
-{
-    if(!path || '\0' == path[0]){
+    if(path.empty()){
         return "";
     }
 
@@ -190,24 +185,17 @@ std::string mydirname(const char* path)
     // Currently, use "&str[pos]" to make it possible to build with C++14.
     // Once we support C++17 or later, we will use "str.data()".
     //
-    std::string strPath = path;
-    strPath.push_back('\0');                    // terminate with a null character and allocate space for it.
-    std::string result = dirname(&strPath[0]);  // NOLINT(readability-container-data-pointer)
-    return result;
-}
-
-std::string mybasename(const std::string& path)
-{
-    const std::lock_guard<std::mutex> data_lock(basename_lock);
-
-    return mybasename(path.c_str());
+    path.push_back('\0');     // terminate with a null character and allocate space for it.
+    return dirname(&path[0]); // NOLINT(readability-container-data-pointer)
 }
 
 // safe variant of basename
 // basename clobbers path so let it operate on a tmp copy
-std::string mybasename(const char* path)
+std::string mybasename(std::string path)
 {
-    if(!path || '\0' == path[0]){
+    const std::lock_guard<std::mutex> data_lock(basename_lock);
+
+    if(path.empty()){
         return "";
     }
 
@@ -215,10 +203,8 @@ std::string mybasename(const char* path)
     // Currently, use "&str[pos]" to make it possible to build with C++14.
     // Once we support C++17 or later, we will use "str.data()".
     //
-    std::string strPath = path;
-    strPath.push_back('\0');                    // terminate with a null character and allocate space for it.
-    std::string result = basename(&strPath[0]); // NOLINT(readability-container-data-pointer)
-    return result;
+    path.push_back('\0');      // terminate with a null character and allocate space for it.
+    return basename(&path[0]); // NOLINT(readability-container-data-pointer)
 }
 
 // mkdir --parents
