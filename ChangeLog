@@ -1,6 +1,9 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.97 -- 7 Dec, 2025 (major changes only)
+#2765 Do not honor -o nonempty when compiled with FUSE 3
+
 Version 1.96 -- 24 Nov, 2025 (major changes only)
 #1867 - Require FUSE 3 on Linux
 #2596 - Require C++14
