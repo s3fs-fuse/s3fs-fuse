@@ -144,10 +144,16 @@ jobs:
 
       - name: Install brew other packages
         run: |
-          S3FS_BREW_PACKAGES='automake cppcheck python3 coreutils shellcheck jq';
-          for s3fs_brew_pkg in ${S3FS_BREW_PACKAGES}; do
-            if brew list | grep -q ${s3fs_brew_pkg}; then if brew outdated | grep -q ${s3fs_brew_pkg}; then HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade ${s3fs_brew_pkg}; fi; else HOMEBREW_NO_AUTO_UPDATE=1 brew install ${s3fs_brew_pkg}; fi
-          done
+          S3FS_BREW_PACKAGES=(
+            automake
+            coreutils
+            cppcheck
+            jq
+            python3
+            shellcheck
+          )
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install "${S3FS_BREW_PACKAGES[@]}"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade "${S3FS_BREW_PACKAGES[@]}"
 
       - name: Build
         run: |
