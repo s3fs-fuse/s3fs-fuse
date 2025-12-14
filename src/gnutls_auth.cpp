@@ -233,7 +233,18 @@ bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
         S3FS_PRN_ERR("MD5 context creation failure: %s/%s", gcry_strsource(err), gcry_strerror(err));
         return false;
     }
-    gcry_md_write(ctx_md5, digest->data(), digest->size());
+    gcry_md_write(ctx_md5, data, datalen);
+
+    // calculate the hash value
+    const auto* result = gcry_md_read(ctx_md5, GCRY_MD_MD5);
+    if(!result){
+        S3FS_PRN_ERR("Failed to read MD5 digest");
+        gcry_md_close(ctx_md5);
+        return false;
+    }
+
+    // copy result to digest
+    std::memcpy(digest->data(), result, digest->size());
     gcry_md_close(ctx_md5);
 
     return true;
