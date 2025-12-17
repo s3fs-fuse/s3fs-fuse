@@ -63,6 +63,7 @@ bool s3fs_init_global_ssl()
     ERR_load_BIO_strings();
     #endif
 
+    // TODO: This enables deprecated algorithms like MD5 -- perhaps use a narrower enablement?
     OpenSSL_add_all_algorithms();
     return true;
 }
@@ -211,12 +212,20 @@ bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
 {
     auto digestlen = static_cast<unsigned int>(digest->size());
 
-    const EVP_MD* md    = EVP_get_digestbyname("md5");
-    EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(mdctx, md, nullptr);
-    EVP_DigestUpdate(mdctx, data, datalen);
-    EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
-    EVP_MD_CTX_destroy(mdctx);
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    if(mdctx == nullptr){
+        S3FS_PRN_ERR("EVP_MD_CTX_new failed\n");
+        return false;
+    }
+    if(EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestInit_ex failed\n");
+        return false;
+    }
+    if(EVP_DigestUpdate(mdctx.get(), data, datalen) != 1 ||
+        EVP_DigestFinal_ex(mdctx.get(), digest->data(), &digestlen) != 1){
+        S3FS_PRN_ERR("Digest computation failed\n");
+        return false;
+    }
 
     return true;
 }
@@ -236,7 +245,14 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 
     // instead of MD5_Init
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr);
+    if(!mdctx){
+        S3FS_PRN_ERR("EVP_MD_CTX_new failed\n");
+        return false;
+    }
+    if(EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestInit_ex failed\n");
+        return false;
+    }
 
     for(off_t total = 0; total < size; total += bytes){
         std::array<char, 512> buf;
@@ -251,11 +267,17 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
             return false;
         }
         // instead of MD5_Update
-        EVP_DigestUpdate(mdctx.get(), buf.data(), bytes);
+        if(EVP_DigestUpdate(mdctx.get(), buf.data(), bytes) != 1){
+            S3FS_PRN_ERR("Digest computation failed\n");
+            return false;
+        }
     }
 
     // instead of MD5_Final
-    EVP_DigestFinal_ex(mdctx.get(), result->data(), &md5_digest_len);
+    if(EVP_DigestFinal_ex(mdctx.get(), result->data(), &md5_digest_len) != 1){
+        S3FS_PRN_ERR("Digest computation failed\n");
+        return false;
+    }
 
     return true;
 }
