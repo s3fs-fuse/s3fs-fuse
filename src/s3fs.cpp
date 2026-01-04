@@ -4614,6 +4614,54 @@ static bool check_region_error(const char* pbody, size_t len, std::string& expec
     return true;
 }
 
+//
+// Checks whether an invalid access error that cannot be retried has occurred.
+// This is determined by the combination of the following response codes and the
+// <Code> in the response body:
+//    [Response code]    [Code string]
+//    400                InvalidToken
+//                       ExpiredToken
+//    403                AccessDenied
+//                       RequestTimeTooSkewed
+//                       SignatureDoesNotMatch
+//                       InvalidAccessKeyId
+// ex) InvalidAccessKeyId
+//       "<Error>
+//          <Code>InvalidAccessKeyId</Code>
+//          <Message>The AWS Access Key Id you provided does not exist in our records.</Message>
+//          <AWSAccessKeyId>...</AWSAccessKeyId>
+//          <RequestId>...</RequestId>
+//          <HostId>...</HostId>
+//        </Error>"
+//
+static bool check_invalid_access(long responseCode, const char* pbody, size_t len, std::string& strErrorCode)
+{
+    constexpr std::array<const char*, 2> strErrCodes400 = {"InvalidToken", "ExpiredToken"};
+    constexpr std::array<const char*, 4> strErrCodes403 = {"AccessDenied", "RequestTimeTooSkewed", "SignatureDoesNotMatch", "InvalidAccessKeyId"};
+
+    if(!pbody){
+        return false;
+    }
+    if(!simple_parse_xml(pbody, len, "Code", strErrorCode)){
+        return false;
+    }
+
+    if(400 == responseCode){
+        for(const auto& strTgCode: strErrCodes400){
+            if(strErrorCode == strTgCode){
+                return true;
+            }
+        }
+    }else if(403 == responseCode){
+        for(const auto& strTgCode: strErrCodes403){
+            if(strErrorCode == strTgCode){
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static bool check_endpoint_error(const char* pbody, size_t len, std::string& expectendpoint)
 {
     if(!pbody){
@@ -4699,6 +4747,7 @@ static int s3fs_check_service()
                 // check region error(for putting message or retrying)
                 std::string expectregion;
                 std::string expectendpoint;
+                std::string invalidAccessCode;
 
                 // Check if any case can be retried
                 if(check_region_error(responseBody.c_str(), responseBody.size(), expectregion)){
@@ -4740,6 +4789,11 @@ static int s3fs_check_service()
                         S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify region(%s) option.", region.c_str(), expectregion.c_str(), expectregion.c_str());
                         isLoop = false;
                     }
+
+                }else if(check_invalid_access(responseCode, responseBody.c_str(), responseBody.size(), invalidAccessCode)){
+                    // Invalid Access error
+                    S3FS_PRN_CRIT("Received '%s' error from the S3 service. Please check and resolve the cause of this error and try again.", invalidAccessCode.c_str());
+                    return EXIT_FAILURE;
 
                 }else if(check_endpoint_error(responseBody.c_str(), responseBody.size(), expectendpoint)){
                     // redirect error
