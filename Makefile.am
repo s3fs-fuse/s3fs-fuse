@@ -45,6 +45,7 @@ cppcheck:
             -D HAVE_MALLOC_TRIM \
             -U CURLE_PEER_FAILED_VERIFICATION \
             -U ENOATTR \
+            -i test/pjd-pjdfstest* \
             --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
