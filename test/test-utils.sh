@@ -438,6 +438,20 @@ function s3_cp() {
         "$@" \
         --request PUT --data-binary "@$TEMPNAME" "$S3_URL/$S3_PATH"
     rm -f "$TEMPNAME"
+
+    # [NOTE][FIXME]
+    # The purpose of this file upload is to prepare a test file that
+    # s3fs-fuse does not recognize.
+    # However, there are cases where the file cannot be read immediately
+    # after uploading, which causes the test to fail.
+    # This failure is not the essence of s3fs-fuse testing, so we will
+    # now make sure to check the existence of the file.
+    #
+    if ! s3_head "${S3_PATH}" >/dev/null 2>&1; then
+        # wait for retry
+        sleep 1
+        s3_head "${S3_PATH}" >/dev/null 2>&1
+    fi
 }
 
 function wait_for_port() {
