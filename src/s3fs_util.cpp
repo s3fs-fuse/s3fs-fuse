@@ -301,8 +301,8 @@ bool check_exist_dir_permission(const char* dirpath)
 
 bool delete_files_in_dir(const char* dir, bool is_remove_own)
 {
-    DIR*           dp;
-    struct dirent* dent;
+    DIR*                 dp;
+    const struct dirent* dent;
 
     if(nullptr == (dp = opendir(dir))){
         S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);

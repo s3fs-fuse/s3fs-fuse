@@ -464,7 +464,7 @@ FdManager::~FdManager()
 {
     if(this == FdManager::get()){
         for(auto iter = fent.cbegin(); fent.cend() != iter; ++iter){
-            FdEntity* ent = (*iter).second.get();
+            const FdEntity* ent = iter->second.get();
             S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
         }
         fent.clear();
@@ -844,9 +844,9 @@ void FdManager::CleanupCacheDir()
 
 void FdManager::CleanupCacheDirInternal(const std::string &path)
 {
-    DIR*           dp;
-    struct dirent* dent;
-    std::string    abs_path = cache_dir + "/" + S3fsCred::GetBucket() + path;
+    DIR*                 dp;
+    const struct dirent* dent;
+    std::string          abs_path = cache_dir + "/" + S3fsCred::GetBucket() + path;
 
     if(nullptr == (dp = opendir(abs_path.c_str()))){
         S3FS_PRN_ERR("could not open cache dir(%s) - errno(%d)", abs_path.c_str(), errno);
