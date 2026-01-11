@@ -266,7 +266,7 @@ function describe {
 # Runs each test in a suite and summarizes results.  The list of
 # tests added by add_tests() is called with CWD set to a tmp
 # directory in the bucket.  An attempt to clean this directory is
-# made after the test run.  
+# made after the test run.
 function run_suite {
    orig_dir="${PWD}"
    key_prefix="testrun-${RANDOM}"
@@ -275,14 +275,21 @@ function run_suite {
        return 1
    fi
 
+   RANDOM_NUM=0
+
    for t in "${TEST_LIST[@]}"; do
+       # Make random string
+       RANDOM_NUM=$((RANDOM_NUM + 1))
+       RANDOM_STR=$(printf '%03d' "${RANDOM_NUM}")
+
        # Ensure test input name differs every iteration
-       TEST_TEXT_FILE="test-s3fs-${RANDOM}.txt"
-       TEST_DIR="testdir-${RANDOM}"
+       TEST_TEXT_FILE="test-s3fs-${RANDOM_STR}.txt"
+       TEST_DIR="testdir-${RANDOM_STR}"
        # shellcheck disable=SC2034
-       ALT_TEST_TEXT_FILE="test-s3fs-ALT-${RANDOM}.txt"
+       ALT_TEST_TEXT_FILE="test-s3fs-ALT-${RANDOM_STR}.txt"
        # shellcheck disable=SC2034
-       BIG_FILE="big-file-s3fs-${RANDOM}.txt"
+       BIG_FILE="big-file-s3fs-${RANDOM_STR}.txt"
+
        # The following sequence runs tests in a subshell to allow continuation
        # on test failure, but still allowing errexit to be in effect during
        # the test.
