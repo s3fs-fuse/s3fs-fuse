@@ -342,9 +342,9 @@ function get_ctime() {
         "${STAT_BIN[@]}" -f "%Fc" "$1"
 
     elif [ "${TIME_FROM_FULL_STAT}" -eq 1 ]; then
-        TEMP_ATIME=$(stat "$1" | grep '^Change:' | awk '{print $2" "$3}')
+        TEMP_ATIME=$("${STAT_BIN[@]}" "$1" | grep '^Change:' | awk '{print $2" "$3}')
         TEMP_ATIME_SEC=$(date -d "${TEMP_ATIME}" +"%s")
-        TEMP_ATIME_NSEC=$(stat "$1" | awk '/^Change:/{print $3}' | cut -d'.' -f2)
+        TEMP_ATIME_NSEC=$("${STAT_BIN[@]}" "$1" | awk '/^Change:/{print $3}' | cut -d'.' -f2)
         printf '%s.%s' "${TEMP_ATIME_SEC}" "${TEMP_ATIME_NSEC}"
     else
         "${STAT_BIN[@]}" --format "%.9Z" "$1"
@@ -366,9 +366,9 @@ function get_atime() {
         "${STAT_BIN[@]}" -f "%Fa" "$1"
 
     elif [ "${TIME_FROM_FULL_STAT}" -eq 1 ]; then
-        TEMP_ATIME=$(stat "$1" | grep '^Access:' | grep -v 'Uid:' | awk '{print $2" "$3}')
+        TEMP_ATIME=$("${STAT_BIN[@]}" "$1" | grep '^Access:' | grep -v 'Uid:' | awk '{print $2" "$3}')
         TEMP_ATIME_SEC=$(date -d "${TEMP_ATIME}" +"%s")
-        TEMP_ATIME_NSEC=$(stat "$1" | grep -v 'Uid:' | awk '/^Access:/{print $3}' | cut -d'.' -f2)
+        TEMP_ATIME_NSEC=$("${STAT_BIN[@]}" "$1" | grep -v 'Uid:' | awk '/^Access:/{print $3}' | cut -d'.' -f2)
         printf '%s.%s' "${TEMP_ATIME_SEC}" "${TEMP_ATIME_NSEC}"
     else
         "${STAT_BIN[@]}" --format "%.9X" "$1"
@@ -385,7 +385,7 @@ function get_permissions() {
 
 function get_user_and_group() {
     if [ "$(uname)" = "Darwin" ]; then
-        stat -f "%u:%g" "$1"
+        "${STAT_BIN[@]}" -f "%u:%g" "$1"
     else
         "${STAT_BIN[@]}" --format "%u:%g" "$1"
     fi
