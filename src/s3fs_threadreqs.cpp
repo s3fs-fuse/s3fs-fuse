@@ -924,6 +924,7 @@ int multipart_upload_part_request(const std::string& path, int upload_fd, off_t 
     // send request by thread
     if(!ThreadPoolMan::Instruct(ppoolparam)){
         S3FS_PRN_ERR("failed to setup Multipart Upload Part Thread Worker [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);;
+        delete thargs;
         return -EIO;
     }
 
@@ -960,6 +961,7 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
     // send request by thread
     if(!ThreadPoolMan::AwaitInstruct(ppoolparam)){
         S3FS_PRN_ERR("failed to setup Await Multipart Upload Part Thread Worker [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);;
+        delete thargs;
         return -EIO;
     }
     if(0 != req_result){
