@@ -423,6 +423,7 @@ std::unique_ptr<FILE, decltype(&s3fs_fclose)> FdManager::MakeTempFile() {
     }
     if (-1 == unlink(cfn)) {
         S3FS_PRN_ERR("failed to delete tmp file. errno(%d)", errno);
+        close(fd);
         return {nullptr, &s3fs_fclose};
     }
     return {fdopen(fd, "rb+"), &s3fs_fclose};
