@@ -853,6 +853,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         S3FS_PRN_ERR("could not open cache dir(%s) - errno(%d)", abs_path.c_str(), errno);
         return;
     }
+    scope_guard dir_guard([dp]() { closedir(dp); });
 
     for(dent = readdir(dp); dent; dent = readdir(dp)){
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
@@ -864,7 +865,6 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         struct stat st;
         if(0 != lstat(fullpath.c_str(), &st)){
             S3FS_PRN_ERR("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
-            closedir(dp);
             return;
         }
         std::string next_path = path + "/" + dent->d_name;
@@ -885,7 +885,6 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
             FdManager::fd_manager_lock.unlock();
         }
     }
-    closedir(dp);
 }
 
 bool FdManager::ReserveDiskSpace(off_t size)
@@ -947,6 +946,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
         S3FS_PRN_ERR("Could not open directory(%s) by errno(%d)", target_dir.c_str(), errno);
         return false;
     }
+    scope_guard dir_guard([statsdir]() { closedir(statsdir); });
 
     // loop in directory of cache file's stats
     const struct dirent* pdirent = nullptr;
@@ -1068,7 +1068,6 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             warn_area_list.clear();
         }
     }
-    closedir(statsdir);
 
     return true;
 }

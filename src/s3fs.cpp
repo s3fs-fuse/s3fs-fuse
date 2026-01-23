@@ -5116,14 +5116,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                     S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
                     return -1;
                 }
+                scope_guard dir_guard([dp]() { closedir(dp); });
+
                 while((ent = readdir(dp)) != nullptr){
                     if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
-                        closedir(dp);
                         S3FS_PRN_EXIT("MOUNTPOINT directory %s is not empty. if you are sure this is safe, can use the 'nonempty' mount option.", mountpoint.c_str());
                         return -1;
                     }
                 }
-                closedir(dp);
             }
 #endif
 #endif
