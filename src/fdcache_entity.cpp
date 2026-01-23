@@ -467,9 +467,11 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
                 st = {};
                 if(-1 == fstat(physical_fd, &st)){
                     S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
+                    const int save_errno = errno;
+                    close(physical_fd);
                     physical_fd = -1;
                     inode       = 0;
-                    return (0 == errno ? -EIO : -errno);
+                    return (0 == save_errno ? -EIO : -save_errno);
                 }
                 // check size, st_size, loading stat file
                 if(-1 == size){
@@ -534,6 +536,8 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
             int mirrorfd;
             if(0 >= (mirrorfd = OpenMirrorFile())){
                 S3FS_PRN_ERR("failed to open mirror file linked cache file(%s).", cachepath.c_str());
+                close(physical_fd);
+                physical_fd = -1;
                 return (0 == mirrorfd ? -EIO : mirrorfd);
             }
             // switch fd
