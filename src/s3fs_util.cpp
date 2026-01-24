@@ -308,6 +308,7 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
         S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);
         return false;
     }
+    scope_guard dir_guard([dp]() { closedir(dp); });
 
     for(dent = readdir(dp); dent; dent = readdir(dp)){
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
@@ -319,25 +320,21 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
         struct stat st;
         if(0 != lstat(fullpath.c_str(), &st)){
             S3FS_PRN_ERR("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
-            closedir(dp);
             return false;
         }
         if(S_ISDIR(st.st_mode)){
             // dir -> Reentrant
             if(!delete_files_in_dir(fullpath.c_str(), true)){
                 S3FS_PRN_ERR("could not remove sub dir(%s) - errno(%d)", fullpath.c_str(), errno);
-                closedir(dp);
                 return false;
             }
         }else{
             if(0 != unlink(fullpath.c_str())){
                 S3FS_PRN_ERR("could not remove file(%s) - errno(%d)", fullpath.c_str(), errno);
-                closedir(dp);
                 return false;
             }
         }
     }
-    closedir(dp);
 
     if(is_remove_own && 0 != rmdir(dir)){
         S3FS_PRN_ERR("could not remove dir(%s) - errno(%d)", dir, errno);
