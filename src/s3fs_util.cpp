@@ -392,12 +392,21 @@ void print_launch_message(int argc, char** argv)
                 if(0 == cnt){
                     message += basename(argv[cnt]);
                 }else{
-                    message += argv[cnt];
+                    if(!insecure_logging){
+                        message += mask_sensitive_arg(argv[cnt]);
+                    }else{
+                        message += argv[cnt];
+                    }
                 }
             }
         }
     }
     S3FS_PRN_LAUNCH_INFO("%s", message.c_str());
+
+    // Special message when insecure logging is enabled
+    if(insecure_logging){
+        S3FS_PRN_LAUNCH_INFO("%s", "[INSECURE] Deprecated option(insecure_logging) is specified. Authentication information such as tokens and credentials is output to the log.");
+    }
 }
 
 int s3fs_fclose(FILE* fp)
@@ -406,6 +415,14 @@ int s3fs_fclose(FILE* fp)
         return 0;
     }
     return fclose(fp);
+}
+
+//-------------------------------------------------------------------
+// Utilities for secure credential strings
+//-------------------------------------------------------------------
+const char* mask_sensitive_string(const char* sensitive)
+{
+    return mask_sensitive_string_with_flag(sensitive, insecure_logging);
 }
 
 /*

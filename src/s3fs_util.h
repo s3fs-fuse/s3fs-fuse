@@ -55,6 +55,8 @@ bool compare_sysname(const char* target);
 
 void print_launch_message(int argc, char** argv);
 
+const char* mask_sensitive_string(const char* sensitive);
+
 //-------------------------------------------------------------------
 // Utility for nanosecond time(timespec)
 //-------------------------------------------------------------------
