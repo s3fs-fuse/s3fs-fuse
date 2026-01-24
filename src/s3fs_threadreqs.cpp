@@ -1480,7 +1480,7 @@ int get_iamv2api_token_request(const std::string& strurl, int tokenttl, const st
 //
 int get_iamrole_request(const std::string& strurl, const std::string& striamtoken, std::string& token)
 {
-    S3FS_PRN_INFO3("Get IAM Role Request directly [url=%s][iam token=%s]", strurl.c_str(), striamtoken.c_str());
+    S3FS_PRN_INFO3("Get IAM Role Request directly [url=%s][iam token=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()));
 
     S3fsCurl s3fscurl;
     int      result = 0;
@@ -1496,7 +1496,7 @@ int get_iamrole_request(const std::string& strurl, const std::string& striamtoke
 //
 int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, std::string& cred)
 {
-    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), striamtoken.c_str(), stribmsecret.c_str());
+    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()), mask_sensitive_string(stribmsecret.c_str()));
 
     S3fsCurl s3fscurl;
     int      result = 0;

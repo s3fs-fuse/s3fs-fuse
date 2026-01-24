@@ -5779,6 +5779,13 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 return 0;
             }
         }
+        //
+        // insecure logging option
+        //
+        else if(0 == strcmp(arg, "insecure_logging")){
+            insecure_logging = true;
+            return 0;
+        }
         // "f2" is not used no more.
         // (set S3fsLog::Level::DBG)
         else if(0 == strcmp(arg, "f2")){
@@ -5949,8 +5956,6 @@ int main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
         }
     }
-    // print launch message
-    print_launch_message(argc, argv);
 
     // Load SSE environment
     if(!S3fsCurl::LoadEnvSse()){
@@ -5995,6 +6000,9 @@ int main(int argc, char* argv[])
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);
     }
+
+    // print launch message
+    print_launch_message(argc, argv);
 
     // init mime types for curl
     if(!S3fsCurl::InitMimeType(mimetype_file)){
