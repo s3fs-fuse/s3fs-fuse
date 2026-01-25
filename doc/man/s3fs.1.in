@@ -449,6 +449,11 @@ Specify "normal" or "body" for the parameter.
 If the parameter is omitted, it is the same as "normal".
 If "body" is specified, some API communication body data will be output in addition to the debug message output as "normal".
 .TP
+\fB\-o\fR insecure_logging - put insecure information to the log
+Normally, secure information(such as tokens and credentials) is not output to logs.
+Specifying this option will write these secure information to the log.
+Use caution when specifying this option, as sensitive authentication information will be output to the log.
+.TP
 \fB\-o\fR no_time_stamp_msg - no time stamp in debug message
 The time stamp is output to the debug message by default.
 If this option is specified, the time stamp will not be output in the debug message.

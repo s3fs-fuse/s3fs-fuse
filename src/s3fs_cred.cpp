@@ -380,7 +380,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
             }else{
                 // Set token
                 if(!SetIAMv2APITokenHasLock(token)){
-                    S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", token.c_str());
+                    S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", mask_sensitive_string(token.c_str()));
                 }
             }
         }
@@ -407,7 +407,7 @@ int S3fsCred::GetIMDSVersion() const
 
 bool S3fsCred::SetIAMv2APITokenHasLock(const std::string& token)
 {
-    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", token.c_str());
+    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", mask_sensitive_string(token.c_str()));
 
     if(token.empty()){
         return false;
@@ -504,7 +504,7 @@ bool S3fsCred::LoadIAMRoleFromMetaData()
 
 bool S3fsCred::SetIAMCredentials(const char* response)
 {
-    S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
+    S3FS_PRN_INFO3("IAM credential response = \"%s\"", mask_sensitive_string(response));
 
     iamcredmap_t keyval;
 
@@ -549,7 +549,7 @@ bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
 {
     const std::lock_guard<std::mutex> lock(token_lock);
 
-    S3FS_PRN_INFO3("IAM role name response = \"%s\"", response ? response : "(null)");
+    S3FS_PRN_INFO3("IAM role name response = \"%s\"", mask_sensitive_string(response));
 
     std::string rolename;
     if(!S3fsCred::ParseIAMRoleFromMetaDataResponse(response, rolename)){

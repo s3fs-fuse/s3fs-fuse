@@ -136,6 +136,13 @@ std::string s3fs_wtf8_decode(const std::string &s);
 std::string get_encoded_cr_code(const char* pbase);
 std::string get_decoded_cr_code(const char* pencode);
 
+//-------------------------------------------------------------------
+// Utilities for masking sensitive strings
+//-------------------------------------------------------------------
+const char* mask_sensitive_string_with_flag(const char* sensitive, bool nomask);
+std::string mask_sensitive_header(const char* pheader, size_t length);
+std::string mask_sensitive_arg(const char* arg);
+
 #endif // S3FS_STRING_UTIL_H_
 
 /*

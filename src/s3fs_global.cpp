@@ -30,6 +30,7 @@ bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool complement_stat              = false;
 bool noxmlns                      = false;
+bool insecure_logging             = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string s3host                = "https://s3.amazonaws.com";

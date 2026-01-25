@@ -648,7 +648,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     // make MD5
     std::string strMd5;
     if(!make_md5_from_binary(raw_key.c_str(), raw_key.length(), strMd5)){
-        S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", raw_key.c_str());
+        S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", mask_sensitive_string(raw_key.c_str()));
         return false;
     }
     // mapped MD5 = SSE Key
@@ -772,7 +772,7 @@ bool S3fsCurl::LoadEnvSseCKeys()
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse
     if(S3fsCurl::sseckeys.empty()){
-        S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", envkeys);
+        S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", mask_sensitive_string(envkeys));
         return false;
     }
     return true;
@@ -1334,13 +1334,18 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
                     newline++;
                     eol++;
                 }
-                size_t length = eol - p;
-                S3FS_PRN_CURL("%s %.*s", getCurlDebugHead(type), (int)length - newline, p);
+                size_t      length    = eol - p;
+                std::string strheader;
+                if(!insecure_logging){
+                    strheader = mask_sensitive_header(p, (length - newline));
+                }else{
+                    strheader.assign(p, (length - newline));
+                }
+                S3FS_PRN_CURL("%s %s", getCurlDebugHead(type), strheader.c_str());
                 remaining -= length;
                 p = eol;
             } while (p != nullptr && remaining > 0);
             break;
-
         case CURLINFO_SSL_DATA_IN:
         case CURLINFO_SSL_DATA_OUT:
             // not put
@@ -2761,7 +2766,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
     if(0 <= static_cast<ssize_t>(ssekey_pos) && ssekey_pos < S3fsCurl::sseckeys.size()){
         std::string md5;
         if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, false)){
-            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, md5.c_str());
+            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, mask_sensitive_string(md5.c_str()));
             return false;
         }
     }
@@ -3115,7 +3120,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
 {
     int result;
 
-    S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][ssetype=%u][ssevalue=%s]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), static_cast<uint8_t>(ssetype), ssevalue.c_str());
+    S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][ssetype=%u][ssevalue=%s]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), static_cast<uint8_t>(ssetype), mask_sensitive_string(ssevalue.c_str()));
 
     if(!tpath){
         return -EINVAL;

@@ -345,6 +345,7 @@ function start_s3fs {
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \
+            -o insecure_logging \
             -o no_time_stamp_msg \
             -o retries=3 \
             -f \
