@@ -837,7 +837,10 @@ void FdManager::CleanupCacheDir()
         CleanupCacheDirInternal("");
         //S3FS_PRN_DBG("cache cleanup ended");
     }else{
-        // wait for other thread to finish cache cleanup
+        // [NOTE]
+        // Another thread is already executing CleanupCacheDirInternal().
+        // Wait for it to complete by blocking on the lock - no need to run
+        // cleanup again since it was just performed by the other thread.
         FdManager::cache_cleanup_lock.lock();
     }
     FdManager::cache_cleanup_lock.unlock();
