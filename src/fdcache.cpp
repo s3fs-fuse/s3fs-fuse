@@ -853,7 +853,11 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
         S3FS_PRN_ERR("could not open cache dir(%s) - errno(%d)", abs_path.c_str(), errno);
         return;
     }
-    scope_guard dir_guard([dp]() { closedir(dp); });
+    scope_guard dir_guard([dp, abs_path]() {
+        if(-1 == closedir(dp)){
+            S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", abs_path.c_str(), errno);
+        }
+    });
 
     for(dent = readdir(dp); dent; dent = readdir(dp)){
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
@@ -946,7 +950,11 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
         S3FS_PRN_ERR("Could not open directory(%s) by errno(%d)", target_dir.c_str(), errno);
         return false;
     }
-    scope_guard dir_guard([statsdir]() { closedir(statsdir); });
+    scope_guard dir_guard([statsdir, target_dir]() {
+        if(-1 == closedir(statsdir)){
+            S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", target_dir.c_str(), errno);
+        }
+    });
 
     // loop in directory of cache file's stats
     const struct dirent* pdirent = nullptr;
@@ -1004,7 +1012,11 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
                 S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD, "Could not open cache file");
                 continue;
             }
-            scope_guard guard([&]() { close(cache_file_fd); });
+            scope_guard guard([cache_file_fd, cache_path]() {
+                if(-1 == close(cache_file_fd)){
+                    S3FS_PRN_ERR("close() failed for %s - errno(%d)", cache_path.c_str(), errno);
+                }
+            });
 
             // get inode number for cache file
             struct stat st;
