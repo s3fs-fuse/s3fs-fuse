@@ -5116,7 +5116,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                     S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
                     return -1;
                 }
-                scope_guard dir_guard([dp]() { closedir(dp); });
+                scope_guard dir_guard([dp]() {
+                    if(-1 == closedir(dp)){
+                        S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", mountpoint.c_str(), errno);
+                    }
+                });
 
                 while((ent = readdir(dp)) != nullptr){
                     if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
