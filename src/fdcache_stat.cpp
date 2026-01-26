@@ -264,7 +264,11 @@ bool CacheFileStat::RawOpen(bool readonly)
             return false;
         }
     }
-    scope_guard guard([&]() { close(tmpfd); });
+    scope_guard guard([tmpfd, sfile_path]() {
+        if(-1 == close(tmpfd)){
+            S3FS_PRN_ERR("close() failed for %s - errno(%d)", sfile_path.c_str(), errno);
+        }
+    });
 
     // lock
     if(-1 == flock(tmpfd, LOCK_EX)){

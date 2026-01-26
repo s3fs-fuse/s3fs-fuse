@@ -118,7 +118,11 @@ bool PseudoFdInfo::OpenUploadFd()
         S3FS_PRN_ERR("Could not duplicate physical file descriptor(errno=%d)", errno);
         return false;
     }
-    scope_guard guard([&]() { close(fd); });
+    scope_guard guard([fd]() {
+        if(-1 == close(fd)){
+            S3FS_PRN_ERR("close() failed for fd %d - errno(%d)", fd, errno);
+        }
+    });
 
     if(0 != lseek(fd, 0, SEEK_SET)){
         S3FS_PRN_ERR("Could not seek physical file descriptor(errno=%d)", errno);

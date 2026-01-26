@@ -308,7 +308,11 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
         S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);
         return false;
     }
-    scope_guard dir_guard([dp]() { closedir(dp); });
+    scope_guard dir_guard([dp, dir]() {
+        if(-1 == closedir(dp)){
+            S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", dir, errno);
+        }
+    });
 
     for(dent = readdir(dp); dent; dent = readdir(dp)){
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
