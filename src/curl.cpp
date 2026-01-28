@@ -3168,7 +3168,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
                 query_string += '&';
             }
             query_string += "prefix=";
-            query_string += &check_path[1]; // skip first '/' character
+            query_string += urlEncodePath(&check_path[1]); // skip first '/' character
         }
     }
     if(!query_string.empty()){
