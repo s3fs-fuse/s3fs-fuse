@@ -186,7 +186,8 @@ This makes the connection vulnerable to man-in-the-middle attacks.
 Only use this option for testing with self-signed certificates.
 Do not use in production environments.
 .TP
-\fB\-o\fR ssl_verify_hostname (default="2")
+\fB\-o\fR ssl_verify_hostname (default="1")
+When set to 1, verify that the server certificate matches the hostname.
 When set to 0, do not verify that the server certificate matches the hostname.
 .B WARNING:
 This makes the connection vulnerable to man-in-the-middle attacks.
