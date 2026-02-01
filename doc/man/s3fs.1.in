@@ -180,10 +180,18 @@ This prevents delays in updates due to cache retention.
 However, it may increase the number of HeadObject requests to check if an object exists, which may decrease performance.
 .TP
 \fB\-o\fR no_check_certificate (by default this option is disabled)
-server certificate won't be checked against the available certificate authorities.
+Do not verify the server certificate against trusted certificate authorities.
+.B WARNING:
+This makes the connection vulnerable to man-in-the-middle attacks.
+Only use this option for testing with self-signed certificates.
+Do not use in production environments.
 .TP
 \fB\-o\fR ssl_verify_hostname (default="2")
-When 0, do not verify the SSL certificate against the hostname.
+When set to 0, do not verify that the server certificate matches the hostname.
+.B WARNING:
+This makes the connection vulnerable to man-in-the-middle attacks.
+Only use this option for testing purposes.
+Do not use in production environments.
 .TP
 \fB\-o\fR ssl_client_cert (default="")
 Specify an SSL client certificate.
