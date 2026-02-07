@@ -246,6 +246,13 @@ ensure that the disk will reserve at least 50GB * 10%% = 5GB of remaining space.
 \fB\-o\fR multipart_threshold (default="25")
 threshold, in MB, to use multipart upload instead of
 single-part. Must be at least 5 MB.
+
+.TP
+\fB\-o\fR putheader_mp_threshold (default=multipart_threshold value is used)
+threshold in MB for using multipart header upload(put header).
+If this option is not specified, the value of multipart_threshold is used.
+Specify this option to change the threshold for multipart upload and header upload.
+This value must be at least 5MB.
 .TP
 \fB\-o\fR singlepart_copy_limit (default="512")
 maximum size, in MB, of a single-part copy before trying

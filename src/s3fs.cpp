@@ -96,6 +96,7 @@ static bool is_s3fs_umask         = false;// default does not set.
 static bool is_remove_cache       = false;
 static bool is_use_xattr          = false;
 static off_t multipart_threshold  = 25 * 1024 * 1024;
+static off_t putheader_mp_threshold  = 0; // default is 0 in which case the value of multipart_threshold is used.
 static int64_t singlepart_copy_limit = 512 * 1024 * 1024;
 static bool is_region_specified   = false;
 static int s3fs_init_deferred_exit_status = 0;
@@ -895,7 +896,7 @@ int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_
         size = get_size(meta);
     }
 
-    if(!nocopyapi && !nomultipart && size >= multipart_threshold){
+    if(!nocopyapi && !nomultipart && size >= (0 == putheader_mp_threshold ? multipart_threshold : putheader_mp_threshold)){
         if(0 != (result = multipart_put_head_request(strpath, strpath, size, meta))){
             return result;
         }
@@ -5576,6 +5577,14 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             multipart_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
             if(multipart_threshold <= MIN_MULTIPART_SIZE){
                 S3FS_PRN_EXIT("multipart_threshold must be at least %lld, was: %lld", static_cast<long long>(MIN_MULTIPART_SIZE), static_cast<long long>(multipart_threshold));
+                return -1;
+            }
+            return 0;
+        }
+        else if(is_prefix(arg, "putheader_mp_threshold=")){
+            putheader_mp_threshold = static_cast<int64_t>(cvt_strtoofft(strchr(arg, '=') + sizeof(char), /*base=*/ 10)) * 1024 * 1024;
+            if(putheader_mp_threshold <= MIN_MULTIPART_SIZE){
+                S3FS_PRN_EXIT("putheader_mp_threshold must be at least %lld, was: %lld", static_cast<long long>(MIN_MULTIPART_SIZE), static_cast<long long>(putheader_mp_threshold));
                 return -1;
             }
             return 0;
