@@ -325,6 +325,7 @@ class S3fsCurl
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true) const;
+        bool GetCurlErrorString(std::string& strError) const;
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);

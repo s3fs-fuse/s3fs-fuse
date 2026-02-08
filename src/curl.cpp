@@ -1616,6 +1616,15 @@ bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle) const
     return true;
 }
 
+bool S3fsCurl::GetCurlErrorString(std::string& strError) const
+{
+    if(CURLE_OK == curlCode){
+        return false;
+    }
+    strError = std::string("CURL ERROR(") + std::to_string(curlCode) + std::string("): ") + curl_easy_strerror(curlCode);
+    return true;
+}
+
 //
 // Reset all options for retrying
 //
@@ -1974,7 +1983,9 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         }
 
         // Requests
-        curlCode = curl_easy_perform(hCurl.get());
+        if(CURLE_OK != (curlCode = curl_easy_perform(hCurl.get()))){
+            S3FS_PRN_ERR("CURL ERROR(%d) : %s", curlCode, curl_easy_strerror(curlCode));
+        }
 
         // Check result
         switch(curlCode){
@@ -2073,32 +2084,26 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 break;
 
             case CURLE_WRITE_ERROR:
-                S3FS_PRN_ERR("### CURLE_WRITE_ERROR");
                 sleep(2);
                 break; 
 
             case CURLE_OPERATION_TIMEDOUT:
-                S3FS_PRN_ERR("### CURLE_OPERATION_TIMEDOUT");
                 sleep(2);
                 break; 
 
             case CURLE_COULDNT_RESOLVE_HOST:
-                S3FS_PRN_ERR("### CURLE_COULDNT_RESOLVE_HOST");
                 sleep(2);
                 break; 
 
             case CURLE_COULDNT_CONNECT:
-                S3FS_PRN_ERR("### CURLE_COULDNT_CONNECT");
                 sleep(4);
                 break; 
 
             case CURLE_GOT_NOTHING:
-                S3FS_PRN_ERR("### CURLE_GOT_NOTHING");
                 sleep(4);
                 break; 
 
             case CURLE_ABORTED_BY_CALLBACK:
-                S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
                 sleep(4);
                 {
                     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
@@ -2107,28 +2112,26 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 break; 
 
             case CURLE_PARTIAL_FILE:
-                S3FS_PRN_ERR("### CURLE_PARTIAL_FILE");
                 sleep(4);
                 break; 
 
             case CURLE_SEND_ERROR:
-                S3FS_PRN_ERR("### CURLE_SEND_ERROR");
                 sleep(2);
                 break;
 
             case CURLE_RECV_ERROR:
-                S3FS_PRN_ERR("### CURLE_RECV_ERROR");
                 sleep(2);
                 break;
 
             case CURLE_SSL_CONNECT_ERROR:
-                S3FS_PRN_ERR("### CURLE_SSL_CONNECT_ERROR");
                 sleep(2);
                 break;
 
-            case CURLE_SSL_CACERT:
-                S3FS_PRN_ERR("### CURLE_SSL_CACERT");
+            case CURLE_SSL_CERTPROBLEM:
+                result = -EIO;
+                break;
 
+            case CURLE_SSL_CACERT:              // = CURLE_SSL_PEER_CERTIFICATE
                 // try to locate cert, if successful, then set the
                 // option and continue
                 if(S3fsCurl::curl_ca_bundle.empty()){
@@ -2145,8 +2148,6 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
             case CURLE_PEER_FAILED_VERIFICATION:
-                S3FS_PRN_ERR("### CURLE_PEER_FAILED_VERIFICATION");
-
                 first_pos = S3fsCred::GetBucket().find_first_of('.');
                 if(first_pos != std::string::npos){
                     S3FS_PRN_INFO("curl returned a CURL_PEER_FAILED_VERIFICATION error");
@@ -2163,8 +2164,6 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
             // This should be invalid since curl option HTTP FAILONERROR is now off
             case CURLE_HTTP_RETURNED_ERROR:
-                S3FS_PRN_ERR("### CURLE_HTTP_RETURNED_ERROR");
-
                 if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &responseCode)){
                     result = -EIO;
                 }else{
@@ -2181,13 +2180,12 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
             // Unknown CURL return code
             default:
-                S3FS_PRN_ERR("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
                 result = -EIO;
                 break;
         } // switch
 
         if(S3FSCURL_PERFORM_RESULT_NOTSET == result){
-            S3FS_PRN_INFO("### retrying...");
+            S3FS_PRN_INFO("Communication error(%d time): Retry up to the limit.", retrycnt);
 
             if(!RemakeHandle()){
                 S3FS_PRN_INFO("Failed to reset handle and internal data for retrying.");
