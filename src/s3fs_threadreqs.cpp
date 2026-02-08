@@ -294,8 +294,25 @@ void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     s3fscurl.SetUseAhbe(false);
 
     pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE);
+
     *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
-    *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+
+    // [NOTE]
+    // A service check request is executed when s3fs starts.
+    // Also, regardless of the debug level, if a Curl communication error occurs,
+    // a Curl message will be displayed. Therefore, the Curl error message is
+    // output to the Body here.
+    //
+    if(0 > pthparam->result && S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == s3fscurl.GetLastResponseCode()){
+        std::string curlError;
+        if(s3fscurl.GetCurlErrorString(curlError)){
+            *(pthparam->presponseBody) = curlError;
+        }else{
+            *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+        }
+    }else{
+        *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+    }
 
     return reinterpret_cast<void*>(pthparam->result);
 }

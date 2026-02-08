@@ -4819,6 +4819,10 @@ static int s3fs_check_service()
                     // Retry without sse parameters
                     forceNoSSE = true;
                 }
+
+            }else if(S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == responseCode){
+                // Curl error cases(ex, about SSL)
+                isLoop = false;
             }
 
             // Try changing signature from v4 to v2
@@ -4838,22 +4842,26 @@ static int s3fs_check_service()
 
             // check errors(after retrying)
             if(!isLoop && responseCode != 200 && responseCode != 301){
-                // parse error message if existed
-                std::string errMessage;
-                check_error_message(responseBody.c_str(), responseBody.size(), errMessage);
-
-                if(responseCode == 400){
-                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-                }else if(responseCode == 403){
-                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Invalid Credentials(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-                }else if(responseCode == 404){
-                    if(mount_prefix.empty()){
-                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory not found(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
-                    }else{
-                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory(%s) not found(host=%s, message=%s) - You may need to specify the compat_dir option.", mount_prefix.c_str(), s3host.c_str(), errMessage.c_str());
-                    }
+                if(S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == responseCode){
+                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : (host=%s, message=\"%s\")", s3host.c_str(), responseBody.c_str());
                 }else{
-                    S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Unable to connect(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                    // parse error message if existed
+                    std::string errMessage;
+                    check_error_message(responseBody.c_str(), responseBody.size(), errMessage);
+
+                    if(responseCode == 400){
+                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                    }else if(responseCode == 403){
+                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Invalid Credentials(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                    }else if(responseCode == 404){
+                        if(mount_prefix.empty()){
+                            S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory not found(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                        }else{
+                            S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bucket or directory(%s) not found(host=%s, message=%s) - You may need to specify the compat_dir option.", mount_prefix.c_str(), s3host.c_str(), errMessage.c_str());
+                        }
+                    }else{
+                        S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Unable to connect(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
+                    }
                 }
                 return EXIT_FAILURE;
             }
