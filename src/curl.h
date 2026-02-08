@@ -263,6 +263,7 @@ class S3fsCurl
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
         static bool SetCheckCertificate(bool isCertCheck);
+        static bool IsCertCheck() { return S3fsCurl::is_cert_check; }
         static long SetConnectTimeout(long timeout);
         static time_t SetReadwriteTimeout(time_t timeout);
         static time_t GetReadwriteTimeout() { return S3fsCurl::readwrite_timeout; }
