@@ -204,8 +204,20 @@ case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
   AS_IF([test "$found_fuse_t" = "yes"],
-    [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])],
-    [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])])
+    [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 1.1.1 ])],
+    [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 1.1.1 ])])
+
+  saved_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $DEPS_CFLAGS"
+
+  AC_MSG_CHECKING([openssl 1.1.1 or later])
+  AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([[#include <openssl/opensslv.h>]],
+      [[#if OPENSSL_VERSION_NUMBER < 0x10101000L
+        #error "OpenSSL >= 1.1.1 required"
+      #endif]])],
+    [AC_MSG_RESULT(yes)],
+    [AC_MSG_ERROR([OpenSSL >= 1.1.1 is required, found an older version])])
 
   AC_MSG_CHECKING([openssl 3.0 or later])
   AC_COMPILE_IFELSE(
@@ -215,6 +227,8 @@ openssl)
                        #endif]], [[]])],
     [AC_MSG_RESULT(no)],
     [AC_MSG_RESULT(yes); use_openssl_30=yes])
+
+  CPPFLAGS="$saved_CPPFLAGS"
   ;;
 gnutls)
   AC_MSG_RESULT(GnuTLS-gcrypt)
