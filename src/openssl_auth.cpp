@@ -26,15 +26,11 @@
 #include <cstdlib>
 #include <cerrno>
 #include <memory>
-#include <mutex>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
-#include <openssl/crypto.h>
-#include <openssl/err.h>
-#include <thread>
 
 #include "s3fs_auth.h"
 #include "s3fs_logger.h"
@@ -54,119 +50,27 @@ const char* s3fs_crypt_lib_name()
 //-------------------------------------------------------------------
 bool s3fs_init_global_ssl()
 {
-    ERR_load_crypto_strings();
-
-    // [NOTE]
-    // OpenSSL 3.0 loads error strings automatically so these functions are not needed.
-    //
-    #ifndef USE_OPENSSL_30
-    ERR_load_BIO_strings();
-    #endif
-
-    // TODO: This enables deprecated algorithms like MD5 -- perhaps use a narrower enablement?
-    OpenSSL_add_all_algorithms();
     return true;
 }
 
 bool s3fs_destroy_global_ssl()
 {
-    EVP_cleanup();
-    ERR_free_strings();
     return true;
 }
 
 //-------------------------------------------------------------------
 // Utility Function for crypt lock
 //-------------------------------------------------------------------
-// internal use struct for openssl
-struct CRYPTO_dynlock_value
-{
-    std::mutex dyn_mutex;
-};
-
-static std::unique_ptr<std::mutex[]> s3fs_crypt_mutex;
-
-static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
-static void s3fs_crypt_mutex_lock(int mode, int pos, const char* file, int line)
-{
-    if(s3fs_crypt_mutex){
-        if(mode & CRYPTO_LOCK){
-            s3fs_crypt_mutex[pos].lock();
-        }else{
-            s3fs_crypt_mutex[pos].unlock();
-        }
-    }
-}
-
-static unsigned long s3fs_crypt_get_threadid() __attribute__ ((unused));
-static unsigned long s3fs_crypt_get_threadid()
-{
-    return static_cast<unsigned long>(std::hash<std::thread::id>()(std::this_thread::get_id()));
-}
-
-static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line) __attribute__ ((unused));
-static struct CRYPTO_dynlock_value* s3fs_dyn_crypt_mutex(const char* file, int line)
-{
-    return new CRYPTO_dynlock_value();
-}
-
-static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused)) NO_THREAD_SAFETY_ANALYSIS;
-static void s3fs_dyn_crypt_mutex_lock(int mode, struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
-{
-    if(dyndata){
-        if(mode & CRYPTO_LOCK){
-            dyndata->dyn_mutex.lock();
-        }else{
-            dyndata->dyn_mutex.unlock();
-        }
-    }
-}
-
-static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line) __attribute__ ((unused));
-static void s3fs_destroy_dyn_crypt_mutex(struct CRYPTO_dynlock_value* dyndata, const char* file, int line)
-{
-    delete dyndata;
-}
-
+// OpenSSL >= 1.1.0 manages threading internally, no application-level
+// locking callbacks are needed.
+//
 bool s3fs_init_crypt_mutex()
 {
-    if(s3fs_crypt_mutex){
-        S3FS_PRN_DBG("s3fs_crypt_mutex is not nullptr, destroy it.");
-
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!s3fs_destroy_crypt_mutex()){
-            S3FS_PRN_ERR("Failed to s3fs_crypt_mutex");
-            return false;
-        }
-    }
-    s3fs_crypt_mutex = std::make_unique<std::mutex[]>(CRYPTO_num_locks());
-    // static lock
-    CRYPTO_set_locking_callback(s3fs_crypt_mutex_lock);
-    CRYPTO_set_id_callback(s3fs_crypt_get_threadid);
-    // dynamic lock
-    CRYPTO_set_dynlock_create_callback(s3fs_dyn_crypt_mutex);
-    CRYPTO_set_dynlock_lock_callback(s3fs_dyn_crypt_mutex_lock);
-    CRYPTO_set_dynlock_destroy_callback(s3fs_destroy_dyn_crypt_mutex);
-
     return true;
 }
 
 bool s3fs_destroy_crypt_mutex()
 {
-    if(!s3fs_crypt_mutex){
-        return true;
-    }
-
-    CRYPTO_set_dynlock_destroy_callback(nullptr);
-    CRYPTO_set_dynlock_lock_callback(nullptr);
-    CRYPTO_set_dynlock_create_callback(nullptr);
-    CRYPTO_set_id_callback(nullptr);
-    CRYPTO_set_locking_callback(nullptr);
-
-    CRYPTO_cleanup_all_ex_data();
-    s3fs_crypt_mutex.reset();
-
     return true;
 }
 
