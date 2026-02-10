@@ -61,6 +61,30 @@ Keep in mind using the pre-built packages when available.
 * openssl/gnutls/nss
 * mime.types (the package providing depends on the OS)
 
+## Compilation on macOS
+
+1. Install prerequisites:
+
+    ```sh
+    brew tap macos-fuse-t/homebrew-cask
+    brew install autoconf automake fuse-t libtool pkg-config
+    ```
+
+2. Clone source code:
+
+    ```sh
+    git clone https://github.com/s3fs-fuse/s3fs-fuse.git
+    ```
+
+3. Finally compile:
+
+    ```sh
+    cd s3fs-fuse
+    ./autogen.sh
+    ./configure
+    make
+    ```
+
 ## Compilation on Windows (using MSYS2)
 
 On Windows, use [MSYS2](https://www.msys2.org/) to compile for itself.
