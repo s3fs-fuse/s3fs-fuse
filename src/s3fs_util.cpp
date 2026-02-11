@@ -39,6 +39,8 @@
 #include "string_util.h"
 #include "s3fs_help.h"
 
+using namespace std::string_literals;
+
 //-------------------------------------------------------------------
 // Global variables
 //-------------------------------------------------------------------
@@ -233,7 +235,7 @@ int mkdirp(const std::string& path, mode_t mode)
 // get existed directory path
 std::string get_exist_directory_path(const std::string& path)
 {
-    std::string        existed("/");    // "/" is existed.
+    std::string        existed = "/"s;    // "/" is existed.
     std::string        base;
     std::string        component;
     std::istringstream ss(path);

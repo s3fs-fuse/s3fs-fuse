@@ -319,7 +319,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
         return "application/x-directory";
     }
 
-    std::string            result("application/octet-stream");
+    auto                   result = "application/octet-stream"s;
     std::string::size_type last_pos  = name.find_last_of('.');
     std::string::size_type first_pos = name.find_first_of('.');
     std::string            prefix, ext, ext2;
