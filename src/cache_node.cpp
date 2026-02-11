@@ -1480,7 +1480,7 @@ bool DirStatCache::GetChildLeafNameHasLock(const std::string& strpath, std::stri
         return false;
     }
 
-    strLeafName.assign(strpath, GetPathHasLock().size());
+    strLeafName.assign(strpath, GetPathHasLock().size(), std::string::npos);
     if(strLeafName.empty()){
         return false;
     }
