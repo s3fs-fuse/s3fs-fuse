@@ -31,6 +31,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
+#include <openssl/err.h>
 
 #include "s3fs_auth.h"
 #include "s3fs_logger.h"
@@ -103,36 +104,41 @@ std::unique_ptr<unsigned char[]> s3fs_HMAC256(const void* key, size_t keylen, co
     return s3fs_HMAC_RAW(key, keylen, data, datalen, digestlen, true);
 }
 
-#ifdef USE_OPENSSL_30
 //-------------------------------------------------------------------
-// Utility Function for MD5 (OpenSSL >= 3.0)
+// Compute a message digest over a memory buffer using the EVP API.
+// The algorithm (e.g. EVP_md5(), EVP_sha256()) is selected by the caller.
 //-------------------------------------------------------------------
-// [NOTE]
-// OpenSSL 3.0 deprecated the MD5_*** low-level encryption functions,
-// so we should use the high-level EVP API instead.
-//
-
-bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
+static bool s3fs_digest(const EVP_MD* md, const unsigned char* data, size_t datalen, unsigned char* out)
 {
-    auto digestlen = static_cast<unsigned int>(digest->size());
-
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    if(mdctx == nullptr){
-        S3FS_PRN_ERR("EVP_MD_CTX_new failed\n");
+    if(!mdctx){
+        S3FS_PRN_ERR("EVP_MD_CTX_new failed: %s", ERR_reason_error_string(ERR_get_error()));
         return false;
     }
-    if(EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr) != 1){
-        S3FS_PRN_ERR("EVP_DigestInit_ex failed\n");
+    if(EVP_DigestInit_ex(mdctx.get(), md, nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestInit_ex failed: %s", ERR_reason_error_string(ERR_get_error()));
         return false;
     }
-    if(EVP_DigestUpdate(mdctx.get(), data, datalen) != 1 ||
-        EVP_DigestFinal_ex(mdctx.get(), digest->data(), &digestlen) != 1){
-        S3FS_PRN_ERR("Digest computation failed\n");
+    if(EVP_DigestUpdate(mdctx.get(), data, datalen) != 1){
+        S3FS_PRN_ERR("EVP_DigestUpdate failed: %s", ERR_reason_error_string(ERR_get_error()));
         return false;
     }
-
+    if(EVP_DigestFinal_ex(mdctx.get(), out, nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestFinal_ex failed: %s", ERR_reason_error_string(ERR_get_error()));
+        return false;
+    }
     return true;
 }
+
+//-------------------------------------------------------------------
+// Utility Function for MD5
+//-------------------------------------------------------------------
+bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
+{
+    return s3fs_digest(EVP_md5(), data, datalen, digest->data());
+}
+
+#ifdef USE_OPENSSL_30
 
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
@@ -187,24 +193,6 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 }
 
 #else
-//-------------------------------------------------------------------
-// Utility Function for MD5 (OpenSSL < 3.0)
-//-------------------------------------------------------------------
-
-// TODO: Does this fail on OpenSSL < 3.0 and we need to use MD5_CTX functions?
-bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
-{
-    unsigned int digestlen = digest->size();
-
-    const EVP_MD* md    = EVP_get_digestbyname("md5");
-    EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(mdctx, md, nullptr);
-    EVP_DigestUpdate(mdctx, data, datalen);
-    EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
-    EVP_MD_CTX_destroy(mdctx);
-
-    return true;
-}
 
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
@@ -247,15 +235,7 @@ bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 //-------------------------------------------------------------------
 bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest)
 {
-    const EVP_MD* md    = EVP_get_digestbyname("sha256");
-    EVP_MD_CTX*   mdctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(mdctx, md, nullptr);
-    EVP_DigestUpdate(mdctx, data, datalen);
-    auto digestlen = static_cast<unsigned int>(digest->size());
-    EVP_DigestFinal_ex(mdctx, digest->data(), &digestlen);
-    EVP_MD_CTX_destroy(mdctx);
-
-    return true;
+    return s3fs_digest(EVP_sha256(), data, datalen, digest->data());
 }
 
 bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
