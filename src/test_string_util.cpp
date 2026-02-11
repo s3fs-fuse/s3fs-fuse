@@ -126,10 +126,10 @@ void test_strtoofft()
 
 void test_wtf8_encoding()
 {
-    std::string ascii("normal std::string");
-    std::string utf8("Hyld\xc3\xbdpi \xc3\xbej\xc3\xb3\xc3\xb0""f\xc3\xa9lagsins vex \xc3\xbar k\xc3\xa6rkomnu b\xc3\xb6li \xc3\xad \xc3\xa1st");
-    std::string cp1252("Hyld\xfdpi \xfej\xf3\xf0""f\xe9lagsins vex \xfar k\xe6rkomnu b\xf6li \xed \xe1st");
-    std::string broken = utf8;
+    auto ascii = "normal std::string"s;
+    auto utf8 = "Hyld\xc3\xbdpi \xc3\xbej\xc3\xb3\xc3\xb0""f\xc3\xa9lagsins vex \xc3\xbar k\xc3\xa6rkomnu b\xc3\xb6li \xc3\xad \xc3\xa1st"s;
+    auto cp1252 = "Hyld\xfdpi \xfej\xf3\xf0""f\xe9lagsins vex \xfar k\xe6rkomnu b\xf6li \xed \xe1st"s;
+    std::string broken = utf8;  // NOLINT(bugprone-exception-escape)
     broken[14] = '\x97';
     std::string mixed = ascii + utf8 + cp1252;
 
@@ -151,27 +151,27 @@ void test_wtf8_encoding()
 void test_cr_encoding()
 {
     // bse strings
-    std::string base_no("STR");
+    auto base_no = "STR"s;
 
-    std::string base_end_cr1("STR\r");
-    std::string base_mid_cr1("STR\rSTR");
-    std::string base_end_cr2("STR\r\r");
-    std::string base_mid_cr2("STR\r\rSTR");
+    auto base_end_cr1 = "STR\r"s;
+    auto base_mid_cr1 = "STR\rSTR"s;
+    auto base_end_cr2 = "STR\r\r"s;
+    auto base_mid_cr2 = "STR\r\rSTR"s;
 
-    std::string base_end_per1("STR%");
-    std::string base_mid_per1("STR%STR");
-    std::string base_end_per2("STR%%");
-    std::string base_mid_per2("STR%%STR");
+    auto base_end_per1 = "STR%"s;
+    auto base_mid_per1 = "STR%STR"s;
+    auto base_end_per2 = "STR%%"s;
+    auto base_mid_per2 = "STR%%STR"s;
 
-    std::string base_end_crlf1("STR\r\n");
-    std::string base_mid_crlf1("STR\r\nSTR");
-    std::string base_end_crlf2("STR\r\n\r\n");
-    std::string base_mid_crlf2("STR\r\n\r\nSTR");
+    auto base_end_crlf1 = "STR\r\n"s;
+    auto base_mid_crlf1 = "STR\r\nSTR"s;
+    auto base_end_crlf2 = "STR\r\n\r\n"s;
+    auto base_mid_crlf2 = "STR\r\n\r\nSTR"s;
 
-    std::string base_end_crper1("STR%\r");
-    std::string base_mid_crper1("STR%\rSTR");
-    std::string base_end_crper2("STR%\r%\r");
-    std::string base_mid_crper2("STR%\r%\rSTR");
+    auto base_end_crper1 = "STR%\r"s;
+    auto base_mid_crper1 = "STR%\rSTR"s;
+    auto base_end_crper2 = "STR%\r%\r"s;
+    auto base_mid_crper2 = "STR%\r%\rSTR"s;
 
     // encode->decode->compare
     ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_no.c_str()).c_str()),         base_no);
@@ -199,8 +199,8 @@ void test_cr_encoding()
 
 void test_mask_sensitive_string_with_flag()
 {
-    std::string base("sensitive");
-    std::string mask("[SENSITIVE]");
+    auto base = "sensitive"s;
+    auto mask = "[SENSITIVE]"s;
 
     ASSERT_EQUALS(std::string(mask_sensitive_string_with_flag(base.c_str(), true)),  base);
     ASSERT_EQUALS(std::string(mask_sensitive_string_with_flag(base.c_str(), false)), mask);
@@ -208,27 +208,27 @@ void test_mask_sensitive_string_with_flag()
 
 void test_mask_sensitive_header()
 {
-    std::string base_auth_sigv4("Authorization: AWS4-HMAC-SHA256 Credential=VALCREDENTIAL, SignedHeaders=VALSIGHEADERS, Signature=VALSIGNATURE");
-    std::string base_auth_sigv2("Authorization: AWS VALCREDENTIAL");
-    std::string base_xamz_token("x-amz-security-token: VALTOKEN");
-    std::string base_xamz_cred("x-amz-credential: VALCREDENTIAL");
-    std::string base_xamz_sig("x-amz-signature: VALSIGNATURE");
-    std::string base_xamz_sseckeymd5("x-amz-server-side-encryption-customer-key-md5: VALKEYMD5");
-    std::string base_xamz_ssekmsid("x-amz-server-side-encryption-aws-kms-key-id: VALKEYID");
-    std::string base_xamz_svrsseckey("x-amz-copy-source-server-side-encryption-customer-key: VALKEY");
-    std::string base_xamz_svrsseckeymd5("x-amz-copy-source-server-side-encryption-customer-key-md5: VALKEYMD5");
-    std::string base_xamz_nomask("x-amz-content-sha256: VALSHA256");
+    auto base_auth_sigv4 = "Authorization: AWS4-HMAC-SHA256 Credential=VALCREDENTIAL, SignedHeaders=VALSIGHEADERS, Signature=VALSIGNATURE"s;
+    auto base_auth_sigv2 = "Authorization: AWS VALCREDENTIAL"s;
+    auto base_xamz_token = "x-amz-security-token: VALTOKEN"s;
+    auto base_xamz_cred = "x-amz-credential: VALCREDENTIAL"s;
+    auto base_xamz_sig = "x-amz-signature: VALSIGNATURE"s;
+    auto base_xamz_sseckeymd5 = "x-amz-server-side-encryption-customer-key-md5: VALKEYMD5"s;
+    auto base_xamz_ssekmsid = "x-amz-server-side-encryption-aws-kms-key-id: VALKEYID"s;
+    auto base_xamz_svrsseckey = "x-amz-copy-source-server-side-encryption-customer-key: VALKEY"s;
+    auto base_xamz_svrsseckeymd5 = "x-amz-copy-source-server-side-encryption-customer-key-md5: VALKEYMD5"s;
+    auto base_xamz_nomask = "x-amz-content-sha256: VALSHA256"s;
 
-    std::string mask_auth_sigv4("Authorization: AWS4-HMAC-SHA256 Credential=[SENSITIVE], SignedHeaders=[SENSITIVE], Signature=[SENSITIVE]");
-    std::string mask_auth_sigv2("Authorization: AWS [SENSITIVE]");
-    std::string mask_xamz_token("x-amz-security-token: [SENSITIVE]");
-    std::string mask_xamz_cred("x-amz-credential: [SENSITIVE]");
-    std::string mask_xamz_sig("x-amz-signature: [SENSITIVE]");
-    std::string mask_xamz_sseckeymd5("x-amz-server-side-encryption-customer-key-md5: [SENSITIVE]");
-    std::string mask_xamz_ssekmsid("x-amz-server-side-encryption-aws-kms-key-id: [SENSITIVE]");
-    std::string mask_xamz_svrsseckey("x-amz-copy-source-server-side-encryption-customer-key: [SENSITIVE]");
-    std::string mask_xamz_svrsseckeymd5("x-amz-copy-source-server-side-encryption-customer-key-md5: [SENSITIVE]");
-    std::string mask_xamz_nomask("x-amz-content-sha256: VALSHA256");
+    auto mask_auth_sigv4 = "Authorization: AWS4-HMAC-SHA256 Credential=[SENSITIVE], SignedHeaders=[SENSITIVE], Signature=[SENSITIVE]"s;
+    auto mask_auth_sigv2 = "Authorization: AWS [SENSITIVE]"s;
+    auto mask_xamz_token = "x-amz-security-token: [SENSITIVE]"s;
+    auto mask_xamz_cred = "x-amz-credential: [SENSITIVE]"s;
+    auto mask_xamz_sig = "x-amz-signature: [SENSITIVE]"s;
+    auto mask_xamz_sseckeymd5 = "x-amz-server-side-encryption-customer-key-md5: [SENSITIVE]"s;
+    auto mask_xamz_ssekmsid = "x-amz-server-side-encryption-aws-kms-key-id: [SENSITIVE]"s;
+    auto mask_xamz_svrsseckey = "x-amz-copy-source-server-side-encryption-customer-key: [SENSITIVE]"s;
+    auto mask_xamz_svrsseckeymd5 = "x-amz-copy-source-server-side-encryption-customer-key-md5: [SENSITIVE]"s;
+    auto mask_xamz_nomask = "x-amz-content-sha256: VALSHA256"s;
 
     ASSERT_EQUALS(mask_sensitive_header(base_auth_sigv4.c_str(),         base_auth_sigv4.length()),         mask_auth_sigv4);
     ASSERT_EQUALS(mask_sensitive_header(base_auth_sigv2.c_str(),         base_auth_sigv2.length()),         mask_auth_sigv2);
@@ -244,23 +244,23 @@ void test_mask_sensitive_header()
 
 void test_mask_sensitive_arg()
 {
-    std::string base_url_http_keyval("url=http://KEY:SEC@test");
-    std::string base_url_https_keyval("url=https://KEY:SEC@test");
-    std::string base_url_http_key("url=http://KEY@test");
-    std::string base_url_https_key("url=https://KEY@test");
-    std::string base_url_http_no("url=http://test");
-    std::string base_url_https_no("url=https://test");
-    std::string base_sslcert_all("ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:PASSWORD");
-    std::string base_sslcert_wrong_short("ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE");
+    auto base_url_http_keyval = "url=http://KEY:SEC@test"s;
+    auto base_url_https_keyval = "url=https://KEY:SEC@test"s;
+    auto base_url_http_key = "url=http://KEY@test"s;
+    auto base_url_https_key = "url=https://KEY@test"s;
+    auto base_url_http_no = "url=http://test"s;
+    auto base_url_https_no = "url=https://test"s;
+    auto base_sslcert_all = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:PASSWORD"s;
+    auto base_sslcert_wrong_short = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE"s;
 
-    std::string mask_url_http_keyval("url=http://[SENSITIVE]@test");
-    std::string mask_url_https_keyval("url=https://[SENSITIVE]@test");
-    std::string mask_url_http_key("url=http://[SENSITIVE]@test");
-    std::string mask_url_https_key("url=https://[SENSITIVE]@test");
-    std::string mask_url_http_no("url=http://test");
-    std::string mask_url_https_no("url=https://test");
-    std::string mask_sslcert_all("ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:[SENSITIVE]");
-    std::string mask_sslcert_wrong_short("ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE");
+    auto mask_url_http_keyval = "url=http://[SENSITIVE]@test"s;
+    auto mask_url_https_keyval = "url=https://[SENSITIVE]@test"s;
+    auto mask_url_http_key = "url=http://[SENSITIVE]@test"s;
+    auto mask_url_https_key = "url=https://[SENSITIVE]@test"s;
+    auto mask_url_http_no = "url=http://test"s;
+    auto mask_url_https_no = "url=https://test"s;
+    auto mask_sslcert_all = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:[SENSITIVE]"s;
+    auto mask_sslcert_wrong_short = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE"s;
 
     ASSERT_EQUALS(mask_sensitive_arg(base_url_http_keyval.c_str()),     mask_url_http_keyval);
     ASSERT_EQUALS(mask_sensitive_arg(base_url_https_keyval.c_str()),    mask_url_https_keyval);
