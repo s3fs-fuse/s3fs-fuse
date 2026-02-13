@@ -30,7 +30,6 @@
 #include <sys/stat.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#include <openssl/md5.h>
 #include <openssl/err.h>
 
 #include "s3fs_auth.h"
@@ -192,97 +191,10 @@ bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
     return s3fs_digest(EVP_md5(), data, datalen, digest->data());
 }
 
-#ifdef USE_OPENSSL_30
-
 bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
 {
-    auto           md5_digest_len = static_cast<unsigned int>(result->size());
-    off_t          bytes;
-
-    if(-1 == size){
-        struct stat st;
-        if(-1 == fstat(fd, &st)){
-            return false;
-        }
-        size = st.st_size;
-    }
-
-    // instead of MD5_Init
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    if(!mdctx){
-        S3FS_PRN_ERR("EVP_MD_CTX_new failed\n");
-        return false;
-    }
-    if(EVP_DigestInit_ex(mdctx.get(), EVP_md5(), nullptr) != 1){
-        S3FS_PRN_ERR("EVP_DigestInit_ex failed\n");
-        return false;
-    }
-
-    for(off_t total = 0; total < size; total += bytes){
-        std::array<char, 512> buf;
-        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
-        bytes = pread(fd, buf.data(), bytes, start + total);
-        if(0 == bytes){
-            // end of file
-            break;
-        }else if(-1 == bytes){
-            // error
-            S3FS_PRN_ERR("file read error(%d)", errno);
-            return false;
-        }
-        // instead of MD5_Update
-        if(EVP_DigestUpdate(mdctx.get(), buf.data(), bytes) != 1){
-            S3FS_PRN_ERR("Digest computation failed\n");
-            return false;
-        }
-    }
-
-    // instead of MD5_Final
-    if(EVP_DigestFinal_ex(mdctx.get(), result->data(), &md5_digest_len) != 1){
-        S3FS_PRN_ERR("Digest computation failed\n");
-        return false;
-    }
-
-    return true;
+    return s3fs_digest_fd(EVP_md5(), fd, start, size, result->data());
 }
-
-#else
-
-bool s3fs_md5_fd(int fd, off_t start, off_t size, md5_t* result)
-{
-    MD5_CTX md5ctx;
-    off_t   bytes;
-
-    if(-1 == size){
-        struct stat st;
-        if(-1 == fstat(fd, &st)){
-            return false;
-        }
-        size = st.st_size;
-    }
-
-    MD5_Init(&md5ctx);
-
-    for(off_t total = 0; total < size; total += bytes){
-        std::array<char, 512> buf;
-        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
-        bytes = pread(fd, buf.data(), bytes, start + total);
-        if(0 == bytes){
-            // end of file
-            break;
-        }else if(-1 == bytes){
-            // error
-            S3FS_PRN_ERR("file read error(%d)", errno);
-            return false;
-        }
-        MD5_Update(&md5ctx, buf.data(), bytes);
-    }
-
-    MD5_Final(result->data(), &md5ctx);
-
-    return true;
-}
-#endif
 
 //-------------------------------------------------------------------
 // Utility Function for SHA256
