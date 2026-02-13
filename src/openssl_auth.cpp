@@ -131,6 +131,60 @@ static bool s3fs_digest(const EVP_MD* md, const unsigned char* data, size_t data
 }
 
 //-------------------------------------------------------------------
+// Compute a message digest over a file descriptor using the EVP API.
+// The algorithm (e.g. EVP_md5(), EVP_sha256()) is selected by the caller.
+//-------------------------------------------------------------------
+static bool s3fs_digest_fd(const EVP_MD* md, int fd, off_t start, off_t size, unsigned char* out)
+{
+    if(-1 == fd){
+        S3FS_PRN_DBG("invalid file descriptor");
+        return false;
+    }
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            S3FS_PRN_ERR("fstat error(%d)", errno);
+            return false;
+        }
+        size = st.st_size;
+    }
+
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    if(!mdctx){
+        S3FS_PRN_ERR("EVP_MD_CTX_new failed: %s", ERR_reason_error_string(ERR_get_error()));
+        return false;
+    }
+    if(EVP_DigestInit_ex(mdctx.get(), md, nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestInit_ex failed: %s", ERR_reason_error_string(ERR_get_error()));
+        return false;
+    }
+
+    off_t bytes;
+    for(off_t total = 0; total < size; total += bytes){
+        std::array<char, 512> buf;
+        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
+        bytes = pread(fd, buf.data(), bytes, start + total);
+        if(0 == bytes){
+            break;
+        }else if(-1 == bytes){
+            S3FS_PRN_ERR("file read error(%d)", errno);
+            return false;
+        }
+        if(EVP_DigestUpdate(mdctx.get(), buf.data(), bytes) != 1){
+            S3FS_PRN_ERR("EVP_DigestUpdate failed: %s", ERR_reason_error_string(ERR_get_error()));
+            return false;
+        }
+    }
+
+    if(EVP_DigestFinal_ex(mdctx.get(), out, nullptr) != 1){
+        S3FS_PRN_ERR("EVP_DigestFinal_ex failed: %s", ERR_reason_error_string(ERR_get_error()));
+        return false;
+    }
+
+    return true;
+}
+
+//-------------------------------------------------------------------
 // Utility Function for MD5
 //-------------------------------------------------------------------
 bool s3fs_md5(const unsigned char* data, size_t datalen, md5_t* digest)
@@ -240,44 +294,7 @@ bool s3fs_sha256(const unsigned char* data, size_t datalen, sha256_t* digest)
 
 bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
 {
-    const EVP_MD*  md = EVP_get_digestbyname("sha256");
-    EVP_MD_CTX*    sha256ctx;
-    off_t          bytes;
-
-    if(-1 == fd){
-        return false;
-    }
-    if(-1 == size){
-        struct stat st;
-        if(-1 == fstat(fd, &st)){
-            S3FS_PRN_ERR("fstat error(%d)", errno);
-            return false;
-        }
-        size = st.st_size;
-    }
-
-    sha256ctx = EVP_MD_CTX_create();
-    EVP_DigestInit_ex(sha256ctx, md, nullptr);
-
-    for(off_t total = 0; total < size; total += bytes){
-        std::array<char, 512> buf;
-        bytes = std::min(static_cast<off_t>(buf.size()), (size - total));
-        bytes = pread(fd, buf.data(), bytes, start + total);
-        if(0 == bytes){
-            // end of file
-            break;
-        }else if(-1 == bytes){
-            // error
-            S3FS_PRN_ERR("file read error(%d)", errno);
-            EVP_MD_CTX_destroy(sha256ctx);
-            return false;
-        }
-        EVP_DigestUpdate(sha256ctx, buf.data(), bytes);
-    }
-    EVP_DigestFinal_ex(sha256ctx, result->data(), nullptr);
-    EVP_MD_CTX_destroy(sha256ctx);
-
-    return true;
+    return s3fs_digest_fd(EVP_sha256(), fd, start, size, result->data());
 }
 
 /*
