@@ -77,7 +77,6 @@ dnl Choice SSL library
 dnl ----------------------------------------------
 auth_lib=na
 nettle_lib=no
-use_openssl_30=no
 
 dnl
 dnl nettle library
@@ -219,15 +218,6 @@ openssl)
     [AC_MSG_RESULT(yes)],
     [AC_MSG_ERROR([OpenSSL >= 1.1.1 is required, found an older version])])
 
-  AC_MSG_CHECKING([openssl 3.0 or later])
-  AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([[#include <openssl/opensslv.h>
-                       #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-                         #error "found openssl is 3.0 or later(so compiling is stopped with error)"
-                       #endif]], [[]])],
-    [AC_MSG_RESULT(no)],
-    [AC_MSG_RESULT(yes); use_openssl_30=yes])
-
   CPPFLAGS="$saved_CPPFLAGS"
   ;;
 gnutls)
@@ -274,7 +264,6 @@ nss)
 esac
 
 AM_CONDITIONAL([USE_SSL_OPENSSL], [test "$auth_lib" = openssl])
-AM_CONDITIONAL([USE_SSL_OPENSSL_30], [test "$use_openssl_30" = yes])
 AM_CONDITIONAL([USE_SSL_GNUTLS], [test "$auth_lib" = gnutls -o "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_GNUTLS_NETTLE], [test "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_SSL_NSS], [test "$auth_lib" = nss])
