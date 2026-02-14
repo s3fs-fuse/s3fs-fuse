@@ -38,6 +38,7 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs_help.h"
+#include "curl.h"
 
 using namespace std::string_literals;
 
@@ -408,6 +409,14 @@ void print_launch_message(int argc, char** argv)
     // Special message when insecure logging is enabled
     if(insecure_logging){
         S3FS_PRN_LAUNCH_INFO("%s", "[INSECURE] Deprecated option(insecure_logging) is specified. Authentication information such as tokens and credentials is output to the log.");
+    }
+
+    // Warn about disabled SSL verification (MITM vulnerability)
+    if(0 == S3fsCurl::GetSslVerifyHostname()){
+        S3FS_PRN_LAUNCH_INFO("%s", "SSL hostname verification is DISABLED (ssl_verify_hostname=0). Connections are vulnerable to MITM attacks.");
+    }
+    if(!S3fsCurl::IsCertCheck()){
+        S3FS_PRN_LAUNCH_INFO("%s", "SSL certificate verification is DISABLED (no_check_certificate). Connections are vulnerable to MITM attacks.");
     }
 }
 

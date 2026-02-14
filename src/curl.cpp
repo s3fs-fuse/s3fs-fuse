@@ -1421,6 +1421,7 @@ bool S3fsCurl::ResetHandle()
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         // REQTYPE::IAMCRED and REQTYPE::IAMROLE are always HTTP
         if(0 == S3fsCurl::ssl_verify_hostname){
+            S3FS_PRN_DBG("SSL hostname verification is DISABLED (ssl_verify_hostname=0).");
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0)){
                 return false;
             }
@@ -1466,9 +1467,8 @@ bool S3fsCurl::ResetHandle()
         return false;
     }
 
-    if(!S3fsCurl::is_cert_check) {
-        S3FS_PRN_DBG("'no_check_certificate' option in effect.");
-        S3FS_PRN_DBG("The server certificate won't be checked against the available certificate authorities.");
+    if(!S3fsCurl::is_cert_check){
+        S3FS_PRN_DBG("SSL certificate verification is DISABLED (no_check_certificate).");
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYPEER, false)){
             return false;
         }
