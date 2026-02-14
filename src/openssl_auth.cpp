@@ -76,14 +76,16 @@ bool s3fs_destroy_crypt_mutex()
 static std::unique_ptr<unsigned char[]> s3fs_HMAC_RAW(const void* key, size_t keylen, const unsigned char* data, size_t datalen, unsigned int* digestlen, bool is_sha256)
 {
     if(!key || !data || !digestlen){
+        S3FS_PRN_DBG("null parameter passed");
         return nullptr;
     }
     (*digestlen) = EVP_MAX_MD_SIZE * sizeof(unsigned char);
     auto digest = std::make_unique<unsigned char[]>(*digestlen);
-    if(is_sha256){
-        HMAC(EVP_sha256(), key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen);
-    }else{
-        HMAC(EVP_sha1(), key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen);
+
+    const EVP_MD* md = is_sha256 ? EVP_sha256() : EVP_sha1();
+    if(!HMAC(md, key, static_cast<int>(keylen), data, datalen, digest.get(), digestlen)){
+        S3FS_PRN_ERR("HMAC failed: %s", ERR_reason_error_string(ERR_get_error()));
+        return nullptr;
     }
 
     return digest;
