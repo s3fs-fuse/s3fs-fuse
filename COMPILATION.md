@@ -18,7 +18,7 @@ Keep in mind using the pre-built packages when available.
 * make
 * libcurl
 * libxml2
-* openssl/gnutls/nss
+* OpenSSL >= 1.1.1 / GnuTLS / NSS
     * Please prepare the library according to the OS on which you will compile.
     * It is necessary to match the library used by libcurl.
     * Install the OpenSSL, GnuTLS or NSS devel package.
@@ -58,7 +58,7 @@ Keep in mind using the pre-built packages when available.
 * fuse >= 3.0.0
 * libcurl
 * libxml2
-* openssl/gnutls/nss
+* OpenSSL >= 1.1.1 / GnuTLS / NSS
 * mime.types (the package providing depends on the OS)
 
 ## Compilation on macOS
