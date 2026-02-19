@@ -34,7 +34,7 @@ on:
 #
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     #
     # build matrix for containers
     #
@@ -173,7 +173,7 @@ jobs:
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
   MemoryTest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     #
     # build matrix for containers
