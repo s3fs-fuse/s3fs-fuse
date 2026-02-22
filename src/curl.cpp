@@ -2721,7 +2721,8 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, b
                         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key-md5",   ssevalue.c_str());
                     }
                 }else{
-                    S3FS_PRN_WARN("Failed to insert SSE-C header.");
+                    S3FS_PRN_ERR("Failed to insert SSE-C header.");
+                    return false;
                 }
                 return true;
             }
@@ -2886,7 +2887,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
     if(S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3017,7 +3019,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     if(0 != strcmp(tpath, "/")){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3093,7 +3096,8 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
     // SSE-C
     if(sse_type_t::SSE_C == ssetype){
         if(!AddSseRequestHead(ssetype, ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3195,7 +3199,8 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
     if(!force_no_sse && S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     
@@ -3336,7 +3341,8 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
     if(S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3502,7 +3508,8 @@ int S3fsCurl::MultipartUploadComplete(const char* tpath, const std::string& uplo
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3700,7 +3707,8 @@ int S3fsCurl::MultipartUploadContentPartSetup(const char* tpath, int part_num, c
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3766,7 +3774,8 @@ int S3fsCurl::MultipartUploadCopyPartSetup(const char* from, const char* to, int
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
