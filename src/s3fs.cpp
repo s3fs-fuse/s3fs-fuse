@@ -3673,7 +3673,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
         s3fsXmlBufferParserError parserError;
         parserError.SetXmlParseError();
 
-        std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, 0), xmlFreeDoc);
+        std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(encbody.c_str(), static_cast<int>(encbody.size()), "", nullptr, S3FS_XML_PARSE_FLAGS), xmlFreeDoc);
         if(nullptr == doc){
             if(parserError.IsXmlParseError()){
                 S3FS_PRN_ERR("xmlReadMemory returns with error: %s", parserError.GetXmlParseError().c_str());
