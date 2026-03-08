@@ -24,6 +24,7 @@
 #include "s3fs_logger.h"
 #include "string_util.h"
 #include "test_util.h"
+#include "types.h"
 
 using namespace std::string_literals;
 
@@ -273,6 +274,29 @@ void test_mask_sensitive_arg()
     ASSERT_EQUALS(mask_sensitive_arg(base_sslcert_wrong_short.c_str()), mask_sslcert_wrong_short);
 }
 
+void test_parse_xattrs()
+{
+    auto encoded = raw_build_xattrs({ {"foo", "bar" } });
+    xattrs_t decoded;
+    ASSERT_EQUALS(encoded, R"({"foo":"YmFy"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
+    ASSERT_EQUALS(decoded.find("foo")->second, "bar"s);
+
+    encoded = raw_build_xattrs({ {"foo", "bar" }, { "1234", "5678" } });
+    ASSERT_EQUALS(encoded, R"({"1234":"NTY3OA==","foo":"YmFy"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(2));
+    ASSERT_EQUALS(decoded.find("foo")->second, "bar"s);
+    ASSERT_EQUALS(decoded.find("1234")->second, "5678"s);
+
+    encoded = raw_build_xattrs({ {"foo:bar", "baz" } });
+    ASSERT_EQUALS(encoded, R"({"foo:bar":"YmF6"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
+    ASSERT_EQUALS(decoded.find("foo:bar")->second, "baz"s);
+}
+
 int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
@@ -285,6 +309,7 @@ int main(int argc, const char *argv[])
     test_mask_sensitive_string_with_flag();
     test_mask_sensitive_header();
     test_mask_sensitive_arg();
+    test_parse_xattrs();
 
     return 0;
 }

@@ -26,6 +26,8 @@
 #include <string>
 #include <strings.h>
 
+#include "types.h"
+
 //
 // A collection of string utilities for manipulating URLs and HTTP responses.
 //
@@ -142,6 +144,10 @@ std::string get_decoded_cr_code(const char* pencode);
 const char* mask_sensitive_string_with_flag(const char* sensitive, bool nomask);
 std::string mask_sensitive_header(const char* pheader, size_t length);
 std::string mask_sensitive_arg(const char* arg);
+
+// xattr parsing
+size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
+std::string raw_build_xattrs(const xattrs_t& xattrs);
 
 #endif // S3FS_STRING_UTIL_H_
 
