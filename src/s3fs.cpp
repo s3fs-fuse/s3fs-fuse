@@ -32,6 +32,9 @@
 #include <dirent.h>  // NOLINT(misc-include-cleaner)
 #include <sys/types.h>
 #include <getopt.h>  // NOLINT(misc-include-cleaner)
+#ifdef __FreeBSD__
+#include <sys/wait.h> // WEXITSTATUS and WIFEXITED
+#endif
 
 #include "common.h"
 #include "s3fs.h"  // NOLINT(misc-include-cleaner)
