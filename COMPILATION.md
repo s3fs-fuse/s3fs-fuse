@@ -17,7 +17,7 @@ Keep in mind using the pre-built packages when available.
     - clang++ >= 3.5
 * make
 * libcurl
-* libxml2
+* libxml2 >= 2.9
 * openssl/gnutls/nss
     * Please prepare the library according to the OS on which you will compile.
     * It is necessary to match the library used by libcurl.
@@ -57,7 +57,7 @@ Keep in mind using the pre-built packages when available.
 
 * fuse >= 3.0.0
 * libcurl
-* libxml2
+* libxml2 >= 2.9
 * openssl/gnutls/nss
 * mime.types (the package providing depends on the OS)
 
