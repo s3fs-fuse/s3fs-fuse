@@ -8,7 +8,6 @@ Checks: '
     -bugprone-assignment-in-if-condition,
     -bugprone-branch-clone,
     -bugprone-easily-swappable-parameters,
-    -bugprone-implicit-widening-of-multiplication-result,
     -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
     -bugprone-unhandled-self-assignment,
@@ -77,6 +76,7 @@ Checks: '
     -readability-simplify-boolean-expr,
     -readability-suspicious-call-argument'
 CheckOptions:
+    bugprone-implicit-widening-of-multiplication-result.IgnoreConstantIntExpr: 'true'
     cppcoreguidelines-narrowing-conversions.WarnOnEquivalentBitWidth: 'false'
     misc-include-cleaner.MissingIncludes: 'false'
     readability-implicit-bool-conversion.AllowIntegerConditions: 'true'
