@@ -21,6 +21,7 @@
 #include <memory>
 #include <signal.h>  // NOLINT(modernize-deprecated-headers)
 #include <thread>
+#include <execinfo.h>
 #include <utility>
 
 #include "psemaphore.h"
