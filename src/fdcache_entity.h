@@ -79,6 +79,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         FileTimes          timestamps     GUARDED_BY(fdent_data_lock);   // file timestamps(atime/ctime/mtime)
         mutable std::mutex ro_path_lock;                                 // for only the ro_path variable
         std::string        ro_path        GUARDED_BY(ro_path_lock);      // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
+        std::string        hidden_path    GUARDED_BY(ro_path_lock);      // holds the hidden‑path value for special functions (e.g., hidden‑path support in FD cache entries).
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
