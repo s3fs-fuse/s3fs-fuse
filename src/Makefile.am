@@ -27,7 +27,10 @@ if USE_SSL_OPENSSL_30
     AM_CPPFLAGS += -DUSE_OPENSSL_30
 endif
 
-s3fs_SOURCES = \
+s3fs_SOURCES = \ 
+    csi.cpp \ 
+    csi_common.cpp \ 
+    csi_server.cpp \
     s3fs.cpp \
     s3fs_global.cpp \
     s3fs_help.cpp \
