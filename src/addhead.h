@@ -79,7 +79,6 @@ class AdditionalHeader
         static AdditionalHeader* get() { return &singleton; }
 
         bool Load(const char* file);
-        void Unload();
 
         bool AddHeader(headers_t& meta, const char* path) const;
         struct curl_slist* AddHeader(struct curl_slist* list, const char* path) const;
