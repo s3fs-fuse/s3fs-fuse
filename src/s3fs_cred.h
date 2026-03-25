@@ -97,6 +97,7 @@ class S3fsCred
         static constexpr int IAMv2_token_ttl = 21600;
         static constexpr char IAMv2_token_ttl_hdr[] = "X-aws-ec2-metadata-token-ttl-seconds";
         static constexpr char IAMv2_token_hdr[] = "X-aws-ec2-metadata-token";
+        bool ReloadCred();
 
     private:
         static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
