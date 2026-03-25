@@ -56,13 +56,23 @@ AdditionalHeader::AdditionalHeader()
 AdditionalHeader::~AdditionalHeader()
 {
     if(this == AdditionalHeader::get()){
-        Unload();
+    
     }else{
         abort();
     }
 }
 
 bool AdditionalHeader::Load(const char* file)
+{
+    if(!file){
+        S3FS_PRN_WARN("file is nullptr.");
+        return false;
+    }
+    // Clear the list and disable headers
+    addheadlist.clear();
+    is_enable = false;
+
+    // ... rest of the Load method ...
 {
     if(!file){
         S3FS_PRN_WARN("file is nullptr.");
@@ -140,7 +150,6 @@ bool AdditionalHeader::Load(const char* file)
     return true;
 }
 
-void AdditionalHeader::Unload()
 {
     is_enable = false;
 
