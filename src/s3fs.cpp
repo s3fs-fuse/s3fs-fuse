@@ -137,9 +137,6 @@ static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
 static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
 static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue);
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, std::string* pval);
-static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
-static std::string raw_build_xattrs(const xattrs_t& xattrs);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
@@ -3855,87 +3852,6 @@ static bool build_inherited_xattr_value(const char* path, std::string& xattrvalu
 
     xattrvalue = urlEncodePath(raw_xattr_value);
     return true;
-}
-
-static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, std::string* pval)
-{
-    // parse key and value
-    size_t pos;
-    std::string tmpval;
-    if(std::string::npos == (pos = xattrpair.find_last_of(':'))){
-        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
-        return false;
-    }
-    key    = xattrpair.substr(0, pos);
-    tmpval = xattrpair.substr(pos + 1);
-
-    if(!takeout_str_dquart(key) || !takeout_str_dquart(tmpval)){
-        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
-        return false;
-    }
-
-    *pval = s3fs_decode64(tmpval.c_str(), tmpval.size());
-
-    return true;
-}
-
-static size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
-{
-    xattrs.clear();
-
-    // decode
-    std::string jsonxattrs = urlDecode(strxattrs);
-
-    // get from "{" to "}"
-    std::string restxattrs;
-    {
-        size_t startpos;
-        size_t endpos = std::string::npos;
-        if(std::string::npos != (startpos = jsonxattrs.find_first_of('{'))){
-            endpos = jsonxattrs.find_last_of('}');
-        }
-        if(startpos == std::string::npos || endpos == std::string::npos || endpos <= startpos){
-            S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
-            return 0;
-        }
-        restxattrs = jsonxattrs.substr(startpos + 1, endpos - (startpos + 1));
-    }
-
-    // parse each key:val
-    for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : ""), pair_nextpos = restxattrs.find_first_of(',')){
-        std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
-        std::string key;
-        std::string val;
-        if(!parse_xattr_keyval(pair, key, &val)){
-            // something format error, so skip this.
-            continue;
-        }
-        xattrs[key] = val;
-    }
-    return xattrs.size();
-}
-
-static std::string raw_build_xattrs(const xattrs_t& xattrs)
-{
-    std::string strxattrs;
-    bool        is_set = false;
-    for(auto iter = xattrs.cbegin(); iter != xattrs.cend(); ++iter){
-        if(is_set){
-            strxattrs += ',';
-        }else{
-            is_set    = true;
-            strxattrs = "{";
-        }
-        strxattrs += '\"';
-        strxattrs += iter->first;
-        strxattrs += "\":\"";
-        strxattrs += s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
-        strxattrs += '\"';
-    }
-    if(is_set){
-        strxattrs += "}";
-    }
-    return strxattrs;
 }
 
 static std::string build_xattrs(const xattrs_t& xattrs)
