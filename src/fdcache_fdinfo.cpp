@@ -704,7 +704,7 @@ bool PseudoFdInfo::ExtractUploadPartsFromUntreatedArea(off_t untreated_start, of
 // The untreated_list in fdentity does not change, but upload_list is changed.
 // (If you want to restore it, you can use cancel_upload_list.)
 //
-bool PseudoFdInfo::ExtractUploadPartsFromAllArea(UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy)
+bool PseudoFdInfo::ExtractUploadPartsFromAllArea(const UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy)
 {
     const std::lock_guard<std::mutex> lock(upload_list_lock);
 

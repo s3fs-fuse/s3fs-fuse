@@ -112,7 +112,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         virtual bool ClearDataHasLock() REQUIRES(StatCacheNode::cache_lock);
         virtual bool ClearHasLock() REQUIRES(StatCacheNode::cache_lock);
         virtual bool RemoveChildHasLock(const std::string& strpath) REQUIRES(StatCacheNode::cache_lock);
-        virtual bool isRemovableHasLock() REQUIRES(StatCacheNode::cache_lock);
+        virtual bool isRemovableHasLock() const REQUIRES(StatCacheNode::cache_lock);
 
         // Add
         virtual bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) REQUIRES(StatCacheNode::cache_lock);
@@ -135,8 +135,8 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         bool GetNoTruncateHasLock() const REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetHasLock(headers_t* pmeta, struct stat* pst) REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetExtraHasLock(std::string& value) REQUIRES(StatCacheNode::cache_lock);
-        virtual s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) REQUIRES(StatCacheNode::cache_lock);
-        virtual bool GetS3ObjListHasLock(S3ObjList& list) REQUIRES(StatCacheNode::cache_lock);
+        virtual s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) const REQUIRES(StatCacheNode::cache_lock);
+        virtual bool GetS3ObjListHasLock(S3ObjList& list) const REQUIRES(StatCacheNode::cache_lock);
 
         // Find
         virtual bool CheckETagValueHasLock(const char* petagval) const REQUIRES(StatCacheNode::cache_lock);
@@ -144,7 +144,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
 
         // Cache out
         bool IsExpireStatCacheTimeHasLock() const REQUIRES(StatCacheNode::cache_lock);
-        virtual bool IsExpiredHasLock() REQUIRES(StatCacheNode::cache_lock);
+        virtual bool IsExpiredHasLock() const REQUIRES(StatCacheNode::cache_lock);
         virtual bool TruncateCacheHasLock() REQUIRES(StatCacheNode::cache_lock);
 
         // For debug
@@ -174,11 +174,11 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         StatCacheNode& operator=(StatCacheNode&&) = delete;
 
         // Cache Type
-        bool isSameObjectType(objtype_t type);
-        bool isDirectory();
-        bool isFile();
-        bool isSymlink();
-        bool isNegative();
+        bool isSameObjectType(objtype_t type) const;
+        bool isDirectory() const;
+        bool isFile() const;
+        bool isSymlink() const;
+        bool isNegative() const;
 
         // Clear
         bool Clear();
@@ -198,7 +198,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         bool Set(const struct stat& stbuf, const headers_t& meta, bool is_notruncate);
 
         // Get
-        std::string Get();
+        std::string Get() const;
         bool Get(headers_t* pmeta, struct stat* pstbuf);
         bool Get(headers_t& get_meta, struct stat& st);
         bool Get(headers_t& get_meta);
@@ -208,14 +208,14 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         unsigned long GetHitCount() const;
         unsigned long IncrementHitCount();
         bool GetExtra(std::string& value);
-        s3obj_type_map_t::size_type GetChildMap(s3obj_type_map_t& childmap);
+        s3obj_type_map_t::size_type GetChildMap(s3obj_type_map_t& childmap) const;
         bool GetS3ObjList(S3ObjList& list);
 
         // Find
         std::shared_ptr<StatCacheNode> Find(const std::string& strpath, const char* petagval = nullptr);
 
         // Cache out
-        bool IsExpired();
+        bool IsExpired() const;
         void ClearNoTruncate();
         bool TruncateCache();
 
@@ -253,7 +253,7 @@ class FileStatCache : public StatCacheNode
 class DirStatCache : public StatCacheNode
 {
     private:
-        std::mutex      dir_cache_lock;                                                     // for local variables
+        mutable std::mutex dir_cache_lock;                                                  // for local variables
         struct timespec last_check_date GUARDED_BY(dir_cache_lock) = {0, 0};
         objtype_t       dir_cache_type  GUARDED_BY(dir_cache_lock) = objtype_t::UNKNOWN;    // [NOTE] backup for use in destructors only
         statcache_map_t children        GUARDED_BY(dir_cache_lock);
@@ -265,19 +265,19 @@ class DirStatCache : public StatCacheNode
         bool ClearS3ObjListHasLock() REQUIRES(dir_cache_lock);
         bool RemoveChildHasLock(const std::string& strpath) override REQUIRES(StatCacheNode::cache_lock);
         bool RemoveChildInS3ObjListHasLock(const std::string& strChildLeaf) REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
-        bool isRemovableHasLock() override REQUIRES(StatCacheNode::cache_lock);
-        bool HasExistedChildHasLock() REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
+        bool isRemovableHasLock() const override REQUIRES(StatCacheNode::cache_lock);
+        bool HasExistedChildHasLock() const REQUIRES(StatCacheNode::cache_lock, dir_cache_lock);
 
         bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) override REQUIRES(StatCacheNode::cache_lock);
         bool AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list) override REQUIRES(StatCacheNode::cache_lock);
 
-        s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) override REQUIRES(StatCacheNode::cache_lock);
-        bool GetS3ObjListHasLock(S3ObjList& list) override REQUIRES(StatCacheNode::cache_lock);
+        s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) const override REQUIRES(StatCacheNode::cache_lock);
+        bool GetS3ObjListHasLock(S3ObjList& list) const override REQUIRES(StatCacheNode::cache_lock);
 
         std::shared_ptr<StatCacheNode> FindHasLock(const std::string& strpath, const char* petagval, bool& needTruncate) override REQUIRES(StatCacheNode::cache_lock);
 
-        bool NeedTruncateProcessing();
-        bool IsExpiredHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        bool NeedTruncateProcessing() const;
+        bool IsExpiredHasLock() const override REQUIRES(StatCacheNode::cache_lock);
 
         bool TruncateCacheHasLock() override REQUIRES(StatCacheNode::cache_lock);
 
@@ -324,7 +324,7 @@ class NegativeStatCache : public StatCacheNode
     protected:
         bool CheckETagValueHasLock(const char* petagval) const override REQUIRES(StatCacheNode::cache_lock);
 
-        bool IsExpiredHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        bool IsExpiredHasLock() const override REQUIRES(StatCacheNode::cache_lock);
 
     public:
         explicit NegativeStatCache(const char* path = nullptr);

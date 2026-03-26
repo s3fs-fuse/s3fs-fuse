@@ -363,7 +363,7 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable)
     return iter->second.get();
 }
 
-bool FdEntity::IsUploading()
+bool FdEntity::IsUploading() const
 {
     for(auto iter = pseudo_fd_map.cbegin(); iter != pseudo_fd_map.cend(); ++iter){
         const PseudoFdInfo* ppseudoinfo = iter->second.get();
@@ -1273,7 +1273,7 @@ int FdEntity::NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj)
     return 0;
 }
 
-off_t FdEntity::BytesModified()
+off_t FdEntity::BytesModified() const
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
