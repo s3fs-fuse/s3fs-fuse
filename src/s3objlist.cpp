@@ -103,7 +103,7 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         if(etag){
             newobject.etag = etag;
         }
-        objects[newname] = newobject;
+        objects[newname] = std::move(newobject);
     }
 
     // add normalization
@@ -131,7 +131,7 @@ bool S3ObjList::insert_normalized(const char* name, const char* normalized, objt
         s3obj_entry newobject;
         newobject.normalname = normalized;
         newobject.type       = type;
-        objects[name]        = newobject;
+        objects[name]        = std::move(newobject);
     }
     return true;
 }
@@ -353,7 +353,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
             if(haveSlash){
                 strtmp += "/";
             }
-            list.push_back(strtmp);
+            list.push_back(std::move(strtmp));
         }
     }
     return true;

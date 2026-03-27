@@ -640,7 +640,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     std::string raw_key;
     if(onekey.length() > 256 / 8){
         std::string p_key(s3fs_decode64(onekey.c_str(), onekey.size()));
-        raw_key = p_key;
+        raw_key = std::move(p_key);
         base64_key = onekey;
     } else {
         base64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length());
@@ -657,7 +657,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     sseckeymap_t md5map;
     md5map.clear();
     md5map[strMd5] = base64_key;
-    S3fsCurl::sseckeys.push_back(md5map);
+    S3fsCurl::sseckeys.push_back(std::move(md5map));
 
     return true;
 }
@@ -2696,9 +2696,8 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     return (0 == result);
 }
 
-bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, bool is_copy)
+bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool is_copy)
 {
-    std::string ssevalue = input;
     switch(ssetype){
         case sse_type_t::SSE_DISABLE:
             return true;
