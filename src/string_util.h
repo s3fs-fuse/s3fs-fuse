@@ -50,8 +50,9 @@ public:
 private:
     const char *str;
 };
+// TODO: constexpr with C++17
 static inline bool is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
-static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
+static constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
 // Macros(WTF8)

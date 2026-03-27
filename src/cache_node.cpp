@@ -267,31 +267,31 @@ bool StatCacheNode::isNegativeHasLock() const
     return IS_NEGATIVE_OBJ(cache_type);
 }
 
-bool StatCacheNode::isSameObjectType(objtype_t type)
+bool StatCacheNode::isSameObjectType(objtype_t type) const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return isSameObjectTypeHasLock(type);
 }
 
-bool StatCacheNode::isDirectory()
+bool StatCacheNode::isDirectory() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return isDirectoryHasLock();
 }
 
-bool StatCacheNode::isFile()
+bool StatCacheNode::isFile() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return isFileHasLock();
 }
 
-bool StatCacheNode::isSymlink()
+bool StatCacheNode::isSymlink() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return isSymlinkHasLock();
 }
 
-bool StatCacheNode::isNegative()
+bool StatCacheNode::isNegative() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return isNegativeHasLock();
@@ -339,7 +339,7 @@ bool StatCacheNode::RemoveChild(const std::string& strpath)
     return RemoveChildHasLock(strpath);
 }
 
-bool StatCacheNode::isRemovableHasLock()
+bool StatCacheNode::isRemovableHasLock() const
 {
     return true;
 }
@@ -603,7 +603,7 @@ bool StatCacheNode::GetHasLock(headers_t* pmeta, struct stat* pst)
     return true;
 }
 
-std::string StatCacheNode::Get()
+std::string StatCacheNode::Get() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return fullpath;
@@ -703,19 +703,19 @@ bool StatCacheNode::GetExtra(std::string& value)
     return GetExtraHasLock(value);
 }
 
-s3obj_type_map_t::size_type StatCacheNode::GetChildMapHasLock(s3obj_type_map_t& childmap)
+s3obj_type_map_t::size_type StatCacheNode::GetChildMapHasLock(s3obj_type_map_t& childmap) const
 {
     childmap.clear();
     return childmap.size();
 }
 
-s3obj_type_map_t::size_type StatCacheNode::GetChildMap(s3obj_type_map_t& childmap)
+s3obj_type_map_t::size_type StatCacheNode::GetChildMap(s3obj_type_map_t& childmap) const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return GetChildMapHasLock(childmap);
 }
 
-bool StatCacheNode::GetS3ObjListHasLock(S3ObjList& list)
+bool StatCacheNode::GetS3ObjListHasLock(S3ObjList& list) const
 {
     // [NOTE]
     // This base class (and all types other than Directory) do not have
@@ -751,7 +751,7 @@ bool StatCacheNode::IsExpireStatCacheTimeHasLock() const
     return false;
 }
 
-bool StatCacheNode::IsExpiredHasLock()
+bool StatCacheNode::IsExpiredHasLock() const
 {
     if(notruncate){
         // not truncate
@@ -767,7 +767,7 @@ bool StatCacheNode::IsExpiredHasLock()
     return false;
 }
 
-bool StatCacheNode::IsExpired()
+bool StatCacheNode::IsExpired() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     return IsExpiredHasLock();
@@ -979,7 +979,7 @@ bool DirStatCache::RemoveChildInS3ObjListHasLock(const std::string& strChildLeaf
     return true;
 }
 
-bool DirStatCache::isRemovableHasLock()
+bool DirStatCache::isRemovableHasLock() const
 {
     if(HasStatHasLock() || HasMetaHasLock()){
         return false;
@@ -992,7 +992,7 @@ bool DirStatCache::isRemovableHasLock()
     return true;
 }
 
-bool DirStatCache::HasExistedChildHasLock()
+bool DirStatCache::HasExistedChildHasLock() const
 {
     // [FIXME]
     // This for statement will result in an error saying that it can be
@@ -1270,7 +1270,7 @@ bool DirStatCache::AddS3ObjListHasLock(const std::string& strpath, const S3ObjLi
     return true;
 }
 
-s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& childmap)
+s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& childmap) const
 {
     childmap.clear();
 
@@ -1283,7 +1283,7 @@ s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& c
     return childmap.size();
 }
 
-bool DirStatCache::GetS3ObjListHasLock(S3ObjList& list)
+bool DirStatCache::GetS3ObjListHasLock(S3ObjList& list) const
 {
     if(!GetNoTruncateHasLock() && IsExpireStatCacheTimeHasLock()){
         return false;
@@ -1376,7 +1376,7 @@ std::shared_ptr<StatCacheNode> DirStatCache::FindHasLock(const std::string& strp
     return pstatcache;
 }
 
-bool DirStatCache::NeedTruncateProcessing()
+bool DirStatCache::NeedTruncateProcessing() const
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
     if(!NeedExpireCheckHasLock(cache_date)){
@@ -1390,7 +1390,7 @@ bool DirStatCache::NeedTruncateProcessing()
 //
 // Override to add the condition when children is empty.
 //
-bool DirStatCache::IsExpiredHasLock()
+bool DirStatCache::IsExpiredHasLock() const
 {
     if(GetNoTruncateHasLock()){
         // not truncate
@@ -1589,7 +1589,7 @@ bool NegativeStatCache::CheckETagValueHasLock(const char* petagval) const
 //
 // Override to exclude when has_stat and has_meta are false (both in this object always are false).
 //
-bool NegativeStatCache::IsExpiredHasLock()
+bool NegativeStatCache::IsExpiredHasLock() const
 {
     if(GetNoTruncateHasLock()){
         // not truncate

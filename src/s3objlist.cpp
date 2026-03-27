@@ -255,7 +255,7 @@ bool S3ObjList::GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized, bool C
     return RawGetNames(nullptr, &objmap, OnlyNormalized, CutSlash);
 }
 
-bool S3ObjList::HasName(const std::string& strName)
+bool S3ObjList::HasName(const std::string& strName) const
 {
     std::string strWitoutSlash;
     std::string strWithSlash;
