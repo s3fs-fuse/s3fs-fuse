@@ -981,6 +981,8 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
         delete thargs;
         return -EIO;
     }
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(0 != req_result){
         S3FS_PRN_ERR("Await Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", req_result, path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);
         return req_result;
@@ -1421,6 +1423,8 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
     }
 
     // check result
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(0 != req_result){
         S3FS_PRN_ERR("error occurred in parallel get object request(errno=%d).", req_result);
         return req_result;
