@@ -186,7 +186,7 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
             strhead += ":";
             strhead += strval;
         }else{
-            strhead = trim(lower(strhead));
+            strhead = trim(lower(std::move(strhead)));
         }
         if(only_amz && strhead.substr(0, 5) != "x-amz"){
             continue;

@@ -104,7 +104,7 @@ class StatCache
         bool AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate = false);
         bool AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate = false);
         bool AddNegativeStat(const std::string& key);
-        bool AddS3ObjList(const std::string& key, const S3ObjList& list);
+        bool AddS3ObjList(std::string key, const S3ObjList& list);
 
         // Update meta stats
         bool UpdateStat(const std::string& key, const struct stat& stbuf, const headers_t& meta);
