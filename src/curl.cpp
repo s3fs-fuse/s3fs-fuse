@@ -3830,6 +3830,8 @@ bool S3fsCurl::MultipartUploadPartComplete()
 {
     bool result;
     if(-1 == partdata.fd){
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         result = MultipartUploadCopyPartComplete();
     }else{
         result = MultipartUploadContentPartComplete();
