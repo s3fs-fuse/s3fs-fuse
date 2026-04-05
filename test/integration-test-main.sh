@@ -2124,8 +2124,20 @@ function test_truncate_cache() {
         ls "${dir}"
     done
 
-    # shellcheck disable=SC2046
-    rm -rf $(seq 2)
+    # NOTE: Related Issue #2833
+    # When using macos-fuse-t to delete multiple directories containing files in bulk,
+    # the command to delete directories may be called before the files are deleted,
+    # sometimes resulting in failure.
+    # Until this issue is resolved, please delete directories one by one.
+    #
+    if ! uname | grep -q Darwin; then
+        # shellcheck disable=SC2046
+        rm -rf $(seq 2)
+    else
+        for dir in $(seq 2); do
+            rm -rf "${dir}"
+        done
+    fi
 }
 
 function test_cache_file_stat() {
