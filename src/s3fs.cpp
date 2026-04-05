@@ -1251,11 +1251,7 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
     }
 
     // keep stat cache without checking expiration
-    //
-    // [FIXME]
-    // The process to prevent cache expiration needs to be revised.
-    // The following process will be pending until this is completed.
-    //PreventStatCacheExpire nocacheexpire;
+    PreventStatCacheExpire nocacheexpire;
 
     // check parent directory attribute.
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
@@ -1359,11 +1355,7 @@ static int s3fs_rmdir(const char* _path)
     FUSE_CTX_INFO("[path=%s]", path);
 
     // keep stat cache without checking expiration
-    //
-    // [FIXME]
-    // The process to prevent cache expiration needs to be revised.
-    // The following process will be pending until this is completed.
-    //PreventStatCacheExpire nocacheexpire;
+    PreventStatCacheExpire nocacheexpire;
 
     if(0 != (result = check_parent_object_access(path, W_OK | X_OK))){
         return result;
