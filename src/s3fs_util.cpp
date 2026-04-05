@@ -29,7 +29,6 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <sys/utsname.h>
 
 #include <string>
 #include <sstream>
@@ -345,36 +344,6 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
 
     if(is_remove_own && 0 != rmdir(dir)){
         S3FS_PRN_ERR("could not remove dir(%s) - errno(%d)", dir, errno);
-        return false;
-    }
-    return true;
-}
-
-//-------------------------------------------------------------------
-// Utility for system information
-//-------------------------------------------------------------------
-bool compare_sysname(const char* target)
-{
-    // [NOTE]
-    // The buffer size of sysname member in struct utsname is
-    // OS dependent, but 512 bytes is sufficient for now.
-    //
-    static const char* psysname = nullptr;
-    static char  sysname[512];
-    if(!psysname){
-        struct utsname sysinfo;
-        if(0 != uname(&sysinfo)){
-            S3FS_PRN_ERR("could not initialize system name to internal buffer(errno:%d), thus use \"Linux\".", errno);
-            strcpy(sysname, "Linux");
-        }else{
-            S3FS_PRN_INFO("system name is %s", sysinfo.sysname);
-            sysname[sizeof(sysname) - 1] = '\0';
-            strncpy(sysname, sysinfo.sysname, sizeof(sysname) - 1);
-        }
-        psysname = &sysname[0];
-    }
-
-    if(!target || 0 != strcmp(psysname, target)){
         return false;
     }
     return true;
