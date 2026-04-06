@@ -101,7 +101,7 @@ TESTS = \
     test_string_util
 
 clang-tidy:
-	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ \
+	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
 		*.h $(s3fs_SOURCES) test_curl_util.cpp test_page_list.cpp test_string_util.cpp \
 		-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
