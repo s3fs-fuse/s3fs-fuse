@@ -2946,7 +2946,15 @@ function add_all_tests {
     add_tests test_utimens_during_multipart
     add_tests test_special_characters
     add_tests test_hardlink
-    add_tests test_symlink
+
+    # TODO: Related Issue #2832
+    # The symlink test fails on macOS.
+    # This is a bug not caused by s3fs-fuse. Therefore, the test will be temporarily bypassed.
+    # This condition will be removed once the related issue is resolved.
+    #
+    if ! uname | grep -q Darwin; then
+        add_tests test_symlink
+    fi
     if ! uname | grep -q Darwin; then
         add_tests test_mknod
         add_tests test_extended_attributes
