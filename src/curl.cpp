@@ -69,7 +69,9 @@ static constexpr int GET_OBJECT_RESPONSE_LIMIT          = 1024;
 // error.
 //
 static constexpr char DEFAULT_MIME_FILE[]               = "/etc/mime.types";
+#ifdef __APPLE__
 static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.types";
+#endif
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -249,15 +251,16 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
         struct stat st;
         if(0 == stat(DEFAULT_MIME_FILE, &st)){
             MimeFile = DEFAULT_MIME_FILE;
-        }else if(compare_sysname("Darwin")){
-            // for macOS, search another default file.
-            if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
-                MimeFile = SPECIAL_DARWIN_MIME_FILE;
-            }else{
-                errPaths += " and ";
-                errPaths += SPECIAL_DARWIN_MIME_FILE;
-            }
         }
+#ifdef __APPLE__
+        // for macOS, search another default file.
+        else if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
+            MimeFile = SPECIAL_DARWIN_MIME_FILE;
+        }else{
+            errPaths += " and ";
+            errPaths += SPECIAL_DARWIN_MIME_FILE;
+        }
+#endif
         if(MimeFile.empty()){
             S3FS_PRN_WARN("Could not find mime.types files, you have to create file(%s) or specify mime option for existing mime.types file.", errPaths.c_str());
             return false;
