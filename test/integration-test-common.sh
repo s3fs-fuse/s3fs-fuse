@@ -290,10 +290,17 @@ function start_s3fs {
     # For macos fuse-t, we need to specify the "noattrcache" option to
     # disable NFS caching.
     #
+    # We also pass "noappledouble" so the macOS VFS does not create
+    # AppleDouble (._*) sidecar files in the mount, which otherwise pollute
+    # directory listings and confuse tests like test_list and
+    # test_file_names_longer_than_posix.
+    #
     if [ "$(uname)" = "Darwin" ]; then
         local FUSE_T_ATTRCACHE_OPT="-o noattrcache"
+        local MACOS_OPTS="-o noappledouble"
     else
         local FUSE_T_ATTRCACHE_OPT=""
+        local MACOS_OPTS=""
     fi
 
     # [NOTE]
@@ -342,6 +349,7 @@ function start_s3fs {
             ${S3FS_HTTP_PROXY_OPT} \
             ${NO_CHECK_CERT_OPT} \
             ${FUSE_T_ATTRCACHE_OPT} \
+            ${MACOS_OPTS} \
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \
