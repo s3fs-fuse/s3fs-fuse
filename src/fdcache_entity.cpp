@@ -24,6 +24,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -290,24 +291,11 @@ int FdEntity::OpenMirrorFile()
         return -EIO;
     }
 
-    // create seed generating mirror file name
-    auto seed = static_cast<unsigned int>(time(nullptr));
-    int urandom_fd;
-    if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
-        unsigned int rand_data;
-        if(sizeof(rand_data) == read(urandom_fd, &rand_data, sizeof(rand_data))){
-            seed ^= rand_data;
-        }
-        close(urandom_fd);
-    }
-
     // try to link mirror file
+    std::random_device rd;
     while(true){
-        // make random(temp) file path
-        // (do not care for threading, because allowed any value returned.)
-        //
         char         szfile[NAME_MAX + 1];
-        snprintf(szfile, sizeof(szfile), "%x.tmp", rand_r(&seed));
+        snprintf(szfile, sizeof(szfile), "%x.tmp", rd());
         szfile[NAME_MAX] = '\0';                            // for safety
         mirrorpath = bupdir + "/" + szfile;
 
@@ -319,7 +307,6 @@ int FdEntity::OpenMirrorFile()
             S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
             return -errno;
         }
-        ++seed;
     }
 
     // open mirror file
