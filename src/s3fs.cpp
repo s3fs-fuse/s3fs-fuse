@@ -4691,7 +4691,7 @@ static int s3fs_check_service()
                         S3FS_PRN_CRIT("The bucket region is not '%s'(specified), it is correctly '%s'. You should specify region(%s) option.", region.c_str(), expectregion.c_str(), expectregion.c_str());
                         isLoop = false;
 
-                    }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY || S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
+                    }else if(S3fsCurl::GetSignatureType() == signature_type_t::V4_ONLY){
                         // current region and url are default value, so try to connect to expected region.
                         S3FS_PRN_CRIT("Failed to connect region '%s'(default), so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", region.c_str(), expectregion.c_str(), expectregion.c_str());
 
@@ -4735,21 +4735,6 @@ static int s3fs_check_service()
             }else if(S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == responseCode){
                 // Curl error cases(ex, about SSL)
                 isLoop = false;
-            }
-
-            // Try changing signature from v4 to v2
-            //
-            // [NOTE]
-            // If there is no case to retry with the previous checks, and there
-            // is a chance to retry with signature v2, prepare to retry with v2.
-            //
-            if(!isLoop && (responseCode == 400 || responseCode == 403) && S3fsCurl::GetSignatureType() == signature_type_t::V2_OR_V4){
-                // switch sigv2
-                S3FS_PRN_CRIT("Failed to connect by sigv4, so retry to connect by signature version 2. But you should to review url and region option.");
-
-                // retry to check with sigv2
-                isLoop = true;
-                S3fsCurl::SetSignatureType(signature_type_t::V2_ONLY);
             }
 
             // check errors(after retrying)

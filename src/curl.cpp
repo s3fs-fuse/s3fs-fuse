@@ -134,7 +134,7 @@ mimes_t          S3fsCurl::mimeTypes;
 std::string      S3fsCurl::userAgent;
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
-signature_type_t S3fsCurl::signature_type      = signature_type_t::V2_OR_V4;       // default
+signature_type_t S3fsCurl::signature_type      = signature_type_t::V4_ONLY;        // default
 bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
