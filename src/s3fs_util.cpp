@@ -218,15 +218,15 @@ int mkdirp(const std::string& path, mode_t mode)
     while (getline(ss, component, '/')) {
         base += component + "/";
 
-        struct stat st;
-        if(0 == stat(base.c_str(), &st)){
-            if(!S_ISDIR(st.st_mode)){
-                return EPERM;
-            }
-        }else{
-            if(0 != mkdir(base.c_str(), mode) && errno != EEXIST){
+        if(0 != mkdir(base.c_str(), mode)){
+            if(errno == EEXIST){
+                struct stat st;
+                if(0 != lstat(base.c_str(), &st) || !S_ISDIR(st.st_mode)){
+                    return EPERM;
+                }
+            }else{
                 return errno;
-           }
+            }
         }
     }
     return 0;
