@@ -435,7 +435,7 @@ bool S3fsCurl::LocateBundle()
                 BF.open("/usr/local/share/certs/ca-root.crt");
                 if(BF.good()){
                     BF.close();
-                    S3fsCurl::curl_ca_bundle = "/usr/share/ssl/certs/ca-bundle.crt";
+                    S3fsCurl::curl_ca_bundle = "/usr/local/share/certs/ca-root.crt";
                 }else{
                     S3FS_PRN_ERR("%s: /.../ca-bundle.crt is not readable", program_name.c_str());
                     return false;
