@@ -59,7 +59,7 @@ int CacheFileStat::MakeCacheFileStatPath(const char* path, std::string& sfile_pa
 
     if(is_create_dir){
       int result;
-      if(0 != (result = mkdirp(top_path + mydirname(path), 0777))){
+      if(0 != (result = mkdirp(top_path + mydirname(path), 0700))){
           S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
           return result;
       }
