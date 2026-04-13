@@ -4197,8 +4197,9 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     char* setpos = list;
     for(auto xiter = xattrs.cbegin(); xiter != xattrs.cend(); ++xiter){
         if(!xiter->first.empty()){
-            strcpy(setpos, xiter->first.c_str());
-            setpos = &setpos[strlen(setpos) + 1];
+            size_t len = xiter->first.length() + 1;
+            memcpy(setpos, xiter->first.c_str(), len);
+            setpos += len;
         }
     }
 
