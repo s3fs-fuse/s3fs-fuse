@@ -38,7 +38,7 @@ class S3fsCurl;
 //
 // Prototype function
 //
-typedef void* (*thpoolman_worker)(S3fsCurl&, void*);
+using thpoolman_worker = void* (*)(S3fsCurl&, void*);
 
 //
 // Parameter structure
@@ -55,7 +55,7 @@ struct thpoolman_param
     thpoolman_worker pfunc = nullptr;
 };
 
-typedef std::list<thpoolman_param> thpoolman_params_t;
+using thpoolman_params_t = std::list<thpoolman_param>;
 
 //------------------------------------------------
 // Class ThreadPoolMan

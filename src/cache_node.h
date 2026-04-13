@@ -223,7 +223,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         void Dump(bool detail);
 };
 
-typedef std::map<std::string, std::shared_ptr<StatCacheNode>> statcache_map_t;
+using statcache_map_t = std::map<std::string, std::shared_ptr<StatCacheNode>>;
 
 //-------------------------------------------------------------------
 // Derived Class : FileStatCache

@@ -33,7 +33,7 @@
 //-------------------------------------------------------------------
 // Structures for MultiThread Request
 //-------------------------------------------------------------------
-typedef std::map<std::string, int> retrycnt_t;
+using retrycnt_t = std::map<std::string, int>;
 
 //
 // Head Request parameter structure for Thread Pool.

@@ -30,7 +30,7 @@
 //-------------------------------------------------------------------
 // headers_t
 //-------------------------------------------------------------------
-typedef std::map<std::string, std::string, case_insensitive_compare_func> headers_t;
+using headers_t = std::map<std::string, std::string, case_insensitive_compare_func>;
 
 //-------------------------------------------------------------------
 // Functions

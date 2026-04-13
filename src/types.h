@@ -49,7 +49,7 @@
 // This header is url encoded string which is json formatted.
 //   x-amz-meta-xattr:urlencode({"xattr-1":"base64(value-1)","xattr-2":"base64(value-2)","xattr-3":"base64(value-3)"})
 //
-typedef std::map<std::string, std::string> xattrs_t;
+using xattrs_t = std::map<std::string, std::string>;
 
 //-------------------------------------------------------------------
 // acl_t
@@ -155,7 +155,7 @@ struct etagpair
 };
 
 // Requires pointer stability and thus must be a list not a vector
-typedef std::list<etagpair> etaglist_t;
+using etaglist_t = std::list<etagpair>;
 
 struct petagpool
 {
@@ -233,7 +233,7 @@ struct filepart
     }
 };
 
-typedef std::vector<filepart> filepart_list_t;
+using filepart_list_t = std::vector<filepart>;
 
 //
 // Each part information for Untreated parts
@@ -291,7 +291,7 @@ struct untreatedpart
     }
 };
 
-typedef std::vector<untreatedpart> untreated_list_t;
+using untreated_list_t = std::vector<untreatedpart>;
 
 //
 // Information on each part of multipart upload
@@ -305,7 +305,7 @@ struct mp_part
     explicit mp_part(off_t set_start = 0, off_t set_size = 0, int part = 0) : start(set_start), size(set_size), part_num(part) {}
 };
 
-typedef std::vector<struct mp_part> mp_part_list_t;
+using mp_part_list_t = std::vector<struct mp_part>;
 
 inline off_t total_mp_part_list(const mp_part_list_t& mplist)
 {
@@ -342,7 +342,7 @@ struct case_insensitive_compare_func
         return strcasecmp(a.c_str(), b.c_str()) < 0;
     }
 };
-typedef std::map<std::string, std::string, case_insensitive_compare_func> mimes_t;
+using mimes_t = std::map<std::string, std::string, case_insensitive_compare_func>;
 
 //-------------------------------------------------------------------
 // S3 Object Type Enum : objtype_t
@@ -440,9 +440,9 @@ inline std::string STR_OBJTYPE(objtype_t type)
 //-------------------------------------------------------------------
 // Typedefs specialized for use
 //-------------------------------------------------------------------
-typedef std::vector<std::string>           readline_t;
-typedef std::map<std::string, std::string> kvmap_t;
-typedef std::map<std::string, kvmap_t>     bucketkvmap_t;
+using readline_t    = std::vector<std::string>;
+using kvmap_t       = std::map<std::string, std::string>;
+using bucketkvmap_t = std::map<std::string, kvmap_t>;
 
 #endif // S3FS_TYPES_H_
 

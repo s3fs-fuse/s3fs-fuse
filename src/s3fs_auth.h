@@ -26,8 +26,8 @@
 #include <string>
 #include <sys/types.h>
 
-typedef std::array<unsigned char, 16> md5_t;
-typedef std::array<unsigned char, 32> sha256_t;
+using md5_t    = std::array<unsigned char, 16>;
+using sha256_t = std::array<unsigned char, 32>;
 
 //-------------------------------------------------------------------
 // Utility functions for Authentication
