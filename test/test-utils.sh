@@ -58,6 +58,7 @@ export LC_ALL=en_US.UTF-8
 # Set your PATH appropriately so that you can find these commands.
 #
 if [ "$(uname)" = "Darwin" ]; then
+    export STAT_BIN="gstat"
     # [NOTE][TODO]
     # In macos-14(and maybe later), currently coreutils' gstdbuf doesn't
     # work with the Github Actions Runner.
@@ -72,6 +73,7 @@ if [ "$(uname)" = "Darwin" ]; then
     fi
     export TRUNCATE_BIN="gtruncate"
 else
+    export STAT_BIN="stat"
     export STDBUF_BIN="stdbuf"
     export TRUNCATE_BIN="truncate"
 fi
@@ -80,10 +82,8 @@ fi
 # Specifying cache disable option depending on stat(coreutils) version
 # TODO: investigate why this is necessary #2327
 #
-if stat --cached=never / >/dev/null 2>&1; then
-    STAT_BIN=(stat --cache=never)
-else
-    STAT_BIN=(stat)
+if "${STAT_BIN[@]}" --cached=never / >/dev/null 2>&1; then
+    STAT_BIN=("${STAT_BIN[@]}" --cache=never)
 fi
 
 function find_xattr() {
@@ -123,19 +123,11 @@ function del_xattr() {
 }
 
 function get_inode() {
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%i" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%i" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%i" "$1"
 }
 
 function get_size() {
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%z" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%s" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%s" "$1"
 }
 
 function check_file_size() {
@@ -335,45 +327,25 @@ function run_suite {
 
 function get_ctime() {
     # ex: "1657504903.019784214"
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%Fc" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%.9Z" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%.9Z" "$1"
 }
 
 function get_mtime() {
     # ex: "1657504903.019784214"
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%Fm" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%.9Y" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%.9Y" "$1"
 }
 
 function get_atime() {
     # ex: "1657504903.019784214"
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%Fa" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%.9X" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%.9X" "$1"
 }
 
 function get_permissions() {
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%p" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%a" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%a" "$1"
 }
 
 function get_user_and_group() {
-    if [ "$(uname)" = "Darwin" ]; then
-        "${STAT_BIN[@]}" -f "%u:%g" "$1"
-    else
-        "${STAT_BIN[@]}" --format "%u:%g" "$1"
-    fi
+    "${STAT_BIN[@]}" --format "%u:%g" "$1"
 }
 
 function check_content_type() {
