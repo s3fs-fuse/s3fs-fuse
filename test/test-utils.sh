@@ -417,22 +417,9 @@ function s3_cp() {
     TEMPNAME="$(mktemp)"
     cat > "$TEMPNAME"
     # TODO: use filenames instead of stdin?
-    # curl's --data-binary defaults Content-Type to
-    # application/x-www-form-urlencoded, which makes Jetty 12 in S3Proxy 3.1.0
-    # drain the body as form parameters before x-amz-content-sha256 is
-    # verified, producing a 400 mismatch.  Default to application/octet-stream
-    # unless the caller passed an explicit Content-Type.
-    local CONTENT_TYPE_HEADER=(--header "Content-Type: application/octet-stream")
-    local arg
-    for arg in "$@"; do
-        case "$arg" in
-            Content-Type:*) CONTENT_TYPE_HEADER=(); break ;;
-        esac
-    done
     curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
         --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
         --header "Content-Length: $(wc -c < "$TEMPNAME")" \
-        "${CONTENT_TYPE_HEADER[@]}" \
         "$@" \
         --request PUT --data-binary "@$TEMPNAME" "$S3_URL/$S3_PATH"
     rm -f "$TEMPNAME"
