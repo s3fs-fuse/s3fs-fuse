@@ -126,8 +126,7 @@ enum class sse_type_t : uint8_t {
 
 enum class signature_type_t  : uint8_t {
     V2_ONLY,
-    V4_ONLY,
-    V2_OR_V4
+    V4_ONLY
 };
 
 //----------------------------------------------
