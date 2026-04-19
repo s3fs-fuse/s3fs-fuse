@@ -37,7 +37,47 @@ AC_CHECK_FUNCS([fallocate])
 CPP_VERSION=c++14
 AC_SUBST([CPP_VERSION])
 
-CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=3 -std=$CPP_VERSION $CXXFLAGS"
+dnl ----------------------------------------------
+dnl Set _FORTIFY_SOURCE flag
+dnl ----------------------------------------------
+dnl Some platforms treat >2 as 2 and emit a warning from features.h.
+dnl Also, it may be built-in.
+dnl
+FORTIFY_FLAG=""
+
+AC_MSG_CHECKING([checking _FORTIFY_SOURCE])
+
+dnl
+dnl Compile a simple program and check the glibc warnings in the standard error output.
+dnl
+AC_LANG_PUSH([C++])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <features.h>]], [[return 0;]])],
+  [
+    compile_result=$("$CXX" $CPPFLAGS $CXXFLAGS -D_FORTIFY_SOURCE=3 -c conftest.$ac_ext -o conftest.$ac_objext 2>&1 1>/dev/null)
+
+    if echo "$compile_result" | grep -iq "_FORTIFY_SOURCE > 2 is treated like 2"; then
+      FORTIFY_FLAG="-D_FORTIFY_SOURCE=2"
+      AC_MSG_RESULT([2])
+    elif echo "$compile_result" | grep -iq "_FORTIFY_SOURCE.*redefined"; then
+      FORTIFY_FLAG=""
+      AC_MSG_RESULT([built-in])
+    else
+      FORTIFY_FLAG="-D_FORTIFY_SOURCE=3"
+      AC_MSG_RESULT([3])
+    fi
+  ],
+  [
+    dnl
+    dnl If even compiling with 3 fails, fall back to 2.
+    dnl
+    FORTIFY_FLAG="-D_FORTIFY_SOURCE=2"
+    AC_MSG_RESULT([2])
+  ]
+)
+AC_LANG_POP([C++])
+
+CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 $FORTIFY_FLAG -std=$CPP_VERSION $CXXFLAGS"
 
 dnl ----------------------------------------------
 dnl For macOS
