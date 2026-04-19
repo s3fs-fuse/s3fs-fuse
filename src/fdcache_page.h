@@ -62,7 +62,7 @@ struct fdpage
         return (0 < bytes ? offset + bytes - 1 : 0);
     }
 };
-typedef std::vector<struct fdpage> fdpage_list_t;
+using fdpage_list_t = std::vector<struct fdpage>;
 
 //------------------------------------------------
 // Class PageList

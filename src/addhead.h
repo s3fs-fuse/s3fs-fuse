@@ -32,7 +32,7 @@
 //----------------------------------------------
 // Structure / Typedef
 //----------------------------------------------
-typedef std::unique_ptr<regex_t, decltype(&regfree)> RegexPtr;
+using RegexPtr = std::unique_ptr<regex_t, decltype(&regfree)>;
 
 struct add_header{
     add_header(RegexPtr pregex, std::string basestring, std::string headkey, std::string headvalue)
@@ -53,7 +53,7 @@ struct add_header{
     std::string   headvalue;
 };
 
-typedef std::vector<add_header> addheadlist_t;
+using addheadlist_t = std::vector<add_header>;
 
 //----------------------------------------------
 // Class AdditionalHeader

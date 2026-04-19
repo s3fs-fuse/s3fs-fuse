@@ -75,7 +75,7 @@ struct curlprogress {
     double dl_progress;
     double ul_progress;
 };
-typedef std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> CurlUniquePtr;
+using CurlUniquePtr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
 //----------------------------------------------
 // class S3fsCurl
@@ -84,10 +84,10 @@ class S3fsCred;
 class S3fsCurl;
 
 // Prototype function for lazy setup options for curl handle
-typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
+using s3fscurl_lazy_setup = bool (*)(S3fsCurl* s3fscurl);
 
-typedef std::map<std::string, std::string> sseckeymap_t;
-typedef std::vector<sseckeymap_t>          sseckeylist_t;
+using sseckeymap_t  = std::map<std::string, std::string>;
+using sseckeylist_t = std::vector<sseckeymap_t>;
 
 // Class for lapping curl
 //

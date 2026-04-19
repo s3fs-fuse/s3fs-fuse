@@ -32,7 +32,7 @@
 //----------------------------------------------
 // Typedefs
 //----------------------------------------------
-typedef std::map<std::string, std::string> iamcredmap_t;
+using iamcredmap_t = std::map<std::string, std::string>;
 
 //------------------------------------------------
 // class S3fsCred

@@ -97,7 +97,7 @@ class PseudoFdInfo
         bool ExtractUploadPartsFromAllArea(const UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy);
 };
 
-typedef std::map<int, std::unique_ptr<PseudoFdInfo>> fdinfo_map_t;
+using fdinfo_map_t = std::map<int, std::unique_ptr<PseudoFdInfo>>;
 
 #endif // S3FS_FDCACHE_FDINFO_H_
 

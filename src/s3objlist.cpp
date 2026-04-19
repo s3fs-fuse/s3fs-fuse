@@ -319,7 +319,7 @@ void S3ObjList::Dump(const std::string& indent, std::ostringstream& oss) const
     oss << indent << "S3ObjList::common_prefixes = {" << strtmp << "}" << std::endl;
 }
 
-typedef std::map<std::string, bool> s3obj_h_t;
+using s3obj_h_t = std::map<std::string, bool>;
 
 bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
 {
