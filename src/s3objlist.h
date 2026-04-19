@@ -39,9 +39,9 @@ struct s3obj_entry{
     objtype_t   type = objtype_t::UNKNOWN;  // only set for directories, UNKNOWN for non-directories.
 };
 
-typedef std::map<std::string, struct s3obj_entry> s3obj_t;
-typedef std::vector<std::string> s3obj_list_t;
-typedef std::map<std::string, objtype_t> s3obj_type_map_t;
+using s3obj_t          = std::map<std::string, struct s3obj_entry>;
+using s3obj_list_t     = std::vector<std::string>;
+using s3obj_type_map_t = std::map<std::string, objtype_t>;
 
 //-------------------------------------------------------------------
 // Class S3ObjList

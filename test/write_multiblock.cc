@@ -42,8 +42,8 @@ struct write_block_part
     off_t size;
 };
 
-typedef std::vector<write_block_part> wbpart_list_t;
-typedef std::list<std::string>        strlist_t;
+using wbpart_list_t = std::vector<write_block_part>;
+using strlist_t     = std::list<std::string>;
 
 //---------------------------------------------------------
 // Const

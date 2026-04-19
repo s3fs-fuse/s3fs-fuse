@@ -39,10 +39,10 @@ static constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NONET;
 
 class S3ObjList;
 
-typedef std::unique_ptr<xmlChar, decltype(xmlFree)> unique_ptr_xmlChar;
-typedef std::unique_ptr<xmlXPathObject, decltype(&xmlXPathFreeObject)> unique_ptr_xmlXPathObject;
-typedef std::unique_ptr<xmlXPathContext, decltype(&xmlXPathFreeContext)> unique_ptr_xmlXPathContext;
-typedef std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> unique_ptr_xmlDoc;
+using unique_ptr_xmlChar         = std::unique_ptr<xmlChar, decltype(xmlFree)>;
+using unique_ptr_xmlXPathObject  = std::unique_ptr<xmlXPathObject, decltype(&xmlXPathFreeObject)>;
+using unique_ptr_xmlXPathContext = std::unique_ptr<xmlXPathContext, decltype(&xmlXPathFreeContext)>;
+using unique_ptr_xmlDoc          = std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)>;
 
 //-------------------------------------------------------------------
 // Utility Class
