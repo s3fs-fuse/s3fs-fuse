@@ -115,19 +115,11 @@ class S3fsLog
             return (logfp ? logfp : stderr);
         }
 
-        static void SeekEnd()
-        {
-            if(logfp){
-                fseek(logfp, 0, SEEK_END);
-            }
-        }
-
-        static void Flush()
-        {
-            if(logfp){
-                fflush(logfp);
-            }
-        }
+        // Format and write a single log line with one write(2) syscall.
+        // Bypasses stdio locking, which deadlocks under concurrent logging
+        // on MSYS2 (issue #2850); also makes log lines atomic on all platforms
+        // since logfp is opened with O_APPEND.
+        static void Printf(FILE* fp, const char* fmt, ...) __attribute__ ((format (printf, 2, 3)));
 
         static bool SetLogfile(const char* pfile);
         static bool ReopenLogfile();
@@ -165,9 +157,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_LOW_CURLDBG(fmt, ...) \
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s[CURL DBG] " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), __VA_ARGS__); \
-                S3fsLog::Flush(); \
+                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s[CURL DBG] " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), __VA_ARGS__); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
@@ -176,11 +166,9 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_LOW_LOGPRN_EXIT(fmt, ...) \
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
-                S3fsLog::Flush(); \
+                S3fsLog::Printf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
             }else{ \
-                fprintf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
+                S3fsLog::Printf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
         }while(0)
@@ -189,9 +177,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_PRN_INIT_INFO(fmt, ...) \
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
-                S3fsLog::Flush(); \
+                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), __VA_ARGS__, ""); \
             } \
@@ -200,9 +186,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_PRN_LAUNCH_INFO(fmt, ...) \
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::SeekEnd(); \
-                fprintf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), __VA_ARGS__, ""); \
-                S3fsLog::Flush(); \
+                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), __VA_ARGS__, ""); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__, ""); \
             } \
@@ -212,9 +196,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_LOW_CACHE(fp, fmt, ...) \
         do{ \
             if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::SeekEnd(); \
-                fprintf(fp, fmt "%s\n", __VA_ARGS__); \
-                S3fsLog::Flush(); \
+                S3fsLog::Printf(fp, fmt "%s\n", __VA_ARGS__); \
             }else{ \
                 syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
             } \
