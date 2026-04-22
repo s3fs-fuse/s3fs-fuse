@@ -852,15 +852,19 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     }
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, ts_times, flags, force_tmpfile, true, false))){
-        S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
-        return -EIO;
+    int error = 0;
+    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, ts_times, flags, force_tmpfile, true, false, &error))){
+        if(0 == error){
+            error = -EIO;
+        }
+        S3FS_PRN_ERR("Could not open file. result(%d)", error);
+        return error;
     }
     // load
-    if(is_load && !ent->LoadAll(autoent.GetPseudoFd())){
-        S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
+    if(is_load && 0 != (result = ent->LoadAll(autoent.GetPseudoFd()))){
+        S3FS_PRN_ERR("Could not load file. result(%d)", result);
         autoent.Close();
-        return -EIO;
+        return result;
     }
     *entity = ent;
     return 0;
@@ -1363,8 +1367,8 @@ static int s3fs_rmdir(const char* _path)
     }
 
     // directory must be empty
-    if(directory_empty(path) != 0){
-        return -ENOTEMPTY;
+    if(0 != (result = directory_empty(path))){
+        return result;
     }
 
     strpath = path;
@@ -1476,9 +1480,13 @@ static int s3fs_symlink(const char* _from, const char* _to)
         AutoFdEntity autoent;
         FdEntity*    ent;
         FileTimes    ts_times;      // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, ts_times, O_RDWR, true, true, false))){
-            S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
-            return -errno;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, ts_times, O_RDWR, true, true, false, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open tmpfile(result=%d)", error);
+            return error;
         }
 
         // write(without space words)
@@ -2946,9 +2954,13 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
         }
 
         FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify))){
-            S3FS_PRN_ERR("could not open file(%s): errno=%d(ent is null(%p))", path, errno, ent);   // [NOTE] read ent to avoid errors with cppcheck etc
-            return -EIO;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open file(%s): result=%d(ent is null(%p))", path, error, ent);   // [NOTE] read ent to avoid errors with cppcheck etc
+            return error;
         }
 
 #ifdef __APPLE__
@@ -2981,9 +2993,13 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
         meta["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
 
         FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, true, true, false))){
-            S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
-            return -EIO;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, true, true, false, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open file(%s): result=%d", path, error);
+            return error;
         }
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
@@ -3066,10 +3082,14 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
     FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
     ts_times.SetAll(st);
-    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, ts_times, fi->flags, false, true, false))){
+    int error = 0;
+    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, ts_times, fi->flags, false, true, false, &error))){
+        if(0 == error){
+            error = -EIO;
+        }
         // remove stat cache
         StatCache::getStatCacheData()->DelStat(path);
-        return -EIO;
+        return error;
     }
 
     if (needs_flush){

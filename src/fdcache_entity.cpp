@@ -490,7 +490,8 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
 
                 // could not open cache file or could not load stats data, so initialize it.
                 if(-1 == (physical_fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
-                    S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
+                    int open_errno = errno;
+                    S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), open_errno);
 
                     // remove cache stat file if it is existed
                     if(0 != (result = CacheFileStat::DeleteCacheFileStat(path.c_str()))){
@@ -498,7 +499,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
                             S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), result);
                         }
                     }
-                    return result;
+                    return -open_errno;
                 }
                 need_save_csf = true;       // need to update page info
                 inode         = FdEntity::GetInode(physical_fd);
@@ -573,11 +574,12 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
         // truncate cache(tmp) file
         if(is_truncate){
             if(0 != ftruncate(physical_fd, size) || 0 != fsync(physical_fd)){
-                S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
+                int save_errno = errno;
+                S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), save_errno);
                 pfile.reset();
                 physical_fd = -1;
                 inode       = 0;
-                return (0 == errno ? -EIO : -errno);
+                return (0 == save_errno ? -EIO : -save_errno);
             }
         }
 
@@ -634,7 +636,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
 // So we do not check disk space for this option mode, if there is not enough
 // disk space this method will be failed.
 //
-bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
+int FdEntity::LoadAll(int fd, off_t* size, bool force_load)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
 
@@ -642,14 +644,14 @@ bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
 
     if(-1 == physical_fd || !FindPseudoFdWithLock(fd)){
         S3FS_PRN_ERR("pseudo_fd(%d) and physical_fd(%d) for path(%s) is not opened yet", fd, physical_fd, path.c_str());
-        return false;
+        return -EBADF;
     }
 
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(force_load){
         if(!SetAllStatusUnloaded()){
-            return false;
+            return -EIO;
         }
     }
     //
@@ -658,12 +660,12 @@ bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
     int result;
     if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
         S3FS_PRN_ERR("could not download, result(%d)", result);
-        return false;
+        return result;
     }
     if(size){
         *size = pagelist.Size();
     }
-    return true;
+    return 0;
 }
 
 //
@@ -1088,8 +1090,8 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
                 // after this, file length is (offset + size), but file does not use any disk space.
                 //
                 if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (offset + oneread))){
-                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", tmpfd);
-                    result = -EIO;
+                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", tmpfd, errno);
+                    result = -errno;
                     break;
                 }
 
