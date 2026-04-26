@@ -190,28 +190,52 @@ function test_mv_file {
 }
 
 function test_mv_file_nocache_content {
-    # Regression test for https://github.com/s3fs-fuse/s3fs-fuse/issues/1944
-    # If the local cache file is missing when a rename runs (common when the
-    # object was created on another machine, or when the cache was cleaned),
-    # FdEntity::Open must mark the freshly-created cache pagelist as "not
-    # loaded" rather than "modified". Otherwise subsequent reads serve the
-    # zero-filled cache instead of fetching from S3.
+    # Regression for https://github.com/s3fs-fuse/s3fs-fuse/issues/1944
+    # Reproduces "Bad behaviour 2" from the original report: file exists,
+    # local cache is dropped, then rename. Without the e4f85c1 fix in
+    # FdEntity::Open the freshly-recreated pagelist would be marked
+    # "modified" rather than "not loaded", and subsequent reads would
+    # serve the zero-filled placeholder cache instead of fetching from S3.
     describe "Testing mv file after dropping local cache (issue #1944) ..."
     if ! s3fs_args | grep -q use_cache; then
         echo "skipping: this test requires use_cache"
         return 0
     fi
 
-    rm -f "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
-    mk_test_file
-    sync
+    local CACHE_TESTRUN_DIR=$1
 
-    # Flush any local state for the source file so the rename path has to
-    # recreate the cache entry from scratch.
-    local CACHE_TESTRUN_DIR; CACHE_TESTRUN_DIR=$(basename "$(pwd)")
-    rm -f "${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
-    rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
-    rm -f "${CACHE_DIR}/.${TEST_BUCKET_1}.mirror/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+    mk_test_file
+
+    # Preflight 1: confirm s3fs has the source content. If async upload
+    # (e.g. streamupload) has not yet reached S3, the rename below would
+    # fail with 404 from the S3-side copy -- a distinguishable error
+    # mode from the bug we're checking for, which is a successful rename
+    # to an all-zeros file.
+    local PREFLIGHT; PREFLIGHT=$(cat "${TEST_TEXT_FILE}")
+    if [ -z "${PREFLIGHT}" ] || [ "${PREFLIGHT}" != "${TEST_TEXT}" ]; then
+        echo "preflight: source file is not readable as expected"
+        return 1
+    fi
+
+    # Drop the local cache so rename has to recreate the FdEntity from
+    # scratch. .mirror entries are inode-keyed hardlinks with random
+    # names -- no path-based cleanup is possible there; removing the
+    # cache file and stat file is what forces FdEntity::Open down the
+    # path that #1944 used to corrupt.
+    local CACHE_FILE="${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+    local STAT_FILE="${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+
+    # Preflight 2: cache really is where we expect.
+    if [ ! -f "${CACHE_FILE}" ]; then
+        echo "preflight: expected cache file not found at ${CACHE_FILE}"
+        return 1
+    fi
+    rm -f "${CACHE_FILE}" "${STAT_FILE}"
+    # Preflight 3: removal worked.
+    if [ -f "${CACHE_FILE}" ]; then
+        echo "preflight: cache file still present after removal"
+        return 1
+    fi
 
     mv "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
 
