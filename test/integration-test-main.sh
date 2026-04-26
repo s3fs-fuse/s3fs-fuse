@@ -161,7 +161,7 @@ function test_mv_file {
        echo "Could not move file"
        return 1
     fi
-    
+
     #check the renamed file content-type
     if [ -f "/etc/mime.types" ]
     then
@@ -176,7 +176,76 @@ function test_mv_file {
        return 1
     fi
 
+    # Verify full content, not just length (guards against issue #1944, where
+    # renames produced a correctly-sized but zero-filled file).
+    local ALT_FILE_CONTENT; ALT_FILE_CONTENT=$(cat "${ALT_TEST_TEXT_FILE}")
+    if [ -z "${ALT_FILE_CONTENT}" ] || [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
+    then
+       echo "moved file content does not match expected: '${TEST_TEXT}' got: '${ALT_FILE_CONTENT}'"
+       return 1
+    fi
+
     # clean up
+    rm_test_file "${ALT_TEST_TEXT_FILE}"
+}
+
+function test_mv_file_nocache_content {
+    # Regression for https://github.com/s3fs-fuse/s3fs-fuse/issues/1944
+    # Reproduces "Bad behaviour 2" from the original report: file exists,
+    # local cache is dropped, then rename. Without the e4f85c1 fix in
+    # FdEntity::Open the freshly-recreated pagelist would be marked
+    # "modified" rather than "not loaded", and subsequent reads would
+    # serve the zero-filled placeholder cache instead of fetching from S3.
+    describe "Testing mv file after dropping local cache (issue #1944) ..."
+    if ! s3fs_args | grep -q use_cache; then
+        echo "skipping: this test requires use_cache"
+        return 0
+    fi
+
+    local CACHE_TESTRUN_DIR=$1
+
+    mk_test_file
+
+    # Preflight 1: confirm s3fs has the source content. If async upload
+    # (e.g. streamupload) has not yet reached S3, the rename below would
+    # fail with 404 from the S3-side copy -- a distinguishable error
+    # mode from the bug we're checking for, which is a successful rename
+    # to an all-zeros file.
+    local PREFLIGHT; PREFLIGHT=$(cat "${TEST_TEXT_FILE}")
+    if [ -z "${PREFLIGHT}" ] || [ "${PREFLIGHT}" != "${TEST_TEXT}" ]; then
+        echo "preflight: source file is not readable as expected"
+        return 1
+    fi
+
+    # Drop the local cache so rename has to recreate the FdEntity from
+    # scratch. .mirror entries are inode-keyed hardlinks with random
+    # names -- no path-based cleanup is possible there; removing the
+    # cache file and stat file is what forces FdEntity::Open down the
+    # path that #1944 used to corrupt.
+    local CACHE_FILE="${CACHE_DIR}/${TEST_BUCKET_1}/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+    local STAT_FILE="${CACHE_DIR}/.${TEST_BUCKET_1}.stat/${CACHE_TESTRUN_DIR}/${TEST_TEXT_FILE}"
+
+    # Preflight 2: cache really is where we expect.
+    if [ ! -f "${CACHE_FILE}" ]; then
+        echo "preflight: expected cache file not found at ${CACHE_FILE}"
+        return 1
+    fi
+    rm -f "${CACHE_FILE}" "${STAT_FILE}"
+    # Preflight 3: removal worked.
+    if [ -f "${CACHE_FILE}" ]; then
+        echo "preflight: cache file still present after removal"
+        return 1
+    fi
+
+    mv "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
+
+    local ALT_FILE_CONTENT; ALT_FILE_CONTENT=$(cat "${ALT_TEST_TEXT_FILE}")
+    if [ -z "${ALT_FILE_CONTENT}" ] || [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
+    then
+       echo "renamed file content is wrong after cache drop: expected '${TEST_TEXT}' got '${ALT_FILE_CONTENT}'"
+       return 1
+    fi
+
     rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 
@@ -2923,6 +2992,7 @@ function add_all_tests {
     add_tests test_truncate_shrink_file
     add_tests test_truncate_shrink_read_file
     add_tests test_mv_file
+    add_tests test_mv_file_nocache_content
     add_tests test_mv_to_exist_file
     add_tests test_mv_empty_directory
     add_tests test_mv_nonempty_directory
