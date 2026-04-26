@@ -28,7 +28,6 @@
 bool foreground                   = false;
 bool nomultipart                  = false;
 bool pathrequeststyle             = false;
-bool complement_stat              = false;
 bool noxmlns                      = false;
 bool insecure_logging             = false;
 std::string program_name;

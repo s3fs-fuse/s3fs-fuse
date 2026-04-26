@@ -5549,7 +5549,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(0 == strcmp(arg, "complement_stat")){
-            complement_stat = true;
+            S3FS_PRN_WARN("complement_stat is enabled by default and a future version will remove this option.");
             return 0;
         }
         else if(0 == strcmp(arg, "notsup_compat_dir")){
