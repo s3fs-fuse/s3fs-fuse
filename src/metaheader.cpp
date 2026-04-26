@@ -166,24 +166,14 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
                         if(strConType == "application/x-directory" || strConType == "httpd/unix-directory"){
                             // Nextcloud uses this MIME type for directory objects when mounting bucket as external Storage
                             mode |= S_IFDIR;
-                        }else if(!strpath.empty() && '/' == *strpath.rbegin()){
-                            if(strConType == "binary/octet-stream" || strConType == "application/octet-stream"){
-                                mode |= S_IFDIR;
-                            }else{
-                                if(complement_stat){
-                                    // If complement lack stat mode, when the object has '/' character at end of name
-                                    // and content type is text/plain and the object's size is 0 or 1, it should be
-                                    // directory.
-                                    off_t size = get_size(meta);
-                                    if(strConType == "text/plain" && (0 == size || 1 == size)){
-                                        mode |= S_IFDIR;
-                                    }else{
-                                        mode |= S_IFREG;
-                                    }
-                                }else{
-                                    mode |= S_IFREG;
-                                }
-                            }
+                        }else if(!strpath.empty() && '/' == *strpath.rbegin() && 0 == get_size(meta)){
+                            // A key ending with '/' cannot be a regular object in S3/GCS,
+                            // so treat it as a directory regardless of Content-Type. This
+                            // covers GCS placeholder objects (often text/plain) and other
+                            // providers that do not set a directory-specific Content-Type.
+                            // Require size 0 to guard against backends that return another
+                            // object's metadata for HEAD on a non-existent "path/" key.
+                            mode |= S_IFDIR;
                         }else{
                             mode |= S_IFREG;
                         }
