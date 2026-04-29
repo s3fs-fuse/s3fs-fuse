@@ -179,7 +179,7 @@ function test_mv_file {
     # Verify full content, not just length (guards against issue #1944, where
     # renames produced a correctly-sized but zero-filled file).
     local ALT_FILE_CONTENT; ALT_FILE_CONTENT=$(cat "${ALT_TEST_TEXT_FILE}")
-    if [ -z "${ALT_FILE_CONTENT}" ] || [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
+    if [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
     then
        echo "moved file content does not match expected: '${TEST_TEXT}' got: '${ALT_FILE_CONTENT}'"
        return 1
@@ -212,7 +212,7 @@ function test_mv_file_nocache_content {
     # mode from the bug we're checking for, which is a successful rename
     # to an all-zeros file.
     local PREFLIGHT; PREFLIGHT=$(cat "${TEST_TEXT_FILE}")
-    if [ -z "${PREFLIGHT}" ] || [ "${PREFLIGHT}" != "${TEST_TEXT}" ]; then
+    if [ "${PREFLIGHT}" != "${TEST_TEXT}" ]; then
         echo "preflight: source file is not readable as expected"
         return 1
     fi
@@ -240,7 +240,7 @@ function test_mv_file_nocache_content {
     mv "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
 
     local ALT_FILE_CONTENT; ALT_FILE_CONTENT=$(cat "${ALT_TEST_TEXT_FILE}")
-    if [ -z "${ALT_FILE_CONTENT}" ] || [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
+    if [ "${ALT_FILE_CONTENT}" != "${TEST_TEXT}" ]
     then
        echo "renamed file content is wrong after cache drop: expected '${TEST_TEXT}' got '${ALT_FILE_CONTENT}'"
        return 1
