@@ -60,7 +60,6 @@ jobs:
           - rockylinux/rockylinux:8
           - fedora:44
           - fedora:43
-          - opensuse/leap:15
           - opensuse/leap:16.0
           - alpine:3.23
 
