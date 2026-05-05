@@ -1050,12 +1050,19 @@ function test_update_time_xattr() {
            return 1
         fi
     else
-        # [macos] fuse-t
-        # atime/ctime are all updated.
-        # see) https://github.com/macos-fuse-t/fuse-t/issues/87
+        # [FIXME] macos fuse-t
+        # On FUSE-T 1.0.x (libfuse2) atime+ctime were both updated by setxattr
+        # (https://github.com/macos-fuse-t/fuse-t/issues/87). On FUSE-T 1.2.x
+        # (libfuse3) the kernel-cached stat returned to userspace does not
+        # reflect the ctime bump, so all three timestamps appear unchanged.
+        # Permit either observed behavior for now.
         #
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-           echo "set_xattr expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+        if [ "${base_mtime}" != "${mtime}" ]; then
+           echo "set_xattr expected unchanged mtime: $base_mtime == $mtime"
+           return 1
+        fi
+        if [ "${base_atime}" != "${atime}" ] && [ "${base_ctime}" = "${ctime}" ]; then
+           echo "set_xattr expected updated ctime when atime is updated: $base_ctime != $ctime"
            return 1
         fi
     fi
@@ -2107,46 +2114,26 @@ function test_content_type() {
 function test_truncate_cache() {
     describe "Test make cache files over max cache file size ..."
 
+    # FIXME:
+    # On macos-fuse-t (libfuse3), readdir on directories with many small files
+    # returns duplicate/missing entries (e.g. "28 28 29 29" with 26, 27 absent),
+    # which causes the subsequent rm -rf to fail. Skip until FUSE-T fixes this.
+    #
+    if uname | grep -q Darwin; then
+        return 0
+    fi
+
     for dir in $(seq 2); do
         mkdir "${dir}"
         for file in $(seq 75); do
             touch "${dir}/${file}"
         done
 
-        # FIXME:
-        # In the case of macos-fuse-t, if you do not enter a wait here, the following error may occur:
-        #    "ls: fts_read: Input/output error"
-        # Currently, we have not yet been able to establish a solution to this problem.
-        # Please pay attention to future developments in macos-fuse-t.
-        #
-        wait_ostype 1 "Darwin"
-
         ls "${dir}"
     done
 
-    # NOTE: Related Issue #2833
-    # When using macos-fuse-t to delete multiple directories containing files in bulk,
-    # the command to delete directories may be called before the files are deleted,
-    # sometimes resulting in failure.
-    # Until this issue is resolved, please delete directories one by one.
-    #
-    # On macOS with -o update_parent_dir_stat there is a second race: each
-    # unlink schedules an async update_mctime_parent_directory PUT against
-    # the parent directory marker. If rm advances to rmdir before that PUT
-    # settles, s3fs_rmdir's check_parent_object_access can read a transient
-    # mode value out of the stat cache and return -EACCES (surfaces as
-    # "rm: <dir>: Permission denied"). Wait between iterations so the
-    # parent's metadata update is committed before the next rm runs.
-    #
-    if ! uname | grep -q Darwin; then
-        # shellcheck disable=SC2046
-        rm -rf $(seq 2)
-    else
-        for dir in $(seq 2); do
-            rm -rf "${dir}"
-            wait_ostype 1 "Darwin"
-        done
-    fi
+    # shellcheck disable=SC2046
+    rm -rf $(seq 2)
 }
 
 function test_cache_file_stat() {
