@@ -65,6 +65,9 @@ Keep in mind using the pre-built packages when available.
 
 1. Install prerequisites:
 
+    s3fs-fuse on macOS requires libfuse3, provided by FUSE-T (>= 1.2.0)
+    or macFUSE (>= 5.0). For FUSE-T:
+
     ```sh
     brew tap macos-fuse-t/homebrew-cask
     brew install autoconf automake fuse-t libtool pkg-config

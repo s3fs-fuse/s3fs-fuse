@@ -89,9 +89,11 @@ case "$target" in
       min_fuse_version=2.8
       ;;
    *-darwin* )
-      # Do something specific for mac
-      min_fuse_version=2.7.3
-      min_fuse_t_version=1.0.20
+      # Mac requires libfuse3 from either FUSE-T (>= 1.2.0) or macFUSE (>= 5.0).
+      # Both providers install fuse3.pc, but they version it differently
+      # (FUSE-T reports its product version, macFUSE reports the libfuse3 API
+      # version), so we use the lower bound that matches FUSE-T.
+      min_fuse_version=1.2.0
       ;;
    *)
       # Default Case
@@ -103,14 +105,7 @@ esac
 dnl ----------------------------------------------
 dnl Checking the FUSE library
 dnl ----------------------------------------------
-dnl Distinguish between Linux (libfuse) and macOS (FUSE-T).
-dnl
-found_fuse_t=no
-PKG_CHECK_MODULES([FUSE_T], [fuse-t >= ${min_fuse_t_version}], [found_fuse_t=yes], [found_fuse_t=no])
-
-AS_IF([test "$found_fuse_t" = "yes"],
-  [PKG_CHECK_MODULES([fuse_library_checking], [fuse-t >= ${min_fuse_t_version}])],
-  [PKG_CHECK_MODULES([fuse_library_checking], [fuse3 >= ${min_fuse_version}])])
+PKG_CHECK_MODULES([fuse_library_checking], [fuse3 >= ${min_fuse_version}])
 
 dnl ----------------------------------------------
 dnl Choice SSL library
@@ -242,9 +237,7 @@ AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
-  AS_IF([test "$found_fuse_t" = "yes"],
-    [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.9 libcrypto >= 1.1.1 ])],
-    [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 libcrypto >= 1.1.1 ])])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 libcrypto >= 1.1.1 ])
 
   saved_CPPFLAGS="$CPPFLAGS"
   CPPFLAGS="$CPPFLAGS $DEPS_CFLAGS"
@@ -267,9 +260,7 @@ gnutls)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
   AS_IF([test $gnutls_nettle = 0],
     [
-      AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.9 gnutls >= 2.12.0 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 gnutls >= 2.12.0 ])])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 gnutls >= 2.12.0 ])
       LIBS="-lgnutls -lgcrypt $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(gcrypt)
@@ -283,9 +274,7 @@ nettle)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
   AS_IF([test $gnutls_nettle = 1],
     [
-      AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nettle >= 2.7.1 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nettle >= 2.7.1 ])])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nettle >= 2.7.1 ])
       LIBS="-lgnutls -lnettle $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(nettle)
@@ -294,9 +283,7 @@ nettle)
   ;;
 nss)
   AC_MSG_RESULT(NSS)
-  AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nss >= 3.15.0 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nss >= 3.15.0 ])])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nss >= 3.15.0 ])
   ;;
 *)
   AC_MSG_ERROR([unknown ssl library type.])

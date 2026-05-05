@@ -259,19 +259,13 @@ function start_s3fs {
         VALGRIND_EXEC="valgrind ${VALGRIND} --log-socket=127.0.1.1"
     fi
 
-    # On OSX only, we need to specify the direct_io and auto_cache flag.
-    #
-    # And Turn off creation and reference of spotlight index.
+    # On OSX only, turn off creation and reference of spotlight index.
     # (Leaving spotlight ON will result in a lot of wasted requests,
     # which will affect test execution time)
     #
+    local DIRECT_IO_OPT=""
     if [ "$(uname)" = "Darwin" ]; then
-       local DIRECT_IO_OPT="-o direct_io -o auto_cache"
-
-       # disable spotlight
        sudo mdutil -a -i off
-    else
-       local DIRECT_IO_OPT=""
     fi
 
     # Set environment variables or options for proxy.
