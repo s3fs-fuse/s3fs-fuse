@@ -2766,7 +2766,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
     responseHeaders.clear();
 
     // requestHeaders(SSE-C)
-    if(SIZE_MAX != static_cast<ssize_t>(ssekey_pos) && ssekey_pos < S3fsCurl::sseckeys.size()){
+    if(SIZE_MAX != ssekey_pos && ssekey_pos < S3fsCurl::sseckeys.size()){
         std::string md5;
         if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, false)){
             S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, mask_sensitive_string(md5.c_str()));
