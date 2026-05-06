@@ -436,7 +436,17 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 
         *pObjType = objtype_t::FILE;       // Since can't access the object, set as a file.
 
-    }else if(0 != result){
+    }else if(-ENOENT == result){
+        // [NOTE]
+        // Only on a -ENOENT error should the check for a compatible object(without a trailing
+        // "/" and with the _$folder$ suffix) be performed.
+        // Performing this check after receiving any other error(-EIO, -ETIMEOUT, etc.) can lead
+        // to serious problems. For example, if the system experiences a transient error, even
+        // though the target object actually exists, a compatible object will also not exist
+        // (because the object exists), resulting in the object being considered non-existent.
+        // As a result, the caller may unintentionally overwrite the existing object and create
+        // a new one (see #2581).
+        //
         if(overcheck && !is_bucket_mountpoint){
             // when support_compat_dir is disabled, strpath maybe have "_$folder$".
             if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
@@ -487,7 +497,7 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
             }
         }
 
-    }else{
+    }else if(0 == result){
         if(is_reg_fmt(*pmeta)){
             *pObjType = objtype_t::FILE;
         }else if(is_symlink_fmt(*pmeta)){
@@ -525,6 +535,11 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
                 }
             }
         }
+    }else{
+        // Currently, this block handles the following errors, which are propagated as-is.
+        // (result = -EIO / -EAGAIN / -EFBIG / -ENAMETOOLONG / -EREMOTE / -ENOTSUP / -EWOULDBLOCK / -ETIMEDOUT)
+        //
+        return result;
     }
 
     // set headers for mount point from default stat
@@ -667,7 +682,7 @@ static int check_object_access(const char* path, int mask, struct stat* pstbuf)
     S3FS_PRN_DBG("[pid=%u,uid=%u,gid=%u]", (unsigned int)(pcxt->pid), (unsigned int)(pcxt->uid), (unsigned int)(pcxt->gid));
 
     if(0 != (result = get_object_attribute(path, pst))){
-        // If there is not the target file(object), result is -ENOENT.
+        // If any error occurs(including -ENOENT)
         return result;
     }
     if(0 == pcxt->uid){
@@ -740,7 +755,7 @@ static int check_object_owner(const char* path, struct stat* pstbuf)
         return -EIO;
     }
     if(0 != (result = get_object_attribute(path, pst))){
-        // If there is not the target file(object), result is -ENOENT.
+        // If any error occurs(including -ENOENT)
         return result;
     }
     // check owner
@@ -1792,17 +1807,22 @@ static int rename_directory(const char* from, const char* to)
     // Initiate and Add base directory into mvnode struct.
     //
     strto += "/";
-    if(0 == chk_dir_object_type(strfrom.c_str(), normpath, strfrom, nullptr, &ObjType) && IS_DIR_OBJ(ObjType)){
-        if(objtype_t::DIR_NOT_EXIST_OBJECT != ObjType){
-            normdir = false;
-        }else{
-            normdir = true;
-            strfrom = from;               // from directory is not removed, but from directory attr is needed.
-        }
-        mvnodes.emplace_back(strfrom, strto, true, normdir);
-    }else{
-        // Something wrong about "from" directory.
+    if(0 != (result = chk_dir_object_type(strfrom.c_str(), normpath, strfrom, nullptr, &ObjType))){
+        // The directory's existence has already been verified prior to this call.
+        // Consequently, a failure here constitutes a fatal error, as any further
+        // processing would be bound to fail.
+        return result;
     }
+    if(!IS_DIR_OBJ(ObjType)){
+        return -ENOENT;
+    }
+    if(objtype_t::DIR_NOT_EXIST_OBJECT != ObjType){
+        normdir = false;
+    }else{
+        normdir = true;
+        strfrom = from;                   // from directory is not removed, but from directory attr is needed.
+    }
+    mvnodes.emplace_back(strfrom, strto, true, normdir);
 
     //
     // get a list of all the objects
@@ -2562,7 +2582,7 @@ static int update_mctime_parent_directory(const char* _path)
     // on the parent directory.
     //
     if(0 != (result = get_object_attribute(parentpath.c_str(), &stbuf))){
-        // If there is not the target file(object), result is -ENOENT.
+        // If any error occurs(including -ENOENT)
         return result;
     }
     if(!S_ISDIR(stbuf.st_mode)){
@@ -2976,8 +2996,8 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
         }
 #endif
 
-    }else{
-        // Not found -> Make tmpfile(with size)
+    }else if(-ENOENT == result){
+        // Creates a sized temporary file only if it doesn't exist(-ENOENT).
         const struct fuse_context* pcxt;
         if(nullptr == (pcxt = fuse_get_context())){
             return -EIO;
@@ -3005,6 +3025,10 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
             return result;
         }
         StatCache::getStatCacheData()->DelStat(path);
+
+    }else{
+        // other than -ENOENT
+        S3FS_PRN_ERR("failed to check existence of file(%s): result=%d", path, result);
     }
 
     return result;
