@@ -30,26 +30,13 @@
 //-------------------------------------------------------------------
 // Static
 //-------------------------------------------------------------------
-StatCache       StatCache::singleton;
 std::mutex      StatCache::stat_cache_lock;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : pMountPointDir(nullptr), CacheSize(100'000)
+StatCache::StatCache() : pMountPointDir(std::make_shared<DirStatCache>("/")), CacheSize(100'000)
 {
-    if(this == StatCache::getStatCacheData()){
-        pMountPointDir = std::make_shared<DirStatCache>("/");
-    }else{
-        abort();
-    }
-}
-
-StatCache::~StatCache()
-{
-    if(this != StatCache::getStatCacheData()){
-        abort();
-    }
 }
 
 //-------------------------------------------------------------------
