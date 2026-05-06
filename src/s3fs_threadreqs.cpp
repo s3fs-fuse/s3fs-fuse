@@ -1139,7 +1139,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
             // Each part must be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB, then loop.
             // This loop breaks if result is not 0.
             //
-            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes && 0 == result; processed_bytes += request_bytes){
+            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes; processed_bytes += request_bytes){
                 // Set temporary part sizes
                 request_bytes = std::min(S3fsCurl::GetMultipartCopySize(), (iter->bytes - processed_bytes));
 
@@ -1169,6 +1169,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
                     S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Copy Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
                     // [NOTE]
                     // This loop breaks because result is not 0.
+                    break;
                 }
                 ++req_count;
             }
