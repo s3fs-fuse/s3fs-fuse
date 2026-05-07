@@ -3453,9 +3453,10 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
     // common variables
     Semaphore    multi_head_sem(0);
-    int          req_count  = 0;
-    int          req_result = 0;
-    int          retrycount = 0;
+    int          req_count    = 0;
+    int          req_result   = 0;
+    int          retrycount   = 0;
+    int          sched_result = 0;
     std::mutex   thparam_lock;
     s3obj_list_t notfound_list;
 
@@ -3480,7 +3481,13 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
         // set one head request
         int result;
         if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, iter->second, req_result, multi_head_sem))){
-            return result;
+            // [NOTE]
+            // Must drain already-scheduled workers before returning, since they
+            // hold pointers to stack-local multi_head_sem/thparam_lock/
+            // syncfiller/retrycount/req_result/notfound_list. Record the
+            // failure and break to the drain loop below.
+            sched_result = result;
+            break;
         }
         ++req_count;
     }
@@ -3489,6 +3496,10 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     while(req_count > 0){
         multi_head_sem.acquire();
         --req_count;
+    }
+
+    if(0 != sched_result){
+        return sched_result;
     }
 
     // print messages
