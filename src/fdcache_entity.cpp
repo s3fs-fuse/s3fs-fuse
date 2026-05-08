@@ -2439,7 +2439,7 @@ int FdEntity::UploadPendingHasLock(int fd)
 // For systems where the fallocate function cannot be detected, use a dummy function.
 // ex. OSX
 //
-#if !defined(HAVE_FALLOCATE) || defined(__MSYS__)
+#ifndef HAVE_FALLOCATE
 static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 {
     errno = ENOSYS;     // This is a bad idea, but the caller can handle it simply.

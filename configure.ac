@@ -83,7 +83,7 @@ dnl ----------------------------------------------
 dnl For macOS
 dnl ----------------------------------------------
 case "$target" in
-   *-cygwin* )
+   *-cygwin* | *-mingw* | *-msys* )
       # Do something specific for windows using winfsp
       CXXFLAGS="$CXXFLAGS -D_GNU_SOURCE=1"
       min_fuse_version=2.8
