@@ -23,10 +23,10 @@ Keep in mind using the pre-built packages when available.
     * It is necessary to match the library used by libcurl.
     * Install the OpenSSL, GnuTLS or NSS devel package.
 * mime.types (the package providing depends on the OS)
-	* s3fs tries to detect `/etc/mime.types` as default regardless of the OS
-	* Else s3fs tries to detect `/etc/apache2/mime.types` if OS is macOS
-	* s3fs exits with an error if these files are not exist
-	* Alternatively, you can set mime.types file path with `mime` option without detecting these default files
+    * s3fs tries to detect `/etc/mime.types` as default regardless of the OS
+    * Else s3fs tries to detect `/etc/apache2/mime.types` if OS is macOS
+    * s3fs exits with an error if these files are not exist
+    * Alternatively, you can set mime.types file path with `mime` option without detecting these default files
 * pkg-config (or your OS equivalent)
 
 * NOTE  

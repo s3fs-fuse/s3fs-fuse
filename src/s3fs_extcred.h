@@ -29,8 +29,8 @@
 // External projects that utilize this header file substitute empty
 //values as follows:
 //
-#ifndef	S3FS_FUNCATTR_WEAK
-#define	S3FS_FUNCATTR_WEAK
+#ifndef S3FS_FUNCATTR_WEAK
+#define S3FS_FUNCATTR_WEAK
 #endif
 
 extern "C" {

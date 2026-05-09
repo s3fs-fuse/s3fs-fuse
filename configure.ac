@@ -315,7 +315,7 @@ dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl clock_gettime function(macos)
-AC_SEARCH_LIBS([clock_gettime],[rt posix4]) 
+AC_SEARCH_LIBS([clock_gettime],[rt posix4])
 AC_CHECK_FUNCS([clock_gettime])
 
 dnl ----------------------------------------------

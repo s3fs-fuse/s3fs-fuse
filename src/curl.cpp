@@ -369,7 +369,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     }
 
     // neither the last extension nor the second-to-last extension
-    // matched a mimeType, return the default mime type 
+    // matched a mimeType, return the default mime type
     return result;
 }
 
@@ -718,7 +718,7 @@ bool S3fsCurl::SetSseKmsid(const char* kmsid)
 }
 
 // [NOTE]
-// Because SSE is set by some options and environment, 
+// Because SSE is set by some options and environment,
 // this function check the integrity of the SSE data finally.
 bool S3fsCurl::FinalCheckSse()
 {
@@ -758,7 +758,7 @@ bool S3fsCurl::FinalCheckSse()
 
     return false;
 }
-                                                                                                                                                   
+
 bool S3fsCurl::LoadEnvSseCKeys()
 {
     char* envkeys = getenv("AWSSSECKEYS");
@@ -1365,7 +1365,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
-S3fsCurl::S3fsCurl(bool ahbe) : 
+S3fsCurl::S3fsCurl(bool ahbe) :
     type(REQTYPE::UNSET), requestHeaders(nullptr),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
@@ -1974,7 +1974,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
     for(int retrycnt = 0; S3FSCURL_PERFORM_RESULT_NOTSET == result && retrycnt < S3fsCurl::retries; ++retrycnt){
         // Reset response code
         responseCode = S3FSCURL_RESPONSECODE_NOTSET;
-        
+
         // Insert headers
         if(!dontAddAuthHeaders) {
             if(!insertAuthHeaders()){
@@ -2090,23 +2090,23 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
             case CURLE_WRITE_ERROR:
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_OPERATION_TIMEDOUT:
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_RESOLVE_HOST:
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_CONNECT:
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_GOT_NOTHING:
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_ABORTED_BY_CALLBACK:
                 sleep(4);
@@ -2114,11 +2114,11 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
                     S3fsCurl::curl_progress[hCurl.get()] = {time(nullptr), -1, -1};
                 }
-                break; 
+                break;
 
             case CURLE_PARTIAL_FILE:
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_SEND_ERROR:
                 sleep(2);
@@ -2174,7 +2174,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 }else{
                     S3FS_PRN_INFO3("HTTP response code =%ld", responseCode);
 
-                    // Let's try to retrieve the 
+                    // Let's try to retrieve the
                     if(404 == responseCode){
                         result = -ENOENT;
                     }else if(500 > responseCode){
@@ -2514,8 +2514,8 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     std::string ttlstr = std::to_string(token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, token_ttl_hdr, ttlstr.c_str());
 
-    // Curl appends an "Expect: 100-continue" header to the token request, 
-    // and aws responds with a 417 Expectation Failed. This ensures the 
+    // Curl appends an "Expect: 100-continue" header to the token request,
+    // and aws responds with a 417 Expectation Failed. This ensures the
     // Expect header is empty before the request is sent.
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Expect", "");
 
@@ -3205,7 +3205,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
             return -EIO;
         }
     }
-    
+
     op = "GET";
     type = REQTYPE::CHKBUCKET;
 
@@ -3804,9 +3804,9 @@ bool S3fsCurl::MultipartUploadContentPartComplete()
 
     // check etag(md5);
     //
-    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent  
+    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent
     // SSE_C: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
-    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
+    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:
     // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
     //
     if(S3fsCurl::is_content_md5 && sse_type_t::SSE_C != S3fsCurl::GetSseType() && sse_type_t::SSE_KMS != S3fsCurl::GetSseType()){
