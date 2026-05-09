@@ -168,6 +168,12 @@ class S3fsCred
         static bool CheckForbiddenBucketParams();
 
     public:
+        static S3fsCred* get()
+        {
+            static S3fsCred s3fscred;
+            return &s3fscred;
+        }
+
         static bool SetBucket(const std::string& bucket);
         static const std::string& GetBucket();
 
