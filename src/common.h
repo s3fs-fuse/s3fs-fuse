@@ -37,7 +37,6 @@ static constexpr off_t    MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
 extern bool           foreground;
 extern bool           nomultipart;
 extern bool           pathrequeststyle;
-extern bool           complement_stat;
 extern bool           noxmlns;
 extern bool           insecure_logging;
 extern std::string    program_name;
