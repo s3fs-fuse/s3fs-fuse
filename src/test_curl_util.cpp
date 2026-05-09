@@ -48,7 +48,7 @@ std::string  S3fsCred::bucket_name;
 
 const std::string& S3fsCred::GetBucket()
 {
-	return S3fsCred::bucket_name;
+    return S3fsCred::bucket_name;
 }
 //---------------------------------------------------------
 

@@ -467,7 +467,7 @@ std::string s3fs_decode64(const char* input, size_t input_len)
 // is a private range, se use the start of this range.
 static constexpr unsigned int escape_base = 0xe000;
 
-// encode bytes into wobbly utf8.  
+// encode bytes into wobbly utf8.
 // 'result' can be null. returns true if transform was needed.
 bool s3fs_wtf8_encode(const char *s, std::string *result)
 {
@@ -496,12 +496,12 @@ bool s3fs_wtf8_encode(const char *s, std::string *result)
                     *result += *(++s);
                 }
                 continue;
-            } 
+            }
             // three byte encoding
             if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
                 const unsigned code = ((c & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
                 if (code >= 0x800 && ! (code >= 0xd800 && code <= 0xd8ff)) {
-                    // not overlong and not a surrogate pair 
+                    // not overlong and not a surrogate pair
                     if (result) {
                         *result += c;
                         *result += *(++s);
@@ -574,7 +574,7 @@ bool s3fs_wtf8_decode(const char *s, std::string *result)
     }
     return encoded;
 }
- 
+
 std::string s3fs_wtf8_decode(const std::string &s)
 {
     std::string result;
@@ -704,8 +704,8 @@ std::string mask_sensitive_header(const char* pheader, size_t length)
             break;
         }
         if(0 == strncasecmp(strHeader.c_str(), one_sensitive, strlen(one_sensitive))){
-			if(isAuthHeader){
-				// mask the element in Authorization header
+            if(isAuthHeader){
+                // mask the element in Authorization header
                 static const std::regex aws4_check(R"(\s*AWS4-HMAC-SHA256\s+)", std::regex::icase);
                 static const std::regex aws2_check(R"(\s*AWS\s+)", std::regex::icase);
 
@@ -722,10 +722,10 @@ std::string mask_sensitive_header(const char* pheader, size_t length)
                     strHeader.resize(strlen(one_sensitive));
                     strHeader += " [SENSITIVE(wrong format)]";
                 }
-			}else{
+            }else{
                 strHeader.resize(strlen(one_sensitive));
                 strHeader += " [SENSITIVE]";
-			}
+            }
             break;
         }
         isAuthHeader = false;

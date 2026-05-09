@@ -1271,11 +1271,11 @@ off_t FdEntity::BytesModified() const
 
 // [NOTE]
 // There are conditions that allow you to perform multipart uploads.
-// 
+//
 // According to the AWS spec:
 //  - 1 to 10,000 parts are allowed
 //  - minimum size of parts is 5MB (except for the last part)
-// 
+//
 // For example, if you set the minimum part size to 5MB, you can upload
 // a maximum (5 * 10,000)MB file.
 // The part size can be changed in MB units, then the maximum file size
@@ -2467,7 +2467,7 @@ static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 // However, this method uses the non-portable(Linux specific) system call fallocate().
 // Also, depending on the file system, FALLOC_FL_PUNCH_HOLE mode may not work and HOLE
 // will not open.(Filesystems for which this method works are ext4, btrfs, xfs, etc.)
-// 
+//
 bool FdEntity::PunchHole(off_t start, size_t size)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);

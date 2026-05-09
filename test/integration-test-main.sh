@@ -161,7 +161,7 @@ function test_mv_file {
        echo "Could not move file"
        return 1
     fi
-    
+
     #check the renamed file content-type
     if [ -f "/etc/mime.types" ]
     then

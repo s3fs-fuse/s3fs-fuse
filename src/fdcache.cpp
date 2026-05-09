@@ -504,7 +504,7 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
 
     if(-1 != existfd){
         for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second && 
+            if(iter->second &&
               iter->second->GetROPath() == path &&
               iter->second->FindPseudoFd(existfd)){
                 // found opened fd in map
@@ -629,14 +629,14 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
     UpdateEntityToTempPath();
 
     // If use_cache is disabled, or the disk space is insufficient when use_cache
-    // is enabled, the corresponding key of the entity in fent is not path. 
+    // is enabled, the corresponding key of the entity in fent is not path.
     auto iter = fent.find(std::string(path));
     if(fent.end() != iter){
       if(iter->second && iter->second->FindPseudoFd(existfd)){
         return iter->second.get();
       }
     } else {
-      // no matter use_cache is enabled or not, search from all entities to 
+      // no matter use_cache is enabled or not, search from all entities to
       // find the entity with the same path. And then compare the pseudo fd.
       for(iter = fent.begin(); iter != fent.end(); ++iter) {
         // GetROPath() holds ro_path_lock rather than fdent_lock.
@@ -912,7 +912,7 @@ void FdManager::FreeReservedDiskSpace(off_t size)
 
 //
 // Inspect all files for stats file for cache file
-// 
+//
 // [NOTE]
 // The minimum sub_path parameter is "/".
 // The sub_path is a directory path starting from "/" and ending with "/".

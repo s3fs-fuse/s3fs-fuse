@@ -1781,7 +1781,7 @@ static int rename_directory(const char* from, const char* to)
     std::string  basepath = strfrom + "/";
     std::string  normpath;                      // normalized path for "from name"(not used)
     objtype_t    ObjType;
-    bool         normdir; 
+    bool         normdir;
     struct stat  stbuf;
     int          result;
     bool         is_dir;
@@ -1867,7 +1867,7 @@ static int rename_directory(const char* from, const char* to)
             is_dir  = false;
             normdir = false;
         }
-        
+
         // push this one onto the stack
         mvnodes.emplace_back(from_name, to_name, is_dir, normdir);
     }
@@ -2251,7 +2251,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
         //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-  
+
     return result;
 }
 
@@ -2498,7 +2498,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_
         // Change owner
         ent->SetUId(uid);
         ent->SetGId(gid);
-  
+
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", curpath.c_str(), result);
@@ -2510,7 +2510,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_
         //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-  
+
     return result;
 }
 
@@ -4429,7 +4429,7 @@ static int s3fs_removexattr(const char* _path, const char* name)
 
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
-// There's no way to pass an exit status to the high-level event loop API, so 
+// There's no way to pass an exit status to the high-level event loop API, so
 // this function stores the exit value in a global for main()
 static void s3fs_exit_fuseloop(int exit_status)
 {
@@ -4992,10 +4992,10 @@ static int print_umount_message(const std::string& mp, bool force)
 }
 
 // This is repeatedly called by the fuse option parser
-// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
+// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
 //
-// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
+// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name
 //  or the mountpoint. The bucket name will always come before the mountpoint
 //
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
@@ -5815,7 +5815,7 @@ int main(int argc, char* argv[])
 {
     int ch;
     int fuse_res;
-    int option_index = 0; 
+    int option_index = 0;
     struct fuse_operations s3fs_oper{};
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
@@ -5930,7 +5930,7 @@ int main(int argc, char* argv[])
     // call of my_fuse_opt_proc function is completed. Therefore,
     // the mime type is loaded just after calling the my_fuse_opt_proc
     // function.
-    // 
+    //
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
@@ -6031,11 +6031,11 @@ int main(int argc, char* argv[])
     // our own certificate verification logic.
     // For now, this will be unsupported unless we get a request for it to
     // be supported. In that case, we have a couple of options:
-    // - implement a command line option that bypasses the verify host 
+    // - implement a command line option that bypasses the verify host
     //   but doesn't bypass verifying the certificate
     // - write our own host verification (this might be complex)
     // See issue #128strncasecmp
-    /* 
+    /*
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){

@@ -61,7 +61,7 @@ extern std::atomic<long long unsigned> num_requests_mpu_copy_part;
 //-------------------------------------------------------------------
 // For weak attribute
 //-------------------------------------------------------------------
-#define	S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
+#define S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
 
 //-------------------------------------------------------------------
 // For clang -Wthread-safety
