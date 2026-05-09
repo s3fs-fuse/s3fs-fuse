@@ -34,29 +34,28 @@
 //------------------------------------------------
 // ThreadPoolMan class variables
 //------------------------------------------------
-int                            ThreadPoolMan::worker_count = 10;    // default
-std::unique_ptr<ThreadPoolMan> ThreadPoolMan::singleton;
+int  ThreadPoolMan::worker_count   = 10;        // default
 
 //------------------------------------------------
 // ThreadPoolMan class methods
 //------------------------------------------------
 bool ThreadPoolMan::Initialize(int count)
 {
-    if(ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(singleton){
         S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
-        abort();
+        return false;
     }
     if(-1 != count){
         ThreadPoolMan::SetWorkerCount(count);
     }
-    ThreadPoolMan::singleton = std::make_unique<ThreadPoolMan>(ThreadPoolMan::worker_count);
-
+    singleton = std::make_unique<ThreadPoolMan>(ThreadPoolMan::worker_count);
     return true;
 }
 
 void ThreadPoolMan::Destroy()
 {
-    ThreadPoolMan::singleton.reset();
+    ThreadPoolMan::Slot().reset();
 }
 
 int ThreadPoolMan::SetWorkerCount(int count)
@@ -80,7 +79,8 @@ int ThreadPoolMan::SetWorkerCount(int count)
 
 bool ThreadPoolMan::Instruct(const thpoolman_param& param)
 {
-    if(!ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(!singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
@@ -88,13 +88,14 @@ bool ThreadPoolMan::Instruct(const thpoolman_param& param)
         S3FS_PRN_ERR("Thread parameter Semaphore is null.");
         return false;
     }
-    ThreadPoolMan::singleton->SetInstruction(param);
+    singleton->SetInstruction(param);
     return true;
 }
 
 bool ThreadPoolMan::AwaitInstruct(const thpoolman_param& param)
 {
-    if(!ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(!singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
@@ -111,7 +112,7 @@ bool ThreadPoolMan::AwaitInstruct(const thpoolman_param& param)
     local_param.pfunc = param.pfunc;
 
     // Set parameters and run thread worker
-    ThreadPoolMan::singleton->SetInstruction(local_param);
+    singleton->SetInstruction(local_param);
 
     // wait until the thread is complete
     await_sem.acquire();
@@ -186,10 +187,6 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0)
 {
     if(count < 1){
         S3FS_PRN_CRIT("Failed to creating singleton for Thread Manager, because thread count(%d) is under 1.", count);
-        abort();
-    }
-    if(ThreadPoolMan::singleton){
-        S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
         abort();
     }
 

@@ -63,8 +63,7 @@ using thpoolman_params_t = std::list<thpoolman_param>;
 class ThreadPoolMan
 {
     private:
-        static int                            worker_count;
-        static std::unique_ptr<ThreadPoolMan> singleton;
+        static int            worker_count;
 
         std::atomic<bool>     is_exit;
         Semaphore             thpoolman_sem;
@@ -74,6 +73,11 @@ class ThreadPoolMan
         thpoolman_params_t    instruction_list GUARDED_BY(thread_list_lock);
 
     private:
+        static std::unique_ptr<ThreadPoolMan>& Slot()
+        {
+            static std::unique_ptr<ThreadPoolMan> singleton;
+            return singleton;
+        }
         static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
 
         bool IsExit() const;

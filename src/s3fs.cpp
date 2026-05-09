@@ -82,7 +82,6 @@ static mode_t mp_mode             = 0;    // mode of mount point
 static mode_t mp_umask            = 0;    // umask for mount point
 static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
-static std::unique_ptr<S3fsCred> ps3fscred; // using only in this file
 static std::string mimetype_file;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
@@ -4458,7 +4457,7 @@ static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config)
 static void* s3fs_init(struct fuse_conn_info* conn)
 #endif
 {
-    S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), ps3fscred->GetCredFuncVersion(false));
+    S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), S3fsCred::get()->GetCredFuncVersion(false));
 
     // cache(remove cache dirs at first)
     if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
@@ -4471,7 +4470,7 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
 
     // check loading IAM role name
-    if(!ps3fscred->LoadIAMRoleFromMetaData()){
+    if(!S3fsCred::get()->LoadIAMRoleFromMetaData()){
         S3FS_PRN_CRIT("could not load IAM role name from meta data.");
         s3fs_exit_fuseloop(EXIT_FAILURE);
         return nullptr;
@@ -4499,10 +4498,8 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
 #endif
 
-    // Signal object
-    if(!S3fsSignals::Initialize()){
-        S3FS_PRN_ERR("Failed to initialize signal object, but continue...");
-    }
+    // Signal object(always true)
+    S3fsSignals::Initialize();
 
     return nullptr;
 }
@@ -4510,11 +4507,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
 static void s3fs_destroy(void*)
 {
     S3FS_PRN_INFO("destroy");
-
-    // Signal object
-    if(!S3fsSignals::Destroy()){
-        S3FS_PRN_WARN("Failed to clean up signal object.");
-    }
 
     ThreadPoolMan::Destroy();
 
@@ -4683,7 +4675,7 @@ static int s3fs_check_service()
     S3FS_PRN_INFO("check services.");
 
     // At first time for access S3, we check IAM role if it sets.
-    if(!ps3fscred->CheckIAMCredentialUpdate()){
+    if(!S3fsCred::get()->CheckIAMCredentialUpdate()){
         S3FS_PRN_CRIT("Failed to initialize IAM credential.");
         return EXIT_FAILURE;
     }
@@ -5325,7 +5317,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         //
         // Detect options for credential
         //
-        else if(0 >= (ret = ps3fscred->DetectParam(arg))){
+        else if(0 >= (ret = S3fsCred::get()->DetectParam(arg))){
             if(0 > ret){
                 return -1;
             }
@@ -5858,8 +5850,7 @@ int main(int argc, char* argv[])
 
     // set credential object
     //
-    ps3fscred = std::make_unique<S3fsCred>();
-    if(!S3fsCurl::InitCredentialObject(ps3fscred.get())){
+    if(!S3fsCurl::InitCredentialObject(S3fsCred::get())){
         S3FS_PRN_EXIT("Failed to setup credential object to s3fs curl.");
         exit(EXIT_FAILURE);
     }
@@ -5994,7 +5985,7 @@ int main(int argc, char* argv[])
     //
     // Check the combination of parameters for credential
     //
-    if(!ps3fscred->CheckAllParams()){
+    if(!S3fsCred::get()->CheckAllParams()){
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);

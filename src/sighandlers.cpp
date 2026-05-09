@@ -31,26 +31,11 @@
 //-------------------------------------------------------------------
 // Class S3fsSignals
 //-------------------------------------------------------------------
-std::unique_ptr<S3fsSignals> S3fsSignals::pSingleton;
-bool S3fsSignals::enableUsr1         = false;
+bool S3fsSignals::enableUsr1 = false;
 
 //-------------------------------------------------------------------
 // Class methods
 //-------------------------------------------------------------------
-bool S3fsSignals::Initialize()
-{
-    if(!S3fsSignals::pSingleton){
-        S3fsSignals::pSingleton = std::make_unique<S3fsSignals>();
-    }
-    return true;
-}
-
-bool S3fsSignals::Destroy()
-{
-    S3fsSignals::pSingleton.reset();
-    return true;
-}
-
 void S3fsSignals::HandlerUSR1(int sig)
 {
     if(SIGUSR1 != sig){
@@ -58,13 +43,7 @@ void S3fsSignals::HandlerUSR1(int sig)
         return;
     }
 
-    S3fsSignals* pSigobj = S3fsSignals::get();
-    if(!pSigobj){
-        S3FS_PRN_ERR("S3fsSignals object is not initialized.");
-        return;
-    }
-
-    if(!pSigobj->WakeupUsr1Thread()){
+    if(!S3fsSignals::get()->WakeupUsr1Thread()){
         S3FS_PRN_ERR("Failed to wakeup the thread for SIGUSR1.");
         return;
     }

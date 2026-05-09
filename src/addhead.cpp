@@ -37,29 +37,11 @@
 static constexpr char ADD_HEAD_REGEX[] = "reg:";
 
 //-------------------------------------------------------------------
-// Class AdditionalHeader
-//-------------------------------------------------------------------
-AdditionalHeader AdditionalHeader::singleton;
-
-//-------------------------------------------------------------------
 // Class AdditionalHeader method
 //-------------------------------------------------------------------
-AdditionalHeader::AdditionalHeader()
-{
-    if(this == AdditionalHeader::get()){
-        is_enable = false;
-    }else{
-        abort();
-    }
-}
-
 AdditionalHeader::~AdditionalHeader()
 {
-    if(this == AdditionalHeader::get()){
-        Unload();
-    }else{
-        abort();
-    }
+    Unload();
 }
 
 bool AdditionalHeader::Load(const char* file)
