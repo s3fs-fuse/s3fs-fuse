@@ -401,14 +401,14 @@ function s3_cp() {
 
 function wait_for_port() {
     local PORT="$1"
-    for _ in $(seq 30); do
+    for _ in $(seq 300); do
         if exec 3<>"/dev/tcp/127.0.0.1/${PORT}";
         then
             exec 3<&-  # Close for read
             exec 3>&-  # Close for write
             break
         fi
-        sleep 1
+        sleep 0.1
     done
 }
 
