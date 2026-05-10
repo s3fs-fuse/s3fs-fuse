@@ -30,7 +30,8 @@
 //-------------------------------------------------------------------
 // Static
 //-------------------------------------------------------------------
-std::mutex      StatCache::stat_cache_lock;
+std::mutex          StatCache::stat_cache_lock;
+StatCache::Sanitizer StatCache::pSanitizer = nullptr;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
@@ -146,8 +147,18 @@ bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, const 
     if(GetCacheSize() < 1 && !notruncate){
         return true;
     }
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    if(pSanitizer){
+        struct stat s_stbuf = stbuf;
+        headers_t   s_meta  = meta;
+        if(!pSanitizer(key, s_stbuf, s_meta, type)){
+            return false;
+        }
+        const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+        return AddStatHasLock(key, &s_stbuf, &s_meta, type, notruncate);
+    }
+
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
     return AddStatHasLock(key, &stbuf, &meta, type, notruncate);
 }
 
@@ -159,8 +170,18 @@ bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, objtyp
     if(GetCacheSize() < 1 && !notruncate){
         return true;
     }
-    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    if(pSanitizer){
+        struct stat s_stbuf = stbuf;
+        headers_t   s_meta;
+        if(!pSanitizer(key, s_stbuf, s_meta, type)){
+            return false;
+        }
+        const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+        return AddStatHasLock(key, &s_stbuf, &s_meta, type, notruncate);
+    }
+
+    const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
     return AddStatHasLock(key, &stbuf, nullptr, type, notruncate);
 }
 
@@ -199,6 +220,35 @@ bool StatCache::AddS3ObjList(std::string key, const S3ObjList& list)
 //
 bool StatCache::UpdateStat(const std::string& key, const struct stat& stbuf, const headers_t& meta)
 {
+    if(pSanitizer){
+        struct stat s_stbuf = stbuf;
+        headers_t   s_meta  = meta;
+        // Sanitizer needs an objtype hint; derive from the existing cache entry
+        // or fall back to UNKNOWN. Lock is acquired by the inner block.
+        objtype_t hint = objtype_t::UNKNOWN;
+        {
+            const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+            auto pCache = pMountPointDir->Find(key);
+            if(pCache){
+                hint = pCache->GetType();
+            }
+        }
+        if(!pSanitizer(key, s_stbuf, s_meta, hint)){
+            return false;
+        }
+        const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
+        auto pCache = pMountPointDir->Find(key);
+        if(!pCache){
+            return false;
+        }
+        if(!pCache->Update(s_stbuf, s_meta)){
+            S3FS_PRN_DBG("failed to update stat cache entry[path=%s]", key.c_str());
+            return false;
+        }
+        S3FS_PRN_INFO3("update stat cache entry[path=%s]", key.c_str());
+        return true;
+    }
+
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
     // search key cache
