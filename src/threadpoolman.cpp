@@ -165,7 +165,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
         // run function
         void* retval;
         if(nullptr != (retval = param.pfunc(s3fscurl, param.args))){
-            S3FS_PRN_WARN("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
+            S3FS_PRN_DBG("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
         }
         if(param.psem){
             param.psem->release();
