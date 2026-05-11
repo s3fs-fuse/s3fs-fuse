@@ -393,10 +393,6 @@ https://curl.haxx.se/docs/ssl-ciphers.html
 The instance name of the current s3fs mountpoint.
 This name will be added to logging messages and user agent headers sent by s3fs.
 .TP
-\fB\-o\fR complement_stat (complement lack of file/directory mode)
-s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
-As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.
-.TP
 \fB\-o\fR compat_dir (enable support of alternative directory names)
 .RS
 s3fs supports two different naming schemas "dir/" and "dir" to map directory names to S3 objects and vice versa by default. As a third variant, directories can be determined indirectly if there is a file object with a path (e.g. "/dir/file") but without the parent directory.  This option enables a fourth variant, "dir_$folder$", created by older applications.
@@ -555,12 +551,6 @@ Enable support of alternative directory names ("\-o compat_dir")
 .RS
 .TP
 s3fs recognizes "dir/" objects as directories. Clients other than s3fs may use "dir", "dir_$folder$" objects as directories, or directory objects may not exist. In order for s3fs to recognize these as directories, you can specify the "compat_dir" option.
-.RE
-.IP \[bu]
-Completion of file and directory information ("\-o complement_stat")
-.RS
-.TP
-s3fs uses the "x-amz-meta-mode header" to determine if an object is a file or a directory. For this reason, objects that do not have the "x-amz-meta-mode header" may not produce the expected results(The directory cannot be displayed, etc.). By specifying the "complement_stat" option, s3fs can automatically complete this missing attribute information, and you can get the expected results.
 .RE
 .SH NOTES
 .TP

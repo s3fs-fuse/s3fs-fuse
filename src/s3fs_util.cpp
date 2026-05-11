@@ -222,10 +222,10 @@ int mkdirp(const std::string& path, mode_t mode)
             if(errno == EEXIST){
                 struct stat st;
                 if(0 != lstat(base.c_str(), &st) || !S_ISDIR(st.st_mode)){
-                    return EPERM;
+                    return -EPERM;
                 }
             }else{
-                return errno;
+                return -errno;
             }
         }
     }

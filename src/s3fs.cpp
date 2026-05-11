@@ -852,15 +852,19 @@ static int get_local_fent(AutoFdEntity& autoent, FdEntity **entity, const char* 
     }
     bool   force_tmpfile = S_ISREG(stobj.st_mode) ? false : true;
 
-    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, ts_times, flags, force_tmpfile, true, false))){
-        S3FS_PRN_ERR("Could not open file. errno(%d)", errno);
-        return -EIO;
+    int error = 0;
+    if(nullptr == (ent = autoent.Open(path, &meta, stobj.st_size, ts_times, flags, force_tmpfile, true, false, &error))){
+        if(0 == error){
+            error = -EIO;
+        }
+        S3FS_PRN_ERR("Could not open file. result(%d)", error);
+        return error;
     }
     // load
-    if(is_load && !ent->LoadAll(autoent.GetPseudoFd())){
-        S3FS_PRN_ERR("Could not load file. errno(%d)", errno);
+    if(is_load && 0 != (result = ent->LoadAll(autoent.GetPseudoFd()))){
+        S3FS_PRN_ERR("Could not load file. result(%d)", result);
         autoent.Close();
-        return -EIO;
+        return result;
     }
     *entity = ent;
     return 0;
@@ -1363,8 +1367,8 @@ static int s3fs_rmdir(const char* _path)
     }
 
     // directory must be empty
-    if(directory_empty(path) != 0){
-        return -ENOTEMPTY;
+    if(0 != (result = directory_empty(path))){
+        return result;
     }
 
     strpath = path;
@@ -1476,9 +1480,13 @@ static int s3fs_symlink(const char* _from, const char* _to)
         AutoFdEntity autoent;
         FdEntity*    ent;
         FileTimes    ts_times;      // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, ts_times, O_RDWR, true, true, false))){
-            S3FS_PRN_ERR("could not open tmpfile(errno=%d)", errno);
-            return -errno;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(strTo.c_str(), &headers, 0, ts_times, O_RDWR, true, true, false, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open tmpfile(result=%d)", error);
+            return error;
         }
 
         // write(without space words)
@@ -1773,7 +1781,7 @@ static int rename_directory(const char* from, const char* to)
     std::string  basepath = strfrom + "/";
     std::string  normpath;                      // normalized path for "from name"(not used)
     objtype_t    ObjType;
-    bool         normdir; 
+    bool         normdir;
     struct stat  stbuf;
     int          result;
     bool         is_dir;
@@ -1859,7 +1867,7 @@ static int rename_directory(const char* from, const char* to)
             is_dir  = false;
             normdir = false;
         }
-        
+
         // push this one onto the stack
         mvnodes.emplace_back(from_name, to_name, is_dir, normdir);
     }
@@ -2243,7 +2251,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
         //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-  
+
     return result;
 }
 
@@ -2490,7 +2498,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_
         // Change owner
         ent->SetUId(uid);
         ent->SetGId(gid);
-  
+
         // upload
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", curpath.c_str(), result);
@@ -2502,7 +2510,7 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_
         //
         StatCache::getStatCacheData()->DelStat(normpath);
     }
-  
+
     return result;
 }
 
@@ -2946,9 +2954,13 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
         }
 
         FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify))){
-            S3FS_PRN_ERR("could not open file(%s): errno=%d(ent is null(%p))", path, errno, ent);   // [NOTE] read ent to avoid errors with cppcheck etc
-            return -EIO;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open file(%s): result=%d(ent is null(%p))", path, error, ent);   // [NOTE] read ent to avoid errors with cppcheck etc
+            return error;
         }
 
 #ifdef __APPLE__
@@ -2981,9 +2993,13 @@ static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
         meta["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
 
         FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
-        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, true, true, false))){
-            S3FS_PRN_ERR("could not open file(%s): errno=%d", path, errno);
-            return -EIO;
+        int error = 0;
+        if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, true, true, false, &error))){
+            if(0 == error){
+                error = -EIO;
+            }
+            S3FS_PRN_ERR("could not open file(%s): result=%d", path, error);
+            return error;
         }
         if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
@@ -3066,10 +3082,14 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
     FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
     ts_times.SetAll(st);
-    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, ts_times, fi->flags, false, true, false))){
+    int error = 0;
+    if(nullptr == (ent = autoent.Open(path, &meta, st.st_size, ts_times, fi->flags, false, true, false, &error))){
+        if(0 == error){
+            error = -EIO;
+        }
         // remove stat cache
         StatCache::getStatCacheData()->DelStat(path);
-        return -EIO;
+        return error;
     }
 
     if (needs_flush){
@@ -3433,9 +3453,10 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
     // common variables
     Semaphore    multi_head_sem(0);
-    int          req_count  = 0;
-    int          req_result = 0;
-    int          retrycount = 0;
+    int          req_count    = 0;
+    int          req_result   = 0;
+    int          retrycount   = 0;
+    int          sched_result = 0;
     std::mutex   thparam_lock;
     s3obj_list_t notfound_list;
 
@@ -3460,7 +3481,13 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
         // set one head request
         int result;
         if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, iter->second, req_result, multi_head_sem))){
-            return result;
+            // [NOTE]
+            // Must drain already-scheduled workers before returning, since they
+            // hold pointers to stack-local multi_head_sem/thparam_lock/
+            // syncfiller/retrycount/req_result/notfound_list. Record the
+            // failure and break to the drain loop below.
+            sched_result = result;
+            break;
         }
         ++req_count;
     }
@@ -3469,6 +3496,10 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     while(req_count > 0){
         multi_head_sem.acquire();
         --req_count;
+    }
+
+    if(0 != sched_result){
+        return sched_result;
     }
 
     // print messages
@@ -4409,7 +4440,7 @@ static int s3fs_removexattr(const char* _path, const char* name)
 
 // s3fs_init calls this function to exit cleanly from the fuse event loop.
 //
-// There's no way to pass an exit status to the high-level event loop API, so 
+// There's no way to pass an exit status to the high-level event loop API, so
 // this function stores the exit value in a global for main()
 static void s3fs_exit_fuseloop(int exit_status)
 {
@@ -4972,10 +5003,10 @@ static int print_umount_message(const std::string& mp, bool force)
 }
 
 // This is repeatedly called by the fuse option parser
-// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by 
+// if the key is equal to FUSE_OPT_KEY_OPT, it's an option passed in prefixed by
 // '-' or '--' e.g.: -f -d -ousecache=/tmp
 //
-// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name 
+// if the key is equal to FUSE_OPT_KEY_NONOPT, it's either the bucket name
 //  or the mountpoint. The bucket name will always come before the mountpoint
 //
 static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs)
@@ -5529,7 +5560,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             return 0;
         }
         else if(0 == strcmp(arg, "complement_stat")){
-            complement_stat = true;
+            S3FS_PRN_WARN("complement_stat is enabled by default and a future version will remove this option.");
             return 0;
         }
         else if(0 == strcmp(arg, "notsup_compat_dir")){
@@ -5795,7 +5826,7 @@ int main(int argc, char* argv[])
 {
     int ch;
     int fuse_res;
-    int option_index = 0; 
+    int option_index = 0;
     struct fuse_operations s3fs_oper{};
     time_t incomp_abort_time = (24 * 60 * 60);
     S3fsLog singletonLog;
@@ -5910,7 +5941,7 @@ int main(int argc, char* argv[])
     // call of my_fuse_opt_proc function is completed. Therefore,
     // the mime type is loaded just after calling the my_fuse_opt_proc
     // function.
-    // 
+    //
     if(!S3fsCurl::InitS3fsCurl()){
         S3FS_PRN_EXIT("Could not initiate curl library.");
         s3fs_destroy_global_ssl();
@@ -6011,11 +6042,11 @@ int main(int argc, char* argv[])
     // our own certificate verification logic.
     // For now, this will be unsupported unless we get a request for it to
     // be supported. In that case, we have a couple of options:
-    // - implement a command line option that bypasses the verify host 
+    // - implement a command line option that bypasses the verify host
     //   but doesn't bypass verifying the certificate
     // - write our own host verification (this might be complex)
     // See issue #128strncasecmp
-    /* 
+    /*
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){

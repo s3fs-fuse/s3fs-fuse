@@ -318,8 +318,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:44" ] ||
         procps
     )
 
-elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:15" ] ||
-     [ "${CONTAINER_FULLNAME}" = "opensuse/leap:16.0" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:16.0" ]; then
     PACKAGE_MANAGER_BIN="zypper"
     PACKAGE_UPDATE_OPTIONS="refresh"
     PACKAGE_INSTALL_OPTIONS="install -y"

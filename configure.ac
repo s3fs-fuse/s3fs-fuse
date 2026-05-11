@@ -83,7 +83,7 @@ dnl ----------------------------------------------
 dnl For macOS
 dnl ----------------------------------------------
 case "$target" in
-   *-cygwin* )
+   *-cygwin* | *-mingw* | *-msys* )
       # Do something specific for windows using winfsp
       CXXFLAGS="$CXXFLAGS -D_GNU_SOURCE=1"
       min_fuse_version=2.8
@@ -315,7 +315,7 @@ dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl clock_gettime function(macos)
-AC_SEARCH_LIBS([clock_gettime],[rt posix4]) 
+AC_SEARCH_LIBS([clock_gettime],[rt posix4])
 AC_CHECK_FUNCS([clock_gettime])
 
 dnl ----------------------------------------------

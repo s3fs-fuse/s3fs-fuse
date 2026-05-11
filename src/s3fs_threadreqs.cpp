@@ -1139,7 +1139,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
             // Each part must be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB, then loop.
             // This loop breaks if result is not 0.
             //
-            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes && 0 == result; processed_bytes += request_bytes){
+            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes; processed_bytes += request_bytes){
                 // Set temporary part sizes
                 request_bytes = std::min(S3fsCurl::GetMultipartCopySize(), (iter->bytes - processed_bytes));
 
@@ -1169,6 +1169,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
                     S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Copy Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
                     // [NOTE]
                     // This loop breaks because result is not 0.
+                    break;
                 }
                 ++req_count;
             }
@@ -1335,7 +1336,8 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
         // setup instruction
         if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for one header request.");
-            return -EIO;
+            result = -EIO;
+            break;
         }
         thargs.release();  // NOLINT(bugprone-unused-return-value)
         ++req_count;
@@ -1345,6 +1347,15 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
     while(req_count > 0){
         multi_head_sem.acquire();
         --req_count;
+    }
+
+    // propagate scheduling failure after drain
+    if(0 != result){
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(strto, upload_id))){
+            S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+        }
+        return result;
     }
 
     // check result
@@ -1380,9 +1391,10 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
 
     Semaphore    para_getobj_sem(0);
     std::mutex   thparam_lock;
-    int          req_count  = 0;
-    int          retrycount = 0;
-    int          req_result = 0;
+    int          req_count    = 0;
+    int          retrycount   = 0;
+    int          req_result   = 0;
+    int          sched_result = 0;
 
     // cycle through open fd, pulling off 10MB chunks at a time
     for(off_t remaining_bytes = size, chunk = 0; 0 < remaining_bytes; remaining_bytes -= chunk){
@@ -1410,7 +1422,8 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
         // setup instruction
         if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for one header request.");
-            return -EIO;
+            sched_result = -EIO;
+            break;
         }
         thargs.release();  // NOLINT(bugprone-unused-return-value)
         ++req_count;
@@ -1420,6 +1433,10 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
     while(req_count > 0){
         para_getobj_sem.acquire();
         --req_count;
+    }
+
+    if(0 != sched_result){
+        return sched_result;
     }
 
     // check result

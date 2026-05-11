@@ -149,7 +149,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         }
         int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
 
-        bool LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
+        int LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return DupWithLock(fd);

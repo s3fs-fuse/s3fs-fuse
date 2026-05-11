@@ -45,7 +45,7 @@ openssl md5 -binary < /tmp/ssekey.bin | base64 > /tmp/ssekeymd5
 chmod 600 /tmp/ssekey /tmp/ssekey.bin /tmp/ssekeymd5
 
 export CACHE_DIR
-export ENSURE_DISKFREE_SIZE 
+export ENSURE_DISKFREE_SIZE
 if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat"

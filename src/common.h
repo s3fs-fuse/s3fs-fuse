@@ -37,7 +37,6 @@ static constexpr off_t    MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
 extern bool           foreground;
 extern bool           nomultipart;
 extern bool           pathrequeststyle;
-extern bool           complement_stat;
 extern bool           noxmlns;
 extern bool           insecure_logging;
 extern std::string    program_name;
@@ -62,7 +61,7 @@ extern std::atomic<long long unsigned> num_requests_mpu_copy_part;
 //-------------------------------------------------------------------
 // For weak attribute
 //-------------------------------------------------------------------
-#define	S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
+#define S3FS_FUNCATTR_WEAK __attribute__ ((weak,unused))
 
 //-------------------------------------------------------------------
 // For clang -Wthread-safety
