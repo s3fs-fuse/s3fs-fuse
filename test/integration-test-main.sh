@@ -2130,12 +2130,21 @@ function test_truncate_cache() {
     # sometimes resulting in failure.
     # Until this issue is resolved, please delete directories one by one.
     #
+    # On macOS with -o update_parent_dir_stat there is a second race: each
+    # unlink schedules an async update_mctime_parent_directory PUT against
+    # the parent directory marker. If rm advances to rmdir before that PUT
+    # settles, s3fs_rmdir's check_parent_object_access can read a transient
+    # mode value out of the stat cache and return -EACCES (surfaces as
+    # "rm: <dir>: Permission denied"). Wait between iterations so the
+    # parent's metadata update is committed before the next rm runs.
+    #
     if ! uname | grep -q Darwin; then
         # shellcheck disable=SC2046
         rm -rf $(seq 2)
     else
         for dir in $(seq 2); do
             rm -rf "${dir}"
+            wait_ostype 1 "Darwin"
         done
     fi
 }
