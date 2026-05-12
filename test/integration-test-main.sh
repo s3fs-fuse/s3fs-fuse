@@ -2915,6 +2915,17 @@ function test_pjdfstest_utimensat() {
 }
 
 function add_all_tests {
+    # fastreaddir mode discards x-amz-meta-* on read paths, so tests that
+    # depend on POSIX-attribute round-trip (chmod, chown, utimens, xattrs,
+    # ACLs, S_IFMT bits for FIFO/SOCK/CHR special files) cannot reflect
+    # ground truth once the stat cache evicts. Skip those tests in
+    # fastreaddir mode; the remaining suite still exercises the read paths
+    # that fastreaddir actually changes.
+    local skip_metadata=false
+    if s3fs_args | grep -q fastreaddir; then
+        skip_metadata=true
+    fi
+
     if s3fs_args | grep -q use_cache; then
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
@@ -2937,8 +2948,10 @@ function add_all_tests {
     add_tests test_mv_nonempty_directory
     add_tests test_redirects
     add_tests test_mkdir_rmdir
-    add_tests test_chmod
-    add_tests test_chown
+    if ! ${skip_metadata}; then
+        add_tests test_chmod
+        add_tests test_chown
+    fi
     add_tests test_list
     add_tests test_remove_nonempty_directory
     add_tests test_external_directory_creation
@@ -2946,8 +2959,10 @@ function add_all_tests {
     add_tests test_external_creation
     add_tests test_read_external_object
     add_tests test_read_external_dir_object
-    add_tests test_update_metadata_external_small_object
-    add_tests test_update_metadata_external_large_object
+    if ! ${skip_metadata}; then
+        add_tests test_update_metadata_external_small_object
+        add_tests test_update_metadata_external_large_object
+    fi
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
@@ -2973,54 +2988,56 @@ function add_all_tests {
     # This is a bug not caused by s3fs-fuse. Therefore, the test will be temporarily bypassed.
     # This condition will be removed once the related issue is resolved.
     #
-    if ! uname | grep -q Darwin; then
+    if ! uname | grep -q Darwin && ! ${skip_metadata}; then
         add_tests test_symlink
     fi
-    if ! uname | grep -q Darwin; then
+    if ! uname | grep -q Darwin && ! ${skip_metadata}; then
         add_tests test_mknod
         add_tests test_extended_attributes
     fi
-    add_tests test_mtime_file
+    if ! ${skip_metadata}; then
+        add_tests test_mtime_file
 
-    add_tests test_update_time_chmod
-    add_tests test_update_time_chown
-    add_tests test_update_time_xattr
-    add_tests test_update_time_touch
-    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
-        add_tests test_update_time_touch_a
-    fi
-    add_tests test_update_time_append
-    add_tests test_update_time_cp_p
-    add_tests test_update_time_mv
+        add_tests test_update_time_chmod
+        add_tests test_update_time_chown
+        add_tests test_update_time_xattr
+        add_tests test_update_time_touch
+        if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+            add_tests test_update_time_touch_a
+        fi
+        add_tests test_update_time_append
+        add_tests test_update_time_cp_p
+        add_tests test_update_time_mv
 
-    add_tests test_update_directory_time_chmod
-    add_tests test_update_directory_time_chown
-    add_tests test_update_directory_time_touch
-    if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
-        add_tests test_update_directory_time_touch_a
-    fi
-    if ! uname | grep -q Darwin; then
-        # FIXME:
-        # These test fail in macos-fuse-t because mtime/ctime/atime are not updated.
-        # Currently, these are not an issue with s3fs, so we will bypass this test for macos.
-        # Please pay attention to future developments in macos-fuse-t.
-        #
-        add_tests test_update_directory_time_set_xattr
-        add_tests test_update_directory_time_subdir
-    fi
-    add_tests test_update_chmod_opened_file
-    if s3fs_args | grep -q update_parent_dir_stat; then
+        add_tests test_update_directory_time_chmod
+        add_tests test_update_directory_time_chown
+        add_tests test_update_directory_time_touch
+        if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
+            add_tests test_update_directory_time_touch_a
+        fi
         if ! uname | grep -q Darwin; then
             # FIXME:
-            # In macos-fuse-t, this test can sometimes succeed if the test waits for more
-            # than one second while it is processing.
-            # However, the results are currently unstable, thus this test is bypassed on macos.
+            # These test fail in macos-fuse-t because mtime/ctime/atime are not updated.
+            # Currently, these are not an issue with s3fs, so we will bypass this test for macos.
             # Please pay attention to future developments in macos-fuse-t.
             #
-            add_tests test_update_parent_directory_time
+            add_tests test_update_directory_time_set_xattr
+            add_tests test_update_directory_time_subdir
+        fi
+        add_tests test_update_chmod_opened_file
+        if s3fs_args | grep -q update_parent_dir_stat; then
+            if ! uname | grep -q Darwin; then
+                # FIXME:
+                # In macos-fuse-t, this test can sometimes succeed if the test waits for more
+                # than one second while it is processing.
+                # However, the results are currently unstable, thus this test is bypassed on macos.
+                # Please pay attention to future developments in macos-fuse-t.
+                #
+                add_tests test_update_parent_directory_time
+            fi
         fi
     fi
-    if ! s3fs_args | grep -q use_xattr; then
+    if ! s3fs_args | grep -q use_xattr && ! ${skip_metadata}; then
         add_tests test_posix_acl
     fi
 
@@ -3065,11 +3082,15 @@ function add_all_tests {
         add_tests test_pjdfstest_granular
         add_tests test_pjdfstest_link
         add_tests test_pjdfstest_mknod
-        add_tests test_pjdfstest_open
+        if ! ${skip_metadata}; then
+            add_tests test_pjdfstest_open
+        fi
         add_tests test_pjdfstest_posix_fallocate
         add_tests test_pjdfstest_truncate
         add_tests test_pjdfstest_unlink
-        add_tests test_pjdfstest_utimensat
+        if ! ${skip_metadata}; then
+            add_tests test_pjdfstest_utimensat
+        fi
 
         # [NOTE][TODO]
         # Temporary error workaround in Ubuntu 25.10
@@ -3080,9 +3101,13 @@ function add_all_tests {
         #
         if ! ( . /etc/os-release 2>/dev/null && [ "${ID}" = "ubuntu" ] && [ "${VERSION_ID}" = "25.10" ] ); then
             add_tests test_pjdfstest_mkdir
-            add_tests test_pjdfstest_mkfifo
+            if ! ${skip_metadata}; then
+                add_tests test_pjdfstest_mkfifo
+            fi
             add_tests test_pjdfstest_rename
-            add_tests test_pjdfstest_rmdir
+            if ! ${skip_metadata}; then
+                add_tests test_pjdfstest_rmdir
+            fi
             add_tests test_pjdfstest_symlink
         fi
     fi

@@ -111,6 +111,7 @@ static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
 static fsblkcnt_t bucket_block_count;                       // advertised block count of the bucket
 static unsigned long s3fs_block_size = 16 * 1024 * 1024;    // s3fs block size is 16MB
+static bool fastreaddir           = false;  // skip per-object HEAD in readdir/getattr
 
 //-------------------------------------------------------------------
 // Static functions : prototype
@@ -282,6 +283,66 @@ static int remove_old_type_dir(const std::string& path, objtype_t ObjType)
 }
 
 //
+// Build a struct stat and synthetic headers from LIST-equivalent metadata
+// (size, last-modified time) and global ownership defaults. The synthesized
+// mode mirrors get_mode()'s defaults for objects without x-amz-meta-mode:
+// 0750 for directories, 0640 for regular files. Setting the directory mode
+// explicitly is necessary because get_mode()'s path-based default (0640 for
+// names without a trailing slash) would otherwise leave a directory cached
+// as drw-r----- and break traversal.
+//
+static bool convert_listentry_to_stat(const std::string& strpath, off_t size, time_t mtime, bool is_dir, struct stat& stbuf, headers_t& meta)
+{
+    meta.clear();
+
+    if(0 <= size){
+        meta["Content-Length"] = std::to_string(size);
+    }
+    if(is_dir){
+        meta["Content-Type"]    = "application/x-directory";
+        meta["x-amz-meta-mode"] = std::to_string(S_IFDIR | 0750);
+    }else{
+        meta["x-amz-meta-mode"] = std::to_string(S_IFREG | 0640);
+    }
+    if(is_s3fs_uid){
+        meta["x-amz-meta-uid"] = std::to_string(s3fs_uid);
+    }
+    if(is_s3fs_gid){
+        meta["x-amz-meta-gid"] = std::to_string(s3fs_gid);
+    }
+
+    if(0 < mtime){
+        std::string ts = std::to_string(static_cast<long long>(mtime));
+        meta["x-amz-meta-mtime"] = ts;
+        meta["x-amz-meta-atime"] = ts;
+        meta["x-amz-meta-ctime"] = ts;
+    }
+
+    return convert_header_to_stat(strpath, meta, stbuf, is_dir);
+}
+
+//
+// StatCache pre-write sanitizer for fastreaddir mode.
+// Discards x-amz-meta-* POSIX attributes from any stat cache write,
+// rebuilding stbuf+meta as if they came from a LIST entry. Keeps the
+// cache consistent regardless of whether the write came from a HEAD,
+// readdir synthesis, chmod/chown/utimens/setxattr, or any other path.
+//
+static bool sanitize_for_fastreaddir(const std::string& key, struct stat& stbuf, headers_t& meta, objtype_t type)
+{
+    bool   is_dir = IS_DIR_OBJ(type) || (!key.empty() && '/' == key.back());
+    off_t  fr_size = get_size(meta);
+    if(fr_size <= 0 && stbuf.st_size > 0){
+        fr_size = stbuf.st_size;
+    }
+    time_t fr_mtime = get_lastmodified(meta);
+    if(fr_mtime < 0){
+        fr_mtime = stbuf.st_mtime;
+    }
+    return convert_listentry_to_stat(key, fr_size, fr_mtime, is_dir, stbuf, meta);
+}
+
+//
 // Get object attributes with stat cache.
 // This function is base for s3fs_getattr().
 //
@@ -415,8 +476,43 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
     // get headers
     result = head_request(strpath, *pmeta);
 
+    // fastreaddir: skip the full overcheck chain and treat the HEAD response as LIST-equivalent
+    // (Content-Length / Last-Modified plus a single Content-Type check for directory detection;
+    // ignore x-amz-meta-* and the _$folder$ probe / directory_empty LIST fallback).
+    // If "foo" returns non-zero, probe "foo/" so directories stored with a trailing slash are
+    // still found on a cold cache. Only adopt the slash form when it actually looks like a
+    // directory marker (0-byte or Content-Type=application/x-directory) — some backends return
+    // 200 on HEAD "foo/" even when only "foo" exists, which would otherwise misclassify files.
+    if(fastreaddir){
+        if(0 != result && !is_bucket_mountpoint && '/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
+            std::string slashpath = strpath + "/";
+            headers_t   slashmeta;
+            if(0 == head_request(slashpath, slashmeta)){
+                if(0 == get_size(slashmeta) || is_dir_fmt(slashmeta)){
+                    strpath = slashpath;
+                    *pmeta  = slashmeta;
+                    result  = 0;
+                }
+            }
+        }
+
+        if(0 == result){
+            off_t       fr_size  = get_size(*pmeta);
+            time_t      fr_mtime = get_lastmodified(*pmeta);
+            // Trailing-slash signals a directory; Content-Type=application/x-directory
+            // covers backends that respond 200 to HEAD on the slash-less form for directory markers.
+            bool        fr_is_dir = (!strpath.empty() && '/' == strpath.back()) || is_dir_fmt(*pmeta);
+
+            if(!convert_listentry_to_stat(strpath, fr_size, fr_mtime, fr_is_dir, *pstbuf, *pmeta)){
+                S3FS_PRN_ERR("convert_listentry_to_stat failed[path=%s]", strpath.c_str());
+                return -EIO;
+            }
+            *pObjType = fr_is_dir ? objtype_t::DIR_NORMAL : objtype_t::FILE;
+        }
+        // For still-non-zero result, fall through to the mount-point / negative-cache logic below.
+    }
     // if not found target path object, do over checking
-    if(-EPERM == result){
+    else if(-EPERM == result){
         // [NOTE]
         // In case of a permission error, it exists in directory
         // file list but inaccessible. So there is a problem that
@@ -3478,6 +3574,32 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
             continue;
         }
 
+        if(fastreaddir){
+            // Synthesize stat from LIST-equivalent metadata; no per-object HEAD.
+            bool        is_dir  = IS_DIR_OBJ(iter->second);
+            off_t       fr_size = head.GetSize(iter->first.c_str());
+            std::string lastmod = head.GetLastModified(iter->first.c_str());
+            time_t      fr_mtime = lastmod.empty() ? 0 : cvtIAMExpireStringToTime(lastmod.c_str());
+
+            std::string bpath = mybasename(disppath);
+            if(use_wtf8){
+                bpath = s3fs_wtf8_decode(bpath);
+            }
+
+            headers_t synthetic;
+            if(convert_listentry_to_stat(disppath, fr_size, fr_mtime, is_dir, st, synthetic)){
+                objtype_t otype = is_dir ? objtype_t::DIR_NORMAL : objtype_t::FILE;
+                if(!StatCache::getStatCacheData()->AddStat(disppath, st, synthetic, otype, false)){
+                    S3FS_PRN_ERR("failed adding stat cache [path=%s], but continue...", disppath.c_str());
+                }
+                syncfiller.Fill(bpath, &st, 0);
+            }else{
+                S3FS_PRN_ERR("failed convert listentry to stat [path=%s], fill empty stat.", disppath.c_str());
+                syncfiller.Fill(bpath, nullptr, 0);
+            }
+            continue;
+        }
+
         // set one head request
         int result;
         if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, iter->second, req_result, multi_head_sem))){
@@ -5582,6 +5704,11 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         else if(0 == strcmp(arg, "update_parent_dir_stat")){
             update_parent_dir_stat = true;
+            return 0;
+        }
+        else if(0 == strcmp(arg, "fastreaddir")){
+            fastreaddir = true;
+            StatCache::SetSanitizer(sanitize_for_fastreaddir);
             return 0;
         }
         else if(is_prefix(arg, "host=")){

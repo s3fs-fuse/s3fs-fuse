@@ -404,6 +404,9 @@ The support for these different naming schemas causes an increased communication
 If you do not have access permissions to the bucket and specify a directory path created by a client other than s3fs for the mount point, you cannot start because the mount point directory cannot be found by s3fs. But by specifying this option, you can avoid this error.
 .RE
 .TP
+\fB\-o\fR fastreaddir (skip per-object HEAD in readdir/getattr)
+Populate the stat cache directly from ListObjects results during readdir, instead of issuing one HEAD per entry. Subsequent stat calls hit the cache; on a cache miss a single HEAD is issued and only its Content-Length and Last-Modified fields are used. x-amz-meta-* headers (mode, uid, gid, mtime, atime, ctime, xattr) and Content-Type-based directory detection are ignored, so file permissions and ownership use the global uid/gid/umask defaults and symlinks appear as regular files. Trades POSIX metadata fidelity for substantially fewer S3 requests on large directories.
+.TP
 \fB\-o\fR use_wtf8 - support arbitrary file system encoding.
 S3 requires all object names to be valid UTF-8. But some
 clients, notably Windows NFS clients, use their own encoding.
