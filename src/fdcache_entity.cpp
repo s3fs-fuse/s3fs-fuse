@@ -752,7 +752,7 @@ bool FdEntity::GetStatsHasLock(struct stat& st) const
 
 int FdEntity::SetCtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
@@ -764,7 +764,7 @@ int FdEntity::SetCtimeHasLock(struct timespec time)
 
 int FdEntity::SetAtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
@@ -776,7 +776,7 @@ int FdEntity::SetAtimeHasLock(struct timespec time)
 
 int FdEntity::SetMtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
