@@ -3157,6 +3157,7 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
 
     if(0 > (res = ent->Write(static_cast<int>(fi->fh), buf, offset, size))){
         S3FS_PRN_WARN("failed to write file(%s). result=%zd", path, res);
+        return static_cast<int>(res);
     }
 
     int    result;
