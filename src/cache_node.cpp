@@ -1429,6 +1429,7 @@ bool DirStatCache::TruncateCacheHasLock()
         std::string strLeafName;
         bool        hasNestedChildren = false;
         if(!GetChildLeafNameHasLock(iter->second->GetPathHasLock(), strLeafName, hasNestedChildren)){
+            ++iter;
             continue;
         }
 
