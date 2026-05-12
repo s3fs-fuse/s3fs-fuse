@@ -73,7 +73,9 @@ S3FS=../src/s3fs
 # CHAOS HTTP PROXY does not support HTTPS.
 #
 if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-    : "${S3_URL:="https://127.0.0.1:8080"}"
+    # Default to S3Proxy's HTTP listener (port 8081). The HTTPS listener
+    # on 8080 is still up; override S3_URL to use it if needed.
+    : "${S3_URL:="http://127.0.0.1:8081"}"
 else
     : "${S3_URL:="http://127.0.0.1:8080"}"
 fi
