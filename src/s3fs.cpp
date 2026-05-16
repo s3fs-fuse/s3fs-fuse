@@ -1286,10 +1286,12 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         S3FS_PRN_ERR("succeed to create the directory(%s), but could not add stat cache.", path);
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(path))){
-        S3FS_PRN_ERR("succeed to create the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(path))){
+            S3FS_PRN_ERR("succeed to create the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+        }
     }
 
     return result;
@@ -1429,10 +1431,12 @@ static int s3fs_rmdir(const char* _path)
         }
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(path))){
-        S3FS_PRN_ERR("succeed to remove the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(path))){
+            S3FS_PRN_ERR("succeed to remove the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+        }
     }
 
     return result;
@@ -1522,10 +1526,12 @@ static int s3fs_symlink(const char* _from, const char* _to)
         }
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
-        S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
+            S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
+        }
     }
 
     return result;
@@ -1988,14 +1994,16 @@ static int s3fs_rename(const char* _from, const char* _to)
         }
     }
 
-    // update parent directory timestamp
-    //
-    // [NOTE]
-    // already updated timestamp for original path in above functions.
-    //
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(to))){
-        S3FS_PRN_ERR("succeed to create the file/directory(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        //
+        // [NOTE]
+        // already updated timestamp for original path in above functions.
+        //
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(to))){
+            S3FS_PRN_ERR("succeed to create the file/directory(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
+        }
     }
 
     return result;
@@ -3263,7 +3271,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
             StatCache::getStatCacheData()->DelStat(strpath);
         }
 
-        if(is_new_file){
+        if(is_new_file && 0 == result){
             // update parent directory timestamp
             int update_result;
             if(0 != (update_result = update_mctime_parent_directory(path))){
@@ -3302,7 +3310,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
             ent->MarkDirtyMetadata();
         }
 
-        if(is_new_file){
+        if(is_new_file && 0 == result){
             // update parent directory timestamp
             int update_result;
             if(0 != (update_result = update_mctime_parent_directory(path))){
