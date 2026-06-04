@@ -41,7 +41,6 @@ using iamcredmap_t = std::map<std::string, std::string>;
 // secret key, tokens, etc.) used by S3fs.
 // Operations related to Credentials are aggregated in this class.
 //
-// cppcheck-suppress ctuOneDefinitionRuleViolation       ; for stub in test_curl_util.cpp
 class S3fsCred
 {
     private:
