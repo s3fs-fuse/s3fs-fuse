@@ -93,7 +93,7 @@ class PseudoFdInfo
         int PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta);
 
         int WaitAllThreadsExit();
-        ssize_t UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta, FdEntity* pfdent) REQUIRES(pfdent->GetMutex());
+        ssize_t UploadBoundaryLastUntreatedArea(const char* path, const headers_t& meta, FdEntity* pfdent) REQUIRES(pfdent->GetMutex());
         bool ExtractUploadPartsFromAllArea(const UntreatedParts& untreated_list, mp_part_list_t& to_upload_list, mp_part_list_t& to_copy_list, mp_part_list_t& to_download_list, filepart_list_t& cancel_upload_list, bool& wait_upload_complete, off_t max_mp_size, off_t file_size, bool use_copy);
 };
 
