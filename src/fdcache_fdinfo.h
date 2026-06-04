@@ -52,16 +52,16 @@ class PseudoFdInfo
         Semaphore               uploaded_sem;                                   // use a semaphore to trigger an upload completion like event flag
 
     private:
-        bool Clear();
+        void Clear();
         void CloseUploadFd();
         bool OpenUploadFd();
-        bool ResetUploadInfo() REQUIRES(upload_list_lock);
-        bool RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
+        void ResetUploadInfo() REQUIRES(upload_list_lock);
+        void RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
         void IncreaseInstructionCount();
         bool GetUploadInfo(std::string& id, int& fd) const;
         bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag);
-        bool CancelAllThreads();
+        void CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(off_t untreated_start, off_t untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
         bool IsUploadingHasLock() const REQUIRES(upload_list_lock);
 
@@ -80,8 +80,8 @@ class PseudoFdInfo
         bool Readable() const;
 
         bool Set(int fd, int open_flags);
-        bool ClearUploadInfo(bool is_cancel_mp = false);
-        bool InitialUploadInfo(const std::string& id){ return RowInitialUploadInfo(id, true); }
+        void ClearUploadInfo(bool is_cancel_mp = false);
+        void InitialUploadInfo(const std::string& id){ RowInitialUploadInfo(id, true); }
 
         bool IsUploading() const;
         bool GetUploadId(std::string& id) const;
