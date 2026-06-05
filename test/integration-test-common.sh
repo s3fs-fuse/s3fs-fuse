@@ -73,7 +73,9 @@ S3FS=../src/s3fs
 # CHAOS HTTP PROXY does not support HTTPS.
 #
 if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-    : "${S3_URL:="https://127.0.0.1:8080"}"
+    # Default to S3Proxy's HTTP listener (port 8081). The HTTPS listener
+    # on 8080 is still up; override S3_URL to use it if needed.
+    : "${S3_URL:="http://127.0.0.1:8081"}"
 else
     : "${S3_URL:="http://127.0.0.1:8080"}"
 fi
@@ -89,8 +91,8 @@ TEST_SCRIPT_DIR=$(pwd)
 export TEST_SCRIPT_DIR
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
-S3PROXY_VERSION="3.0.0"
-S3PROXY_HASH="28eda00684ed6cf7bed0246c1d28d490321084ed81cd06e4c47dd9f01fa6ad75"
+S3PROXY_VERSION="3.1.0"
+S3PROXY_HASH="0d4aec51ba20783260f9c522d5ed0ea522e37d934d6316f21c3c1df063687447"
 S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
@@ -129,7 +131,7 @@ else
 fi
 
 # This function execute the function parameters $1 times
-# before giving up, with 1 second delays.
+# before giving up, with 0.1 second delays.
 function retry {
     local N="$1"
     shift
@@ -142,7 +144,7 @@ function retry {
         if [ "${rc}" -eq 0 ]; then
             break
         fi
-        sleep 1
+        sleep 0.1
         echo "Retrying: $*"
     done
 
@@ -352,27 +354,32 @@ function start_s3fs {
             "${@}" &
         echo $! >&3
     ) 3>pid | "${STDBUF_COMMAND_LINE[@]}" awk "{print \"s3fs: \" \$0}" &
-    sleep 1
+    # Poll for the pid file rather than sleeping a fixed second.
+    for _ in $(seq 50); do
+        [ -s pid ] && break
+        sleep 0.1
+    done
     S3FS_PID=$(<pid)
     export S3FS_PID
     rm -f pid
 
     if [ "$(uname)" = "Darwin" ]; then
         local TRYCOUNT=0
-        while [ "${TRYCOUNT}" -le "${RETRIES:=20}" ]; do
+        local MAX_TRIES=$(( ${RETRIES:=20} * 10 ))
+        while [ "${TRYCOUNT}" -le "${MAX_TRIES}" ]; do
             _DF_RESULT=$(df 2>/dev/null)
             if echo "${_DF_RESULT}" | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
                 break;
             fi
-            sleep 1
+            sleep 0.1
             TRYCOUNT=$((TRYCOUNT + 1))
         done
-        if [ "${TRYCOUNT}" -gt "${RETRIES}" ]; then
-            echo "Waited ${TRYCOUNT} seconds, but it could not be mounted."
+        if [ "${TRYCOUNT}" -gt "${MAX_TRIES}" ]; then
+            echo "Waited ${RETRIES} seconds, but it could not be mounted."
             exit 1
         fi
     else
-        retry "${RETRIES:=20}" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts || exit 1
+        retry "$(( ${RETRIES:=20} * 10 ))" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts || exit 1
     fi
 
     # Quick way to start system up for manual testing with options under test
@@ -388,11 +395,11 @@ function stop_s3fs {
     # Retry in case file system is in use
     if [ "$(uname)" = "Darwin" ]; then
         if df | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
-            retry 10 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
+            retry 100 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     else
         if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then
-            retry 10 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
+            retry 100 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     fi
 }

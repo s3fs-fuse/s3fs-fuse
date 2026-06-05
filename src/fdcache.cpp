@@ -77,7 +77,6 @@ static constexpr char NOCACHE_PATH_PREFIX_FORM[] = " __S3FS_UNEXISTED_PATH_%lx__
 //------------------------------------------------
 // FdManager class variable
 //------------------------------------------------
-FdManager       FdManager::singleton;
 std::mutex      FdManager::fd_manager_lock;
 std::mutex      FdManager::cache_cleanup_lock;
 std::mutex      FdManager::reserved_diskspace_lock;
@@ -435,7 +434,7 @@ bool FdManager::HasOpenEntityFd(const char* path)
 
     const FdEntity* ent;
     int         fd = -1;
-    if(nullptr == (ent = FdManager::singleton.GetFdEntityHasLock(path, fd, false))){
+    if(nullptr == (ent = FdManager::get()->GetFdEntityHasLock(path, fd, false))){
         return false;
     }
     return (0 < ent->GetOpenCount());
@@ -448,31 +447,20 @@ int FdManager::GetOpenFdCount(const char* path)
 {
     const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
 
-    return FdManager::singleton.GetPseudoFdCount(path);
+    return FdManager::get()->GetPseudoFdCount(path);
 }
 
 //------------------------------------------------
 // FdManager methods
 //------------------------------------------------
-FdManager::FdManager()
-{
-    if(this != FdManager::get()){
-        abort();
-    }
-}
-
 FdManager::~FdManager()
 {
-    if(this == FdManager::get()){
-        for(auto iter = fent.cbegin(); fent.cend() != iter; ++iter){
-            const FdEntity* ent = iter->second.get();
-            S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
-        }
-        fent.clear();
-        except_fent.clear();
-    }else{
-        abort();
+    for(auto iter = fent.cbegin(); fent.cend() != iter; ++iter){
+        const FdEntity* ent = iter->second.get();
+        S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
     }
+    fent.clear();
+    except_fent.clear();
 }
 
 FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool newfd)

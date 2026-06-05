@@ -41,6 +41,7 @@ config.log
 config.status
 config.sub
 configure
+configure~
 configure.scan
 configure.ac~
 depcomp

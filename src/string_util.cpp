@@ -309,7 +309,7 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
         // wrong format
         return false;
     }
-    unixtime = mktime(&tm);
+    unixtime = timegm(&tm); // GMT
     return true;
 }
 

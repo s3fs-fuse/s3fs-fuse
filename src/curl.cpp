@@ -1661,9 +1661,6 @@ bool S3fsCurl::RemakeHandle()
     headdata.clear();
     LastResponseCode   = S3FSCURL_RESPONSECODE_NOTSET;
 
-    // retry count up
-    retry_count++;
-
     // set from backup
     postdata           = b_postdata;
     postdata_remaining = b_postdata_remaining;
@@ -1956,6 +1953,20 @@ bool S3fsCurl::RemakeHandle()
 }
 
 //
+// Sleep Method with Exponential Backoff and Jitter
+//
+// [NOTE]
+// The primary objective of this process is to prevent secondary server
+// failures caused by spikes in simultaneous retries.
+//
+void S3fsCurl::WaitBeforeRetry()
+{
+    unsigned int sleep_time = 2 << retry_count;
+    sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
+    retry_count++;
+}
+
+//
 // returns curl return code
 //
 int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
@@ -2065,22 +2076,71 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         result = -EIO;
                         break;
 
+                    case 429:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 429 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 429 was returned, returning EAGAIN");
+                            result = -EAGAIN;
+                        }
+                        break;
+
+                    case 500:
+                        // [NOTE]
+                        // The 500 error message occurs when the server is unable to process the request at
+                        // that time, and may be resolved by retrying the request.
+                        //
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 500 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 500 was returned, returning EIO");
+                            result = -EIO;
+                        }
+                        break;
+
                     case 501:
                         S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
                         S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
                         result = -ENOTSUP;
                         break;
 
-                    case 429:
-                    case 500:
-                    case 503: {
-                        S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
-                        // Add jitter to avoid thundering herd.
-                        unsigned int sleep_time = 2 << retry_count;
-                        sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
+                    case 502:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 502 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 502 was returned, returning EWOULDBLOCK");
+                            result = -EWOULDBLOCK;
+                        }
                         break;
-                    }
+
+                    case 503:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 503 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 503 was returned, returning EAGAIN");
+                            result = -EAGAIN;
+                        }
+                        break;
+
+                    case 504:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 504 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 504 was returned, returning ETIMEDOUT");
+                            result = -ETIMEDOUT;
+                        }
+                        break;
+
                     default:
                         S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.c_str());
                         result = -EIO;

@@ -32,14 +32,16 @@
 class S3fsSignals
 {
     private:
-        static std::unique_ptr<S3fsSignals> pSingleton;
-        static bool         enableUsr1;
-
+        static bool                  enableUsr1;
         std::unique_ptr<std::thread> pThreadUsr1;
-        std::unique_ptr<Semaphore> pSemUsr1;
+        std::unique_ptr<Semaphore>   pSemUsr1;
 
     protected:
-        static S3fsSignals* get() { return pSingleton.get(); }
+        static S3fsSignals* get()
+        {
+            static S3fsSignals singleton;
+            return &singleton;
+        }
 
         static void HandlerUSR1(int sig);
         static void CheckCacheWorker(Semaphore* pSem);
@@ -62,8 +64,8 @@ class S3fsSignals
         S3fsSignals& operator=(const S3fsSignals&) = delete;
         S3fsSignals& operator=(S3fsSignals&&) = delete;
 
-        static bool Initialize();
-        static bool Destroy();
+        // Call get() to force the creation of a singleton object.
+        static bool Initialize() { (void)get(); return true; }
 
         static bool SetUsr1Handler(const char* path);
 };

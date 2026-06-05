@@ -34,7 +34,6 @@
 class FdManager
 {
   private:
-      static FdManager       singleton;
       static std::mutex      fd_manager_lock;
       static std::mutex      cache_cleanup_lock;
       static std::mutex      reserved_diskspace_lock;
@@ -65,7 +64,7 @@ class FdManager
       bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);
 
   public:
-      FdManager();
+      FdManager() = default;
       ~FdManager();
       FdManager(const FdManager&) = delete;
       FdManager(FdManager&&) = delete;
@@ -73,7 +72,11 @@ class FdManager
       FdManager& operator=(FdManager&&) = delete;
 
       // Reference singleton
-      static FdManager* get() { return &singleton; }
+      static FdManager* get()
+      {
+          static FdManager  singleton;
+          return &singleton;
+      }
 
       static bool DeleteCacheDirectory();
       static int DeleteCacheFile(const char* path);

@@ -20,22 +20,16 @@
 
 SUBDIRS=src test doc
 
-EXTRA_DIST=doc default_commit_hash
+EXTRA_DIST=default_commit_hash
 
-dist-hook:
-	rm -rf `find $(distdir)/doc -type d -name .svn`
-	rm -f `find $(distdir)/doc -type f -name Makefile`
-
-release : dist ../utils/release.sh
-	../utils/release.sh $(DIST_ARCHIVES)
-
-.PHONY: cppcheck shellcheck
+.PHONY: cppcheck shellcheck clang-tidy
 
 clang-tidy:
-	make -C src/ clang-tidy
-	make -C test/ clang-tidy
+	$(MAKE) -C src clang-tidy
+	$(MAKE) -C test clang-tidy
 
 cppcheck:
+	pjd_dir=$$(find test -maxdepth 1 -type d -name 'pjd-pjdfstest*' 2>/dev/null); \
 	cppcheck --quiet --error-exitcode=1 \
             --inline-suppr \
             --std=@CPP_VERSION@ \
@@ -45,7 +39,7 @@ cppcheck:
             -D HAVE_MALLOC_TRIM \
             -U CURLE_PEER_FAILED_VERIFICATION \
             -U ENOATTR \
-            -i test/pjd-pjdfstest* \
+            $${pjd_dir:+-i "$$pjd_dir"} \
             --enable=warning,style,information,missingInclude \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
@@ -73,11 +67,11 @@ shellcheck:
 	$(SHELLCHECK_CMD) --version; \
 	echo ""; \
 	echo "* Check all sh files with ShellCheck"; \
-	LC_ALL=C.UTF-8 $(SHELLCHECK_CMD) $(SHELLCHECK_SH_OPT) $(SHELLCHECK_COMMON_IGN) $$(find . -type f -name \*.sh | grep -v pjd-pjdfstest | xargs grep -l '^#![[:space:]]*/bin/sh$$') || exit 1; \
+	LC_ALL=C.UTF-8 $(SHELLCHECK_CMD) $(SHELLCHECK_SH_OPT) $(SHELLCHECK_COMMON_IGN) $$(find . -type d -name 'pjd-pjdfstest*' -prune -o -type f -name '*.sh' -print | xargs grep -l '^#![[:space:]]*/bin/sh$$') || exit 1; \
 	echo "-> No error was detected."; \
 	echo ""; \
 	echo "* Check all bash files with ShellCheck"; \
-	LC_ALL=C.UTF-8 $(SHELLCHECK_CMD) $(SHELLCHECK_BASH_OPT) $(SHELLCHECK_COMMON_IGN) $$(find . -type f -name \*.sh | grep -v pjd-pjdfstest | xargs grep -l '^#![[:space:]]*/bin/bash$$') || exit 1; \
+	LC_ALL=C.UTF-8 $(SHELLCHECK_CMD) $(SHELLCHECK_BASH_OPT) $(SHELLCHECK_COMMON_IGN) $$(find . -type d -name 'pjd-pjdfstest*' -prune -o -type f -name '*.sh' -print | xargs grep -l '^#![[:space:]]*/bin/bash$$') || exit 1; \
 	echo "-> No error was detected.";
 
 #
