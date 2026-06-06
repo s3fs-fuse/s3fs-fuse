@@ -212,10 +212,14 @@ bool PseudoFdInfo::GetUploadInfo(std::string& id, int& fd) const
     return true;
 }
 
-bool PseudoFdInfo::GetUploadId(std::string& id) const
+std::optional<std::string> PseudoFdInfo::GetUploadId() const
 {
     int fd = -1;
-    return GetUploadInfo(id, fd);
+    std::string id;
+    if(!GetUploadInfo(id, fd)){
+        return std::nullopt;
+    }
+    return id;
 }
 
 bool PseudoFdInfo::GetEtaglist(etaglist_t& list) const

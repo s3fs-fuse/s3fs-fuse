@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "common.h"
@@ -84,7 +85,7 @@ class PseudoFdInfo
         void InitialUploadInfo(const std::string& id){ RowInitialUploadInfo(id, true); }
 
         bool IsUploading() const;
-        bool GetUploadId(std::string& id) const;
+        std::optional<std::string> GetUploadId() const;
         bool GetEtaglist(etaglist_t& list) const;
 
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = nullptr);

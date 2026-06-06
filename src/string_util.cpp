@@ -238,27 +238,26 @@ bool takeout_str_dquart(std::string& str)
 //
 // ex. target="http://......?keyword=value&..."
 //
-bool get_keyword_value(const std::string& target, const char* keyword, std::string& value)
+std::optional<std::string> get_keyword_value(const std::string& target, const char* keyword)
 {
     if(!keyword){
-        return false;
+        return std::nullopt;
     }
     size_t spos;
     size_t epos;
     if(std::string::npos == (spos = target.find(keyword))){
-        return false;
+        return std::nullopt;
     }
     spos += strlen(keyword);
     if('=' != target[spos]){
-        return false;
+        return std::nullopt;
     }
     spos++;
     if(std::string::npos == (epos = target.find('&', spos))){
-        value = target.substr(spos);
+        return target.substr(spos);
     }else{
-        value = target.substr(spos, (epos - spos));
+        return target.substr(spos, (epos - spos));
     }
-    return true;
 }
 
 //
@@ -297,32 +296,31 @@ std::string get_date_iso8601(time_t tm)
     return buf;
 }
 
-bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
+std::optional<time_t> get_unixtime_from_iso8601(const char* pdate)
 {
     if(!pdate){
-        return false;
+        return std::nullopt;
     }
 
     struct tm tm;
     const char* prest = s3fs_strptime(pdate, "%Y-%m-%dT%T", &tm);
     if(prest == pdate){
         // wrong format
-        return false;
+        return std::nullopt;
     }
-    unixtime = timegm(&tm); // GMT
-    return true;
+    return timegm(&tm); // GMT
 }
 
 //
 // Convert to unixtime from std::string which formatted by following:
 //   "12Y12M12D12h12m12s", "86400s", "9h30m", etc
 //
-bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
+std::optional<time_t> convert_unixtime_from_option_arg(const char* argv)
 {
     if(!argv){
-      return false;
+      return std::nullopt;
     }
-    unixtime = 0;
+    time_t      unixtime = 0;
     const char* ptmp;
     int         last_unit_type = 0;       // unit flag.
     bool        is_last_number;
@@ -352,18 +350,18 @@ bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime)
                 unixtime      += tmptime;
                 last_unit_type = 6;
             }else{
-                return false;
+                return std::nullopt;
             }
             tmptime        = 0;
             is_last_number = false;
         }else{
-            return false;
+            return std::nullopt;
         }
     }
     if(is_last_number){
-        return false;
+        return std::nullopt;
     }
-    return true;
+    return unixtime;
 }
 
 static std::string s3fs_hex(const unsigned char* input, size_t length, const char *hexAlphabet)

@@ -248,19 +248,18 @@ std::string prepare_url(const char* url)
     return url_str;
 }
 
-bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5)
+std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length)
 {
     if(!pstr || '\0' == pstr[0]){
         S3FS_PRN_ERR("Parameter is wrong.");
-        return false;
+        return std::nullopt;
     }
     md5_t binary;
     if(!s3fs_md5(reinterpret_cast<const unsigned char*>(pstr), length, &binary)){
-        return false;
+        return std::nullopt;
     }
 
-    md5 = s3fs_base64(binary.data(), binary.size());
-    return true;
+    return s3fs_base64(binary.data(), binary.size());
 }
 
 std::string url_to_host(const std::string &url)

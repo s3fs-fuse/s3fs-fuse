@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include <curl/curl.h>
+#include <optional>
 #include <string>
 #include "metaheader.h"
 
@@ -41,7 +42,7 @@ std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
 int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_st_size = true);    // implement in s3fs.cpp
 
-bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5);
+std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length);
 std::string url_to_host(const std::string &url);
 std::string get_bucket_host();
 const char* getCurlDebugHead(curl_infotype type);

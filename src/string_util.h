@@ -23,6 +23,7 @@
 
 #include <cstring>
 #include <ctime>
+#include <optional>
 #include <string>
 #include <strings.h>
 
@@ -103,8 +104,8 @@ std::string get_date_rfc850();
 void get_date_sigv3(std::string& date, std::string& date8601);
 std::string get_date_string(time_t tm);
 std::string get_date_iso8601(time_t tm);
-bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime);
-bool convert_unixtime_from_option_arg(const char* argv, time_t& unixtime);
+std::optional<time_t> get_unixtime_from_iso8601(const char* pdate);
+std::optional<time_t> convert_unixtime_from_option_arg(const char* argv);
 
 //
 // For encoding
@@ -115,7 +116,7 @@ std::string urlEncodeQuery(const std::string &s);
 std::string urlDecode(const std::string& s);
 
 bool takeout_str_dquart(std::string& str);
-bool get_keyword_value(const std::string& target, const char* keyword, std::string& value);
+std::optional<std::string> get_keyword_value(const std::string& target, const char* keyword);
 
 //
 // For binary string
