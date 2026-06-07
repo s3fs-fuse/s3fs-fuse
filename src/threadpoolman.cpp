@@ -212,13 +212,13 @@ void ThreadPoolMan::SetExitFlag(bool exit_flag)
     is_exit = exit_flag;
 }
 
-bool ThreadPoolMan::StopThreads()
+void ThreadPoolMan::StopThreads()
 {
     const std::lock_guard<std::mutex> lock(thread_list_lock);
 
     if(thread_list.empty()){
         S3FS_PRN_INFO("Any threads are running now, then nothing to do.");
-        return true;
+        return;
     }
 
     // all threads to exit
@@ -238,8 +238,6 @@ bool ThreadPoolMan::StopThreads()
     // reset semaphore(to zero)
     while(thpoolman_sem.try_acquire()){
     }
-
-    return true;
 }
 
 bool ThreadPoolMan::StartThreads(int count)
@@ -250,12 +248,7 @@ bool ThreadPoolMan::StartThreads(int count)
     }
 
     // stop all thread if they are running.
-    // cppcheck-suppress unmatchedSuppression
-    // cppcheck-suppress knownConditionTrueFalse
-    if(!StopThreads()){
-        S3FS_PRN_ERR("Failed to stop existed threads.");
-        return false;
-    }
+    StopThreads();
 
     // create all threads
     SetExitFlag(false);

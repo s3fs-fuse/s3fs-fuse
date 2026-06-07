@@ -83,7 +83,7 @@ class ThreadPoolMan
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);
 
-        bool StopThreads();
+        void StopThreads();
         bool StartThreads(int count);
         void SetInstruction(const thpoolman_param& pparam);
 

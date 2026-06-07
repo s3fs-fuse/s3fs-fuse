@@ -53,20 +53,12 @@ PseudoFdInfo::~PseudoFdInfo()
     Clear();        // call before destroying the mutex
 }
 
-bool PseudoFdInfo::Clear()
+void PseudoFdInfo::Clear()
 {
-    // cppcheck-suppress unmatchedSuppression
-    // cppcheck-suppress knownConditionTrueFalse
-    if(!CancelAllThreads()){
-        return false;
-    }
+    CancelAllThreads();
     {
         const std::lock_guard<std::mutex> lock(upload_list_lock);
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!ResetUploadInfo()){
-            return false;
-        }
+        ResetUploadInfo();
     }
     CloseUploadFd();
 
@@ -75,8 +67,6 @@ bool PseudoFdInfo::Clear()
     }
     pseudo_fd   = -1;
     physical_fd = -1;
-
-    return true;
 }
 
 bool PseudoFdInfo::IsUploadingHasLock() const
@@ -172,50 +162,35 @@ bool PseudoFdInfo::Readable() const
     return true;
 }
 
-bool PseudoFdInfo::ClearUploadInfo(bool is_cancel_mp)
+void PseudoFdInfo::ClearUploadInfo(bool is_cancel_mp)
 {
     if(is_cancel_mp){
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!CancelAllThreads()){
-            return false;
-        }
+        CancelAllThreads();
     }
 
     const std::lock_guard<std::mutex> lock(upload_list_lock);
-    return ResetUploadInfo();
+    ResetUploadInfo();
 }
 
-bool PseudoFdInfo::ResetUploadInfo()
+void PseudoFdInfo::ResetUploadInfo()
 {
     upload_id.clear();
     upload_list.clear();
     instruct_count  = 0;
     last_result     = 0;
-
-    return true;
 }
 
-bool PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp)
+void PseudoFdInfo::RowInitialUploadInfo(const std::string& id, bool is_cancel_mp)
 {
     if(is_cancel_mp){
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!ClearUploadInfo(is_cancel_mp)){
-            return false;
-        }
+        ClearUploadInfo(is_cancel_mp);
     }else{
         const std::lock_guard<std::mutex> lock(upload_list_lock);
-        // cppcheck-suppress unmatchedSuppression
-        // cppcheck-suppress knownConditionTrueFalse
-        if(!ResetUploadInfo()){
-            return false;
-        }
+        ResetUploadInfo();
     }
 
     const std::lock_guard<std::mutex> lock(upload_list_lock);
     upload_id = id;
-    return true;
 }
 
 void PseudoFdInfo::IncreaseInstructionCount()
@@ -418,10 +393,7 @@ int PseudoFdInfo::PreMultipartUploadRequest(const std::string& strpath, const he
     }
 
     // reset upload_id
-    if(!RowInitialUploadInfo(new_upload_id, false/* not need to cancel */)){
-        S3FS_PRN_ERR("failed to setup multipart upload(set upload id to object)");
-        return -EIO;
-    }
+    RowInitialUploadInfo(new_upload_id, false/* not need to cancel */);
     S3FS_PRN_DBG("succeed to setup multipart upload(set upload id to object)");
 
     return 0;
@@ -576,7 +548,7 @@ int PseudoFdInfo::WaitAllThreadsExit()
     return result;
 }
 
-bool PseudoFdInfo::CancelAllThreads()
+void PseudoFdInfo::CancelAllThreads()
 {
     bool need_cancel = false;
     {
@@ -590,7 +562,6 @@ bool PseudoFdInfo::CancelAllThreads()
     if(need_cancel){
         WaitAllThreadsExit();
     }
-    return true;
 }
 
 //
