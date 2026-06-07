@@ -70,7 +70,6 @@ using fdpage_list_t = std::vector<struct fdpage>;
 class CacheFileStat;
 class FdEntity;
 
-// cppcheck-suppress copyCtorAndEqOperator
 class PageList
 {
     friend class FdEntity;    // only one method access directly pages.

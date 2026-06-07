@@ -70,7 +70,6 @@ inline void assert_strequals(const char *x, const char *y, const char *file, int
 {
   if(x == nullptr && y == nullptr){
       return;
-  // cppcheck-suppress nullPointerRedundantCheck
   } else if(x == nullptr || y == nullptr || strcmp(x, y) != 0){
       std::cerr << (x ? x : "null") << " != " << (y ? y : "null") << " at " << file << ":" << line << std::endl;
       abort();
@@ -81,7 +80,6 @@ inline void assert_bufequals(const char *x, size_t len1, const char *y, size_t l
 {
     if(x == nullptr && y == nullptr){
         return;
-    // cppcheck-suppress nullPointerRedundantCheck
     } else if(x == nullptr || y == nullptr || len1 != len2 || memcmp(x, y, len1) != 0){
         std::cerr << (x ? std::string(x, len1) : "null") << " != " << (y ? std::string(y, len2) : "null") << " at " << file << ":" << line << std::endl;
         abort();
