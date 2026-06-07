@@ -444,7 +444,7 @@ int PseudoFdInfo::PreMultipartUploadRequest(const std::string& strpath, const he
 //   alignment(to backward), and if that gap area is remained, that area is
 //   rest to untreated area.
 //
-ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, headers_t& meta, FdEntity* pfdent)
+ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, const headers_t& meta, FdEntity* pfdent)
 {
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", SAFESTRPTR(path), pseudo_fd, physical_fd);
 
