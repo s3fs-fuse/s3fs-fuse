@@ -338,9 +338,10 @@ struct mvnode
 //-------------------------------------------------------------------
 struct case_insensitive_compare_func
 {
-    bool operator()(const std::string& a, const std::string& b) const {
-        return strcasecmp(a.c_str(), b.c_str()) < 0;
-    }
+    using is_transparent = void;
+    bool operator()(const std::string& a, const std::string& b) const { return strcasecmp(a.c_str(), b.c_str()) < 0; }
+    bool operator()(const std::string& a, const char* b) const        { return strcasecmp(a.c_str(), b) < 0; }
+    bool operator()(const char* a, const std::string& b) const        { return strcasecmp(a, b.c_str()) < 0; }
 };
 using mimes_t = std::map<std::string, std::string, case_insensitive_compare_func>;
 
