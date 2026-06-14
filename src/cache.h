@@ -44,8 +44,18 @@
 //
 class StatCache
 {
+    public:
+        // Optional rewrite hook applied to every stat/meta pair before it
+        // enters the cache. Used by fastreaddir mode to discard x-amz-meta-*
+        // POSIX attributes so that the cache reflects what a cache-miss read
+        // would synthesize, eliminating timing-dependent visibility of
+        // chmod/chown/utimens/setxattr inside the TTL window. Returns false
+        // to abort the cache write.
+        using Sanitizer = bool(*)(const std::string& key, struct stat& stbuf, headers_t& meta, objtype_t type);
+
     private:
         static std::mutex      stat_cache_lock;
+        static Sanitizer       pSanitizer;
 
         std::shared_ptr<DirStatCache> pMountPointDir GUARDED_BY(stat_cache_lock);   // Top directory = Mount point
         unsigned long                 CacheSize;
@@ -75,6 +85,9 @@ class StatCache
             static StatCache singleton;
             return &singleton;
         }
+
+        // Install (or clear) the pre-cache sanitizer hook.
+        static void SetSanitizer(Sanitizer fn) { pSanitizer = fn; }
 
         // Attribute
         unsigned long GetCacheSize() const;
