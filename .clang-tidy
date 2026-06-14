@@ -59,6 +59,7 @@ Checks: '
     -modernize-raw-string-literal,
     -modernize-return-braced-init-list,
     -modernize-use-default-member-init,
+    -modernize-use-scoped-lock,
     -modernize-use-trailing-return-type,
     -performance-avoid-endl,
     -performance-no-int-to-ptr,

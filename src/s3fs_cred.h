@@ -23,6 +23,7 @@
 
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "common.h"
@@ -98,7 +99,7 @@ class S3fsCred
         static constexpr char IAMv2_token_hdr[] = "X-aws-ec2-metadata-token";
 
     private:
-        static bool ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename);
+        static std::optional<std::string> ParseIAMRoleFromMetaDataResponse(const char* response);
 
         bool SetS3fsPasswdFile(const char* file);
         bool IsSetPasswdFile() const;

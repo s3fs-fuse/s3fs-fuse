@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "common.h"
@@ -204,8 +205,8 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
            return SetMtimeHasLock(time);
         }
 
-        bool GetSize(off_t& size) const;
-        bool GetXattr(std::string& xattr) const;
+        std::optional<off_t> GetSize() const;
+        std::optional<std::string> GetXattr() const;
         bool SetXattr(const std::string& xattr);
         bool SetMode(mode_t mode) {
             const std::lock_guard<std::mutex> lock(fdent_lock);

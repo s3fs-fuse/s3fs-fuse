@@ -151,10 +151,10 @@ const std::string& S3fsCred::GetBucket()
     return S3fsCred::bucket_name;
 }
 
-bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::string& rolename)
+std::optional<std::string> S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response)
 {
     if(!response){
-        return false;
+        return std::nullopt;
     }
     // [NOTE]
     // expected following strings.
@@ -164,10 +164,12 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
     std::istringstream ssrole(response);
     std::string        oneline;
     if (getline(ssrole, oneline, '\n')){
-        rolename = oneline;
-        return !rolename.empty();
+        if(oneline.empty()){
+            return std::nullopt;
+        }
+        return oneline;
     }
-    return false;
+    return std::nullopt;
 }
 
 //-------------------------------------------------------------------
@@ -551,12 +553,12 @@ bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
 
     S3FS_PRN_INFO3("IAM role name response = \"%s\"", mask_sensitive_string(response));
 
-    std::string rolename;
-    if(!S3fsCred::ParseIAMRoleFromMetaDataResponse(response, rolename)){
+    auto rolename = S3fsCred::ParseIAMRoleFromMetaDataResponse(response);
+    if(!rolename){
         return false;
     }
 
-    SetIAMRole(rolename.c_str());
+    SetIAMRole(rolename->c_str());
     return true;
 }
 

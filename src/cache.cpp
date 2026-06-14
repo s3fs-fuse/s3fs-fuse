@@ -320,10 +320,10 @@ bool StatCache::DelStat(const std::string& key)
     return DelStatHasLock(key);
 }
 
-bool StatCache::GetSymlink(const std::string& key, std::string& value)
+std::optional<std::string> StatCache::GetSymlink(const std::string& key)
 {
     if(GetCacheSize() < 1){
-        return true;
+        return std::nullopt;
     }
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
@@ -331,7 +331,7 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
     auto pCache = pMountPointDir->Find(key);
     if(!pCache){
         // Not found cache
-        return false;
+        return std::nullopt;
     }
 
     if(!pCache->isSymlink()){
@@ -341,18 +341,19 @@ bool StatCache::GetSymlink(const std::string& key, std::string& value)
         // If updating this cache(key) as a Symlink, the caller must
         // delete or overwrite it.
         //
-        return false;
+        return std::nullopt;
     }
 
-    if(!pCache->GetExtra(value)){
-        return false;
+    auto value = pCache->GetExtra();
+    if(!value){
+        return std::nullopt;
     }
     S3FS_PRN_INFO3("get symbolic link cache entry[path=%s]", key.c_str());
 
     // for debug
     //pMountPointDir->Dump(true);
 
-    return true;
+    return value;
 }
 
 bool StatCache::AddSymlink(const std::string& key, const struct stat& stbuf, const headers_t& meta, const std::string& value)

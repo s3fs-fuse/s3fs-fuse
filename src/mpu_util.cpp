@@ -74,12 +74,12 @@ static bool abort_incomp_mpu_list(const incomp_mpu_list_t& list, time_t abort_ti
         std::string upload_id = (*iter).id;
 
         if(0 != abort_time){    // abort_time is 0, it means all.
-            time_t    date = 0;
-            if(!get_unixtime_from_iso8601((*iter).date.c_str(), date)){
+            auto date = get_unixtime_from_iso8601((*iter).date.c_str());
+            if(!date){
                 S3FS_PRN_DBG("date format is not ISO 8601 for %s multipart uploading object, skip this.", tpath);
                 continue;
             }
-            if(now_time <= (date + abort_time)){
+            if(now_time <= (*date + abort_time)){
                 continue;
             }
         }
