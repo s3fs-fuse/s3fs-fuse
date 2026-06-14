@@ -6065,7 +6065,7 @@ int main(int argc, char* argv[])
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){
-            found = s3host.find("https:");
+            found = is_prefix(s3host.c_str(), "https:");
             if(found != std::string::npos){
                 S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
                 S3fsCurl::DestroyS3fsCurl();
