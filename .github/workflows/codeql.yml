@@ -1,0 +1,112 @@
+#
+# s3fs - FUSE-based file system backed by Amazon S3
+#
+# Copyright(C) 2007 Takeshi Nakatani <ggtakec.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+
+name: CodeQL
+
+# CodeQL static analysis for the s3fs-fuse C++ codebase.
+# s3fs handles AWS access keys, signed request URLs, and arbitrary
+# filesystem inputs, so a regular security scan with the default
+# `security-extended` query pack is a useful complement to the
+# existing build, sanitizer, and shellcheck jobs in ci.yml.
+#
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  # Allow maintainers to trigger an on-demand scan from the Actions
+  # tab without having to push a throwaway commit. This is also handy
+  # when triaging a new CVE in libcurl, fuse, or one of the bundled
+  # crypto backends.
+  workflow_dispatch:
+  schedule:
+    # Weekly scan, Monday 06:00 UTC. Offsets the existing Sunday
+    # cron in ci.yml so we don't pile up CI minutes on the same hour.
+    - cron: '0 6 * * 1'
+
+# Cancel in-progress runs for the same ref when a new commit is
+# pushed; CodeQL rebuilds are slow enough that this is worth the
+# small risk of skipping a scan on a force-pushed branch.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+
+    permissions:
+      # CodeQL needs read-only access to the working tree to build
+      # the database, and write access to upload SARIF results to
+      # the Security tab.
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # s3fs-fuse is a C/C++ project; `cpp` covers both. We could
+        # add `python` later if any tooling scripts grow large enough
+        # to be worth scanning on their own.
+        language:
+          - cpp
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # `security-extended` adds queries on top of `security` for
+          # things like injection, insecure randomness, and cleartext
+          # credentials, which are all relevant for a filesystem that
+          # builds signed HTTP requests from user-controlled paths.
+          queries: security-extended
+          # Avoid running CodeQL on vendored third-party code; the
+          # findings would drown out the real s3fs source in the
+          # Security tab and most of them are already tracked upstream.
+          paths-ignore:
+            - 'test/'
+            - 'doc/'
+            - '**/*.md'
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+          # Upload SARIF even on failure so partial results are
+          # visible in the Security tab rather than only in the
+          # workflow log.
+          upload: always
+
+#
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: expandtab sw=4 ts=4 fdm=marker
+# vim<600: expandtab sw=4 ts=4
+#
