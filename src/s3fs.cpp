@@ -788,7 +788,7 @@ static int check_parent_object_access(const char* path, int mask)
         return 0;
     }
     if(X_OK == (mask & X_OK)){
-        for(parent = mydirname(path); !parent.empty(); parent = mydirname(parent)){
+        for(parent = mydirname(path); !parent.empty(); parent = mydirname(std::move(parent))){
             if(parent == "."){
                 parent = "/";
             }

@@ -668,7 +668,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
 
     // read each line
     while(getline(PF, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }
@@ -869,7 +869,7 @@ bool S3fsCred::ReadAwsCredentialFile(const std::string &filename)
     // read each line
     std::string line;
     while(getline(PF, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }

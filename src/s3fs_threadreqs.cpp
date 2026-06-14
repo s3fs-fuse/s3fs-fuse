@@ -470,7 +470,7 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
                     std::string etag;
                     pthparam->ppartdata->uploaded    = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag", etag);
-                    pthparam->ppartdata->petag->etag = peeloff(etag);
+                    pthparam->ppartdata->petag->etag = peeloff(std::move(etag));
                 }
                 result = 0;
                 break;
