@@ -61,7 +61,7 @@ jobs:
           - fedora:44
           - fedora:43
           - opensuse/leap:16.0
-          - alpine:3.23
+          - alpine:3.24
 
     container:
       image: ${{ matrix.container }}
@@ -82,7 +82,7 @@ jobs:
         run: zypper install -y tar gzip
 
       - name: Install Alpine packages before checkout
-        if: matrix.container == 'alpine:3.23'
+        if: matrix.container == 'alpine:3.24'
         run: apk add --no-progress --no-cache bash
 
       - name: Checkout source code

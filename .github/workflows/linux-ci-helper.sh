@@ -342,7 +342,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:16.0" ]; then
         python3
     )
 
-elif [ "${CONTAINER_FULLNAME}" = "alpine:3.23" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "alpine:3.24" ]; then
     PACKAGE_MANAGER_BIN="apk"
     PACKAGE_UPDATE_OPTIONS="update --no-progress"
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
