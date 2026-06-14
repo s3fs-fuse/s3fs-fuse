@@ -284,16 +284,33 @@ void S3fsLog::Printf(FILE* fp, const char* fmt, ...)
     }
 }
 
+// Format a printf-style message into a heap buffer.
+//
+// [NOTE]
+// The caller owns the va_list (va_start/va_end); this helper only copies
+// it for the sizing pass and consumes the original for the format pass.
+//
+static std::unique_ptr<char[]> s3fs_vformat(const char* fmt, va_list va)
+{
+    va_list va2;
+    va_copy(va2, va);
+    int len = vsnprintf(nullptr, 0, fmt, va2);
+    va_end(va2);
+    len = std::max(len, 0);
+
+    auto message = std::make_unique<char[]>(static_cast<size_t>(len) + 1);
+    vsnprintf(message.get(), static_cast<size_t>(len) + 1, fmt, va);
+    return message;
+}
+
 void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...)
 {
+    // [NOTE]
+    // The level guard lives in the S3FS_LOW_LOGPRN macro so the log
+    // arguments are not evaluated when the level is disabled.
     va_list va;
     va_start(va, fmt);
-    size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
-    va_end(va);
-
-    auto message = std::make_unique<char[]>(len);
-    va_start(va, fmt);
-    vsnprintf(message.get(), len, fmt, va);
+    auto message = s3fs_vformat(fmt, va);
     va_end(va);
 
     if(foreground || S3fsLog::IsSetLogFile()){
@@ -306,20 +323,87 @@ void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, i
 
 void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const char *func, int line, const char *fmt, ...)
 {
+    // [NOTE]
+    // The level guard lives in the S3FS_LOW_LOGPRN2 macro so the log
+    // arguments are not evaluated when the level is disabled.
     va_list va;
     va_start(va, fmt);
-    size_t len = vsnprintf(nullptr, 0, fmt, va) + 1;
-    va_end(va);
-
-    auto message = std::make_unique<char[]>(len);
-    va_start(va, fmt);
-    vsnprintf(message.get(), len, fmt, va);
+    auto message = s3fs_vformat(fmt, va);
     va_end(va);
 
     if(foreground || S3fsLog::IsSetLogFile()){
         S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
     }else{
         syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message.get());
+    }
+}
+
+void s3fs_low_curldbg(const char* fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    auto message = s3fs_vformat(fmt, va);
+    va_end(va);
+
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s[CURL DBG] %s\n", S3fsLog::GetCurrentTime().c_str(), message.get());
+    }else{
+        syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%s%s", instance_name.c_str(), message.get());
+    }
+}
+
+void s3fs_low_logprn_exit(const char* fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    auto message = s3fs_vformat(fmt, va);
+    va_end(va);
+
+    S3fsLog::Printf(S3fsLog::GetErrorLogFile(), "s3fs: %s\n", message.get());
+    if(!(foreground || S3fsLog::IsSetLogFile())){
+        syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%ss3fs: %s", instance_name.c_str(), message.get());
+    }
+}
+
+void s3fs_low_init_info(const char* file, const char *func, int line, const char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    auto message = s3fs_vformat(fmt, va);
+    va_end(va);
+
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), S3fsLog::GetS3fsLogNest(0), file, func, line, message.get());
+    }else{
+        syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), message.get());
+    }
+}
+
+void s3fs_low_launch_info(const char* fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    auto message = s3fs_vformat(fmt, va);
+    va_end(va);
+
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), message.get());
+    }else{
+        syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s%s", instance_name.c_str(), message.get());
+    }
+}
+
+void s3fs_low_cache(FILE* fp, const char* fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    auto message = s3fs_vformat(fmt, va);
+    va_end(va);
+
+    if(foreground || S3fsLog::IsSetLogFile()){
+        S3fsLog::Printf(fp, "%s\n", message.get());
+    }else{
+        syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s: %s", instance_name.c_str(), message.get());
     }
 }
 
