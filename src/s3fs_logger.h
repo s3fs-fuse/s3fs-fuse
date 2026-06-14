@@ -41,12 +41,15 @@
 class S3fsLog
 {
     public:
+        // Ordinal severity, ascending verbosity: a message at `level` is shown
+        // when level <= debug_level (see IsS3fsLogLevel). CRIT is the floor and
+        // is therefore always logged.
         enum class Level : uint8_t {
             CRIT = 0,          // LEVEL_CRIT
             ERR  = 1,          // LEVEL_ERR
-            WARN = 3,          // LEVEL_WARNING
-            INFO = 7,          // LEVEL_INFO
-            DBG  = 15          // LEVEL_DEBUG
+            WARN = 2,          // LEVEL_WARNING
+            INFO = 3,          // LEVEL_INFO
+            DBG  = 4           // LEVEL_DEBUG
         };
 
     protected:
@@ -68,7 +71,10 @@ class S3fsLog
         Level LowBumpupLogLevel() const;
 
     public:
-        static bool IsS3fsLogLevel(Level level);
+        static bool IsS3fsLogLevel(Level level)
+        {
+            return static_cast<int>(level) <= static_cast<int>(debug_level);
+        }
         static bool IsS3fsLogCrit()  { return IsS3fsLogLevel(Level::CRIT); }
         static bool IsS3fsLogErr()   { return IsS3fsLogLevel(Level::ERR);  }
         static bool IsS3fsLogWarn()  { return IsS3fsLogLevel(Level::WARN); }
@@ -77,22 +83,20 @@ class S3fsLog
 
         static constexpr int GetSyslogLevel(Level level)
         {
-            int masked = static_cast<int>(level) & static_cast<int>(Level::DBG);
-            return ( static_cast<int>(Level::DBG)  == masked ? LOG_DEBUG   :
-                     static_cast<int>(Level::INFO) == masked ? LOG_INFO    :
-                     static_cast<int>(Level::WARN) == masked ? LOG_WARNING :
-                     static_cast<int>(Level::ERR)  == masked ? LOG_ERR     : LOG_CRIT );
+            return ( Level::DBG  == level ? LOG_DEBUG   :
+                     Level::INFO == level ? LOG_INFO    :
+                     Level::WARN == level ? LOG_WARNING :
+                     Level::ERR  == level ? LOG_ERR     : LOG_CRIT );
         }
 
         static std::string GetCurrentTime();
 
         static constexpr const char* GetLevelString(Level level)
         {
-            int masked = static_cast<int>(level) & static_cast<int>(Level::DBG);
-            return ( static_cast<int>(Level::DBG)  == masked ? "[DBG] " :
-                     static_cast<int>(Level::INFO) == masked ? "[INF] " :
-                     static_cast<int>(Level::WARN) == masked ? "[WAN] " :
-                     static_cast<int>(Level::ERR)  == masked ? "[ERR] " : "[CRT] " );
+            return ( Level::DBG  == level ? "[DBG] " :
+                     Level::INFO == level ? "[INF] " :
+                     Level::WARN == level ? "[WAN] " :
+                     Level::ERR  == level ? "[ERR] " : "[CRT] " );
         }
 
         static constexpr const char* GetS3fsLogNest(int nest)
