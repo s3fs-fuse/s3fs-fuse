@@ -766,8 +766,10 @@ static int check_parent_object_access(const char* path, int mask)
     std::string parent;
     int result;
 
+    if(!path || '\0' == path[0]){
+        return -EINVAL;
+    }
     S3FS_PRN_DBG("[path=%s]", path);
-
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
         // path is mount point.
         return 0;
