@@ -294,8 +294,25 @@ void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     s3fscurl.SetUseAhbe(false);
 
     pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE);
+
     *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
-    *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+
+    // [NOTE]
+    // A service check request is executed when s3fs starts.
+    // Also, regardless of the debug level, if a Curl communication error occurs,
+    // a Curl message will be displayed. Therefore, the Curl error message is
+    // output to the Body here.
+    //
+    if(0 > pthparam->result && S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == s3fscurl.GetLastResponseCode()){
+        std::string curlError;
+        if(s3fscurl.GetCurlErrorString(curlError)){
+            *(pthparam->presponseBody) = curlError;
+        }else{
+            *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+        }
+    }else{
+        *(pthparam->presponseBody) = s3fscurl.GetBodyData();
+    }
 
     return reinterpret_cast<void*>(pthparam->result);
 }
@@ -453,7 +470,7 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
                     std::string etag;
                     pthparam->ppartdata->uploaded    = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag", etag);
-                    pthparam->ppartdata->petag->etag = peeloff(etag);
+                    pthparam->ppartdata->petag->etag = peeloff(std::move(etag));
                 }
                 result = 0;
                 break;
@@ -684,8 +701,8 @@ int head_request(const std::string& strpath, headers_t& header)
 //
 int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::mutex& thparam_lock, int& retrycount, s3obj_list_t& notfound_list, bool use_wtf8, objtype_t objtype, int& result, Semaphore& sem)
 {
-    // parameter for thread worker
-    auto* thargs           = new multi_head_req_thparam;    // free in multi_head_req_threadworker
+    // parameter for thread worker (freed in multi_head_req_threadworker)
+    auto thargs            = std::make_unique<multi_head_req_thparam>();
     thargs->path           = strpath;
     thargs->psyncfiller    = &syncfiller;
     thargs->pthparam_lock  = &thparam_lock;                         // for pretrycount and presult member
@@ -697,16 +714,16 @@ int multi_head_request(const std::string& strpath, SyncFiller& syncfiller, std::
 
     // make parameter for thread pool
     thpoolman_param  ppoolparam;
-    ppoolparam.args  = thargs;
+    ppoolparam.args  = thargs.get();
     ppoolparam.psem  = &sem;
     ppoolparam.pfunc = multi_head_req_threadworker;
 
     // setup instruction
     if(!ThreadPoolMan::Instruct(ppoolparam)){
         S3FS_PRN_ERR("failed to setup Multi Head Request Thread Worker [path=%s]", strpath.c_str());
-        delete thargs;
         return -EIO;
     }
+    thargs.release();  // NOLINT(bugprone-unused-return-value)
     return 0;
 }
 
@@ -902,8 +919,8 @@ int pre_multipart_upload_request(const std::string& path, const headers_t& meta,
 //
 int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, Semaphore* psem, std::mutex* pthparam_lock, int* req_result)
 {
-    // parameter for thread worker
-    auto* thargs = new multipart_upload_part_req_thparam;   // free in multipart_upload_part_req_threadworker
+    // parameter for thread worker (freed in multipart_upload_part_req_threadworker)
+    auto thargs            = std::make_unique<multipart_upload_part_req_thparam>();
     thargs->path           = path;
     thargs->upload_id      = upload_id;
     thargs->upload_fd      = upload_fd;
@@ -917,7 +934,7 @@ int multipart_upload_part_request(const std::string& path, int upload_fd, off_t 
 
     // make parameter for thread pool
     thpoolman_param  ppoolparam;
-    ppoolparam.args  = thargs;
+    ppoolparam.args  = thargs.get();
     ppoolparam.psem  = psem;
     ppoolparam.pfunc = multipart_upload_part_req_threadworker;
 
@@ -926,6 +943,7 @@ int multipart_upload_part_request(const std::string& path, int upload_fd, off_t 
         S3FS_PRN_ERR("failed to setup Multipart Upload Part Thread Worker [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);;
         return -EIO;
     }
+    thargs.release();  // NOLINT(bugprone-unused-return-value)
 
     return 0;
 }
@@ -938,8 +956,8 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
     std::mutex thparam_lock;
     int        req_result = 0;
 
-    // parameter for thread worker
-    auto* thargs = new multipart_upload_part_req_thparam;   // free in multipart_upload_part_req_threadworker
+    // parameter for thread worker (freed in multipart_upload_part_req_threadworker)
+    auto thargs            = std::make_unique<multipart_upload_part_req_thparam>();
     thargs->path           = path;
     thargs->upload_id      = upload_id;
     thargs->upload_fd      = upload_fd;
@@ -953,7 +971,7 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
 
     // make parameter for thread pool
     thpoolman_param  ppoolparam;
-    ppoolparam.args  = thargs;
+    ppoolparam.args  = thargs.get();
     ppoolparam.psem  = nullptr;         // case await
     ppoolparam.pfunc = multipart_upload_part_req_threadworker;
 
@@ -962,6 +980,9 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
         S3FS_PRN_ERR("failed to setup Await Multipart Upload Part Thread Worker [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);;
         return -EIO;
     }
+    thargs.release();  // NOLINT(bugprone-unused-return-value)
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(0 != req_result){
         S3FS_PRN_ERR("Await Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", req_result, path.c_str(), upload_id.c_str(), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), (is_copy ? "true" : "false"), part_num);
         return req_result;
@@ -1118,7 +1139,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
             // Each part must be larger than MIN_MULTIPART_SIZE and smaller than FIVE_GB, then loop.
             // This loop breaks if result is not 0.
             //
-            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes && 0 == result; processed_bytes += request_bytes){
+            for(off_t processed_bytes = 0, request_bytes = 0; processed_bytes < iter->bytes; processed_bytes += request_bytes){
                 // Set temporary part sizes
                 request_bytes = std::min(S3fsCurl::GetMultipartCopySize(), (iter->bytes - processed_bytes));
 
@@ -1148,6 +1169,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
                     S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Copy Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
                     // [NOTE]
                     // This loop breaks because result is not 0.
+                    break;
                 }
                 ++req_count;
             }
@@ -1284,8 +1306,8 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
 
         partdata.add_etag_list(list);
 
-        // parameter for thread worker
-        auto* thargs = new multipart_put_head_req_thparam;    // free in multipart_put_head_req_threadworker
+        // parameter for thread worker (freed in multipart_put_head_req_threadworker)
+        auto thargs           = std::make_unique<multipart_put_head_req_thparam>();
         thargs->from          = strfrom;
         thargs->to            = strto;
         thargs->upload_id     = upload_id;
@@ -1307,16 +1329,17 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
 
         // make parameter for thread pool
         thpoolman_param  ppoolparam;
-        ppoolparam.args  = thargs;
+        ppoolparam.args  = thargs.get();
         ppoolparam.psem  = &multi_head_sem;
         ppoolparam.pfunc = multipart_put_head_req_threadworker;
 
         // setup instruction
         if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for one header request.");
-            delete thargs;
-            return -EIO;
+            result = -EIO;
+            break;
         }
+        thargs.release();  // NOLINT(bugprone-unused-return-value)
         ++req_count;
     }
 
@@ -1324,6 +1347,15 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
     while(req_count > 0){
         multi_head_sem.acquire();
         --req_count;
+    }
+
+    // propagate scheduling failure after drain
+    if(0 != result){
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(strto, upload_id))){
+            S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+        }
+        return result;
     }
 
     // check result
@@ -1359,17 +1391,18 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
 
     Semaphore    para_getobj_sem(0);
     std::mutex   thparam_lock;
-    int          req_count  = 0;
-    int          retrycount = 0;
-    int          req_result = 0;
+    int          req_count    = 0;
+    int          retrycount   = 0;
+    int          req_result   = 0;
+    int          sched_result = 0;
 
     // cycle through open fd, pulling off 10MB chunks at a time
     for(off_t remaining_bytes = size, chunk = 0; 0 < remaining_bytes; remaining_bytes -= chunk){
         // chunk size
         chunk = remaining_bytes > S3fsCurl::GetMultipartSize() ? S3fsCurl::GetMultipartSize() : remaining_bytes;
 
-        // parameter for thread worker
-        auto* thargs = new parallel_get_object_req_thparam;  // free in parallel_get_object_req_threadworker
+        // parameter for thread worker (freed in parallel_get_object_req_threadworker)
+        auto thargs           = std::make_unique<parallel_get_object_req_thparam>();
         thargs->path          = path;
         thargs->fd            = fd;
         thargs->start         = (start + size - remaining_bytes);
@@ -1382,16 +1415,17 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
 
         // make parameter for thread pool
         thpoolman_param  ppoolparam;
-        ppoolparam.args  = thargs;
+        ppoolparam.args  = thargs.get();
         ppoolparam.psem  = &para_getobj_sem;
         ppoolparam.pfunc = parallel_get_object_req_threadworker;
 
         // setup instruction
         if(!ThreadPoolMan::Instruct(ppoolparam)){
             S3FS_PRN_ERR("failed setup instruction for one header request.");
-            delete thargs;
-            return -EIO;
+            sched_result = -EIO;
+            break;
         }
+        thargs.release();  // NOLINT(bugprone-unused-return-value)
         ++req_count;
     }
 
@@ -1401,7 +1435,13 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
         --req_count;
     }
 
+    if(0 != sched_result){
+        return sched_result;
+    }
+
     // check result
+    // cppcheck-suppress unmatchedSuppression
+    // cppcheck-suppress knownConditionTrueFalse
     if(0 != req_result){
         S3FS_PRN_ERR("error occurred in parallel get object request(errno=%d).", req_result);
         return req_result;
@@ -1478,7 +1518,7 @@ int get_iamv2api_token_request(const std::string& strurl, int tokenttl, const st
 //
 int get_iamrole_request(const std::string& strurl, const std::string& striamtoken, std::string& token)
 {
-    S3FS_PRN_INFO3("Get IAM Role Request directly [url=%s][iam token=%s]", strurl.c_str(), striamtoken.c_str());
+    S3FS_PRN_INFO3("Get IAM Role Request directly [url=%s][iam token=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()));
 
     S3fsCurl s3fscurl;
     int      result = 0;
@@ -1494,7 +1534,7 @@ int get_iamrole_request(const std::string& strurl, const std::string& striamtoke
 //
 int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, std::string& cred)
 {
-    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), striamtoken.c_str(), stribmsecret.c_str());
+    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()), mask_sensitive_string(stribmsecret.c_str()));
 
     S3fsCurl s3fscurl;
     int      result = 0;

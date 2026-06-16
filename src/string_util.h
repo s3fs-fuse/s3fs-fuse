@@ -26,6 +26,8 @@
 #include <string>
 #include <strings.h>
 
+#include "types.h"
+
 //
 // A collection of string utilities for manipulating URLs and HTTP responses.
 //
@@ -48,8 +50,9 @@ public:
 private:
     const char *str;
 };
+// TODO: constexpr with C++17
 static inline bool is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
-static inline const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
+static constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
 // Macros(WTF8)
@@ -135,6 +138,17 @@ std::string s3fs_wtf8_decode(const std::string &s);
 //
 std::string get_encoded_cr_code(const char* pbase);
 std::string get_decoded_cr_code(const char* pencode);
+
+//-------------------------------------------------------------------
+// Utilities for masking sensitive strings
+//-------------------------------------------------------------------
+const char* mask_sensitive_string_with_flag(const char* sensitive, bool nomask);
+std::string mask_sensitive_header(const char* pheader, size_t length);
+std::string mask_sensitive_arg(const char* arg);
+
+// xattr parsing
+size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
+std::string raw_build_xattrs(const xattrs_t& xattrs);
 
 #endif // S3FS_STRING_UTIL_H_
 

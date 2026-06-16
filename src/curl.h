@@ -75,7 +75,7 @@ struct curlprogress {
     double dl_progress;
     double ul_progress;
 };
-typedef std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> CurlUniquePtr;
+using CurlUniquePtr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
 //----------------------------------------------
 // class S3fsCurl
@@ -84,10 +84,10 @@ class S3fsCred;
 class S3fsCurl;
 
 // Prototype function for lazy setup options for curl handle
-typedef bool (*s3fscurl_lazy_setup)(S3fsCurl* s3fscurl);
+using s3fscurl_lazy_setup = bool (*)(S3fsCurl* s3fscurl);
 
-typedef std::map<std::string, std::string> sseckeymap_t;
-typedef std::vector<sseckeymap_t>          sseckeylist_t;
+using sseckeymap_t  = std::map<std::string, std::string>;
+using sseckeylist_t = std::vector<sseckeymap_t>;
 
 // Class for lapping curl
 //
@@ -235,14 +235,15 @@ class S3fsCurl
         // methods
         bool ResetHandle() REQUIRES(S3fsCurl::curl_handles_lock);
         bool RemakeHandle();
+        void WaitBeforeRetry();
         bool ClearInternalData();
         bool insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
         bool insertAuthHeaders();
-        bool AddSseRequestHead(sse_type_t ssetype, const std::string& ssevalue, bool is_copy);
-        bool PreHeadRequest(const char* tpath, size_t ssekey_pos = -1);
-        bool PreHeadRequest(const std::string& tpath, size_t ssekey_pos = -1) {
+        bool AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool is_copy);
+        bool PreHeadRequest(const char* tpath, size_t ssekey_pos = SIZE_MAX);
+        bool PreHeadRequest(const std::string& tpath, size_t ssekey_pos = SIZE_MAX) {
             return PreHeadRequest(tpath.c_str(), ssekey_pos);
         }
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
@@ -263,6 +264,7 @@ class S3fsCurl
         // class methods(variables)
         static std::string LookupMimeType(const std::string& name);
         static bool SetCheckCertificate(bool isCertCheck);
+        static bool IsCertCheck() { return S3fsCurl::is_cert_check; }
         static long SetConnectTimeout(long timeout);
         static time_t SetReadwriteTimeout(time_t timeout);
         static time_t GetReadwriteTimeout() { return S3fsCurl::readwrite_timeout; }
@@ -325,6 +327,7 @@ class S3fsCurl
         bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
         bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
         bool GetResponseCode(long& responseCode, bool from_curl_handle = true) const;
+        bool GetCurlErrorString(std::string& strError) const;
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);

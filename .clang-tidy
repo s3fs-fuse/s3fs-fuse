@@ -7,16 +7,16 @@ Checks: '
     -boost-*,
     -bugprone-assignment-in-if-condition,
     -bugprone-branch-clone,
+    -bugprone-command-processor,
     -bugprone-easily-swappable-parameters,
-    -bugprone-implicit-widening-of-multiplication-result,
     -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
+    -bugprone-throwing-static-initialization,
     -bugprone-unhandled-self-assignment,
     -cert-dcl50-cpp,
     -cert-env33-c,
     -cert-err33-c,
     -cert-err58-cpp,
-    -clang-analyzer-security.insecureAPI.strcpy,
     -clang-analyzer-unix.BlockInCriticalSection,
     -concurrency-mt-unsafe,
     -cppcoreguidelines-avoid-c-arrays,
@@ -28,6 +28,7 @@ Checks: '
     -cppcoreguidelines-no-malloc,
     -cppcoreguidelines-owning-memory,
     -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+    -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
     -cppcoreguidelines-pro-bounds-constant-array-index,
     -cppcoreguidelines-pro-bounds-pointer-arithmetic,
     -cppcoreguidelines-pro-type-member-init,
@@ -52,13 +53,13 @@ Checks: '
     -misc-use-anonymous-namespace,
     -misc-use-internal-linkage,
     -modernize-avoid-c-arrays,
+    -modernize-avoid-variadic-functions,
     -modernize-loop-convert,
     -modernize-use-nodiscard,
     -modernize-raw-string-literal,
     -modernize-return-braced-init-list,
     -modernize-use-default-member-init,
     -modernize-use-trailing-return-type,
-    -modernize-use-using,
     -performance-avoid-endl,
     -performance-no-int-to-ptr,
     -readability-avoid-nested-conditional-operator,
@@ -77,7 +78,9 @@ Checks: '
     -readability-simplify-boolean-expr,
     -readability-suspicious-call-argument'
 CheckOptions:
+    bugprone-implicit-widening-of-multiplication-result.IgnoreConstantIntExpr: 'true'
     cppcoreguidelines-narrowing-conversions.WarnOnEquivalentBitWidth: 'false'
     misc-include-cleaner.MissingIncludes: 'false'
+    modernize-use-using.IgnoreExternC: 'true'
     readability-implicit-bool-conversion.AllowIntegerConditions: 'true'
     readability-implicit-bool-conversion.AllowPointerConditions: 'true'

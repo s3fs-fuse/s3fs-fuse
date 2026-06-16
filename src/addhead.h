@@ -32,7 +32,7 @@
 //----------------------------------------------
 // Structure / Typedef
 //----------------------------------------------
-typedef std::unique_ptr<regex_t, decltype(&regfree)> RegexPtr;
+using RegexPtr = std::unique_ptr<regex_t, decltype(&regfree)>;
 
 struct add_header{
     add_header(RegexPtr pregex, std::string basestring, std::string headkey, std::string headvalue)
@@ -53,7 +53,7 @@ struct add_header{
     std::string   headvalue;
 };
 
-typedef std::vector<add_header> addheadlist_t;
+using addheadlist_t = std::vector<add_header>;
 
 //----------------------------------------------
 // Class AdditionalHeader
@@ -61,12 +61,11 @@ typedef std::vector<add_header> addheadlist_t;
 class AdditionalHeader
 {
     private:
-        static AdditionalHeader singleton;
-        bool                    is_enable;
-        addheadlist_t           addheadlist;
+        bool            is_enable = false;
+        addheadlist_t   addheadlist;
 
     protected:
-        AdditionalHeader();
+        AdditionalHeader() = default;
         ~AdditionalHeader();
 
     public:
@@ -76,7 +75,11 @@ class AdditionalHeader
         AdditionalHeader& operator=(AdditionalHeader&&) = delete;
 
         // Reference singleton
-        static AdditionalHeader* get() { return &singleton; }
+        static AdditionalHeader* get()
+        {
+            static AdditionalHeader singleton;
+            return &singleton;
+        }
 
         bool Load(const char* file);
         void Unload();

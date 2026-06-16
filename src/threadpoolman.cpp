@@ -34,29 +34,28 @@
 //------------------------------------------------
 // ThreadPoolMan class variables
 //------------------------------------------------
-int                            ThreadPoolMan::worker_count = 10;    // default
-std::unique_ptr<ThreadPoolMan> ThreadPoolMan::singleton;
+int  ThreadPoolMan::worker_count   = 10;        // default
 
 //------------------------------------------------
 // ThreadPoolMan class methods
 //------------------------------------------------
 bool ThreadPoolMan::Initialize(int count)
 {
-    if(ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(singleton){
         S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
-        abort();
+        return false;
     }
     if(-1 != count){
         ThreadPoolMan::SetWorkerCount(count);
     }
-    ThreadPoolMan::singleton = std::make_unique<ThreadPoolMan>(ThreadPoolMan::worker_count);
-
+    singleton = std::make_unique<ThreadPoolMan>(ThreadPoolMan::worker_count);
     return true;
 }
 
 void ThreadPoolMan::Destroy()
 {
-    ThreadPoolMan::singleton.reset();
+    ThreadPoolMan::Slot().reset();
 }
 
 int ThreadPoolMan::SetWorkerCount(int count)
@@ -80,7 +79,8 @@ int ThreadPoolMan::SetWorkerCount(int count)
 
 bool ThreadPoolMan::Instruct(const thpoolman_param& param)
 {
-    if(!ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(!singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
@@ -88,13 +88,14 @@ bool ThreadPoolMan::Instruct(const thpoolman_param& param)
         S3FS_PRN_ERR("Thread parameter Semaphore is null.");
         return false;
     }
-    ThreadPoolMan::singleton->SetInstruction(param);
+    singleton->SetInstruction(param);
     return true;
 }
 
 bool ThreadPoolMan::AwaitInstruct(const thpoolman_param& param)
 {
-    if(!ThreadPoolMan::singleton){
+    auto& singleton = ThreadPoolMan::Slot();
+    if(!singleton){
         S3FS_PRN_WARN("The singleton object is not initialized yet.");
         return false;
     }
@@ -111,7 +112,7 @@ bool ThreadPoolMan::AwaitInstruct(const thpoolman_param& param)
     local_param.pfunc = param.pfunc;
 
     // Set parameters and run thread worker
-    ThreadPoolMan::singleton->SetInstruction(local_param);
+    singleton->SetInstruction(local_param);
 
     // wait until the thread is complete
     await_sem.acquire();
@@ -165,7 +166,7 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
         // run function
         void* retval;
         if(nullptr != (retval = param.pfunc(s3fscurl, param.args))){
-            S3FS_PRN_WARN("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
+            S3FS_PRN_DBG("The instruction function returned with something error code(%ld).", reinterpret_cast<long>(retval));
         }
         if(param.psem){
             param.psem->release();
@@ -186,10 +187,6 @@ ThreadPoolMan::ThreadPoolMan(int count) : is_exit(false), thpoolman_sem(0)
 {
     if(count < 1){
         S3FS_PRN_CRIT("Failed to creating singleton for Thread Manager, because thread count(%d) is under 1.", count);
-        abort();
-    }
-    if(ThreadPoolMan::singleton){
-        S3FS_PRN_CRIT("Already singleton for Thread Manager exists.");
         abort();
     }
 
@@ -215,13 +212,13 @@ void ThreadPoolMan::SetExitFlag(bool exit_flag)
     is_exit = exit_flag;
 }
 
-bool ThreadPoolMan::StopThreads()
+void ThreadPoolMan::StopThreads()
 {
     const std::lock_guard<std::mutex> lock(thread_list_lock);
 
     if(thread_list.empty()){
         S3FS_PRN_INFO("Any threads are running now, then nothing to do.");
-        return true;
+        return;
     }
 
     // all threads to exit
@@ -241,8 +238,6 @@ bool ThreadPoolMan::StopThreads()
     // reset semaphore(to zero)
     while(thpoolman_sem.try_acquire()){
     }
-
-    return true;
 }
 
 bool ThreadPoolMan::StartThreads(int count)
@@ -253,12 +248,7 @@ bool ThreadPoolMan::StartThreads(int count)
     }
 
     // stop all thread if they are running.
-    // cppcheck-suppress unmatchedSuppression
-    // cppcheck-suppress knownConditionTrueFalse
-    if(!StopThreads()){
-        S3FS_PRN_ERR("Failed to stop existed threads.");
-        return false;
-    }
+    StopThreads();
 
     // create all threads
     SetExitFlag(false);

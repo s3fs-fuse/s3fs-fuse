@@ -22,7 +22,9 @@
 #include "fdcache_stat.h"
 #include "test_util.h"
 
+// cppcheck-suppress functionStatic
 bool CacheFileStat::Open() { return false; }                                            // NOLINT(readability-convert-member-functions-to-static)
+// cppcheck-suppress functionStatic
 bool CacheFileStat::OverWriteFile(const std::string& strall) const { return false; }    // NOLINT(readability-convert-member-functions-to-static)
 
 void test_compress()

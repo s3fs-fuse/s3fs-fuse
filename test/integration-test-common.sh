@@ -20,15 +20,15 @@
 #
 
 #
-# Common code for starting an s3fs-fuse mountpoint and an S3Proxy instance 
+# Common code for starting an s3fs-fuse mountpoint and an S3Proxy instance
 # to run tests against S3Proxy locally.
 #
-# To run against an Amazon S3 or other S3 provider, specify the following 
+# To run against an Amazon S3 or other S3 provider, specify the following
 # environment variables:
 #
 # S3FS_CREDENTIALS_FILE=keyfile      s3fs format key file
 # S3FS_PROFILE=name                  s3fs profile to use (overrides key file)
-# TEST_BUCKET_1=bucketname           Name of bucket to use 
+# TEST_BUCKET_1=bucketname           Name of bucket to use
 # S3PROXY_BINARY=""                  Specify empty string to skip S3Proxy start
 # S3_URL="https://s3.amazonaws.com"  Specify Amazon AWS as the S3 provider
 # S3_ENDPOINT="us-east-1"            Specify region
@@ -44,7 +44,7 @@
 # To change the s3fs-fuse debug level:
 #
 #    DBGLEVEL=debug ./small-integration-test.sh
-# 
+#
 # To stop and wait after the mount point is up for manual interaction. This allows you to
 # explore the mounted file system exactly as it would have been started for the test case
 #
@@ -57,7 +57,7 @@
 # Run the tests with request auth turned off in both S3Proxy and s3fs-fuse.  This can be
 # useful for poking around with plain old curl
 #
-#    PUBLIC=1 INTERACT=1 ./small-integration-test.sh 
+#    PUBLIC=1 INTERACT=1 ./small-integration-test.sh
 #
 # A valgrind tool can be specified
 # eg: VALGRIND="--tool=memcheck --leak-check=full" ./small-integration-test.sh
@@ -73,7 +73,9 @@ S3FS=../src/s3fs
 # CHAOS HTTP PROXY does not support HTTPS.
 #
 if [ -z "${CHAOS_HTTP_PROXY}" ] && [ -z "${CHAOS_HTTP_PROXY_OPT}" ]; then
-    : "${S3_URL:="https://127.0.0.1:8080"}"
+    # Default to S3Proxy's HTTP listener (port 8081). The HTTPS listener
+    # on 8080 is still up; override S3_URL to use it if needed.
+    : "${S3_URL:="http://127.0.0.1:8081"}"
 else
     : "${S3_URL:="http://127.0.0.1:8080"}"
 fi
@@ -89,8 +91,8 @@ TEST_SCRIPT_DIR=$(pwd)
 export TEST_SCRIPT_DIR
 export TEST_BUCKET_MOUNT_POINT_1=${TEST_BUCKET_1}
 
-S3PROXY_VERSION="2.9.0"
-S3PROXY_HASH="30965ab24f6eed0ff7260d37a9f4e1efba38829e19b1302e5c080e3470d6a420"
+S3PROXY_VERSION="3.1.0"
+S3PROXY_HASH="0d4aec51ba20783260f9c522d5ed0ea522e37d934d6316f21c3c1df063687447"
 S3PROXY_BINARY="${S3PROXY_BINARY-"s3proxy-${S3PROXY_VERSION}"}"
 
 CHAOS_HTTP_PROXY_VERSION="1.1.0"
@@ -101,8 +103,8 @@ PJDFSTEST_HASH="c711b5f6b666579846afba399a998f74f60c488b"
 
 if [ ! -f "$S3FS_CREDENTIALS_FILE" ]
 then
-	echo "Missing credentials file: ${S3FS_CREDENTIALS_FILE}"
-	exit 1
+    echo "Missing credentials file: ${S3FS_CREDENTIALS_FILE}"
+    exit 1
 fi
 chmod 600 "${S3FS_CREDENTIALS_FILE}"
 
@@ -115,7 +117,7 @@ if [ -z "${S3FS_PROFILE}" ]; then
 fi
 
 if [ ! -d "${TEST_BUCKET_MOUNT_POINT_1}" ]; then
-	mkdir -p "${TEST_BUCKET_MOUNT_POINT_1}"
+    mkdir -p "${TEST_BUCKET_MOUNT_POINT_1}"
 fi
 
 # [NOTE]
@@ -129,7 +131,7 @@ else
 fi
 
 # This function execute the function parameters $1 times
-# before giving up, with 1 second delays.
+# before giving up, with 0.1 second delays.
 function retry {
     local N="$1"
     shift
@@ -142,7 +144,7 @@ function retry {
         if [ "${rc}" -eq 0 ]; then
             break
         fi
-        sleep 1
+        sleep 0.1
         echo "Retrying: $*"
     done
 
@@ -155,7 +157,7 @@ function retry {
 # Proxy is not started if S3PROXY_BINARY is an empty string
 # PUBLIC unset: use s3proxy.conf
 # PUBLIC=1:     use s3proxy-noauth.conf (no request signing)
-# 
+#
 function start_s3proxy {
     if [ -n "${PUBLIC}" ]; then
         local S3PROXY_CONFIG="s3proxy-noauth.conf"
@@ -172,7 +174,7 @@ function start_s3proxy {
         if [ ! -e "${S3PROXY_BINARY}" ]; then
             curl "https://github.com/gaul/s3proxy/releases/download/s3proxy-${S3PROXY_VERSION}/s3proxy" \
                 --fail --location --silent --output "/tmp/${S3PROXY_BINARY}"
-            echo "$S3PROXY_HASH" "/tmp/${S3PROXY_BINARY}" | sha256sum --check
+            echo "$S3PROXY_HASH" "/tmp/${S3PROXY_BINARY}" | "${SHA256SUM_BIN}" --check
             mv "/tmp/${S3PROXY_BINARY}" "${S3PROXY_BINARY}"
             chmod +x "${S3PROXY_BINARY}"
         fi
@@ -202,7 +204,7 @@ function start_s3proxy {
         if [ ! -e "${CHAOS_HTTP_PROXY_BINARY}" ]; then
             curl "https://github.com/bouncestorage/chaos-http-proxy/releases/download/chaos-http-proxy-${CHAOS_HTTP_PROXY_VERSION}/chaos-http-proxy" \
                 --fail --location --silent --output "/tmp/${CHAOS_HTTP_PROXY_BINARY}"
-            echo "$CHAOS_HTTP_PROXY_HASH" "/tmp/${CHAOS_HTTP_PROXY_BINARY}" | sha256sum --check
+            echo "$CHAOS_HTTP_PROXY_HASH" "/tmp/${CHAOS_HTTP_PROXY_BINARY}" | "${SHA256SUM_BIN}" --check
             mv "/tmp/${CHAOS_HTTP_PROXY_BINARY}" "${CHAOS_HTTP_PROXY_BINARY}"
             chmod +x "${CHAOS_HTTP_PROXY_BINARY}"
         fi
@@ -240,7 +242,7 @@ function stop_s3proxy {
 }
 
 # Mount the bucket, function arguments passed to s3fs in addition to
-# a set of common arguments.  
+# a set of common arguments.
 function start_s3fs {
     # Public bucket if PUBLIC is set
     if [ -n "${PUBLIC}" ]; then
@@ -252,26 +254,20 @@ function start_s3fs {
     fi
 
     # If VALGRIND is set, pass it as options to valgrind.
-    # start valgrind-listener in another shell. 
+    # start valgrind-listener in another shell.
     # eg: VALGRIND="--tool=memcheck --leak-check=full" ./small-integration-test.sh
     # Start valgrind-listener (default port is 1500)
     if [ -n "${VALGRIND}" ]; then
         VALGRIND_EXEC="valgrind ${VALGRIND} --log-socket=127.0.1.1"
     fi
 
-    # On OSX only, we need to specify the direct_io and auto_cache flag.
-    #
-    # And Turn off creation and reference of spotlight index.
+    # On OSX only, turn off creation and reference of spotlight index.
     # (Leaving spotlight ON will result in a lot of wasted requests,
     # which will affect test execution time)
     #
+    local DIRECT_IO_OPT=""
     if [ "$(uname)" = "Darwin" ]; then
-       local DIRECT_IO_OPT="-o direct_io -o auto_cache"
-
-       # disable spotlight
        sudo mdutil -a -i off
-    else
-       local DIRECT_IO_OPT=""
     fi
 
     # Set environment variables or options for proxy.
@@ -313,8 +309,8 @@ function start_s3fs {
     # use_path_request_style
     #     The test env doesn't have virtual hosts
     # $AUTH_OPT
-    #     Will be either "-o public_bucket=1" 
-    #                     or 
+    #     Will be either "-o public_bucket=1"
+    #                     or
     #     "-o passwd_file=${S3FS_CREDENTIALS_FILE}"
     # dbglevel
     #     error by default.  override with DBGLEVEL env variable
@@ -325,7 +321,7 @@ function start_s3fs {
     # subshell with set -x to log exact invocation of s3fs-fuse
     # shellcheck disable=SC2086
     (
-        set -x 
+        set -x
         CURL_CA_BUNDLE="${S3PROXY_CACERT_FILE}" \
         "${STDBUF_COMMAND_LINE[@]}" \
             ${VALGRIND_EXEC} \
@@ -345,33 +341,39 @@ function start_s3fs {
             -o stat_cache_expire=1 \
             -o stat_cache_interval_expire=1 \
             -o dbglevel="${DBGLEVEL:=info}" \
+            -o insecure_logging \
             -o no_time_stamp_msg \
             -o retries=3 \
             -f \
             "${@}" &
         echo $! >&3
     ) 3>pid | "${STDBUF_COMMAND_LINE[@]}" awk "{print \"s3fs: \" \$0}" &
-    sleep 1
+    # Poll for the pid file rather than sleeping a fixed second.
+    for _ in $(seq 50); do
+        [ -s pid ] && break
+        sleep 0.1
+    done
     S3FS_PID=$(<pid)
     export S3FS_PID
     rm -f pid
 
     if [ "$(uname)" = "Darwin" ]; then
-         local TRYCOUNT=0
-         while [ "${TRYCOUNT}" -le "${RETRIES:=20}" ]; do
-             _DF_RESULT=$(df 2>/dev/null)
-             if echo "${_DF_RESULT}" | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
-                 break;
-             fi
-             sleep 1
-             TRYCOUNT=$((TRYCOUNT + 1))
-         done
-         if [ "${TRYCOUNT}" -gt "${RETRIES}" ]; then
-             echo "Waited ${TRYCOUNT} seconds, but it could not be mounted."
-             exit 1
-         fi
+        local TRYCOUNT=0
+        local MAX_TRIES=$(( ${RETRIES:=20} * 10 ))
+        while [ "${TRYCOUNT}" -le "${MAX_TRIES}" ]; do
+            _DF_RESULT=$(df 2>/dev/null)
+            if echo "${_DF_RESULT}" | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
+                break;
+            fi
+            sleep 0.1
+            TRYCOUNT=$((TRYCOUNT + 1))
+        done
+        if [ "${TRYCOUNT}" -gt "${MAX_TRIES}" ]; then
+            echo "Waited ${RETRIES} seconds, but it could not be mounted."
+            exit 1
+        fi
     else
-        retry "${RETRIES:=20}" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts || exit 1
+        retry "$(( ${RETRIES:=20} * 10 ))" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts || exit 1
     fi
 
     # Quick way to start system up for manual testing with options under test
@@ -387,11 +389,11 @@ function stop_s3fs {
     # Retry in case file system is in use
     if [ "$(uname)" = "Darwin" ]; then
         if df | grep -q "${TEST_BUCKET_MOUNT_POINT_1}"; then
-            retry 10 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
+            retry 100 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     else
-        if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then 
-            retry 10 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
+        if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then
+            retry 100 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     fi
 }

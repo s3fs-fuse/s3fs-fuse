@@ -29,14 +29,14 @@
 //-------------------------------------------------------------------
 // Structure / Typedef
 //-------------------------------------------------------------------
-typedef struct incomplete_multipart_upload_info
+struct INCOMP_MPU_INFO
 {
     std::string key;
     std::string id;
     std::string date;
-}INCOMP_MPU_INFO;
+};
 
-typedef std::vector<INCOMP_MPU_INFO> incomp_mpu_list_t;
+using incomp_mpu_list_t = std::vector<INCOMP_MPU_INFO>;
 
 //-------------------------------------------------------------------
 // enum for utility process mode

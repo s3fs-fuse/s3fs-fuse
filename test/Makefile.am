@@ -43,7 +43,7 @@ truncate_read_file_SOURCES = truncate_read_file.cc
 cr_filename_SOURCES        = cr_filename.cc
 
 clang-tidy:
-	clang-tidy -extra-arg=-std=@CPP_VERSION@ \
+	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
     $(junk_data_SOURCES) \
     $(write_multiblock_SOURCES) \
     $(mknod_test_SOURCES) \

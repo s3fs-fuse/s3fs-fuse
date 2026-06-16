@@ -319,7 +319,7 @@ bool is_truncated(xmlDocPtr doc)
     return 0 == strcasecmp(reinterpret_cast<const char*>(strTruncate.get()), "true");
 }
 
-int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head, bool prefix)
+int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, const char* ex_size, const char* ex_lastmod, int isCPrefix, S3ObjList& head, bool prefix)
 {
     xmlNodeSetPtr content_nodes;
 
@@ -336,6 +336,8 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
 
     bool is_dir;
     std::string stretag;
+    std::string strlastmod;
+    off_t       objsize;
     int i;
     for(i = 0; i < content_nodes->nodeNr; i++){
         ctx->node = content_nodes->nodeTab[i];
@@ -358,8 +360,10 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             S3FS_PRN_WARN("name is something wrong. but continue.");
             break;
         case get_object_name_result::SUCCESS: {
-            is_dir  = isCPrefix ? true : false;
-            stretag = "";
+            is_dir     = isCPrefix ? true : false;
+            stretag    = "";
+            strlastmod = "";
+            objsize    = -1;
 
             if(!isCPrefix && ex_etag){
                 // Get ETag
@@ -377,6 +381,38 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
                 }
             }
 
+            if(!isCPrefix && ex_size){
+                // Get Size
+                unique_ptr_xmlXPathObject Size(xmlXPathEvalExpression(reinterpret_cast<const xmlChar*>(ex_size), ctx), xmlXPathFreeObject);
+                if(nullptr != Size){
+                    if(xmlXPathNodeSetIsEmpty(Size->nodesetval)){
+                        S3FS_PRN_INFO("Size->nodesetval is empty.");
+                    }else{
+                        xmlNodeSetPtr size_nodes = Size->nodesetval;
+                        unique_ptr_xmlChar psize(xmlNodeListGetString(doc, size_nodes->nodeTab[0]->xmlChildrenNode, 1), xmlFree);
+                        if(psize){
+                            objsize = cvt_strtoofft(reinterpret_cast<const char*>(psize.get()), /*base=*/ 10);
+                        }
+                    }
+                }
+            }
+
+            if(!isCPrefix && ex_lastmod){
+                // Get LastModified
+                unique_ptr_xmlXPathObject LastModified(xmlXPathEvalExpression(reinterpret_cast<const xmlChar*>(ex_lastmod), ctx), xmlXPathFreeObject);
+                if(nullptr != LastModified){
+                    if(xmlXPathNodeSetIsEmpty(LastModified->nodesetval)){
+                        S3FS_PRN_INFO("LastModified->nodesetval is empty.");
+                    }else{
+                        xmlNodeSetPtr lastmod_nodes = LastModified->nodesetval;
+                        unique_ptr_xmlChar plastmod(xmlNodeListGetString(doc, lastmod_nodes->nodeTab[0]->xmlChildrenNode, 1), xmlFree);
+                        if(plastmod){
+                            strlastmod = reinterpret_cast<const char*>(plastmod.get());
+                        }
+                    }
+                }
+            }
+
             // [NOTE]
             // The XML data passed to this function is CR code(\r) encoded.
             // The function below decodes that encoded CR code.
@@ -386,7 +422,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             if(prefix){
                 head.AddCommonPrefix(decname);
             }
-            if(!head.insert(decname.c_str(), (!stretag.empty() ? stretag.c_str() : nullptr), is_dir)){
+            if(!head.insert(decname.c_str(), (!stretag.empty() ? stretag.c_str() : nullptr), is_dir, objsize, (!strlastmod.empty() ? strlastmod.c_str() : nullptr))){
                 S3FS_PRN_ERR("insert_object returns with error.");
                 return -1;
             }
@@ -409,6 +445,8 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
     std::string ex_cprefix  = "//";
     std::string ex_prefix;
     std::string ex_etag;
+    std::string ex_size;
+    std::string ex_lastmod;
 
     if(!doc){
         return -1;
@@ -427,15 +465,19 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
         ex_cprefix += "s3:";
         ex_prefix  += "s3:";
         ex_etag    += "s3:";
+        ex_size    += "s3:";
+        ex_lastmod += "s3:";
     }
     ex_contents+= "Contents";
     ex_key     += "Key";
     ex_cprefix += "CommonPrefixes";
     ex_prefix  += "Prefix";
     ex_etag    += "ETag";
+    ex_size    += "Size";
+    ex_lastmod += "LastModified";
 
-    if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx.get(), ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), 0, head, /*prefix=*/ false) ||
-       -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx.get(), ex_cprefix.c_str(), ex_prefix.c_str(), nullptr, 1, head, /*prefix=*/ true) )
+    if(-1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx.get(), ex_contents.c_str(), ex_key.c_str(), ex_etag.c_str(), ex_size.c_str(), ex_lastmod.c_str(), 0, head, /*prefix=*/ false) ||
+       -1 == append_objects_from_xml_ex(prefix.c_str(), doc, ctx.get(), ex_cprefix.c_str(), ex_prefix.c_str(), nullptr, nullptr, nullptr, 1, head, /*prefix=*/ true) )
     {
         S3FS_PRN_ERR("append_objects_from_xml_ex returns with error.");
         return -1;
@@ -464,7 +506,7 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
     s3fsXmlBufferParserError parserError;
     parserError.SetXmlParseError();
 
-    std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(data, static_cast<int>(len), "", nullptr, 0), xmlFreeDoc);
+    std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> doc(xmlReadMemory(data, static_cast<int>(len), "", nullptr, S3FS_XML_PARSE_FLAGS), xmlFreeDoc);
     if(nullptr == doc){
         if(parserError.IsXmlParseError()){
             S3FS_PRN_ERR("xmlReadMemory returns with error: %s", parserError.GetXmlParseError().c_str());

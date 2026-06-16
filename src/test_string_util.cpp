@@ -24,6 +24,7 @@
 #include "s3fs_logger.h"
 #include "string_util.h"
 #include "test_util.h"
+#include "types.h"
 
 using namespace std::string_literals;
 
@@ -126,10 +127,10 @@ void test_strtoofft()
 
 void test_wtf8_encoding()
 {
-    std::string ascii("normal std::string");
-    std::string utf8("Hyld\xc3\xbdpi \xc3\xbej\xc3\xb3\xc3\xb0""f\xc3\xa9lagsins vex \xc3\xbar k\xc3\xa6rkomnu b\xc3\xb6li \xc3\xad \xc3\xa1st");
-    std::string cp1252("Hyld\xfdpi \xfej\xf3\xf0""f\xe9lagsins vex \xfar k\xe6rkomnu b\xf6li \xed \xe1st");
-    std::string broken = utf8;
+    auto ascii = "normal std::string"s;
+    auto utf8 = "Hyld\xc3\xbdpi \xc3\xbej\xc3\xb3\xc3\xb0""f\xc3\xa9lagsins vex \xc3\xbar k\xc3\xa6rkomnu b\xc3\xb6li \xc3\xad \xc3\xa1st"s;
+    auto cp1252 = "Hyld\xfdpi \xfej\xf3\xf0""f\xe9lagsins vex \xfar k\xe6rkomnu b\xf6li \xed \xe1st"s;
+    std::string broken = utf8;  // NOLINT(bugprone-exception-escape)
     broken[14] = '\x97';
     std::string mixed = ascii + utf8 + cp1252;
 
@@ -151,27 +152,27 @@ void test_wtf8_encoding()
 void test_cr_encoding()
 {
     // bse strings
-    std::string base_no("STR");
+    auto base_no = "STR"s;
 
-    std::string base_end_cr1("STR\r");
-    std::string base_mid_cr1("STR\rSTR");
-    std::string base_end_cr2("STR\r\r");
-    std::string base_mid_cr2("STR\r\rSTR");
+    auto base_end_cr1 = "STR\r"s;
+    auto base_mid_cr1 = "STR\rSTR"s;
+    auto base_end_cr2 = "STR\r\r"s;
+    auto base_mid_cr2 = "STR\r\rSTR"s;
 
-    std::string base_end_per1("STR%");
-    std::string base_mid_per1("STR%STR");
-    std::string base_end_per2("STR%%");
-    std::string base_mid_per2("STR%%STR");
+    auto base_end_per1 = "STR%"s;
+    auto base_mid_per1 = "STR%STR"s;
+    auto base_end_per2 = "STR%%"s;
+    auto base_mid_per2 = "STR%%STR"s;
 
-    std::string base_end_crlf1("STR\r\n");
-    std::string base_mid_crlf1("STR\r\nSTR");
-    std::string base_end_crlf2("STR\r\n\r\n");
-    std::string base_mid_crlf2("STR\r\n\r\nSTR");
+    auto base_end_crlf1 = "STR\r\n"s;
+    auto base_mid_crlf1 = "STR\r\nSTR"s;
+    auto base_end_crlf2 = "STR\r\n\r\n"s;
+    auto base_mid_crlf2 = "STR\r\n\r\nSTR"s;
 
-    std::string base_end_crper1("STR%\r");
-    std::string base_mid_crper1("STR%\rSTR");
-    std::string base_end_crper2("STR%\r%\r");
-    std::string base_mid_crper2("STR%\r%\rSTR");
+    auto base_end_crper1 = "STR%\r"s;
+    auto base_mid_crper1 = "STR%\rSTR"s;
+    auto base_end_crper2 = "STR%\r%\r"s;
+    auto base_mid_crper2 = "STR%\r%\rSTR"s;
 
     // encode->decode->compare
     ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_no.c_str()).c_str()),         base_no);
@@ -197,6 +198,105 @@ void test_cr_encoding()
     ASSERT_EQUALS(get_decoded_cr_code(get_encoded_cr_code(base_mid_crper2.c_str()).c_str()), base_mid_crper2);
 }
 
+void test_mask_sensitive_string_with_flag()
+{
+    auto base = "sensitive"s;
+    auto mask = "[SENSITIVE]"s;
+
+    ASSERT_EQUALS(std::string(mask_sensitive_string_with_flag(base.c_str(), true)),  base);
+    ASSERT_EQUALS(std::string(mask_sensitive_string_with_flag(base.c_str(), false)), mask);
+}
+
+void test_mask_sensitive_header()
+{
+    auto base_auth_sigv4 = "Authorization: AWS4-HMAC-SHA256 Credential=VALCREDENTIAL, SignedHeaders=VALSIGHEADERS, Signature=VALSIGNATURE"s;
+    auto base_auth_sigv2 = "Authorization: AWS VALCREDENTIAL"s;
+    auto base_xamz_token = "x-amz-security-token: VALTOKEN"s;
+    auto base_xamz_cred = "x-amz-credential: VALCREDENTIAL"s;
+    auto base_xamz_sig = "x-amz-signature: VALSIGNATURE"s;
+    auto base_xamz_sseckeymd5 = "x-amz-server-side-encryption-customer-key-md5: VALKEYMD5"s;
+    auto base_xamz_ssekmsid = "x-amz-server-side-encryption-aws-kms-key-id: VALKEYID"s;
+    auto base_xamz_svrsseckey = "x-amz-copy-source-server-side-encryption-customer-key: VALKEY"s;
+    auto base_xamz_svrsseckeymd5 = "x-amz-copy-source-server-side-encryption-customer-key-md5: VALKEYMD5"s;
+    auto base_xamz_nomask = "x-amz-content-sha256: VALSHA256"s;
+
+    auto mask_auth_sigv4 = "Authorization: AWS4-HMAC-SHA256 Credential=[SENSITIVE], SignedHeaders=[SENSITIVE], Signature=[SENSITIVE]"s;
+    auto mask_auth_sigv2 = "Authorization: AWS [SENSITIVE]"s;
+    auto mask_xamz_token = "x-amz-security-token: [SENSITIVE]"s;
+    auto mask_xamz_cred = "x-amz-credential: [SENSITIVE]"s;
+    auto mask_xamz_sig = "x-amz-signature: [SENSITIVE]"s;
+    auto mask_xamz_sseckeymd5 = "x-amz-server-side-encryption-customer-key-md5: [SENSITIVE]"s;
+    auto mask_xamz_ssekmsid = "x-amz-server-side-encryption-aws-kms-key-id: [SENSITIVE]"s;
+    auto mask_xamz_svrsseckey = "x-amz-copy-source-server-side-encryption-customer-key: [SENSITIVE]"s;
+    auto mask_xamz_svrsseckeymd5 = "x-amz-copy-source-server-side-encryption-customer-key-md5: [SENSITIVE]"s;
+    auto mask_xamz_nomask = "x-amz-content-sha256: VALSHA256"s;
+
+    ASSERT_EQUALS(mask_sensitive_header(base_auth_sigv4.c_str(),         base_auth_sigv4.length()),         mask_auth_sigv4);
+    ASSERT_EQUALS(mask_sensitive_header(base_auth_sigv2.c_str(),         base_auth_sigv2.length()),         mask_auth_sigv2);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_token.c_str(),         base_xamz_token.length()),         mask_xamz_token);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_cred.c_str(),          base_xamz_cred.length()),          mask_xamz_cred);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_sig.c_str(),           base_xamz_sig.length()),           mask_xamz_sig);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_sseckeymd5.c_str(),    base_xamz_sseckeymd5.length()),    mask_xamz_sseckeymd5);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_ssekmsid.c_str(),      base_xamz_ssekmsid.length()),      mask_xamz_ssekmsid);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_svrsseckey.c_str(),    base_xamz_svrsseckey.length()),    mask_xamz_svrsseckey);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_svrsseckeymd5.c_str(), base_xamz_svrsseckeymd5.length()), mask_xamz_svrsseckeymd5);
+    ASSERT_EQUALS(mask_sensitive_header(base_xamz_nomask.c_str(),        base_xamz_nomask.length()),        mask_xamz_nomask);
+}
+
+void test_mask_sensitive_arg()
+{
+    auto base_url_http_keyval = "url=http://KEY:SEC@test"s;
+    auto base_url_https_keyval = "url=https://KEY:SEC@test"s;
+    auto base_url_http_key = "url=http://KEY@test"s;
+    auto base_url_https_key = "url=https://KEY@test"s;
+    auto base_url_http_no = "url=http://test"s;
+    auto base_url_https_no = "url=https://test"s;
+    auto base_sslcert_all = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:PASSWORD"s;
+    auto base_sslcert_wrong_short = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE"s;
+
+    auto mask_url_http_keyval = "url=http://[SENSITIVE]@test"s;
+    auto mask_url_https_keyval = "url=https://[SENSITIVE]@test"s;
+    auto mask_url_http_key = "url=http://[SENSITIVE]@test"s;
+    auto mask_url_https_key = "url=https://[SENSITIVE]@test"s;
+    auto mask_url_http_no = "url=http://test"s;
+    auto mask_url_https_no = "url=https://test"s;
+    auto mask_sslcert_all = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE:[SENSITIVE]"s;
+    auto mask_sslcert_wrong_short = "ssl_client_cert=CCERT:CTYPE:CPRIVKEY:CPRIVTYPE"s;
+
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_http_keyval.c_str()),     mask_url_http_keyval);
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_https_keyval.c_str()),    mask_url_https_keyval);
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_http_key.c_str()),        mask_url_http_key);
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_https_key.c_str()),       mask_url_https_key);
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_http_no.c_str()),         mask_url_http_no);
+    ASSERT_EQUALS(mask_sensitive_arg(base_url_https_no.c_str()),        mask_url_https_no);
+
+    ASSERT_EQUALS(mask_sensitive_arg(base_sslcert_all.c_str()),         mask_sslcert_all);
+    ASSERT_EQUALS(mask_sensitive_arg(base_sslcert_wrong_short.c_str()), mask_sslcert_wrong_short);
+}
+
+void test_parse_xattrs()
+{
+    auto encoded = raw_build_xattrs({ {"foo", "bar" } });
+    xattrs_t decoded;
+    ASSERT_EQUALS(encoded, R"({"foo":"YmFy"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
+    ASSERT_EQUALS(decoded.find("foo")->second, "bar"s);
+
+    encoded = raw_build_xattrs({ {"foo", "bar" }, { "1234", "5678" } });
+    ASSERT_EQUALS(encoded, R"({"1234":"NTY3OA==","foo":"YmFy"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(2));
+    ASSERT_EQUALS(decoded.find("foo")->second, "bar"s);
+    ASSERT_EQUALS(decoded.find("1234")->second, "5678"s);
+
+    encoded = raw_build_xattrs({ {"foo:bar", "baz" } });
+    ASSERT_EQUALS(encoded, R"({"foo:bar":"YmF6"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
+    ASSERT_EQUALS(decoded.find("foo:bar")->second, "baz"s);
+}
+
 int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
@@ -206,6 +306,10 @@ int main(int argc, const char *argv[])
     test_strtoofft();
     test_wtf8_encoding();
     test_cr_encoding();
+    test_mask_sensitive_string_with_flag();
+    test_mask_sensitive_header();
+    test_mask_sensitive_arg();
+    test_parse_xattrs();
 
     return 0;
 }

@@ -28,6 +28,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <regex>
 #include <fcntl.h>
 #include <sys/stat.h>  // NOLINT(misc-include-cleaner)
 
@@ -308,7 +309,7 @@ bool get_unixtime_from_iso8601(const char* pdate, time_t& unixtime)
         // wrong format
         return false;
     }
-    unixtime = mktime(&tm);
+    unixtime = timegm(&tm); // GMT
     return true;
 }
 
@@ -466,7 +467,7 @@ std::string s3fs_decode64(const char* input, size_t input_len)
 // is a private range, se use the start of this range.
 static constexpr unsigned int escape_base = 0xe000;
 
-// encode bytes into wobbly utf8.  
+// encode bytes into wobbly utf8.
 // 'result' can be null. returns true if transform was needed.
 bool s3fs_wtf8_encode(const char *s, std::string *result)
 {
@@ -495,12 +496,12 @@ bool s3fs_wtf8_encode(const char *s, std::string *result)
                     *result += *(++s);
                 }
                 continue;
-            } 
+            }
             // three byte encoding
             if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {
                 const unsigned code = ((c & 0x0f) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
                 if (code >= 0x800 && ! (code >= 0xd800 && code <= 0xd8ff)) {
-                    // not overlong and not a surrogate pair 
+                    // not overlong and not a surrogate pair
                     if (result) {
                         *result += c;
                         *result += *(++s);
@@ -573,7 +574,7 @@ bool s3fs_wtf8_decode(const char *s, std::string *result)
     }
     return encoded;
 }
- 
+
 std::string s3fs_wtf8_decode(const std::string &s)
 {
     std::string result;
@@ -662,6 +663,168 @@ std::string get_decoded_cr_code(const char* pencode)
         result += strencode.substr(startpos);
     }
     return result;
+}
+
+//-------------------------------------------------------------------
+// Utilities for masking sensitive strings
+//-------------------------------------------------------------------
+const char* mask_sensitive_string_with_flag(const char* sensitive, bool nomask)
+{
+    if(!sensitive){
+        return "(null)";
+    }else if(nomask){
+        return sensitive;
+    }else{
+        return "[SENSITIVE]";
+    }
+}
+
+std::string mask_sensitive_header(const char* pheader, size_t length)
+{
+    static const char* SensitiveHeaders[] = {
+        "authorization:",                                   // do not change this position(see. isAuthHeader)
+        "x-amz-security-token:",
+        "x-amz-credential:",
+        "x-amz-signature:",
+        "x-amz-server-side-encryption-customer-key-md5:",
+        "x-amz-server-side-encryption-aws-kms-key-id:",
+        "x-amz-copy-source-server-side-encryption-customer-key:",
+        "x-amz-copy-source-server-side-encryption-customer-key-md5:",
+        nullptr
+    };
+
+    if(!pheader || length == 0){
+        return std::string();
+    }
+    std::string strHeader(pheader, length);
+
+    bool isAuthHeader = true;
+    for(const auto* one_sensitive: SensitiveHeaders){
+        if(one_sensitive == nullptr){
+            break;
+        }
+        if(0 == strncasecmp(strHeader.c_str(), one_sensitive, strlen(one_sensitive))){
+            if(isAuthHeader){
+                // mask the element in Authorization header
+                static const std::regex aws4_check(R"(\s*AWS4-HMAC-SHA256\s+)", std::regex::icase);
+                static const std::regex aws2_check(R"(\s*AWS\s+)", std::regex::icase);
+
+                if(std::regex_search(strHeader, aws4_check)){
+                    // AWS Signature Version 4
+                    strHeader = std::regex_replace(strHeader, std::regex(R"((Credential)\s*=\s*[^,]+)",    std::regex::icase), "$1=[SENSITIVE]");
+                    strHeader = std::regex_replace(strHeader, std::regex(R"((SignedHeaders)\s*=\s*[^,]+)", std::regex::icase), "$1=[SENSITIVE]");
+                    strHeader = std::regex_replace(strHeader, std::regex(R"((Signature)\s*=\s*\S+)",       std::regex::icase), "$1=[SENSITIVE]");
+                }else if(std::regex_search(strHeader, aws2_check)){
+                    // AWS Signature Version 2
+                    strHeader = std::regex_replace(strHeader, std::regex(R"((\s*AWS\s+)(.+))", std::regex::icase), "$1[SENSITIVE]");
+                }else{
+                    // wrong format
+                    strHeader.resize(strlen(one_sensitive));
+                    strHeader += " [SENSITIVE(wrong format)]";
+                }
+            }else{
+                strHeader.resize(strlen(one_sensitive));
+                strHeader += " [SENSITIVE]";
+            }
+            break;
+        }
+        isAuthHeader = false;
+    }
+    return strHeader;
+}
+
+std::string mask_sensitive_arg(const char* arg)
+{
+    if(!arg || 0 == strlen(arg)){
+        return std::string();
+    }
+
+    std::string strArg(arg);
+    strArg = std::regex_replace(strArg, std::regex(R"((url=https?://)[^@]+(@))", std::regex::icase), "$1[SENSITIVE]$2");
+    strArg = std::regex_replace(strArg, std::regex(R"((ssl_client_cert=(?:[^:]+:){4})(.+))", std::regex::icase), "$1[SENSITIVE]");
+
+    return strArg;
+}
+
+static bool parse_xattr_keyval(const std::string& xattrpair, std::string& key, std::string* pval)
+{
+    // parse key and value
+    size_t pos;
+    std::string tmpval;
+    if(std::string::npos == (pos = xattrpair.find_last_of(':'))){
+        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
+        return false;
+    }
+    key    = xattrpair.substr(0, pos);
+    tmpval = xattrpair.substr(pos + 1);
+
+    if(!takeout_str_dquart(key) || !takeout_str_dquart(tmpval)){
+        S3FS_PRN_ERR("one of xattr pair(%s) is wrong format.", xattrpair.c_str());
+        return false;
+    }
+
+    *pval = s3fs_decode64(tmpval.c_str(), tmpval.size());
+
+    return true;
+}
+
+size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
+{
+    xattrs.clear();
+
+    // decode
+    std::string jsonxattrs = urlDecode(strxattrs);
+
+    // get from "{" to "}"
+    std::string restxattrs;
+    {
+        size_t startpos;
+        size_t endpos = std::string::npos;
+        if(std::string::npos != (startpos = jsonxattrs.find_first_of('{'))){
+            endpos = jsonxattrs.find_last_of('}');
+        }
+        if(startpos == std::string::npos || endpos == std::string::npos || endpos <= startpos){
+            S3FS_PRN_WARN("xattr header(%s) is not json format.", jsonxattrs.c_str());
+            return 0;
+        }
+        restxattrs = jsonxattrs.substr(startpos + 1, endpos - (startpos + 1));
+    }
+
+    // parse each key:val
+    for(size_t pair_nextpos = restxattrs.find_first_of(','); !restxattrs.empty(); restxattrs = (pair_nextpos != std::string::npos ? restxattrs.substr(pair_nextpos + 1) : ""), pair_nextpos = restxattrs.find_first_of(',')){
+        std::string pair = pair_nextpos != std::string::npos ? restxattrs.substr(0, pair_nextpos) : restxattrs;
+        std::string key;
+        std::string val;
+        if(!parse_xattr_keyval(pair, key, &val)){
+            // something format error, so skip this.
+            continue;
+        }
+        xattrs[key] = val;
+    }
+    return xattrs.size();
+}
+
+std::string raw_build_xattrs(const xattrs_t& xattrs)
+{
+    std::string strxattrs;
+    bool        is_set = false;
+    for(auto iter = xattrs.cbegin(); iter != xattrs.cend(); ++iter){
+        if(is_set){
+            strxattrs += ',';
+        }else{
+            is_set    = true;
+            strxattrs = "{";
+        }
+        strxattrs += '\"';
+        strxattrs += iter->first;
+        strxattrs += "\":\"";
+        strxattrs += s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
+        strxattrs += '\"';
+    }
+    if(is_set){
+        strxattrs += "}";
+    }
+    return strxattrs;
 }
 
 /*

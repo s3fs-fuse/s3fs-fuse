@@ -180,10 +180,19 @@ This prevents delays in updates due to cache retention.
 However, it may increase the number of HeadObject requests to check if an object exists, which may decrease performance.
 .TP
 \fB\-o\fR no_check_certificate (by default this option is disabled)
-server certificate won't be checked against the available certificate authorities.
+Do not verify the server certificate against trusted certificate authorities.
+.B WARNING:
+This makes the connection vulnerable to man-in-the-middle attacks.
+Only use this option for testing with self-signed certificates.
+Do not use in production environments.
 .TP
-\fB\-o\fR ssl_verify_hostname (default="2")
-When 0, do not verify the SSL certificate against the hostname.
+\fB\-o\fR ssl_verify_hostname (default="1")
+When set to 1, verify that the server certificate matches the hostname.
+When set to 0, do not verify that the server certificate matches the hostname.
+.B WARNING:
+This makes the connection vulnerable to man-in-the-middle attacks.
+Only use this option for testing purposes.
+Do not use in production environments.
 .TP
 \fB\-o\fR ssl_client_cert (default="")
 Specify an SSL client certificate.
@@ -246,6 +255,13 @@ ensure that the disk will reserve at least 50GB * 10%% = 5GB of remaining space.
 \fB\-o\fR multipart_threshold (default="25")
 threshold, in MB, to use multipart upload instead of
 single-part. Must be at least 5 MB.
+
+.TP
+\fB\-o\fR putheader_mp_threshold (default=multipart_threshold value is used)
+threshold in MB for using multipart header upload(put header).
+If this option is not specified, the value of multipart_threshold is used.
+Specify this option to change the threshold for multipart upload and header upload.
+This value must be at least 5MB.
 .TP
 \fB\-o\fR singlepart_copy_limit (default="512")
 maximum size, in MB, of a single-part copy before trying
@@ -269,10 +285,10 @@ But if you do not specify this option, and if you can not connect with the defau
 So s3fs can know the correct region name, because s3fs can find it in an error from the S3 server.
 You can also specify the legacy -o endpoint which means the same thing.
 .TP
-\fB\-o\fR sigv2 (default is signature version 4 falling back to version 2)
+\fB\-o\fR sigv2 (default is signature version 4 only)
 sets signing AWS requests by using only signature version 2.
 .TP
-\fB\-o\fR sigv4 (default is signature version 4 falling back to version 2)
+\fB\-o\fR sigv4 (default is signature version 4 only)
 sets signing AWS requests by using only signature version 4.
 .TP
 \fB\-o\fR mp_umask (default is "0000")
@@ -377,10 +393,6 @@ https://curl.haxx.se/docs/ssl-ciphers.html
 The instance name of the current s3fs mountpoint.
 This name will be added to logging messages and user agent headers sent by s3fs.
 .TP
-\fB\-o\fR complement_stat (complement lack of file/directory mode)
-s3fs complements lack of information about file/directory mode if a file or a directory object does not have x-amz-meta-mode header.
-As default, s3fs does not complements stat information for a object, then the object will not be able to be allowed to list/modify.
-.TP
 \fB\-o\fR compat_dir (enable support of alternative directory names)
 .RS
 s3fs supports two different naming schemas "dir/" and "dir" to map directory names to S3 objects and vice versa by default. As a third variant, directories can be determined indirectly if there is a file object with a path (e.g. "/dir/file") but without the parent directory.  This option enables a fourth variant, "dir_$folder$", created by older applications.
@@ -448,6 +460,11 @@ Put the debug message from libcurl when this option is specified.
 Specify "normal" or "body" for the parameter.
 If the parameter is omitted, it is the same as "normal".
 If "body" is specified, some API communication body data will be output in addition to the debug message output as "normal".
+.TP
+\fB\-o\fR insecure_logging - put insecure information to the log
+Normally, secure information(such as tokens and credentials) is not output to logs.
+Specifying this option will write these secure information to the log.
+Use caution when specifying this option, as sensitive authentication information will be output to the log.
 .TP
 \fB\-o\fR no_time_stamp_msg - no time stamp in debug message
 The time stamp is output to the debug message by default.
@@ -534,12 +551,6 @@ Enable support of alternative directory names ("\-o compat_dir")
 .RS
 .TP
 s3fs recognizes "dir/" objects as directories. Clients other than s3fs may use "dir", "dir_$folder$" objects as directories, or directory objects may not exist. In order for s3fs to recognize these as directories, you can specify the "compat_dir" option.
-.RE
-.IP \[bu]
-Completion of file and directory information ("\-o complement_stat")
-.RS
-.TP
-s3fs uses the "x-amz-meta-mode header" to determine if an object is a file or a directory. For this reason, objects that do not have the "x-amz-meta-mode header" may not produce the expected results(The directory cannot be displayed, etc.). By specifying the "complement_stat" option, s3fs can automatically complete this missing attribute information, and you can get the expected results.
 .RE
 .SH NOTES
 .TP

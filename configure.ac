@@ -20,11 +20,12 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([s3fs],[1.97])
-AC_CONFIG_HEADER([config.h])
+AC_INIT([s3fs],[1.97],[https://github.com/s3fs-fuse/s3fs-fuse/issues])
+AC_CONFIG_HEADERS([config.h])
 
-AC_CANONICAL_TARGET
+AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE([foreign])
+AM_SILENT_RULES([yes])
 
 AC_PROG_CXX
 AC_PROG_CC
@@ -37,21 +38,63 @@ AC_CHECK_FUNCS([fallocate])
 CPP_VERSION=c++14
 AC_SUBST([CPP_VERSION])
 
-CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 -D_FORTIFY_SOURCE=3 -std=$CPP_VERSION $CXXFLAGS"
+dnl ----------------------------------------------
+dnl Set _FORTIFY_SOURCE flag
+dnl ----------------------------------------------
+dnl Some platforms treat >2 as 2 and emit a warning from features.h.
+dnl Also, it may be built-in.
+dnl
+FORTIFY_FLAG=""
+
+AC_MSG_CHECKING([_FORTIFY_SOURCE])
+
+dnl
+dnl Compile a simple program and check the glibc warnings in the standard error output.
+dnl
+AC_LANG_PUSH([C++])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <features.h>]], [[return 0;]])],
+  [
+    compile_result=$("$CXX" $CPPFLAGS $CXXFLAGS -D_FORTIFY_SOURCE=3 -c conftest.$ac_ext -o conftest.$ac_objext 2>&1 1>/dev/null)
+
+    if echo "$compile_result" | grep -iq "_FORTIFY_SOURCE > 2 is treated like 2"; then
+      FORTIFY_FLAG="-D_FORTIFY_SOURCE=2"
+      AC_MSG_RESULT([2])
+    elif echo "$compile_result" | grep -iq "_FORTIFY_SOURCE.*redefined"; then
+      FORTIFY_FLAG=""
+      AC_MSG_RESULT([built-in])
+    else
+      FORTIFY_FLAG="-D_FORTIFY_SOURCE=3"
+      AC_MSG_RESULT([3])
+    fi
+  ],
+  [
+    dnl
+    dnl If even compiling with 3 fails, fall back to 2.
+    dnl
+    FORTIFY_FLAG="-D_FORTIFY_SOURCE=2"
+    AC_MSG_RESULT([2])
+  ]
+)
+AC_LANG_POP([C++])
+
+CXXFLAGS="-Wall -fno-exceptions -D_FILE_OFFSET_BITS=64 $FORTIFY_FLAG -std=$CPP_VERSION $CXXFLAGS"
 
 dnl ----------------------------------------------
 dnl For macOS
 dnl ----------------------------------------------
-case "$target" in
-   *-cygwin* )
+case "$host" in
+   *-cygwin* | *-mingw* | *-msys* )
       # Do something specific for windows using winfsp
       CXXFLAGS="$CXXFLAGS -D_GNU_SOURCE=1"
       min_fuse_version=2.8
       ;;
    *-darwin* )
-      # Do something specific for mac
-      min_fuse_version=2.7.3
-      min_fuse_t_version=1.0.20
+      # Mac requires libfuse3 from either FUSE-T (>= 1.2.0) or macFUSE (>= 5.0).
+      # Both providers install fuse3.pc, but they version it differently
+      # (FUSE-T reports its product version, macFUSE reports the libfuse3 API
+      # version), so we use the lower bound that matches FUSE-T.
+      min_fuse_version=1.2.0
       ;;
    *)
       # Default Case
@@ -63,21 +106,13 @@ esac
 dnl ----------------------------------------------
 dnl Checking the FUSE library
 dnl ----------------------------------------------
-dnl Distinguish between Linux (libfuse) and macOS (FUSE-T).
-dnl
-found_fuse_t=no
-PKG_CHECK_MODULES([FUSE_T], [fuse-t >= ${min_fuse_t_version}], [found_fuse_t=yes], [found_fuse_t=no])
-
-AS_IF([test "$found_fuse_t" = "yes"],
-  [PKG_CHECK_MODULES([fuse_library_checking], [fuse-t >= ${min_fuse_t_version}])],
-  [PKG_CHECK_MODULES([fuse_library_checking], [fuse3 >= ${min_fuse_version}])])
+PKG_CHECK_MODULES([fuse_library_checking], [fuse3 >= ${min_fuse_version}])
 
 dnl ----------------------------------------------
 dnl Choice SSL library
 dnl ----------------------------------------------
 auth_lib=na
 nettle_lib=no
-use_openssl_30=no
 
 dnl
 dnl nettle library
@@ -203,18 +238,21 @@ AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
-  AS_IF([test "$found_fuse_t" = "yes"],
-    [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])],
-    [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 libcrypto >= 0.9 ])])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 libcrypto >= 1.1.1])
 
-  AC_MSG_CHECKING([openssl 3.0 or later])
+  saved_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $DEPS_CFLAGS"
+
+  AC_MSG_CHECKING([openssl 1.1.1 or later])
   AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM([[#include <openssl/opensslv.h>
-                       #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-                         #error "found openssl is 3.0 or later(so compiling is stopped with error)"
-                       #endif]], [[]])],
-    [AC_MSG_RESULT(no)],
-    [AC_MSG_RESULT(yes); use_openssl_30=yes])
+    [AC_LANG_PROGRAM([[#include <openssl/opensslv.h>]],
+      [[#if OPENSSL_VERSION_NUMBER < 0x10101000L
+        #error "OpenSSL >= 1.1.1 required"
+      #endif]])],
+    [AC_MSG_RESULT(yes)],
+    [AC_MSG_ERROR([OpenSSL >= 1.1.1 is required, found an older version])])
+
+  CPPFLAGS="$saved_CPPFLAGS"
   ;;
 gnutls)
   AC_MSG_RESULT(GnuTLS-gcrypt)
@@ -223,9 +261,7 @@ gnutls)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
   AS_IF([test $gnutls_nettle = 0],
     [
-      AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 gnutls >= 2.12.0 ])])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 gnutls >= 2.12.0])
       LIBS="-lgnutls -lgcrypt $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(gcrypt)
@@ -239,9 +275,7 @@ nettle)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
   AS_IF([test $gnutls_nettle = 1],
     [
-      AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nettle >= 2.7.1 ])])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nettle >= 2.7.1])
       LIBS="-lgnutls -lnettle $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(nettle)
@@ -250,9 +284,7 @@ nettle)
   ;;
 nss)
   AC_MSG_RESULT(NSS)
-  AS_IF([test "$found_fuse_t" = "yes"],
-        [PKG_CHECK_MODULES([DEPS], [fuse-t >= ${min_fuse_t_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])],
-        [PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.6 nss >= 3.15.0 ])])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nss >= 3.15.0])
   ;;
 *)
   AC_MSG_ERROR([unknown ssl library type.])
@@ -260,7 +292,6 @@ nss)
 esac
 
 AM_CONDITIONAL([USE_SSL_OPENSSL], [test "$auth_lib" = openssl])
-AM_CONDITIONAL([USE_SSL_OPENSSL_30], [test "$use_openssl_30" = yes])
 AM_CONDITIONAL([USE_SSL_GNUTLS], [test "$auth_lib" = gnutls -o "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_GNUTLS_NETTLE], [test "$auth_lib" = nettle])
 AM_CONDITIONAL([USE_SSL_NSS], [test "$auth_lib" = nss])
@@ -272,7 +303,7 @@ dnl malloc_trim function
 AC_CHECK_FUNCS([malloc_trim])
 
 dnl clock_gettime function(macos)
-AC_SEARCH_LIBS([clock_gettime],[rt posix4]) 
+AC_SEARCH_LIBS([clock_gettime],[rt posix4])
 AC_CHECK_FUNCS([clock_gettime])
 
 dnl ----------------------------------------------
@@ -302,7 +333,7 @@ dnl ----------------------------------------------
 dnl check CURLoption
 dnl ----------------------------------------------
 dnl CURLOPT_TCP_KEEPALIVE (is supported by 7.25.0 and later)
-AC_MSG_CHECKING([checking CURLOPT_TCP_KEEPALIVE])
+AC_MSG_CHECKING([CURLOPT_TCP_KEEPALIVE])
 AC_COMPILE_IFELSE(
   [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
                    [[CURLoption opt = CURLOPT_TCP_KEEPALIVE;]])
@@ -316,7 +347,7 @@ AC_COMPILE_IFELSE(
 )
 
 dnl CURLOPT_SSL_ENABLE_ALPN (is supported by 7.36.0 and later)
-AC_MSG_CHECKING([checking CURLOPT_SSL_ENABLE_ALPN])
+AC_MSG_CHECKING([CURLOPT_SSL_ENABLE_ALPN])
 AC_COMPILE_IFELSE(
   [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
                    [[CURLoption opt = CURLOPT_SSL_ENABLE_ALPN;]])
@@ -330,7 +361,7 @@ AC_COMPILE_IFELSE(
 )
 
 dnl CURLOPT_KEEP_SENDING_ON_ERROR (is supported by 7.51.0 and later)
-AC_MSG_CHECKING([checking CURLOPT_KEEP_SENDING_ON_ERROR])
+AC_MSG_CHECKING([CURLOPT_KEEP_SENDING_ON_ERROR])
 AC_COMPILE_IFELSE(
   [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
                    [[CURLoption opt = CURLOPT_KEEP_SENDING_ON_ERROR;]])
@@ -346,12 +377,12 @@ AC_COMPILE_IFELSE(
 dnl ----------------------------------------------
 dnl dl library
 dnl ----------------------------------------------
-AC_CHECK_LIB([dl], [dlopen, dlclose, dlerror, dlsym], [], [AC_MSG_ERROR([Could not found dlopen, dlclose, dlerror and dlsym])])
+AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([Could not find dlopen])])
 
 dnl ----------------------------------------------
 dnl build date
 dnl ----------------------------------------------
-AC_SUBST([MAN_PAGE_DATE], [$(date -r doc/man/s3fs.1.in +"%B %Y")])
+AC_SUBST([MAN_PAGE_DATE], ["m4_esyscmd_s([LC_ALL=C date "+%B %Y"])"])
 
 dnl ----------------------------------------------
 dnl output files
@@ -366,7 +397,7 @@ dnl ----------------------------------------------
 dnl short commit hash
 dnl ----------------------------------------------
 AC_CHECK_PROG([GITCMD], [git --version], [yes], [no])
-AS_IF([test -d .git], [DOTGITDIR=yes], [DOTGITDIR=no])
+AS_IF([test -e .git], [DOTGITDIR=yes], [DOTGITDIR=no])
 
 AC_MSG_CHECKING([github short commit hash])
 if test "x${GITCMD}" = "xyes" -a "x${DOTGITDIR}" = "xyes"; then

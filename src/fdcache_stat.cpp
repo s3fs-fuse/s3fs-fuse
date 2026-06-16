@@ -59,7 +59,7 @@ int CacheFileStat::MakeCacheFileStatPath(const char* path, std::string& sfile_pa
 
     if(is_create_dir){
       int result;
-      if(0 != (result = mkdirp(top_path + mydirname(path), 0777))){
+      if(0 != (result = mkdirp(top_path + mydirname(path), 0700))){
           S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
           return result;
       }
@@ -264,7 +264,11 @@ bool CacheFileStat::RawOpen(bool readonly)
             return false;
         }
     }
-    scope_guard guard([&]() { close(tmpfd); });
+    scope_guard guard([tmpfd, sfile_path]() {
+        if(-1 == close(tmpfd)){
+            S3FS_PRN_ERR("close() failed for %s - errno(%d)", sfile_path.c_str(), errno);
+        }
+    });
 
     // lock
     if(-1 == flock(tmpfd, LOCK_EX)){

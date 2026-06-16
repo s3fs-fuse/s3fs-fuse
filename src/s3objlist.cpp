@@ -38,7 +38,7 @@
 // will be set to type. If it is not a directory(file, symbolic link), type will
 // be set to objtype_t::UNKNOWN.
 //
-bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
+bool S3ObjList::insert(const char* name, const char* etag, bool is_dir, off_t size, const char* last_modified)
 {
     if(!name || '\0' == name[0]){
         return false;
@@ -95,6 +95,12 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         if(etag){
             iter->second.etag = etag;  // over write
         }
+        if(0 <= size){
+            iter->second.size = size;
+        }
+        if(last_modified){
+            iter->second.last_modified = last_modified;
+        }
     }else{
         // add new object
         s3obj_entry newobject;
@@ -103,7 +109,13 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir)
         if(etag){
             newobject.etag = etag;
         }
-        objects[newname] = newobject;
+        if(0 <= size){
+            newobject.size = size;
+        }
+        if(last_modified){
+            newobject.last_modified = last_modified;
+        }
+        objects[newname] = std::move(newobject);
     }
 
     // add normalization
@@ -131,7 +143,7 @@ bool S3ObjList::insert_normalized(const char* name, const char* normalized, objt
         s3obj_entry newobject;
         newobject.normalname = normalized;
         newobject.type       = type;
-        objects[name]        = newobject;
+        objects[name]        = std::move(newobject);
     }
     return true;
 }
@@ -189,6 +201,32 @@ std::string S3ObjList::GetETag(const char* name) const
         return "";
     }
     return ps3obj->etag;
+}
+
+off_t S3ObjList::GetSize(const char* name) const
+{
+    const s3obj_entry* ps3obj;
+
+    if(!name || '\0' == name[0]){
+        return -1;
+    }
+    if(nullptr == (ps3obj = GetS3Obj(name))){
+        return -1;
+    }
+    return ps3obj->size;
+}
+
+std::string S3ObjList::GetLastModified(const char* name) const
+{
+    const s3obj_entry* ps3obj;
+
+    if(!name || '\0' == name[0]){
+        return "";
+    }
+    if(nullptr == (ps3obj = GetS3Obj(name))){
+        return "";
+    }
+    return ps3obj->last_modified;
 }
 
 bool S3ObjList::IsDir(const char* name) const
@@ -255,7 +293,7 @@ bool S3ObjList::GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized, bool C
     return RawGetNames(nullptr, &objmap, OnlyNormalized, CutSlash);
 }
 
-bool S3ObjList::HasName(const std::string& strName)
+bool S3ObjList::HasName(const std::string& strName) const
 {
     std::string strWitoutSlash;
     std::string strWithSlash;
@@ -301,10 +339,12 @@ void S3ObjList::Dump(const std::string& indent, std::ostringstream& oss) const
     oss << indent << "S3ObjList::objects = {" << std::endl;
     for(auto oiter = objects.cbegin(); objects.cend() != oiter; ++oiter){
         oss << child_indent << "[" << oiter->first << "] = {" << std::endl;
-        oss << child_member_indent << "normalname = " << oiter->second.normalname        << std::endl;
-        oss << child_member_indent << "orgname    = " << oiter->second.orgname           << std::endl;
-        oss << child_member_indent << "etag       = " << oiter->second.etag              << std::endl;
-        oss << child_member_indent << "type       = " << STR_OBJTYPE(oiter->second.type) << std::endl;
+        oss << child_member_indent << "normalname    = " << oiter->second.normalname        << std::endl;
+        oss << child_member_indent << "orgname       = " << oiter->second.orgname           << std::endl;
+        oss << child_member_indent << "etag          = " << oiter->second.etag              << std::endl;
+        oss << child_member_indent << "size          = " << oiter->second.size              << std::endl;
+        oss << child_member_indent << "last_modified = " << oiter->second.last_modified     << std::endl;
+        oss << child_member_indent << "type          = " << STR_OBJTYPE(oiter->second.type) << std::endl;
         oss << child_indent << "}" << std::endl;
     }
     oss << indent << "}" << std::endl;
@@ -319,7 +359,7 @@ void S3ObjList::Dump(const std::string& indent, std::ostringstream& oss) const
     oss << indent << "S3ObjList::common_prefixes = {" << strtmp << "}" << std::endl;
 }
 
-typedef std::map<std::string, bool> s3obj_h_t;
+using s3obj_h_t = std::map<std::string, bool>;
 
 bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
 {
@@ -353,7 +393,7 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
             if(haveSlash){
                 strtmp += "/";
             }
-            list.push_back(strtmp);
+            list.push_back(std::move(strtmp));
         }
     }
     return true;

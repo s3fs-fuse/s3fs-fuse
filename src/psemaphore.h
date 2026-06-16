@@ -27,7 +27,7 @@
 #if __cplusplus >= 202002L
 
 #include <semaphore>
-typedef std::counting_semaphore<INT_MAX> Semaphore;
+using Semaphore = std::counting_semaphore<INT_MAX>;
 
 #else
 

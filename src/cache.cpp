@@ -30,26 +30,13 @@
 //-------------------------------------------------------------------
 // Static
 //-------------------------------------------------------------------
-StatCache       StatCache::singleton;
 std::mutex      StatCache::stat_cache_lock;
 
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : pMountPointDir(nullptr), CacheSize(100'000)
+StatCache::StatCache() : pMountPointDir(std::make_shared<DirStatCache>("/")), CacheSize(100'000)
 {
-    if(this == StatCache::getStatCacheData()){
-        pMountPointDir = std::make_shared<DirStatCache>("/");
-    }else{
-        abort();
-    }
-}
-
-StatCache::~StatCache()
-{
-    if(this != StatCache::getStatCacheData()){
-        abort();
-    }
 }
 
 //-------------------------------------------------------------------
@@ -177,18 +164,17 @@ bool StatCache::AddStat(const std::string& key, const struct stat& stbuf, objtyp
     return AddStatHasLock(key, &stbuf, nullptr, type, notruncate);
 }
 
-bool StatCache::AddS3ObjList(const std::string& key, const S3ObjList& list)
+bool StatCache::AddS3ObjList(std::string key, const S3ObjList& list)
 {
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
-    std::string _key = key;
-    if('/' != _key.back()){
-        _key += '/';
+    if('/' != key.back()){
+        key += '/';
     }
 
     // Add
-    if(!pMountPointDir->AddS3ObjList(_key, list)){
-        S3FS_PRN_DBG("failed to add s3objlist to stat cache entry[path=%s]", _key.c_str());
+    if(!pMountPointDir->AddS3ObjList(key, list)){
+        S3FS_PRN_DBG("failed to add s3objlist to stat cache entry[path=%s]", key.c_str());
         return false;
     }
 
@@ -196,7 +182,7 @@ bool StatCache::AddS3ObjList(const std::string& key, const S3ObjList& list)
     if(TruncateCacheHasLock(true)){
         S3FS_PRN_DBG("Some expired caches have been truncated.");
     }
-    S3FS_PRN_INFO3("add s3objlist to stat cache entry[path=%s]", _key.c_str());
+    S3FS_PRN_INFO3("add s3objlist to stat cache entry[path=%s]", key.c_str());
 
     // for debug
     //pMountPointDir->Dump(true);

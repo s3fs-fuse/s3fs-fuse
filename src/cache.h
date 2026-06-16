@@ -45,7 +45,6 @@
 class StatCache
 {
     private:
-        static StatCache       singleton;
         static std::mutex      stat_cache_lock;
 
         std::shared_ptr<DirStatCache> pMountPointDir GUARDED_BY(stat_cache_lock);   // Top directory = Mount point
@@ -53,7 +52,7 @@ class StatCache
 
     private:
         StatCache();
-        ~StatCache();
+        ~StatCache() = default;
 
         bool AddStatHasLock(const std::string& key, const struct stat* pstbuf, const headers_t* pmeta, objtype_t type, bool notruncate) REQUIRES(StatCache::stat_cache_lock);
         bool TruncateCacheHasLock(bool check_only_oversize_case = true) REQUIRES(StatCache::stat_cache_lock);
@@ -69,6 +68,11 @@ class StatCache
         // Reference singleton
         static StatCache* getStatCacheData()
         {
+            // [NOTE]
+            // Occured SIOF issue in macOS, so the singleton of this class is
+            // initialized within this function.
+            //
+            static StatCache singleton;
             return &singleton;
         }
 
@@ -104,7 +108,7 @@ class StatCache
         bool AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate = false);
         bool AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate = false);
         bool AddNegativeStat(const std::string& key);
-        bool AddS3ObjList(const std::string& key, const S3ObjList& list);
+        bool AddS3ObjList(std::string key, const S3ObjList& list);
 
         // Update meta stats
         bool UpdateStat(const std::string& key, const struct stat& stbuf, const headers_t& meta);

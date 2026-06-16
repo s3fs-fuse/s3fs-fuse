@@ -31,7 +31,7 @@
 //------------------------------------------------
 // List of pseudo fd in use
 //
-typedef std::vector<int>    pseudofd_list_t;
+using pseudofd_list_t = std::vector<int>;
 
 //------------------------------------------------
 // Class PseudoFdManager

@@ -24,6 +24,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -290,24 +291,11 @@ int FdEntity::OpenMirrorFile()
         return -EIO;
     }
 
-    // create seed generating mirror file name
-    auto seed = static_cast<unsigned int>(time(nullptr));
-    int urandom_fd;
-    if(-1 != (urandom_fd = open("/dev/urandom", O_RDONLY))){
-        unsigned int rand_data;
-        if(sizeof(rand_data) == read(urandom_fd, &rand_data, sizeof(rand_data))){
-            seed ^= rand_data;
-        }
-        close(urandom_fd);
-    }
-
     // try to link mirror file
+    std::random_device rd;
     while(true){
-        // make random(temp) file path
-        // (do not care for threading, because allowed any value returned.)
-        //
         char         szfile[NAME_MAX + 1];
-        snprintf(szfile, sizeof(szfile), "%x.tmp", rand_r(&seed));
+        snprintf(szfile, sizeof(szfile), "%x.tmp", rd());
         szfile[NAME_MAX] = '\0';                            // for safety
         mirrorpath = bupdir + "/" + szfile;
 
@@ -319,7 +307,6 @@ int FdEntity::OpenMirrorFile()
             S3FS_PRN_ERR("could not link mirror file(%s) to cache file(%s) by errno(%d).", mirrorpath.c_str(), cachepath.c_str(), errno);
             return -errno;
         }
-        ++seed;
     }
 
     // open mirror file
@@ -363,7 +350,7 @@ PseudoFdInfo* FdEntity::CheckPseudoFdFlags(int fd, bool writable)
     return iter->second.get();
 }
 
-bool FdEntity::IsUploading()
+bool FdEntity::IsUploading() const
 {
     for(auto iter = pseudo_fd_map.cbegin(); iter != pseudo_fd_map.cend(); ++iter){
         const PseudoFdInfo* ppseudoinfo = iter->second.get();
@@ -467,9 +454,11 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
                 st = {};
                 if(-1 == fstat(physical_fd, &st)){
                     S3FS_PRN_ERR("fstat is failed. errno(%d)", errno);
+                    const int save_errno = errno;
+                    close(physical_fd);
                     physical_fd = -1;
                     inode       = 0;
-                    return (0 == errno ? -EIO : -errno);
+                    return (0 == save_errno ? -EIO : -save_errno);
                 }
                 // check size, st_size, loading stat file
                 if(-1 == size){
@@ -501,7 +490,8 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
 
                 // could not open cache file or could not load stats data, so initialize it.
                 if(-1 == (physical_fd = open(cachepath.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0600))){
-                    S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), errno);
+                    int open_errno = errno;
+                    S3FS_PRN_ERR("failed to open file(%s). errno(%d)", cachepath.c_str(), open_errno);
 
                     // remove cache stat file if it is existed
                     if(0 != (result = CacheFileStat::DeleteCacheFileStat(path.c_str()))){
@@ -509,7 +499,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
                             S3FS_PRN_WARN("failed to delete current cache stat file(%s) by errno(%d), but continue...", path.c_str(), result);
                         }
                     }
-                    return result;
+                    return -open_errno;
                 }
                 need_save_csf = true;       // need to update page info
                 inode         = FdEntity::GetInode(physical_fd);
@@ -534,6 +524,8 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
             int mirrorfd;
             if(0 >= (mirrorfd = OpenMirrorFile())){
                 S3FS_PRN_ERR("failed to open mirror file linked cache file(%s).", cachepath.c_str());
+                close(physical_fd);
+                physical_fd = -1;
                 return (0 == mirrorfd ? -EIO : mirrorfd);
             }
             // switch fd
@@ -582,11 +574,12 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
         // truncate cache(tmp) file
         if(is_truncate){
             if(0 != ftruncate(physical_fd, size) || 0 != fsync(physical_fd)){
-                S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), errno);
+                int save_errno = errno;
+                S3FS_PRN_ERR("ftruncate(%s) or fsync returned err(%d)", cachepath.c_str(), save_errno);
                 pfile.reset();
                 physical_fd = -1;
                 inode       = 0;
-                return (0 == errno ? -EIO : -errno);
+                return (0 == save_errno ? -EIO : -save_errno);
             }
         }
 
@@ -643,7 +636,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
 // So we do not check disk space for this option mode, if there is not enough
 // disk space this method will be failed.
 //
-bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
+int FdEntity::LoadAll(int fd, off_t* size, bool force_load)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
 
@@ -651,14 +644,14 @@ bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
 
     if(-1 == physical_fd || !FindPseudoFdWithLock(fd)){
         S3FS_PRN_ERR("pseudo_fd(%d) and physical_fd(%d) for path(%s) is not opened yet", fd, physical_fd, path.c_str());
-        return false;
+        return -EBADF;
     }
 
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
 
     if(force_load){
         if(!SetAllStatusUnloaded()){
-            return false;
+            return -EIO;
         }
     }
     //
@@ -667,12 +660,12 @@ bool FdEntity::LoadAll(int fd, off_t* size, bool force_load)
     int result;
     if(0 != (result = Load(/*start=*/ 0, /*size=*/ 0))){
         S3FS_PRN_ERR("could not download, result(%d)", result);
-        return false;
+        return result;
     }
     if(size){
         *size = pagelist.Size();
     }
-    return true;
+    return 0;
 }
 
 //
@@ -759,7 +752,7 @@ bool FdEntity::GetStatsHasLock(struct stat& st) const
 
 int FdEntity::SetCtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
@@ -771,7 +764,7 @@ int FdEntity::SetCtimeHasLock(struct timespec time)
 
 int FdEntity::SetAtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
@@ -783,7 +776,7 @@ int FdEntity::SetAtimeHasLock(struct timespec time)
 
 int FdEntity::SetMtimeHasLock(struct timespec time)
 {
-    S3FS_PRN_INFO3("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][time=%s]", path.c_str(), physical_fd, str(time).c_str());
 
     if(!valid_timespec(time)){
         return 0;
@@ -1097,8 +1090,8 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
                 // after this, file length is (offset + size), but file does not use any disk space.
                 //
                 if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (offset + oneread))){
-                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d).", tmpfd);
-                    result = -EIO;
+                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", tmpfd, errno);
+                    result = -errno;
                     break;
                 }
 
@@ -1269,7 +1262,7 @@ int FdEntity::NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj)
     return 0;
 }
 
-off_t FdEntity::BytesModified()
+off_t FdEntity::BytesModified() const
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
@@ -1278,11 +1271,11 @@ off_t FdEntity::BytesModified()
 
 // [NOTE]
 // There are conditions that allow you to perform multipart uploads.
-// 
+//
 // According to the AWS spec:
 //  - 1 to 10,000 parts are allowed
 //  - minimum size of parts is 5MB (except for the last part)
-// 
+//
 // For example, if you set the minimum part size to 5MB, you can upload
 // a maximum (5 * 10,000)MB file.
 // The part size can be changed in MB units, then the maximum file size
@@ -2446,7 +2439,7 @@ int FdEntity::UploadPendingHasLock(int fd)
 // For systems where the fallocate function cannot be detected, use a dummy function.
 // ex. OSX
 //
-#if !defined(HAVE_FALLOCATE) || defined(__MSYS__)
+#ifndef HAVE_FALLOCATE
 static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 {
     errno = ENOSYS;     // This is a bad idea, but the caller can handle it simply.
@@ -2474,7 +2467,7 @@ static int fallocate(int /*fd*/, int /*mode*/, off_t /*offset*/, off_t /*len*/)
 // However, this method uses the non-portable(Linux specific) system call fallocate().
 // Also, depending on the file system, FALLOC_FL_PUNCH_HOLE mode may not work and HOLE
 // will not open.(Filesystems for which this method works are ext4, btrfs, xfs, etc.)
-// 
+//
 bool FdEntity::PunchHole(off_t start, size_t size)
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);

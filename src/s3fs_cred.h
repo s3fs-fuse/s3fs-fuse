@@ -32,7 +32,7 @@
 //----------------------------------------------
 // Typedefs
 //----------------------------------------------
-typedef std::map<std::string, std::string> iamcredmap_t;
+using iamcredmap_t = std::map<std::string, std::string>;
 
 //------------------------------------------------
 // class S3fsCred
@@ -41,7 +41,6 @@ typedef std::map<std::string, std::string> iamcredmap_t;
 // secret key, tokens, etc.) used by S3fs.
 // Operations related to Credentials are aggregated in this class.
 //
-// cppcheck-suppress ctuOneDefinitionRuleViolation       ; for stub in test_curl_util.cpp
 class S3fsCred
 {
     private:
@@ -168,6 +167,12 @@ class S3fsCred
         static bool CheckForbiddenBucketParams();
 
     public:
+        static S3fsCred* get()
+        {
+            static S3fsCred s3fscred;
+            return &s3fscred;
+        }
+
         static bool SetBucket(const std::string& bucket);
         static const std::string& GetBucket();
 

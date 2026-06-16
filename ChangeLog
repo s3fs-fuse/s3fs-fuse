@@ -520,7 +520,7 @@ issue #184 - Add usage information for multipart_size
 issue #185 - Correct obvious typos in usage and README
 issue #190 - Add a no_check_certificate option.
 issue #194 - Tilda in a file-name breaks things (EPERM)
-issue #198 - Disable integration tests for Travis 
+issue #198 - Disable integration tests for Travis
 issue #199 - Supported extended attributes(retry)
 issue #200 - fixed fallback to sigv2 for bucket create and GCS
 issue #202 - Specialize {set,get}xattr for OS X
@@ -637,7 +637,7 @@ see detail on googlecodes: https://code.google.com/p/s3fs/downloads/detail?name=
 Version 1.16 -- Nov 22, 2010
 see detail on googlecodes: https://code.google.com/p/s3fs/downloads/detail?name=s3fs-1.16.tar.gz
 
-Version 1.10 -- Nov 6, 2010 
+Version 1.10 -- Nov 6, 2010
 see detail on googlecodes: https://code.google.com/p/s3fs/downloads/detail?name=s3fs-1.10.tar.gz
 
 Version 1.02 -- Oct 29, 2010

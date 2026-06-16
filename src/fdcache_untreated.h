@@ -60,9 +60,9 @@ class UntreatedParts
         bool ReplaceLastUpdatePart(off_t start, off_t size);
         bool RemoveLastUpdatePart();
 
-        bool Duplicate(untreated_list_t& list);
+        bool Duplicate(untreated_list_t& list) const;
 
-        void Dump();
+        void Dump() const;
 };
 
 #endif // S3FS_FDCACHE_UNTREATED_H_

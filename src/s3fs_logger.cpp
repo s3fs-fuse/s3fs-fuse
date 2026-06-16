@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cstdarg>
 #include <cstdlib>
 #include <iomanip>
@@ -25,6 +26,7 @@
 #include <sstream>
 #include <string>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "s3fs_logger.h"
@@ -253,6 +255,43 @@ S3fsLog::Level S3fsLog::LowBumpupLogLevel() const
     return old;
 }
 
+void S3fsLog::Printf(FILE* fp, const char* fmt, ...)
+{
+    if(!fp){
+        return;
+    }
+    va_list va;
+    va_start(va, fmt);
+    int len = vsnprintf(nullptr, 0, fmt, va);
+    va_end(va);
+    if(len < 0){
+        return;
+    }
+
+    auto buf = std::make_unique<char[]>(static_cast<size_t>(len) + 1);
+    va_start(va, fmt);
+    vsnprintf(buf.get(), static_cast<size_t>(len) + 1, fmt, va);
+    va_end(va);
+
+    int fd = fileno(fp);
+    if(fd < 0){
+        return;
+    }
+    const char* p = buf.get();
+    auto remaining = static_cast<size_t>(len);
+    while(remaining > 0){
+        ssize_t w = write(fd, p, remaining);
+        if(w < 0){
+            if(errno == EINTR){
+                continue;
+            }
+            break;
+        }
+        p += w;
+        remaining -= static_cast<size_t>(w);
+    }
+}
+
 void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...)
 {
     va_list va;
@@ -266,9 +305,7 @@ void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, i
     va_end(va);
 
     if(foreground || S3fsLog::IsSetLogFile()){
-        S3fsLog::SeekEnd();
-        fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message.get());
-        S3fsLog::Flush();
+        S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), file, func, line, message.get());
     }else{
         // TODO: why does this differ from s3fs_low_logprn2?
         syslog(S3fsLog::GetSyslogLevel(level), "%s%s:%s(%d): %s", instance_name.c_str(), file, func, line, message.get());
@@ -288,9 +325,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
     va_end(va);
 
     if(foreground || S3fsLog::IsSetLogFile()){
-        S3fsLog::SeekEnd();
-        fprintf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
-        S3fsLog::Flush();
+        S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): %s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(level), S3fsLog::GetS3fsLogNest(nest), file, func, line, message.get());
     }else{
         syslog(S3fsLog::GetSyslogLevel(level), "%s%s%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(nest), message.get());
     }

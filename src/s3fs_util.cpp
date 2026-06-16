@@ -29,7 +29,6 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <sys/utsname.h>
 
 #include <string>
 #include <sstream>
@@ -38,6 +37,9 @@
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "s3fs_help.h"
+#include "curl.h"
+
+using namespace std::string_literals;
 
 //-------------------------------------------------------------------
 // Global variables
@@ -216,15 +218,15 @@ int mkdirp(const std::string& path, mode_t mode)
     while (getline(ss, component, '/')) {
         base += component + "/";
 
-        struct stat st;
-        if(0 == stat(base.c_str(), &st)){
-            if(!S_ISDIR(st.st_mode)){
-                return EPERM;
+        if(0 != mkdir(base.c_str(), mode)){
+            if(errno == EEXIST){
+                struct stat st;
+                if(0 != lstat(base.c_str(), &st) || !S_ISDIR(st.st_mode)){
+                    return -EPERM;
+                }
+            }else{
+                return -errno;
             }
-        }else{
-            if(0 != mkdir(base.c_str(), mode) && errno != EEXIST){
-                return errno;
-           }
         }
     }
     return 0;
@@ -233,7 +235,7 @@ int mkdirp(const std::string& path, mode_t mode)
 // get existed directory path
 std::string get_exist_directory_path(const std::string& path)
 {
-    std::string        existed("/");    // "/" is existed.
+    std::string        existed = "/"s;    // "/" is existed.
     std::string        base;
     std::string        component;
     std::istringstream ss(path);
@@ -301,13 +303,18 @@ bool check_exist_dir_permission(const char* dirpath)
 
 bool delete_files_in_dir(const char* dir, bool is_remove_own)
 {
-    DIR*           dp;
-    struct dirent* dent;
+    DIR*                 dp;
+    const struct dirent* dent;
 
     if(nullptr == (dp = opendir(dir))){
         S3FS_PRN_ERR("could not open dir(%s) - errno(%d)", dir, errno);
         return false;
     }
+    scope_guard dir_guard([dp, dir]() {
+        if(-1 == closedir(dp)){
+            S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", dir, errno);
+        }
+    });
 
     for(dent = readdir(dp); dent; dent = readdir(dp)){
         if(0 == strcmp(dent->d_name, "..") || 0 == strcmp(dent->d_name, ".")){
@@ -319,58 +326,24 @@ bool delete_files_in_dir(const char* dir, bool is_remove_own)
         struct stat st;
         if(0 != lstat(fullpath.c_str(), &st)){
             S3FS_PRN_ERR("could not get stats of file(%s) - errno(%d)", fullpath.c_str(), errno);
-            closedir(dp);
             return false;
         }
         if(S_ISDIR(st.st_mode)){
             // dir -> Reentrant
             if(!delete_files_in_dir(fullpath.c_str(), true)){
                 S3FS_PRN_ERR("could not remove sub dir(%s) - errno(%d)", fullpath.c_str(), errno);
-                closedir(dp);
                 return false;
             }
         }else{
             if(0 != unlink(fullpath.c_str())){
                 S3FS_PRN_ERR("could not remove file(%s) - errno(%d)", fullpath.c_str(), errno);
-                closedir(dp);
                 return false;
             }
         }
     }
-    closedir(dp);
 
     if(is_remove_own && 0 != rmdir(dir)){
         S3FS_PRN_ERR("could not remove dir(%s) - errno(%d)", dir, errno);
-        return false;
-    }
-    return true;
-}
-
-//-------------------------------------------------------------------
-// Utility for system information
-//-------------------------------------------------------------------
-bool compare_sysname(const char* target)
-{
-    // [NOTE]
-    // The buffer size of sysname member in struct utsname is
-    // OS dependent, but 512 bytes is sufficient for now.
-    //
-    static const char* psysname = nullptr;
-    static char  sysname[512];
-    if(!psysname){
-        struct utsname sysinfo;
-        if(0 != uname(&sysinfo)){
-            S3FS_PRN_ERR("could not initialize system name to internal buffer(errno:%d), thus use \"Linux\".", errno);
-            strcpy(sysname, "Linux");
-        }else{
-            S3FS_PRN_INFO("system name is %s", sysinfo.sysname);
-            sysname[sizeof(sysname) - 1] = '\0';
-            strncpy(sysname, sysinfo.sysname, sizeof(sysname) - 1);
-        }
-        psysname = &sysname[0];
-    }
-
-    if(!target || 0 != strcmp(psysname, target)){
         return false;
     }
     return true;
@@ -391,12 +364,29 @@ void print_launch_message(int argc, char** argv)
                 if(0 == cnt){
                     message += basename(argv[cnt]);
                 }else{
-                    message += argv[cnt];
+                    if(!insecure_logging){
+                        message += mask_sensitive_arg(argv[cnt]);
+                    }else{
+                        message += argv[cnt];
+                    }
                 }
             }
         }
     }
     S3FS_PRN_LAUNCH_INFO("%s", message.c_str());
+
+    // Special message when insecure logging is enabled
+    if(insecure_logging){
+        S3FS_PRN_LAUNCH_INFO("%s", "[INSECURE] Deprecated option(insecure_logging) is specified. Authentication information such as tokens and credentials is output to the log.");
+    }
+
+    // Warn about disabled SSL verification (MITM vulnerability)
+    if(0 == S3fsCurl::GetSslVerifyHostname()){
+        S3FS_PRN_LAUNCH_INFO("%s", "SSL hostname verification is DISABLED (ssl_verify_hostname=0). Connections are vulnerable to MITM attacks.");
+    }
+    if(!S3fsCurl::IsCertCheck()){
+        S3FS_PRN_LAUNCH_INFO("%s", "SSL certificate verification is DISABLED (no_check_certificate). Connections are vulnerable to MITM attacks.");
+    }
 }
 
 int s3fs_fclose(FILE* fp)
@@ -405,6 +395,14 @@ int s3fs_fclose(FILE* fp)
         return 0;
     }
     return fclose(fp);
+}
+
+//-------------------------------------------------------------------
+// Utilities for secure credential strings
+//-------------------------------------------------------------------
+const char* mask_sensitive_string(const char* sensitive)
+{
+    return mask_sensitive_string_with_flag(sensitive, insecure_logging);
 }
 
 /*

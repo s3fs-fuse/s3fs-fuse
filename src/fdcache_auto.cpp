@@ -80,6 +80,10 @@ FdEntity* AutoFdEntity::Open(const char* path, const headers_t* pmeta, off_t siz
 {
     Close();
 
+    // FdManager::Open writes pseudo_fd via reference only on the path that
+    // reaches FdEntity::Open. Initialise to -EIO so early-return failure
+    // paths still yield a meaningful negative errno through *error.
+    pseudo_fd = -EIO;
     if(nullptr == (pFdEntity = FdManager::get()->Open(pseudo_fd, path, pmeta, size, ts_times, flags, force_tmpfile, is_create, ignore_modify))){
         if(error){
             *error = pseudo_fd;

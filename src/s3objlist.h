@@ -23,6 +23,7 @@
 
 #include <map>
 #include <string>
+#include <sys/types.h>
 #include <utility>
 #include <vector>
 #include <sstream>
@@ -36,12 +37,14 @@ struct s3obj_entry{
     std::string normalname;                 // normalized name: if empty, object is normalized name.
     std::string orgname;                    // original name: if empty, object is original name.
     std::string etag;
+    off_t       size = -1;                  // Size from ListObjects <Contents>; -1 if unknown (e.g. CommonPrefix).
+    std::string last_modified;              // LastModified from ListObjects <Contents>, raw ISO 8601 string; empty if unknown.
     objtype_t   type = objtype_t::UNKNOWN;  // only set for directories, UNKNOWN for non-directories.
 };
 
-typedef std::map<std::string, struct s3obj_entry> s3obj_t;
-typedef std::vector<std::string> s3obj_list_t;
-typedef std::map<std::string, objtype_t> s3obj_type_map_t;
+using s3obj_t          = std::map<std::string, struct s3obj_entry>;
+using s3obj_list_t     = std::vector<std::string>;
+using s3obj_type_map_t = std::map<std::string, objtype_t>;
 
 //-------------------------------------------------------------------
 // Class S3ObjList
@@ -61,17 +64,19 @@ class S3ObjList
 
     public:
         bool IsEmpty() const { return objects.empty(); }
-        bool insert(const char* name, const char* etag = nullptr, bool is_dir = false);
+        bool insert(const char* name, const char* etag = nullptr, bool is_dir = false, off_t size = -1, const char* last_modified = nullptr);
         std::string GetOrgName(const char* name) const;
         std::string GetNormalizedName(const char* name) const;
         std::string GetETag(const char* name) const;
+        off_t GetSize(const char* name) const;
+        std::string GetLastModified(const char* name) const;
         const std::vector<std::string>& GetCommonPrefixes() const { return common_prefixes; }
         void AddCommonPrefix(std::string prefix) { common_prefixes.push_back(std::move(prefix)); }
         bool IsDir(const char* name) const;
         bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetLastName(std::string& lastname) const;
-        bool HasName(const std::string& strName);
+        bool HasName(const std::string& strName) const;
         bool Remove(const std::string& strName);
         void Dump(const std::string& indent, std::ostringstream& oss) const;
 

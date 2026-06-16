@@ -37,8 +37,8 @@ struct curl_share_locks {
     std::mutex lock_session;
 };
 
-typedef std::unique_ptr<CURLSH, decltype(&curl_share_cleanup)> CurlSharePtr;
-typedef std::unique_ptr<curl_share_locks>                      ShareLocksPtr;
+using CurlSharePtr = std::unique_ptr<CURLSH, decltype(&curl_share_cleanup)>;
+using ShareLocksPtr = std::unique_ptr<curl_share_locks>;
 
 //----------------------------------------------
 // class S3fsCurlShare

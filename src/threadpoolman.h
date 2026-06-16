@@ -38,7 +38,7 @@ class S3fsCurl;
 //
 // Prototype function
 //
-typedef void* (*thpoolman_worker)(S3fsCurl&, void*);
+using thpoolman_worker = void* (*)(S3fsCurl&, void*);
 
 //
 // Parameter structure
@@ -55,7 +55,7 @@ struct thpoolman_param
     thpoolman_worker pfunc = nullptr;
 };
 
-typedef std::list<thpoolman_param> thpoolman_params_t;
+using thpoolman_params_t = std::list<thpoolman_param>;
 
 //------------------------------------------------
 // Class ThreadPoolMan
@@ -63,8 +63,7 @@ typedef std::list<thpoolman_param> thpoolman_params_t;
 class ThreadPoolMan
 {
     private:
-        static int                            worker_count;
-        static std::unique_ptr<ThreadPoolMan> singleton;
+        static int            worker_count;
 
         std::atomic<bool>     is_exit;
         Semaphore             thpoolman_sem;
@@ -74,12 +73,17 @@ class ThreadPoolMan
         thpoolman_params_t    instruction_list GUARDED_BY(thread_list_lock);
 
     private:
+        static std::unique_ptr<ThreadPoolMan>& Slot()
+        {
+            static std::unique_ptr<ThreadPoolMan> singleton;
+            return singleton;
+        }
         static void Worker(ThreadPoolMan* psingleton, std::promise<int> promise);
 
         bool IsExit() const;
         void SetExitFlag(bool exit_flag);
 
-        bool StopThreads();
+        void StopThreads();
         bool StartThreads(int count);
         void SetInstruction(const thpoolman_param& pparam);
 

@@ -43,6 +43,8 @@
 #include "addhead.h"
 #include "s3fs_xml.h"
 
+using namespace std::string_literals;
+
 //-------------------------------------------------------------------
 // Symbols
 //-------------------------------------------------------------------
@@ -67,7 +69,9 @@ static constexpr int GET_OBJECT_RESPONSE_LIMIT          = 1024;
 // error.
 //
 static constexpr char DEFAULT_MIME_FILE[]               = "/etc/mime.types";
+#ifdef __APPLE__
 static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.types";
+#endif
 
 // [NOTICE]
 // This symbol is for libcurl under 7.23.0
@@ -130,7 +134,7 @@ mimes_t          S3fsCurl::mimeTypes;
 std::string      S3fsCurl::userAgent;
 off_t            S3fsCurl::multipart_size      = MULTIPART_SIZE; // default
 off_t            S3fsCurl::multipart_copy_size = 512 * 1024 * 1024;  // default
-signature_type_t S3fsCurl::signature_type      = signature_type_t::V2_OR_V4;       // default
+signature_type_t S3fsCurl::signature_type      = signature_type_t::V4_ONLY;        // default
 bool             S3fsCurl::is_unsigned_payload = false;          // default
 bool             S3fsCurl::is_ua               = true;           // default
 bool             S3fsCurl::listobjectsv2       = false;          // default
@@ -247,15 +251,16 @@ bool S3fsCurl::InitMimeType(const std::string& strFile)
         struct stat st;
         if(0 == stat(DEFAULT_MIME_FILE, &st)){
             MimeFile = DEFAULT_MIME_FILE;
-        }else if(compare_sysname("Darwin")){
-            // for macOS, search another default file.
-            if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
-                MimeFile = SPECIAL_DARWIN_MIME_FILE;
-            }else{
-                errPaths += " and ";
-                errPaths += SPECIAL_DARWIN_MIME_FILE;
-            }
         }
+#ifdef __APPLE__
+        // for macOS, search another default file.
+        else if(0 == stat(SPECIAL_DARWIN_MIME_FILE, &st)){
+            MimeFile = SPECIAL_DARWIN_MIME_FILE;
+        }else{
+            errPaths += " and ";
+            errPaths += SPECIAL_DARWIN_MIME_FILE;
+        }
+#endif
         if(MimeFile.empty()){
             S3FS_PRN_WARN("Could not find mime.types files, you have to create file(%s) or specify mime option for existing mime.types file.", errPaths.c_str());
             return false;
@@ -317,7 +322,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
         return "application/x-directory";
     }
 
-    std::string            result("application/octet-stream");
+    auto                   result = "application/octet-stream"s;
     std::string::size_type last_pos  = name.find_last_of('.');
     std::string::size_type first_pos = name.find_first_of('.');
     std::string            prefix, ext, ext2;
@@ -364,7 +369,7 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     }
 
     // neither the last extension nor the second-to-last extension
-    // matched a mimeType, return the default mime type 
+    // matched a mimeType, return the default mime type
     return result;
 }
 
@@ -430,7 +435,7 @@ bool S3fsCurl::LocateBundle()
                 BF.open("/usr/local/share/certs/ca-root.crt");
                 if(BF.good()){
                     BF.close();
-                    S3fsCurl::curl_ca_bundle = "/usr/share/ssl/certs/ca-bundle.crt";
+                    S3fsCurl::curl_ca_bundle = "/usr/local/share/certs/ca-root.crt";
                 }else{
                     S3FS_PRN_ERR("%s: /.../ca-bundle.crt is not readable", program_name.c_str());
                     return false;
@@ -482,7 +487,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
         }
         std::string value;
         getline(ss, value);
-        (*headers)[key] = trim(value);
+        (*headers)[key] = trim(std::move(value));
     }
     return blockSize * numBlocks;
 }
@@ -638,7 +643,7 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     std::string raw_key;
     if(onekey.length() > 256 / 8){
         std::string p_key(s3fs_decode64(onekey.c_str(), onekey.size()));
-        raw_key = p_key;
+        raw_key = std::move(p_key);
         base64_key = onekey;
     } else {
         base64_key = s3fs_base64(reinterpret_cast<const unsigned char*>(onekey.c_str()), onekey.length());
@@ -648,14 +653,14 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     // make MD5
     std::string strMd5;
     if(!make_md5_from_binary(raw_key.c_str(), raw_key.length(), strMd5)){
-        S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", raw_key.c_str());
+        S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", mask_sensitive_string(raw_key.c_str()));
         return false;
     }
     // mapped MD5 = SSE Key
     sseckeymap_t md5map;
     md5map.clear();
     md5map[strMd5] = base64_key;
-    S3fsCurl::sseckeys.push_back(md5map);
+    S3fsCurl::sseckeys.push_back(std::move(md5map));
 
     return true;
 }
@@ -713,7 +718,7 @@ bool S3fsCurl::SetSseKmsid(const char* kmsid)
 }
 
 // [NOTE]
-// Because SSE is set by some options and environment, 
+// Because SSE is set by some options and environment,
 // this function check the integrity of the SSE data finally.
 bool S3fsCurl::FinalCheckSse()
 {
@@ -753,7 +758,7 @@ bool S3fsCurl::FinalCheckSse()
 
     return false;
 }
-                                                                                                                                                   
+
 bool S3fsCurl::LoadEnvSseCKeys()
 {
     char* envkeys = getenv("AWSSSECKEYS");
@@ -772,7 +777,7 @@ bool S3fsCurl::LoadEnvSseCKeys()
     // cppcheck-suppress unmatchedSuppression
     // cppcheck-suppress knownConditionTrueFalse
     if(S3fsCurl::sseckeys.empty()){
-        S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", envkeys);
+        S3FS_PRN_ERR("There is no SSE Key in environment(AWSSSECKEYS=%s).", mask_sensitive_string(envkeys));
         return false;
     }
     return true;
@@ -974,7 +979,7 @@ bool S3fsCurl::SetProxy(const char* url)
         pos += strlen("://");
 
         // Check if it is other than "http://"
-        if(0 != tmpurl.find("http://", 0)){
+        if(is_prefix(tmpurl.c_str(), "http://")){
             is_http = false;
         }
     }else{
@@ -1035,7 +1040,7 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
     std::string userpwd;
     std::string line;
     while(getline(credFileStream, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }
@@ -1334,13 +1339,18 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
                     newline++;
                     eol++;
                 }
-                size_t length = eol - p;
-                S3FS_PRN_CURL("%s %.*s", getCurlDebugHead(type), (int)length - newline, p);
+                size_t      length    = eol - p;
+                std::string strheader;
+                if(!insecure_logging){
+                    strheader = mask_sensitive_header(p, (length - newline));
+                }else{
+                    strheader.assign(p, (length - newline));
+                }
+                S3FS_PRN_CURL("%s %s", getCurlDebugHead(type), strheader.c_str());
                 remaining -= length;
                 p = eol;
             } while (p != nullptr && remaining > 0);
             break;
-
         case CURLINFO_SSL_DATA_IN:
         case CURLINFO_SSL_DATA_OUT:
             // not put
@@ -1355,7 +1365,7 @@ int S3fsCurl::RawCurlDebugFunc(const CURL* hcurl, curl_infotype type, char* data
 //-------------------------------------------------------------------
 // Methods for S3fsCurl
 //-------------------------------------------------------------------
-S3fsCurl::S3fsCurl(bool ahbe) : 
+S3fsCurl::S3fsCurl(bool ahbe) :
     type(REQTYPE::UNSET), requestHeaders(nullptr),
     LastResponseCode(S3FSCURL_RESPONSECODE_NOTSET), postdata(nullptr), postdata_remaining(0), is_use_ahbe(ahbe),
     retry_count(0), b_postdata(nullptr), b_postdata_remaining(0), b_partdata_startpos(0), b_partdata_size(0),
@@ -1414,6 +1424,7 @@ bool S3fsCurl::ResetHandle()
     if(type != REQTYPE::IAMCRED && type != REQTYPE::IAMROLE){
         // REQTYPE::IAMCRED and REQTYPE::IAMROLE are always HTTP
         if(0 == S3fsCurl::ssl_verify_hostname){
+            S3FS_PRN_DBG("SSL hostname verification is DISABLED (ssl_verify_hostname=0).");
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYHOST, 0)){
                 return false;
             }
@@ -1459,9 +1470,8 @@ bool S3fsCurl::ResetHandle()
         return false;
     }
 
-    if(!S3fsCurl::is_cert_check) {
-        S3FS_PRN_DBG("'no_check_certificate' option in effect.");
-        S3FS_PRN_DBG("The server certificate won't be checked against the available certificate authorities.");
+    if(!S3fsCurl::is_cert_check){
+        S3FS_PRN_DBG("SSL certificate verification is DISABLED (no_check_certificate).");
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_VERIFYPEER, false)){
             return false;
         }
@@ -1611,6 +1621,15 @@ bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle) const
     return true;
 }
 
+bool S3fsCurl::GetCurlErrorString(std::string& strError) const
+{
+    if(CURLE_OK == curlCode){
+        return false;
+    }
+    strError = "CURL ERROR("s + std::to_string(curlCode) + "): "s + curl_easy_strerror(curlCode);
+    return true;
+}
+
 //
 // Reset all options for retrying
 //
@@ -1641,9 +1660,6 @@ bool S3fsCurl::RemakeHandle()
     bodydata.clear();
     headdata.clear();
     LastResponseCode   = S3FSCURL_RESPONSECODE_NOTSET;
-
-    // retry count up
-    retry_count++;
 
     // set from backup
     postdata           = b_postdata;
@@ -1937,6 +1953,20 @@ bool S3fsCurl::RemakeHandle()
 }
 
 //
+// Sleep Method with Exponential Backoff and Jitter
+//
+// [NOTE]
+// The primary objective of this process is to prevent secondary server
+// failures caused by spikes in simultaneous retries.
+//
+void S3fsCurl::WaitBeforeRetry()
+{
+    unsigned int sleep_time = 2 << retry_count;
+    sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
+    retry_count++;
+}
+
+//
 // returns curl return code
 //
 int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
@@ -1955,7 +1985,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
     for(int retrycnt = 0; S3FSCURL_PERFORM_RESULT_NOTSET == result && retrycnt < S3fsCurl::retries; ++retrycnt){
         // Reset response code
         responseCode = S3FSCURL_RESPONSECODE_NOTSET;
-        
+
         // Insert headers
         if(!dontAddAuthHeaders) {
             if(!insertAuthHeaders()){
@@ -1969,7 +1999,9 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         }
 
         // Requests
-        curlCode = curl_easy_perform(hCurl.get());
+        if(CURLE_OK != (curlCode = curl_easy_perform(hCurl.get()))){
+            S3FS_PRN_ERR("CURL ERROR(%d) : %s", curlCode, curl_easy_strerror(curlCode));
+        }
 
         // Check result
         switch(curlCode){
@@ -2044,22 +2076,71 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         result = -EIO;
                         break;
 
+                    case 429:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 429 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 429 was returned, returning EAGAIN");
+                            result = -EAGAIN;
+                        }
+                        break;
+
+                    case 500:
+                        // [NOTE]
+                        // The 500 error message occurs when the server is unable to process the request at
+                        // that time, and may be resolved by retrying the request.
+                        //
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 500 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 500 was returned, returning EIO");
+                            result = -EIO;
+                        }
+                        break;
+
                     case 501:
                         S3FS_PRN_INFO3("HTTP response code 501 was returned, returning ENOTSUP");
                         S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
                         result = -ENOTSUP;
                         break;
 
-                    case 429:
-                    case 500:
-                    case 503: {
-                        S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
-                        // Add jitter to avoid thundering herd.
-                        unsigned int sleep_time = 2 << retry_count;
-                        sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
+                    case 502:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 502 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 502 was returned, returning EWOULDBLOCK");
+                            result = -EWOULDBLOCK;
+                        }
                         break;
-                    }
+
+                    case 503:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 503 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 503 was returned, returning EAGAIN");
+                            result = -EAGAIN;
+                        }
+                        break;
+
+                    case 504:
+                        if((retrycnt + 1) < S3fsCurl::retries){
+                            S3FS_PRN_INFO3("HTTP response code 504 was returned, slowing down");
+                            S3FS_PRN_DBG("Body Text: %s", bodydata.c_str());
+                            WaitBeforeRetry();
+                        }else{
+                            S3FS_PRN_INFO3("HTTP response code 504 was returned, returning ETIMEDOUT");
+                            result = -ETIMEDOUT;
+                        }
+                        break;
+
                     default:
                         S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.c_str());
                         result = -EIO;
@@ -2068,62 +2149,54 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 break;
 
             case CURLE_WRITE_ERROR:
-                S3FS_PRN_ERR("### CURLE_WRITE_ERROR");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_OPERATION_TIMEDOUT:
-                S3FS_PRN_ERR("### CURLE_OPERATION_TIMEDOUT");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_RESOLVE_HOST:
-                S3FS_PRN_ERR("### CURLE_COULDNT_RESOLVE_HOST");
                 sleep(2);
-                break; 
+                break;
 
             case CURLE_COULDNT_CONNECT:
-                S3FS_PRN_ERR("### CURLE_COULDNT_CONNECT");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_GOT_NOTHING:
-                S3FS_PRN_ERR("### CURLE_GOT_NOTHING");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_ABORTED_BY_CALLBACK:
-                S3FS_PRN_ERR("### CURLE_ABORTED_BY_CALLBACK");
                 sleep(4);
                 {
                     const std::lock_guard<std::mutex> lock(S3fsCurl::curl_handles_lock);
                     S3fsCurl::curl_progress[hCurl.get()] = {time(nullptr), -1, -1};
                 }
-                break; 
+                break;
 
             case CURLE_PARTIAL_FILE:
-                S3FS_PRN_ERR("### CURLE_PARTIAL_FILE");
                 sleep(4);
-                break; 
+                break;
 
             case CURLE_SEND_ERROR:
-                S3FS_PRN_ERR("### CURLE_SEND_ERROR");
                 sleep(2);
                 break;
 
             case CURLE_RECV_ERROR:
-                S3FS_PRN_ERR("### CURLE_RECV_ERROR");
                 sleep(2);
                 break;
 
             case CURLE_SSL_CONNECT_ERROR:
-                S3FS_PRN_ERR("### CURLE_SSL_CONNECT_ERROR");
                 sleep(2);
                 break;
 
-            case CURLE_SSL_CACERT:
-                S3FS_PRN_ERR("### CURLE_SSL_CACERT");
+            case CURLE_SSL_CERTPROBLEM:
+                result = -EIO;
+                break;
 
+            case CURLE_SSL_CACERT:              // = CURLE_SSL_PEER_CERTIFICATE
                 // try to locate cert, if successful, then set the
                 // option and continue
                 if(S3fsCurl::curl_ca_bundle.empty()){
@@ -2140,8 +2213,6 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
 #ifdef CURLE_PEER_FAILED_VERIFICATION
             case CURLE_PEER_FAILED_VERIFICATION:
-                S3FS_PRN_ERR("### CURLE_PEER_FAILED_VERIFICATION");
-
                 first_pos = S3fsCred::GetBucket().find_first_of('.');
                 if(first_pos != std::string::npos){
                     S3FS_PRN_INFO("curl returned a CURL_PEER_FAILED_VERIFICATION error");
@@ -2158,14 +2229,12 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
             // This should be invalid since curl option HTTP FAILONERROR is now off
             case CURLE_HTTP_RETURNED_ERROR:
-                S3FS_PRN_ERR("### CURLE_HTTP_RETURNED_ERROR");
-
                 if(0 != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &responseCode)){
                     result = -EIO;
                 }else{
                     S3FS_PRN_INFO3("HTTP response code =%ld", responseCode);
 
-                    // Let's try to retrieve the 
+                    // Let's try to retrieve the
                     if(404 == responseCode){
                         result = -ENOENT;
                     }else if(500 > responseCode){
@@ -2176,13 +2245,12 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
             // Unknown CURL return code
             default:
-                S3FS_PRN_ERR("###curlCode: %d  msg: %s", curlCode, curl_easy_strerror(curlCode));
                 result = -EIO;
                 break;
         } // switch
 
         if(S3FSCURL_PERFORM_RESULT_NOTSET == result){
-            S3FS_PRN_INFO("### retrying...");
+            S3FS_PRN_INFO("Communication error(%d time): Retry up to the limit.", retrycnt);
 
             if(!RemakeHandle()){
                 S3FS_PRN_INFO("Failed to reset handle and internal data for retrying.");
@@ -2506,8 +2574,8 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
     std::string ttlstr = std::to_string(token_ttl);
     requestHeaders = curl_slist_sort_insert(requestHeaders, token_ttl_hdr, ttlstr.c_str());
 
-    // Curl appends an "Expect: 100-continue" header to the token request, 
-    // and aws responds with a 417 Expectation Failed. This ensures the 
+    // Curl appends an "Expect: 100-continue" header to the token request,
+    // and aws responds with a 417 Expectation Failed. This ensures the
     // Expect header is empty before the request is sent.
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Expect", "");
 
@@ -2691,9 +2759,8 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     return (0 == result);
 }
 
-bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, bool is_copy)
+bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool is_copy)
 {
-    std::string ssevalue = input;
     switch(ssetype){
         case sse_type_t::SSE_DISABLE:
             return true;
@@ -2716,7 +2783,8 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, b
                         requestHeaders = curl_slist_sort_insert(requestHeaders, "x-amz-server-side-encryption-customer-key-md5",   ssevalue.c_str());
                     }
                 }else{
-                    S3FS_PRN_WARN("Failed to insert SSE-C header.");
+                    S3FS_PRN_ERR("Failed to insert SSE-C header.");
+                    return false;
                 }
                 return true;
             }
@@ -2737,7 +2805,7 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, const std::string& input, b
 
 //
 // tpath :      target path for head request
-// ssekey_pos : -1    means "not" SSE-C type
+// ssekey_pos : SIZE_MAX means "not" SSE-C type
 //              0 - X means SSE-C type and position for SSE-C key(0 is latest key)
 //
 bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
@@ -2758,10 +2826,10 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
     responseHeaders.clear();
 
     // requestHeaders(SSE-C)
-    if(0 <= static_cast<ssize_t>(ssekey_pos) && ssekey_pos < S3fsCurl::sseckeys.size()){
+    if(SIZE_MAX != ssekey_pos && ssekey_pos < S3fsCurl::sseckeys.size()){
         std::string md5;
         if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, false)){
-            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, md5.c_str());
+            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, mask_sensitive_string(md5.c_str()));
             return false;
         }
     }
@@ -2881,7 +2949,8 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
     if(S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3012,7 +3081,8 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     if(0 != strcmp(tpath, "/")){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3088,7 +3158,8 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
     // SSE-C
     if(sse_type_t::SSE_C == ssetype){
         if(!AddSseRequestHead(ssetype, ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3115,7 +3186,7 @@ int S3fsCurl::GetObjectRequest(const char* tpath, int fd, off_t start, off_t siz
 {
     int result;
 
-    S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][ssetype=%u][ssevalue=%s]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), static_cast<uint8_t>(ssetype), ssevalue.c_str());
+    S3FS_PRN_INFO3("[tpath=%s][start=%lld][size=%lld][ssetype=%u][ssevalue=%s]", SAFESTRPTR(tpath), static_cast<long long>(start), static_cast<long long>(size), static_cast<uint8_t>(ssetype), mask_sensitive_string(ssevalue.c_str()));
 
     if(!tpath){
         return -EINVAL;
@@ -3168,7 +3239,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
                 query_string += '&';
             }
             query_string += "prefix=";
-            query_string += &check_path[1]; // skip first '/' character
+            query_string += urlEncodePath(&check_path[1]); // skip first '/' character
         }
     }
     if(!query_string.empty()){
@@ -3190,10 +3261,11 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
     if(!force_no_sse && S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
-    
+
     op = "GET";
     type = REQTYPE::CHKBUCKET;
 
@@ -3331,7 +3403,8 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
     if(S3fsCurl::GetSseType() != sse_type_t::SSE_DISABLE){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
     if(is_use_ahbe){
@@ -3497,7 +3570,8 @@ int S3fsCurl::MultipartUploadComplete(const char* tpath, const std::string& uplo
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3695,7 +3769,8 @@ int S3fsCurl::MultipartUploadContentPartSetup(const char* tpath, int part_num, c
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3761,7 +3836,8 @@ int S3fsCurl::MultipartUploadCopyPartSetup(const char* from, const char* to, int
     if(sse_type_t::SSE_C == S3fsCurl::GetSseType()){
         std::string ssevalue;
         if(!AddSseRequestHead(S3fsCurl::GetSseType(), ssevalue, false)){
-            S3FS_PRN_WARN("Failed to set SSE header, but continue...");
+            S3FS_PRN_ERR("Failed to set SSE header, aborting request.");
+            return -EIO;
         }
     }
 
@@ -3788,9 +3864,9 @@ bool S3fsCurl::MultipartUploadContentPartComplete()
 
     // check etag(md5);
     //
-    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent  
+    // The ETAG when using SSE_C and SSE_KMS does not reflect the MD5 we sent
     // SSE_C: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
-    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:  
+    // SSE_KMS is ignored in the above, but in the following it states the same in the highlights:
     // https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
     //
     if(S3fsCurl::is_content_md5 && sse_type_t::SSE_C != S3fsCurl::GetSseType() && sse_type_t::SSE_KMS != S3fsCurl::GetSseType()){
@@ -3817,6 +3893,8 @@ bool S3fsCurl::MultipartUploadPartComplete()
 {
     bool result;
     if(-1 == partdata.fd){
+        // cppcheck-suppress unmatchedSuppression
+        // cppcheck-suppress knownConditionTrueFalse
         result = MultipartUploadCopyPartComplete();
     }else{
         result = MultipartUploadContentPartComplete();

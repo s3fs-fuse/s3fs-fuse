@@ -186,7 +186,7 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
             strhead += ":";
             strhead += strval;
         }else{
-            strhead = trim(lower(strhead));
+            strhead = trim(lower(std::move(strhead)));
         }
         if(only_amz && strhead.substr(0, 5) != "x-amz"){
             continue;
@@ -221,9 +221,9 @@ std::string prepare_url(const char* url)
     size_t bucket_length = token.size();
     size_t uri_length = 0;
 
-    if(!strncasecmp(url_str.c_str(), "https://", 8)){
+    if(is_prefix(url_str.c_str(), "https://")){
         uri_length = 8;
-    } else if(!strncasecmp(url_str.c_str(), "http://", 7)) {
+    } else if(is_prefix(url_str.c_str(), "http://")) {
         uri_length = 7;
     }
     uri  = url_str.substr(0, uri_length);

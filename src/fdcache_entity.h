@@ -38,7 +38,7 @@
 // Typedef
 //----------------------------------------------
 class PseudoFdInfo;
-typedef std::map<int, std::unique_ptr<PseudoFdInfo>> fdinfo_map_t;
+using fdinfo_map_t = std::map<int, std::unique_ptr<PseudoFdInfo>>;
 
 //------------------------------------------------
 // class FdEntity
@@ -89,7 +89,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         int OpenMirrorFile() REQUIRES(FdEntity::fdent_data_lock);
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
-        bool IsUploading() REQUIRES(FdEntity::fdent_lock);
+        bool IsUploading() const REQUIRES(FdEntity::fdent_lock);
         int SetCtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int SetAtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int SetMtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
@@ -149,7 +149,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         }
         int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
 
-        bool LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
+        int LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return DupWithLock(fd);
@@ -177,7 +177,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return UploadPendingHasLock(fd);
         }
-        bool HaveUploadPending(){
+        bool HaveUploadPending() const {
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return (pending_status_t::NO_UPDATE_PENDING != pending_status);
         }
@@ -227,7 +227,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
 
         int Load(off_t start, off_t size, bool is_modified_flag = false) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);  // size=0 means loading to end
 
-        off_t BytesModified();
+        off_t BytesModified() const;
         int RowFlush(int fd, const char* tpath, bool force_sync = false) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
@@ -253,7 +253,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         std::mutex* GetMutex() RETURN_CAPABILITY(fdent_lock);
 };
 
-typedef std::map<std::string, std::shared_ptr<FdEntity>> fdent_map_t;           // key=path, value=FdEntity
+using fdent_map_t = std::map<std::string, std::shared_ptr<FdEntity>>;           // key=path, value=FdEntity
 
 #endif // S3FS_FDCACHE_ENTITY_H_
 

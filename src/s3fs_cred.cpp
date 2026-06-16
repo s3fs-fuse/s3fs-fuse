@@ -59,9 +59,9 @@ static constexpr char DEFAULT_AWS_PROFILE_NAME[] = "default";
 const char* VersionS3fsCredential(bool detail)
 {
     static constexpr char version[]        = "built-in";
-    static constexpr char detail_version[] = 
-		"s3fs-fuse built-in Credential I/F Function\n"
-		"Copyright(C) 2007 s3fs-fuse\n";
+    static constexpr char detail_version[] =
+        "s3fs-fuse built-in Credential I/F Function\n"
+        "Copyright(C) 2007 s3fs-fuse\n";
 
     if(detail){
         return detail_version;
@@ -135,7 +135,7 @@ constexpr char S3fsCred::IAMv2_token_hdr[];
 std::string S3fsCred::bucket_name;
 
 //-------------------------------------------------------------------
-// Class Methods 
+// Class Methods
 //-------------------------------------------------------------------
 bool S3fsCred::SetBucket(const std::string& bucket)
 {
@@ -158,7 +158,7 @@ bool S3fsCred::ParseIAMRoleFromMetaDataResponse(const char* response, std::strin
     }
     // [NOTE]
     // expected following strings.
-    // 
+    //
     // myrolename
     //
     std::istringstream ssrole(response);
@@ -380,7 +380,7 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
             }else{
                 // Set token
                 if(!SetIAMv2APITokenHasLock(token)){
-                    S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", token.c_str());
+                    S3FS_PRN_ERR("Error storing IMDSv2 API token(%s).", mask_sensitive_string(token.c_str()));
                 }
             }
         }
@@ -407,7 +407,7 @@ int S3fsCred::GetIMDSVersion() const
 
 bool S3fsCred::SetIAMv2APITokenHasLock(const std::string& token)
 {
-    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", token.c_str());
+    S3FS_PRN_INFO3("Setting AWS IMDSv2 API token to %s", mask_sensitive_string(token.c_str()));
 
     if(token.empty()){
         return false;
@@ -504,7 +504,7 @@ bool S3fsCred::LoadIAMRoleFromMetaData()
 
 bool S3fsCred::SetIAMCredentials(const char* response)
 {
-    S3FS_PRN_INFO3("IAM credential response = \"%s\"", response);
+    S3FS_PRN_INFO3("IAM credential response = \"%s\"", mask_sensitive_string(response));
 
     iamcredmap_t keyval;
 
@@ -549,7 +549,7 @@ bool S3fsCred::SetIAMRoleFromMetaData(const char* response)
 {
     const std::lock_guard<std::mutex> lock(token_lock);
 
-    S3FS_PRN_INFO3("IAM role name response = \"%s\"", response ? response : "(null)");
+    S3FS_PRN_INFO3("IAM role name response = \"%s\"", mask_sensitive_string(response));
 
     std::string rolename;
     if(!S3fsCred::ParseIAMRoleFromMetaDataResponse(response, rolename)){
@@ -668,7 +668,7 @@ bool S3fsCred::ParseS3fsPasswdFile(bucketkvmap_t& resmap)
 
     // read each line
     while(getline(PF, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }
@@ -869,7 +869,7 @@ bool S3fsCred::ReadAwsCredentialFile(const std::string &filename)
     // read each line
     std::string line;
     while(getline(PF, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }
@@ -1550,7 +1550,7 @@ bool S3fsCred::CheckAllParams()
             return false;
         }
         // More error checking on the access key pair can be done
-        // like checking for appropriate lengths and characters  
+        // like checking for appropriate lengths and characters
     }
 
     // check IBM IAM requirements

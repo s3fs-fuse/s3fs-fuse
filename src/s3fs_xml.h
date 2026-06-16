@@ -30,12 +30,19 @@
 
 #include "mpu_util.h"
 
+// S3 responses never use DTDs — block external entity loading.
+#ifdef XML_PARSE_NO_XXE
+static constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NO_XXE;
+#else
+static constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NONET;
+#endif
+
 class S3ObjList;
 
-typedef std::unique_ptr<xmlChar, decltype(xmlFree)> unique_ptr_xmlChar;
-typedef std::unique_ptr<xmlXPathObject, decltype(&xmlXPathFreeObject)> unique_ptr_xmlXPathObject;
-typedef std::unique_ptr<xmlXPathContext, decltype(&xmlXPathFreeContext)> unique_ptr_xmlXPathContext;
-typedef std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)> unique_ptr_xmlDoc;
+using unique_ptr_xmlChar         = std::unique_ptr<xmlChar, decltype(xmlFree)>;
+using unique_ptr_xmlXPathObject  = std::unique_ptr<xmlXPathObject, decltype(&xmlXPathFreeObject)>;
+using unique_ptr_xmlXPathContext = std::unique_ptr<xmlXPathContext, decltype(&xmlXPathFreeContext)>;
+using unique_ptr_xmlDoc          = std::unique_ptr<xmlDoc, decltype(&xmlFreeDoc)>;
 
 //-------------------------------------------------------------------
 // Utility Class
@@ -79,7 +86,7 @@ class s3fsXmlBufferParserError
 // Functions
 //-------------------------------------------------------------------
 bool is_truncated(xmlDocPtr doc);
-int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, int isCPrefix, S3ObjList& head, bool prefix);
+int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextPtr ctx, const char* ex_contents, const char* ex_key, const char* ex_etag, const char* ex_size, const char* ex_lastmod, int isCPrefix, S3ObjList& head, bool prefix);
 int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head);
 unique_ptr_xmlChar get_next_continuation_token(xmlDocPtr doc);
 unique_ptr_xmlChar get_next_marker(xmlDocPtr doc);

@@ -49,7 +49,7 @@ jobs:
       #
       matrix:
         container:
-          - ubuntu:25.10
+          - ubuntu:26.04
           - ubuntu:24.04
           - ubuntu:22.04
           - debian:trixie
@@ -58,11 +58,10 @@ jobs:
           - rockylinux/rockylinux:10
           - rockylinux/rockylinux:9
           - rockylinux/rockylinux:8
+          - fedora:44
           - fedora:43
-          - fedora:42
-          - opensuse/leap:15
           - opensuse/leap:16.0
-          - alpine:3.23
+          - alpine:3.24
 
     container:
       image: ${{ matrix.container }}
@@ -83,11 +82,11 @@ jobs:
         run: zypper install -y tar gzip
 
       - name: Install Alpine packages before checkout
-        if: matrix.container == 'alpine:3.23'
+        if: matrix.container == 'alpine:3.24'
         run: apk add --no-progress --no-cache bash
 
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # [NOTE]
       # Matters that depend on OS:VERSION are determined and executed in the following script.
@@ -128,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Brew tap
         run: |
@@ -201,17 +200,17 @@ jobs:
           - valgrind
 
     container:
-      image: fedora:43
+      image: fedora:44
 
       options: "--privileged --cap-add SYS_ADMIN --device /dev/fuse"
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:43
+          .github/workflows/linux-ci-helper.sh fedora:44
 
       - name: Install clang
         run: |
@@ -276,15 +275,15 @@ jobs:
   static-checks:
     runs-on: ubuntu-latest
     container:
-      image: fedora:43
+      image: fedora:44
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install packages
         run: |
-          .github/workflows/linux-ci-helper.sh fedora:43
+          .github/workflows/linux-ci-helper.sh fedora:44
 
       - name: Install extra packages
         run: |
