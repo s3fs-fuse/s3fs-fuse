@@ -903,6 +903,10 @@ int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_
 
 static int s3fs_getattr(const char* _path, struct stat* stbuf, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result;
 
@@ -944,7 +948,11 @@ static int s3fs_getattr(const char* _path, struct stat* stbuf, struct fuse_file_
 
 static int s3fs_readlink(const char* _path, char* buf, size_t size)
 {
-    if(!_path || !buf || 0 == size){
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
+    if(!buf || 0 == size){
         return 0;
     }
     WTF8_ENCODE(path)
@@ -1082,6 +1090,10 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 
 static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int       result;
     struct fuse_context* pcxt;
@@ -1114,6 +1126,10 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 
 static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     std::string  strpath = path;
     int          result;
@@ -1191,11 +1207,12 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
 
 static int create_directory_object(const char* path, mode_t mode, const struct timespec& ts_atime, const struct timespec& ts_mtime, const struct timespec& ts_ctime, uid_t uid, gid_t gid, const char* pxattrvalue, struct stat* pstbuf)
 {
-    S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%s][mtime=%s][ctime=%s][uid=%u][gid=%u]", path, mode, str(ts_atime).c_str(), str(ts_mtime).c_str(), str(ts_ctime).c_str(), (unsigned int)uid, (unsigned int)gid);
-
     if(!path || '\0' == path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
         return -EINVAL;
     }
+    S3FS_PRN_INFO1("[path=%s][mode=%04o][atime=%s][mtime=%s][ctime=%s][uid=%u][gid=%u]", path, mode, str(ts_atime).c_str(), str(ts_mtime).c_str(), str(ts_ctime).c_str(), (unsigned int)uid, (unsigned int)gid);
+
     std::string tpath = path;
     if('/' != *tpath.rbegin()){
         tpath += "/";
@@ -1232,6 +1249,10 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
 
 static int s3fs_mkdir(const char* _path, mode_t mode)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result;
     struct fuse_context* pcxt;
@@ -1287,6 +1308,10 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
 
 static int s3fs_unlink(const char* _path)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     std::string strPath = path;
     int         result;
@@ -1341,6 +1366,10 @@ static int directory_empty(const char* path)
 
 static int s3fs_rmdir(const char* _path)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string strpath;
@@ -1432,6 +1461,10 @@ static int s3fs_rmdir(const char* _path)
 
 static int s3fs_symlink(const char* _from, const char* _to)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        S3FS_PRN_ERR("Wrong parameter: from/to is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     std::string                strFrom = trim(from);;
@@ -1934,6 +1967,10 @@ static int rename_directory(const char* from, const char* to)
 
 static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        S3FS_PRN_ERR("Wrong parameter: from/to is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     struct stat buf;
@@ -2000,6 +2037,10 @@ static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 
 static int s3fs_link(const char* _from, const char* _to)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        S3FS_PRN_ERR("Wrong parameter: from/to is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
@@ -2008,6 +2049,10 @@ static int s3fs_link(const char* _from, const char* _to)
 
 static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2154,6 +2199,10 @@ static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* inf
 
 static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2254,6 +2303,10 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_in
 
 static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2406,6 +2459,10 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_
 
 static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2637,6 +2694,10 @@ static int update_mctime_parent_directory(const char* _path)
 
 static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2795,6 +2856,10 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct f
 
 static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2903,6 +2968,10 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], s
 
 static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int          result;
     headers_t    meta;
@@ -3014,6 +3083,10 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
 
 static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result;
     struct stat st;
@@ -3116,6 +3189,10 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 
 static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     ssize_t res;
 
@@ -3144,6 +3221,10 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 
 static int s3fs_write(const char* _path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     ssize_t res;
 
@@ -3216,6 +3297,10 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 
 static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result;
 
@@ -3281,6 +3366,10 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 //
 static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result = 0;
 
@@ -3320,6 +3409,10 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
@@ -3415,6 +3508,10 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 
 static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     int result;
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
@@ -3563,6 +3660,10 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     WTF8_ENCODE(path)
     S3ObjList head;
     int result;
@@ -3920,11 +4021,14 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
 static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags)
 {
+    if(!_path || '\0' == _path[0]){
+        S3FS_PRN_ERR("Wrong parameter: path is null or empty");
+        return -EINVAL;
+    }
     if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
     }
-
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -4210,10 +4314,10 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
 static int s3fs_removexattr(const char* _path, const char* name)
 {
-    if(!_path || !name){
-        return -EIO;
+    if(!_path || '\0' == _path[0] || !name){
+        S3FS_PRN_ERR("Wrong parameter: path is null/empty or name is null");
+        return -EINVAL;
     }
-
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
