@@ -86,7 +86,7 @@ jobs:
         run: apk add --no-progress --no-cache bash
 
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # [NOTE]
       # Matters that depend on OS:VERSION are determined and executed in the following script.
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Brew tap
         run: |
@@ -206,7 +206,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install packages
         run: |
@@ -279,7 +279,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install packages
         run: |
