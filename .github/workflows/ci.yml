@@ -61,7 +61,7 @@ jobs:
           - fedora:44
           - fedora:43
           - opensuse/leap:16.0
-          - alpine:3.23
+          - alpine:3.24
 
     container:
       image: ${{ matrix.container }}
@@ -82,11 +82,11 @@ jobs:
         run: zypper install -y tar gzip
 
       - name: Install Alpine packages before checkout
-        if: matrix.container == 'alpine:3.23'
+        if: matrix.container == 'alpine:3.24'
         run: apk add --no-progress --no-cache bash
 
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # [NOTE]
       # Matters that depend on OS:VERSION are determined and executed in the following script.
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Brew tap
         run: |
@@ -206,7 +206,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install packages
         run: |
@@ -279,7 +279,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install packages
         run: |

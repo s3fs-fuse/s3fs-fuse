@@ -487,7 +487,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
         }
         std::string value;
         getline(ss, value);
-        (*headers)[key] = trim(value);
+        (*headers)[key] = trim(std::move(value));
     }
     return blockSize * numBlocks;
 }
@@ -979,7 +979,7 @@ bool S3fsCurl::SetProxy(const char* url)
         pos += strlen("://");
 
         // Check if it is other than "http://"
-        if(0 != tmpurl.find("http://", 0)){
+        if(is_prefix(tmpurl.c_str(), "http://")){
             is_http = false;
         }
     }else{
@@ -1040,7 +1040,7 @@ bool S3fsCurl::SetProxyUserPwd(const char* file)
     std::string userpwd;
     std::string line;
     while(getline(credFileStream, line)){
-        line = trim(line);
+        line = trim(std::move(line));
         if(line.empty()){
             continue;
         }

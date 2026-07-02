@@ -67,12 +67,6 @@
 #define ENOATTR                   ENODATA
 #endif
 
-#if FUSE_USE_VERSION >= 30
-#define FUSE3_FILE_INFO_ARG , struct fuse_file_info* info
-#else
-#define FUSE3_FILE_INFO_ARG
-#endif
-
 //-------------------------------------------------------------------
 // Static variables
 //-------------------------------------------------------------------
@@ -85,9 +79,6 @@ static std::string mountpoint;
 static std::string mimetype_file;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
-#if FUSE_USE_VERSION < 30
-static bool nonempty              = false;
-#endif
 static bool allow_other           = false;
 static uid_t s3fs_uid             = 0;
 static gid_t s3fs_gid             = 0;
@@ -149,26 +140,22 @@ static int print_umount_message(const std::string& mp, bool force) __attribute__
 //-------------------------------------------------------------------
 // fuse interface functions
 //-------------------------------------------------------------------
-static int s3fs_getattr(const char* path, struct stat* stbuf FUSE3_FILE_INFO_ARG);
+static int s3fs_getattr(const char* path, struct stat* stbuf, struct fuse_file_info* info);
 static int s3fs_readlink(const char* path, char* buf, size_t size);
 static int s3fs_mknod(const char* path, mode_t mode, dev_t rdev);
 static int s3fs_mkdir(const char* path, mode_t mode);
 static int s3fs_unlink(const char* path);
 static int s3fs_rmdir(const char* path);
 static int s3fs_symlink(const char* from, const char* to);
-#if FUSE_USE_VERSION >= 30
 static int s3fs_rename(const char* from, const char* to, unsigned int flags);
-#else
-static int s3fs_rename(const char* from, const char* to);
-#endif
 static int s3fs_link(const char* from, const char* to);
-static int s3fs_chmod(const char* path, mode_t mode FUSE3_FILE_INFO_ARG);
-static int s3fs_chmod_nocopy(const char* path, mode_t mode FUSE3_FILE_INFO_ARG);
-static int s3fs_chown(const char* path, uid_t uid, gid_t gid FUSE3_FILE_INFO_ARG);
-static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid FUSE3_FILE_INFO_ARG);
-static int s3fs_utimens(const char* path, const struct timespec ts[2] FUSE3_FILE_INFO_ARG);
-static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2] FUSE3_FILE_INFO_ARG);
-static int s3fs_truncate(const char* path, off_t size FUSE3_FILE_INFO_ARG);
+static int s3fs_chmod(const char* path, mode_t mode, struct fuse_file_info* info);
+static int s3fs_chmod_nocopy(const char* path, mode_t mode, struct fuse_file_info* info);
+static int s3fs_chown(const char* path, uid_t uid, gid_t gid, struct fuse_file_info* info);
+static int s3fs_chown_nocopy(const char* path, uid_t uid, gid_t gid, struct fuse_file_info* info);
+static int s3fs_utimens(const char* path, const struct timespec ts[2], struct fuse_file_info* info);
+static int s3fs_utimens_nocopy(const char* path, const struct timespec ts[2], struct fuse_file_info* info);
+static int s3fs_truncate(const char* path, off_t size, struct fuse_file_info* info);
 static int s3fs_create(const char* path, mode_t mode, struct fuse_file_info* fi);
 static int s3fs_open(const char* path, struct fuse_file_info* fi);
 static int s3fs_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi);
@@ -178,25 +165,12 @@ static int s3fs_flush(const char* path, struct fuse_file_info* fi);
 static int s3fs_fsync(const char* path, int datasync, struct fuse_file_info* fi);
 static int s3fs_release(const char* path, struct fuse_file_info* fi);
 static int s3fs_opendir(const char* path, struct fuse_file_info* fi);
-#if FUSE_USE_VERSION >= 30
 static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags);
-#else
-static int s3fs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info);
-#endif
 static int s3fs_access(const char* path, int mask);
-#if FUSE_USE_VERSION >= 30
 static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config);
-#else
-static void* s3fs_init(struct fuse_conn_info* conn);
-#endif
 static void s3fs_destroy(void*);
-#ifdef __APPLE__
-static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags, uint32_t position);
-static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position);
-#else
 static int s3fs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags);
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size);
-#endif
 static int s3fs_listxattr(const char* path, char* list, size_t size);
 static int s3fs_removexattr(const char* path, const char* name);
 
@@ -788,7 +762,7 @@ static int check_parent_object_access(const char* path, int mask)
         return 0;
     }
     if(X_OK == (mask & X_OK)){
-        for(parent = mydirname(path); !parent.empty(); parent = mydirname(parent)){
+        for(parent = mydirname(path); !parent.empty(); parent = mydirname(std::move(parent))){
             if(parent == "."){
                 parent = "/";
             }
@@ -927,7 +901,7 @@ int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_
     return 0;
 }
 
-static int s3fs_getattr(const char* _path, struct stat* stbuf FUSE3_FILE_INFO_ARG)
+static int s3fs_getattr(const char* _path, struct stat* stbuf, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int result;
@@ -1300,10 +1274,12 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         S3FS_PRN_ERR("succeed to create the directory(%s), but could not add stat cache.", path);
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(path))){
-        S3FS_PRN_ERR("succeed to create the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(path))){
+            S3FS_PRN_ERR("succeed to create the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+        }
     }
 
     return result;
@@ -1443,10 +1419,12 @@ static int s3fs_rmdir(const char* _path)
         }
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(path))){
-        S3FS_PRN_ERR("succeed to remove the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(path))){
+            S3FS_PRN_ERR("succeed to remove the directory(%s), but could not update timestamp of its parent directory(result=%d).", path, update_result);
+        }
     }
 
     return result;
@@ -1536,10 +1514,12 @@ static int s3fs_symlink(const char* _from, const char* _to)
         }
     }
 
-    // update parent directory timestamp
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
-        S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(strTo.c_str()))){
+            S3FS_PRN_ERR("succeed to create symbolic link(%s), but could not update timestamp of its parent directory(result=%d).", strTo.c_str(), update_result);
+        }
     }
 
     return result;
@@ -1952,11 +1932,7 @@ static int rename_directory(const char* from, const char* to)
     return 0;
 }
 
-#if FUSE_USE_VERSION >= 30
 static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
-#else
-static int s3fs_rename(const char* _from, const char* _to)
-#endif
 {
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
@@ -2007,14 +1983,16 @@ static int s3fs_rename(const char* _from, const char* _to)
         }
     }
 
-    // update parent directory timestamp
-    //
-    // [NOTE]
-    // already updated timestamp for original path in above functions.
-    //
-    int update_result;
-    if(0 != (update_result = update_mctime_parent_directory(to))){
-        S3FS_PRN_ERR("succeed to create the file/directory(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
+    if(0 == result){
+        // update parent directory timestamp
+        //
+        // [NOTE]
+        // already updated timestamp for original path in above functions.
+        //
+        int update_result;
+        if(0 != (update_result = update_mctime_parent_directory(to))){
+            S3FS_PRN_ERR("succeed to create the file/directory(%s), but could not update timestamp of its parent directory(result=%d).", to, update_result);
+        }
     }
 
     return result;
@@ -2028,7 +2006,7 @@ static int s3fs_link(const char* _from, const char* _to)
     return -ENOTSUP;
 }
 
-static int s3fs_chmod(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
+static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2174,7 +2152,7 @@ static int s3fs_chmod(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
     return 0;
 }
 
-static int s3fs_chmod_nocopy(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
+static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2274,7 +2252,7 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode FUSE3_FILE_INFO_ARG)
     return result;
 }
 
-static int s3fs_chown(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_INFO_ARG)
+static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2426,7 +2404,7 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_INFO_AR
     return 0;
 }
 
-static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid FUSE3_FILE_INFO_ARG)
+static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2657,7 +2635,7 @@ static int update_mctime_parent_directory(const char* _path)
     return 0;
 }
 
-static int s3fs_utimens(const char* _path, const struct timespec ts[2] FUSE3_FILE_INFO_ARG)
+static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2815,7 +2793,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2] FUSE3_FIL
     return 0;
 }
 
-static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2] FUSE3_FILE_INFO_ARG)
+static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int         result;
@@ -2923,7 +2901,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2] FU
     return result;
 }
 
-static int s3fs_truncate(const char* _path, off_t size FUSE3_FILE_INFO_ARG)
+static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* info)
 {
     WTF8_ENCODE(path)
     int          result;
@@ -3286,7 +3264,7 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
             StatCache::getStatCacheData()->DelStat(strpath);
         }
 
-        if(is_new_file){
+        if(is_new_file && 0 == result){
             // update parent directory timestamp
             int update_result;
             if(0 != (update_result = update_mctime_parent_directory(path))){
@@ -3325,7 +3303,7 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
             ent->MarkDirtyMetadata();
         }
 
-        if(is_new_file){
+        if(is_new_file && 0 == result){
             // update parent directory timestamp
             int update_result;
             if(0 != (update_result = update_mctime_parent_directory(path))){
@@ -3583,11 +3561,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     return 0;
 }
 
-#if FUSE_USE_VERSION >= 30
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags)
-#else
-static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info)
-#endif
 {
     WTF8_ENCODE(path)
     S3ObjList head;
@@ -3613,13 +3587,8 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     }
 
     // force to add "." and ".." name.
-#if FUSE_USE_VERSION >= 30
     filler(buf, ".", nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS);
     filler(buf, "..", nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS);
-#else
-    filler(buf, ".", nullptr, 0);
-    filler(buf, "..", nullptr, 0);
-#endif
     if(head.IsEmpty()){
         return 0;
     }
@@ -3949,23 +3918,12 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
     return 0;
 }
 
-#ifdef __APPLE__
-static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags, uint32_t position)
-#else
 static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags)
-#endif
 {
     if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
     }
-
-#ifdef __APPLE__
-    if(position != 0){
-        // No resource fork support
-        return -EINVAL;
-    }
-#endif
 
     WTF8_ENCODE(path)
     int         result;
@@ -4126,24 +4084,13 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
     return 0;
 }
 
-#ifdef __APPLE__
-static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size, uint32_t position)
-#else
 static int s3fs_getxattr(const char* path, const char* name, char* value, size_t size)
-#endif
 {
     FUSE_CTX_DBG("[path=%s][name=%s][value=%p][size=%zu]", path, name, value, size);
 
     if(!path || !name){
         return -EIO;
     }
-
-#ifdef __APPLE__
-    if (position != 0) {
-        // No resource fork support
-        return -EINVAL;
-    }
-#endif
 
     int       result;
     headers_t meta;
@@ -4475,11 +4422,7 @@ static void s3fs_exit_fuseloop(int exit_status)
       }
 }
 
-#if FUSE_USE_VERSION >= 30
 static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config)
-#else
-static void* s3fs_init(struct fuse_conn_info* conn)
-#endif
 {
     S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), S3fsCred::get()->GetCredFuncVersion(false));
 
@@ -4516,11 +4459,6 @@ static void* s3fs_init(struct fuse_conn_info* conn)
     }
     #endif
 
-#if FUSE_USE_VERSION < 30
-    if(conn->capable & FUSE_CAP_BIG_WRITES){
-         conn->want |= FUSE_CAP_BIG_WRITES;
-    }
-#endif
 
     // Signal object(always true)
     S3fsSignals::Initialize();
@@ -5069,28 +5007,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 return -1;
             }
 
-#if FUSE_USE_VERSION < 30
-            if(!nonempty){
-                const struct dirent *ent;
-                DIR *dp = opendir(mountpoint.c_str());
-                if(dp == nullptr){
-                    S3FS_PRN_EXIT("failed to open MOUNTPOINT: %s: %s", mountpoint.c_str(), strerror(errno));
-                    return -1;
-                }
-                scope_guard dir_guard([dp]() {
-                    if(-1 == closedir(dp)){
-                        S3FS_PRN_ERR("closedir() failed for %s - errno(%d)", mountpoint.c_str(), errno);
-                    }
-                });
-
-                while((ent = readdir(dp)) != nullptr){
-                    if(strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0){
-                        S3FS_PRN_EXIT("MOUNTPOINT directory %s is not empty. if you are sure this is safe, can use the 'nonempty' mount option.", mountpoint.c_str());
-                        return -1;
-                    }
-                }
-            }
-#endif
 #endif
             return 1;
         }
@@ -5181,12 +5097,6 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             is_remove_cache = true;
             return 0;
         }
-#if FUSE_USE_VERSION < 30
-        else if(0 == strcmp(arg, "nonempty")){
-            nonempty = true;
-            return 1; // need to continue for fuse.
-        }
-#endif
         else if(0 == strcmp(arg, "nomultipart")){
             nomultipart = true;
             return 0;
@@ -6065,7 +5975,7 @@ int main(int argc, char* argv[])
     if(1 == S3fsCurl::GetSslVerifyHostname()){
         found = S3fsCred::GetBucket().find_first_of('.');
         if(found != std::string::npos){
-            found = s3host.find("https:");
+            found = is_prefix(s3host.c_str(), "https:");
             if(found != std::string::npos){
                 S3FS_PRN_EXIT("Using https and a bucket name with periods is unsupported.");
                 S3fsCurl::DestroyS3fsCurl();
@@ -6166,9 +6076,6 @@ int main(int argc, char* argv[])
         s3fs_oper.removexattr = s3fs_removexattr;
     }
 
-#if FUSE_USE_VERSION < 30
-    s3fs_oper.flag_utime_omit_ok = true;
-#endif
 
     // now passing things off to fuse, fuse will finish evaluating the command line args
     fuse_res = fuse_main(custom_args.argc, custom_args.argv, &s3fs_oper, nullptr);
