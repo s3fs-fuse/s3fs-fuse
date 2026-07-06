@@ -425,7 +425,7 @@ void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
     sse_type_t  ssetype = sse_type_t::SSE_DISABLE;
     std::string ssevalue;
-    if(!get_object_sse_type(pthparam->path.c_str(), ssetype, ssevalue)){
+    if(!get_object_sse_type(pthparam->path, ssetype, ssevalue)){
         S3FS_PRN_WARN("Failed to get SSE type for file(%s).", pthparam->path.c_str());
     }
 
@@ -1385,7 +1385,7 @@ int parallel_get_object_request(const std::string& path, int fd, off_t start, of
 
     sse_type_t  ssetype = sse_type_t::SSE_DISABLE;
     std::string ssevalue;
-    if(!get_object_sse_type(path.c_str(), ssetype, ssevalue)){
+    if(!get_object_sse_type(path, ssetype, ssevalue)){
         S3FS_PRN_WARN("Failed to get SSE type for file(%s).", path.c_str());
     }
 

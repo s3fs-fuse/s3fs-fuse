@@ -38,8 +38,8 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz =
 std::string get_header_value(const struct curl_slist* list, const std::string &key);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
-bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
-int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_st_size = true);    // implement in s3fs.cpp
+bool get_object_sse_type(const std::string& path, sse_type_t& ssetype, std::string& ssevalue);          // implement in s3fs.cpp
+int put_headers(const std::string& path, const headers_t& meta, bool is_copy, bool use_st_size = true); // implement in s3fs.cpp
 
 bool make_md5_from_binary(const char* pstr, size_t length, std::string& md5);
 std::string url_to_host(const std::string &url);

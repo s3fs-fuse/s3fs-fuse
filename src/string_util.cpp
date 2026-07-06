@@ -474,7 +474,7 @@ bool s3fs_wtf8_encode(const char *s, std::string *result)
     bool invalid = false;
 
     // Pass valid utf8 code through
-    for (; *s; s++) {
+    for (; s && *s; s++) {
         const unsigned char c = *s;
 
         // single byte encoding

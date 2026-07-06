@@ -55,17 +55,6 @@ static inline bool is_prefix(const char *str, const char *prefix) { return strnc
 static constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
-// Macros(WTF8)
-//-------------------------------------------------------------------
-#define WTF8_ENCODE(ARG)  \
-        std::string ARG##_buf; \
-        const char * ARG = _##ARG; \
-        if (use_wtf8 && s3fs_wtf8_encode( _##ARG, 0 )) { \
-            s3fs_wtf8_encode( _##ARG, &ARG##_buf); \
-            ARG = ARG##_buf.c_str(); \
-        }
-
-//-------------------------------------------------------------------
 // Utilities
 //-------------------------------------------------------------------
 // TODO: rename to to_string?

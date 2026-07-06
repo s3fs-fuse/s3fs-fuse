@@ -2412,7 +2412,7 @@ int FdEntity::UploadPendingHasLock(int fd)
         updatemeta["x-amz-metadata-directive"] = "REPLACE";
 
         // put headers, no need to update mtime to avoid dead lock
-        result = put_headers(path.c_str(), updatemeta, true);
+        result = put_headers(path, updatemeta, true);
         if(0 != result){
             S3FS_PRN_ERR("failed to put header after flushing file(%s) by(%d).", path.c_str(), result);
         }else{
