@@ -443,7 +443,7 @@ void* get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     std::unique_ptr<multipart_put_head_req_thparam> pthparam(static_cast<multipart_put_head_req_thparam*>(arg));
-    if(!pthparam || !pthparam->ppartdata || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
+    if(!pthparam || !pthparam->petag || !pthparam->pthparam_lock || !pthparam->pretrycount || !pthparam->presult){
         return reinterpret_cast<void*>(-EIO);
     }
 
@@ -467,13 +467,15 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){
-                // add into stat cache
+                // set etag for this part
                 {
                     const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
 
                     auto etag = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag");
-                    pthparam->ppartdata->uploaded    = etag.has_value();
-                    pthparam->ppartdata->petag->etag = peeloff(std::move(etag).value_or(""));
+                    if(!etag){
+                        S3FS_PRN_WARN("Put Head Request(%s->%s) could not parse ETag in response body.", pthparam->from.c_str(), pthparam->to.c_str());
+                    }
+                    pthparam->petag->etag = peeloff(std::move(etag).value_or(""));
                 }
                 result = 0;
                 break;
@@ -1301,7 +1303,6 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
     // common variables
     Semaphore    multi_head_sem(0);
     std::mutex   thparam_lock;
-    filepart     partdata;
     int          req_count  = 0;
     int          retrycount = 0;
     int          req_result = 0;
@@ -1309,17 +1310,23 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
     for(bytes_remaining = size; 0 < bytes_remaining; bytes_remaining -= chunk){
         chunk = bytes_remaining > S3fsCurl::GetMultipartCopySize() ? S3fsCurl::GetMultipartCopySize() : bytes_remaining;
 
-        partdata.add_etag_list(list);
+        // [NOTE]
+        // Each part needs its own etagpair in the list because the worker
+        // threads run in parallel and store the response ETag through this
+        // pointer.  (etaglist_t is a std::list, so pointers remain stable.)
+        //
+        list.emplace_back(nullptr, static_cast<int>(list.size()) + 1);
+        etagpair* petag = &list.back();
 
         // parameter for thread worker (freed in multipart_put_head_req_threadworker)
         auto thargs           = std::make_unique<multipart_put_head_req_thparam>();
         thargs->from          = strfrom;
         thargs->to            = strto;
         thargs->upload_id     = upload_id;
-        thargs->part_number   = partdata.get_part_number();
+        thargs->part_number   = petag->part_num;
         thargs->meta          = meta;
         thargs->pthparam_lock = &thparam_lock;
-        thargs->ppartdata     = &partdata;
+        thargs->petag         = petag;
         thargs->pretrycount   = &retrycount;
         thargs->presult       = &req_result;
 
@@ -1375,6 +1382,11 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
 
     // completion process
     if(0 != (result = complete_multipart_upload_request(strto, upload_id, list))){
+        S3FS_PRN_ERR("error completing multipart upload(errno=%d).", result);
+        int result2;
+        if(0 != (result2 = abort_multipart_upload_request(strto, upload_id))){
+            S3FS_PRN_ERR("error aborting multipart upload(errno=%d).", result2);
+        }
         return result;
     }
 
