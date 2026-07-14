@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -28,21 +29,22 @@
 // [NOTE]
 // This program operates on a file which is unlinked while it is still
 // open.  FUSE(libfuse) passes a null path to the file handle based
-// handlers(read/write/flush/fsync/release and fstat) for such a file,
-// especially when mounted with -o hard_remove, and s3fs must serve
-// them from the open file descriptor.
+// handlers(read/write/flush/fsync/release) for such a file, especially
+// when mounted with -o hard_remove, and s3fs must serve them from the
+// open file descriptor.
 //
 int main(int argc, const char *argv[])
 {
-    if(argc != 2){
+    if((argc != 2 && argc != 3) || (argc == 3 && 0 != strcmp(argv[2], "allow_estale_fstat"))){
         fprintf(stderr, "[ERROR] Wrong parameters\n");
-        fprintf(stdout, "[Usage] unlink_open_file <file path>\n");
+        fprintf(stdout, "[Usage] unlink_open_file <file path> [allow_estale_fstat]\n");
         exit(EXIT_FAILURE);
     }
 
-    const char* filepath = argv[1];
-    const char  data[]   = "hello world";
-    auto        datalen  = static_cast<ssize_t>(sizeof(data) - 1);
+    const char* filepath           = argv[1];
+    bool        allow_estale_fstat = (3 == argc);
+    const char  data[]             = "hello world";
+    auto        datalen            = static_cast<ssize_t>(sizeof(data) - 1);
     int         fd;
 
     // create file
@@ -86,14 +88,23 @@ int main(int argc, const char *argv[])
     }
 
     // fstat the unlinked file
+    //
+    // [NOTE]
+    // fstat(2) sends a FUSE GETATTR request without the file handle, so
+    // when the file has no path(mounted with hard_remove) and the kernel
+    // attribute cache has expired, libfuse itself fails the request with
+    // ESTALE before the file system is called.  The caller passes
+    // allow_estale_fstat to accept that outcome.
+    //
     struct stat st;
-    if(0 != fstat(fd, &st)){
-        fprintf(stderr, "[ERROR] Could not fstat unlinked file(%s)\n", filepath);
-        close(fd);
-        exit(EXIT_FAILURE);
-    }
-    if(datalen != st.st_size){
-        fprintf(stderr, "[ERROR] Wrong size(%lld) of unlinked file(%s)\n", static_cast<long long>(st.st_size), filepath);
+    if(0 == fstat(fd, &st)){
+        if(datalen != st.st_size){
+            fprintf(stderr, "[ERROR] Wrong size(%lld) of unlinked file(%s)\n", static_cast<long long>(st.st_size), filepath);
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+    }else if(!allow_estale_fstat || ESTALE != errno){
+        fprintf(stderr, "[ERROR] Could not fstat unlinked file(%s) by errno(%d)\n", filepath, errno);
         close(fd);
         exit(EXIT_FAILURE);
     }

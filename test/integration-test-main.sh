@@ -142,7 +142,16 @@ function test_unlink_open_file {
     # to these handlers and s3fs must serve them by the pseudo fd alone
     # (see issue #2903).  Without hard_remove, FUSE hides the file with
     # a .fuse_hidden name instead.
-    ../../unlink_open_file "${TEST_TEXT_FILE}"
+    #
+    # With hard_remove, fstat(2) may fail with ESTALE in libfuse itself:
+    # the kernel sends GETATTR without the file handle, which cannot be
+    # answered for a file without a path once the kernel attribute cache
+    # has expired.
+    if s3fs_args | grep -q hard_remove; then
+        ../../unlink_open_file "${TEST_TEXT_FILE}" allow_estale_fstat
+    else
+        ../../unlink_open_file "${TEST_TEXT_FILE}"
+    fi
 
     # the file must not exist(and must not be recreated) after the last close
     if [ -e "${TEST_TEXT_FILE}" ]; then
