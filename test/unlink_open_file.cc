@@ -35,14 +35,14 @@
 //
 int main(int argc, const char *argv[])
 {
-    if((argc != 2 && argc != 3) || (argc == 3 && 0 != strcmp(argv[2], "allow_estale_fstat"))){
+    if((argc != 2 && argc != 3) || (argc == 3 && 0 != strcmp(argv[2], "allow_fstat_failure"))){
         fprintf(stderr, "[ERROR] Wrong parameters\n");
-        fprintf(stdout, "[Usage] unlink_open_file <file path> [allow_estale_fstat]\n");
+        fprintf(stdout, "[Usage] unlink_open_file <file path> [allow_fstat_failure]\n");
         exit(EXIT_FAILURE);
     }
 
-    const char* filepath           = argv[1];
-    bool        allow_estale_fstat = (3 == argc);
+    const char* filepath            = argv[1];
+    bool        allow_fstat_failure = (3 == argc);
     const char  data[]             = "hello world";
     auto        datalen            = static_cast<ssize_t>(sizeof(data) - 1);
     int         fd;
@@ -92,9 +92,10 @@ int main(int argc, const char *argv[])
     // [NOTE]
     // fstat(2) sends a FUSE GETATTR request without the file handle, so
     // when the file has no path(mounted with hard_remove) and the kernel
-    // attribute cache has expired, libfuse itself fails the request with
-    // ESTALE before the file system is called.  The caller passes
-    // allow_estale_fstat to accept that outcome.
+    // attribute cache has expired, libfuse itself fails the request
+    // before the file system is called: with ESTALE since libfuse 3.12
+    // and with ENOENT before that.  The caller passes
+    // allow_fstat_failure to accept those outcomes.
     //
     struct stat st;
     if(0 == fstat(fd, &st)){
@@ -103,7 +104,7 @@ int main(int argc, const char *argv[])
             close(fd);
             exit(EXIT_FAILURE);
         }
-    }else if(!allow_estale_fstat || ESTALE != errno){
+    }else if(!allow_fstat_failure || (ESTALE != errno && ENOENT != errno)){
         fprintf(stderr, "[ERROR] Could not fstat unlinked file(%s) by errno(%d)\n", filepath, errno);
         close(fd);
         exit(EXIT_FAILURE);
