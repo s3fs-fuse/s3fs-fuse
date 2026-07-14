@@ -99,6 +99,7 @@ static off_t max_dirty_data       = 5LL * 1024LL * 1024LL * 1024LL;
 static bool use_wtf8              = false;
 static off_t fake_diskfree_size   = -1; // default is not set(-1)
 static bool update_parent_dir_stat= false;  // default not updating parent directory stats
+static bool use_hard_remove       = false;  // default hides open files as .fuse_hidden instead of removing them
 static fsblkcnt_t bucket_block_count;                       // advertised block count of the bucket
 static unsigned long s3fs_block_size = 16 * 1024 * 1024;    // s3fs block size is 16MB
 
@@ -903,6 +904,34 @@ int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_
 
 static int s3fs_getattr(const char* _path, struct stat* stbuf, struct fuse_file_info* info)
 {
+    // [NOTE]
+    // FUSE passes a null path for file handle based operations(fstat)
+    // on a file which was unlinked while it is still open.  The object
+    // no longer has a path, so serve the request from the open entity
+    // found by the pseudo fd.
+    //
+    if(!_path || '\0' == _path[0]){
+        if(!info){
+            return -ESTALE;
+        }
+        FUSE_CTX_INFO("[path=null][pseudo_fd=%llu]", (unsigned long long)(info->fh));
+
+        AutoFdEntity autoent;
+        const FdEntity* ent;
+        if(nullptr == (ent = autoent.GetExistFdEntityByPseudoFd(static_cast<int>(info->fh)))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for null path", (unsigned long long)(info->fh));
+            return -ESTALE;
+        }
+        if(stbuf){
+            if(!ent->GetStatsFromMeta(*stbuf)){
+                return -EIO;
+            }
+            stbuf->st_blksize = 4096;
+            stbuf->st_blocks  = get_blocks(stbuf->st_size);
+        }
+        return 0;
+    }
+
     WTF8_ENCODE(path)
     int result;
 
@@ -1082,6 +1111,10 @@ static int create_file_object(const char* path, mode_t mode, uid_t uid, gid_t gi
 
 static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int       result;
     struct fuse_context* pcxt;
@@ -1114,6 +1147,10 @@ static int s3fs_mknod(const char *_path, mode_t mode, dev_t rdev)
 
 static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     std::string  strpath = path;
     int          result;
@@ -1232,6 +1269,10 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
 
 static int s3fs_mkdir(const char* _path, mode_t mode)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int result;
     struct fuse_context* pcxt;
@@ -1287,6 +1328,10 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
 
 static int s3fs_unlink(const char* _path)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     std::string strPath = path;
     int         result;
@@ -1341,6 +1386,10 @@ static int directory_empty(const char* path)
 
 static int s3fs_rmdir(const char* _path)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string strpath;
@@ -1432,6 +1481,10 @@ static int s3fs_rmdir(const char* _path)
 
 static int s3fs_symlink(const char* _from, const char* _to)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     std::string                strFrom = trim(from);;
@@ -1934,6 +1987,10 @@ static int rename_directory(const char* from, const char* to)
 
 static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     struct stat buf;
@@ -2000,6 +2057,10 @@ static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 
 static int s3fs_link(const char* _from, const char* _to)
 {
+    if(!_from || '\0' == _from[0] || !_to || '\0' == _to[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     FUSE_CTX_INFO("[from=%s][to=%s]", from, to);
@@ -2008,6 +2069,14 @@ static int s3fs_link(const char* _from, const char* _to)
 
 static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
+    // [NOTE]
+    // A null path(fchmod on a file which was unlinked while open) cannot
+    // be handled by the path based metadata operations, returns ESTALE.
+    //
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2154,6 +2223,10 @@ static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* inf
 
 static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2254,6 +2327,14 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_in
 
 static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
+    // [NOTE]
+    // A null path(fchown on a file which was unlinked while open) cannot
+    // be handled by the path based metadata operations, returns ESTALE.
+    //
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2406,6 +2487,10 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_
 
 static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid, struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2637,6 +2722,15 @@ static int update_mctime_parent_directory(const char* _path)
 
 static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
+    // [NOTE]
+    // A null path(futimens on a file which was unlinked while open)
+    // cannot be handled by the path based metadata operations, returns
+    // ESTALE.
+    //
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2795,6 +2889,10 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct f
 
 static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], struct fuse_file_info* info)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int         result;
     std::string curpath;
@@ -2903,6 +3001,14 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], s
 
 static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* info)
 {
+    // [NOTE]
+    // A null path(ftruncate on a file which was unlinked while open)
+    // cannot be handled by the path based operations, returns ESTALE.
+    //
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int          result;
     headers_t    meta;
@@ -3014,6 +3120,10 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
 
 static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int result;
     struct stat st;
@@ -3117,15 +3227,31 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
 static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
+    std::string unlinked_path;
     ssize_t res;
-
-    FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(nullptr == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened pseudo_fd(=%llu) for path(%s)", (unsigned long long)(fi->fh), path);
-        return -EIO;
+    if(path && '\0' != path[0]){
+        FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
+
+        if(nullptr == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(=%llu) for path(%s)", (unsigned long long)(fi->fh), path);
+            return -EIO;
+        }
+    }else{
+        // [NOTE]
+        // FUSE passes a null path for file handle based operations on a
+        // file which was unlinked while it is still open.  Find the
+        // entity by the pseudo fd alone.
+        //
+        if(nullptr == (ent = autoent.GetExistFdEntityByPseudoFd(static_cast<int>(fi->fh)))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for null path", (unsigned long long)(fi->fh));
+            return -ESTALE;
+        }
+        unlinked_path = ent->GetPath();
+        path          = unlinked_path.c_str();
+        FUSE_CTX_DBG("[unlinked path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long>(offset), (unsigned long long)(fi->fh));
     }
 
     // check real file size
@@ -3145,15 +3271,33 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
 static int s3fs_write(const char* _path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi)
 {
     WTF8_ENCODE(path)
+    std::string unlinked_path;
+    bool        is_unlinked = false;
     ssize_t res;
-
-    FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
 
     AutoFdEntity autoent;
     FdEntity*    ent;
-    if(nullptr == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
-        S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
-        return -EIO;
+    if(path && '\0' != path[0]){
+        FUSE_CTX_DBG("[path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
+
+        if(nullptr == (ent = autoent.GetExistFdEntity(path, static_cast<int>(fi->fh)))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for path(%s)", (unsigned long long)(fi->fh), path);
+            return -EIO;
+        }
+    }else{
+        // [NOTE]
+        // FUSE passes a null path for file handle based operations on a
+        // file which was unlinked while it is still open.  Find the
+        // entity by the pseudo fd alone.
+        //
+        if(nullptr == (ent = autoent.GetExistFdEntityByPseudoFd(static_cast<int>(fi->fh)))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for null path", (unsigned long long)(fi->fh));
+            return -ESTALE;
+        }
+        is_unlinked   = true;
+        unlinked_path = ent->GetPath();
+        path          = unlinked_path.c_str();
+        FUSE_CTX_DBG("[unlinked path=%s][size=%zu][offset=%lld][pseudo_fd=%llu]", path, size, static_cast<long long int>(offset), (unsigned long long)(fi->fh));
     }
 
     if(0 > (res = ent->Write(static_cast<int>(fi->fh), buf, offset, size))){
@@ -3168,7 +3312,12 @@ static int s3fs_write(const char* _path, const char* buf, size_t size, off_t off
         return result;
     }
 
-    if(max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
+    // [NOTE]
+    // For an unlinked file, do not upload on the way: the object was
+    // deleted and uploading would recreate it.  The dirty data is
+    // discarded when the file is finally closed.
+    //
+    if(!is_unlinked && max_dirty_data != -1 && ent->BytesModified() >= max_dirty_data){
         int flushres;
         if(0 != (flushres = ent->RowFlush(static_cast<int>(fi->fh), path, true))){
             S3FS_PRN_ERR("could not upload file(%s): result=%d", path, flushres);
@@ -3216,6 +3365,24 @@ static int s3fs_statfs(const char* _path, struct statvfs* stbuf)
 
 static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 {
+    // [NOTE]
+    // FUSE passes a null path for file handle based operations on a
+    // file which was unlinked while it is still open.  The object was
+    // deleted, so do not upload the pending data here: uploading would
+    // recreate the deleted object.  Discarding the data at close is the
+    // POSIX behavior for a file with no remaining links.
+    //
+    if(!_path || '\0' == _path[0]){
+        FUSE_CTX_INFO("[path=null][pseudo_fd=%llu]", (unsigned long long)(fi->fh));
+
+        AutoFdEntity autoent;
+        if(nullptr == autoent.GetExistFdEntityByPseudoFd(static_cast<int>(fi->fh))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for null path", (unsigned long long)(fi->fh));
+            return -ESTALE;
+        }
+        return 0;
+    }
+
     WTF8_ENCODE(path)
     int result;
 
@@ -3281,6 +3448,21 @@ static int s3fs_flush(const char* _path, struct fuse_file_info* fi)
 //
 static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi)
 {
+    // [NOTE]
+    // A null path means the file was unlinked while it is still open.
+    // As in s3fs_flush, do not upload the pending data for it.
+    //
+    if(!_path || '\0' == _path[0]){
+        FUSE_CTX_INFO("[path=null][datasync=%d][pseudo_fd=%llu]", datasync, (unsigned long long)(fi->fh));
+
+        AutoFdEntity autoent;
+        if(nullptr == autoent.GetExistFdEntityByPseudoFd(static_cast<int>(fi->fh))){
+            S3FS_PRN_ERR("could not find opened pseudo_fd(%llu) for null path", (unsigned long long)(fi->fh));
+            return -ESTALE;
+        }
+        return 0;
+    }
+
     WTF8_ENCODE(path)
     int result = 0;
 
@@ -3320,6 +3502,24 @@ static int s3fs_fsync(const char* _path, int datasync, struct fuse_file_info* fi
 
 static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 {
+    // [NOTE]
+    // A null path means the file was unlinked while it is still open.
+    // The object was deleted, so do not upload the pending data(which
+    // would recreate the deleted object), only release the pseudo fd.
+    // The cache file is removed with the last pseudo fd.
+    //
+    if(!_path || '\0' == _path[0]){
+        FUSE_CTX_INFO("[path=null][pseudo_fd=%llu]", (unsigned long long)(fi->fh));
+
+        AutoFdEntity autoent;
+        if(nullptr == autoent.AttachByPseudoFd(static_cast<int>(fi->fh))){
+            S3FS_PRN_ERR("could not find pseudo_fd(%llu) for null path", (unsigned long long)(fi->fh));
+            return -ESTALE;
+        }
+        // the pseudo fd is released by the AutoFdEntity destructor.
+        return 0;
+    }
+
     WTF8_ENCODE(path)
     FUSE_CTX_INFO("[path=%s][pseudo_fd=%llu]", path, (unsigned long long)(fi->fh));
 
@@ -3415,6 +3615,10 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
 
 static int s3fs_opendir(const char* _path, struct fuse_file_info* fi)
 {
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     int result;
     int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
@@ -3563,6 +3767,15 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags)
 {
+    // [NOTE]
+    // FUSE passes a null path for a directory which was removed while
+    // it is still open.  s3fs does not keep a directory handle, so this
+    // cannot be served and returns ESTALE.
+    //
+    if(!_path || '\0' == _path[0]){
+        return -ESTALE;
+    }
+
     WTF8_ENCODE(path)
     S3ObjList head;
     int result;
@@ -3920,6 +4133,9 @@ static int set_xattrs_to_header(headers_t& meta, const char* name, const char* v
 
 static int s3fs_setxattr(const char* _path, const char* name, const char* value, size_t size, int flags)
 {
+    if(!_path || '\0' == _path[0] || !name){
+        return -ESTALE;
+    }
     if(!value && 0 < size){
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
@@ -4426,6 +4642,13 @@ static void* s3fs_init(struct fuse_conn_info* conn, fuse_config* config)
 {
     S3FS_PRN_INIT_INFO("init v%s%s with %s, credential-library(%s)", VERSION, COMMIT_HASH_VAL, s3fs_crypt_lib_name(), S3fsCred::get()->GetCredFuncVersion(false));
 
+    // hard_remove: really remove files which are unlinked while open,
+    // instead of renaming them to ".fuse_hidden..." objects.  The file
+    // handle based handlers then receive a null path for such files.
+    if(use_hard_remove){
+        config->hard_remove = 1;
+    }
+
     // cache(remove cache dirs at first)
     if(is_remove_cache && (!CacheFileStat::DeleteCacheFileStatDirectory() || !FdManager::DeleteCacheDirectory())){
         S3FS_PRN_DBG("Could not initialize cache directory.");
@@ -4480,6 +4703,10 @@ static void s3fs_destroy(void*)
 
 static int s3fs_access(const char* path, int mask)
 {
+    if(!path || '\0' == path[0]){
+        return -ESTALE;
+    }
+
     FUSE_CTX_INFO("[path=%s][mask=%s%s%s%s]", path,
             ((mask & R_OK) == R_OK) ? "R_OK " : "",
             ((mask & W_OK) == W_OK) ? "W_OK " : "",
@@ -5483,6 +5710,17 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         else if(0 == strcmp(arg, "norenameapi")){
             norenameapi = true;
+            return 0;
+        }
+        else if(0 == strcmp(arg, "hard_remove")){
+            // [NOTE]
+            // FUSE2 parsed this option in libfuse, but FUSE3 moved it to
+            // fuse_config which only the file system can set(in s3fs_init).
+            // Removing an opened file immediately avoids the expensive
+            // server side copy to a ".fuse_hidden..." object.  The file
+            // handle based handlers then receive a null path and serve
+            // the file by its pseudo fd.
+            use_hard_remove = true;
             return 0;
         }
         else if(0 == strcmp(arg, "complement_stat")){

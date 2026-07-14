@@ -134,6 +134,23 @@ function test_truncate_shrink_read_file {
     rm_test_file
 }
 
+function test_unlink_open_file {
+    describe "Testing operations on a file which is unlinked while open ..."
+
+    # This exercises the file handle based FUSE handlers after the file
+    # has lost its path.  With -o hard_remove, FUSE passes a null path
+    # to these handlers and s3fs must serve them by the pseudo fd alone
+    # (see issue #2903).  Without hard_remove, FUSE hides the file with
+    # a .fuse_hidden name instead.
+    ../../unlink_open_file "${TEST_TEXT_FILE}"
+
+    # the file must not exist(and must not be recreated) after the last close
+    if [ -e "${TEST_TEXT_FILE}" ]; then
+        echo "file ${TEST_TEXT_FILE} exists after unlink and close"
+        return 1
+    fi
+}
+
 function test_mv_file {
     describe "Testing mv file function ..."
     # if the rename file exists, delete it
@@ -2918,6 +2935,7 @@ function add_all_tests {
     add_tests test_truncate_empty_file
     add_tests test_truncate_shrink_file
     add_tests test_truncate_shrink_read_file
+    add_tests test_unlink_open_file
     add_tests test_mv_file
     add_tests test_mv_to_exist_file
     add_tests test_mv_empty_directory
@@ -3055,7 +3073,15 @@ function add_all_tests {
         add_tests test_pjdfstest_open
         add_tests test_pjdfstest_posix_fallocate
         add_tests test_pjdfstest_truncate
-        add_tests test_pjdfstest_unlink
+        # [NOTE]
+        # pjdfstest unlink/14.t expects fstat to return st_nlink=0 for a
+        # file which was unlinked while open.  With hard_remove, the
+        # kernel sends GETATTR without a file handle for a read-only fd
+        # and libfuse itself fails the pathless lookup with ESTALE, so
+        # this expectation cannot be satisfied.
+        if ! s3fs_args | grep -q hard_remove; then
+            add_tests test_pjdfstest_unlink
+        fi
         add_tests test_pjdfstest_utimensat
 
         # [NOTE][TODO]

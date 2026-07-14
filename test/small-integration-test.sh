@@ -60,6 +60,7 @@ if [ -n "${ALL_TESTS}" ]; then
         #use_sse  # TODO: S3Proxy does not support SSE
         #use_sse=custom:/tmp/ssekey  # TODO: S3Proxy does not support SSE
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o streamupload"
+        hard_remove  # exercise null-path file handle operations
     )
 else
     FLAGS=(
