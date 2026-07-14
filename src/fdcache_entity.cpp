@@ -1717,6 +1717,43 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
     return result;
 }
 
+// [NOTE]
+// This method is called when a stream upload fails.
+// The in-flight multipart upload(if any) is aborted, and the untreated
+// list is rebuilt from the modified pages.
+//
+// The next flush derives the areas to upload only from the untreated
+// list and the upload list(see ExtractUploadPartsFromAllArea).  If the
+// untreated list were simply cleared here, a retried flush(such as the
+// one in s3fs_release) would find nothing to upload, copy the stale
+// object over itself and mark the modified pages clean, silently losing
+// the written data.
+//
+void FdEntity::AbortStreamUpload(PseudoFdInfo* pseudo_obj)
+{
+    // Abort the in-flight multipart upload(best effort), because its
+    // uploaded parts are discarded below and a retry starts a new one.
+    if(pseudo_obj->IsUploading()){
+        auto upload_id = pseudo_obj->GetUploadId();
+        if(upload_id){
+            int result;
+            if(0 != (result = abort_multipart_upload_request(path, *upload_id))){
+                S3FS_PRN_ERR("failed to abort multipart upload by errno(%d), but continue...", result);
+            }
+        }
+    }
+    pseudo_obj->ClearUploadInfo();
+
+    // Rebuild the untreated list from the modified pages, so that the
+    // next flush uploads all modified areas again.
+    untreated_list.ClearAll();
+    for(auto iter = pagelist.pages.cbegin(); iter != pagelist.pages.cend(); ++iter){
+        if(iter->modified && 0 < iter->bytes){
+            AddUntreated(iter->offset, iter->bytes);
+        }
+    }
+}
+
 //
 // ([TODO] This is a temporary modification till S3fsMultiCurl is deprecated.)
 //
@@ -1774,10 +1811,8 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         // reset uploaded file size
         size_orgmeta = st.st_size;
 
-        untreated_list.ClearAll();
-
-        if(0 == result){
-            pagelist.ClearAllModified();
+        if(0 != result){
+            AbortStreamUpload(pseudo_obj);
         }
 
     }else{
@@ -1880,14 +1915,12 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
         if(!pseudo_obj->ParallelMultipartUploadAll(path.c_str(), to_upload_list, to_copy_list, result)){
             S3FS_PRN_ERR("Failed to upload multipart parts.");
-            untreated_list.ClearAll();
-            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
+            AbortStreamUpload(pseudo_obj);     // abort upload and rebuild untreated list
             return -EIO;
         }
         if(0 != result){
             S3FS_PRN_ERR("An error(%d) occurred in some threads that were uploading parallel multiparts, but continue to clean up..", result);
-            untreated_list.ClearAll();
-            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
+            AbortStreamUpload(pseudo_obj);     // abort upload and rebuild untreated list
             return result;
         }
 
@@ -1898,19 +1931,12 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         etaglist_t  parts;
         if(!upload_id || !pseudo_obj->GetEtaglist(parts)){
             S3FS_PRN_ERR("There is no upload id or etag list.");
-            untreated_list.ClearAll();
-            pseudo_obj->ClearUploadInfo();     // clear multipart upload info
+            AbortStreamUpload(pseudo_obj);     // abort upload and rebuild untreated list
             return -EIO;
         }else{
             if(0 != (result = complete_multipart_upload_request(path, *upload_id, parts))){
                 S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
-                untreated_list.ClearAll();
-                pseudo_obj->ClearUploadInfo(); // clear multipart upload info
-
-                int result2;
-                if(0 != (result2 = abort_multipart_upload_request(path, *upload_id))){
-                    S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
-                }
+                AbortStreamUpload(pseudo_obj); // abort upload and rebuild untreated list
                 return result;
             }
         }
@@ -1923,9 +1949,9 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             return result;
         }
     }
-    untreated_list.ClearAll();
 
     if(0 == result){
+        untreated_list.ClearAll();
         pagelist.ClearAllModified();
     }
 
