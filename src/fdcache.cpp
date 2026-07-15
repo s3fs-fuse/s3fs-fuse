@@ -790,21 +790,17 @@ bool FdManager::Close(FdEntity* ent, int fd)
 bool FdManager::ChangeEntityToTempPath(std::shared_ptr<FdEntity> ent, const char* path)
 {
     // [NOTE]
-    // If the path element does not exist in fent, it may be because a cache directory
-    // has not been specified, or FdEntity::NoCacheLoadAndPost has already been called.
-    // In these cases, the path element(=ent) has already been registered as a TempPath
-    // element from fent, so there is no need to register ent in the except_fent map.
-    // (Processing with UpdateEntityToTempPath should not be performed.)
+    // This method only stages the entity into the except_fent map, which is
+    // guarded by except_entmap_lock.  It must NOT acquire fd_manager_lock here:
+    // this method is called from FdEntity::NoCacheLoadAndPost while the entity
+    // locks are held, and fd_manager_lock is always acquired before the entity
+    // locks elsewhere (e.g. FdManager::Close).  Acquiring fd_manager_lock here
+    // would invert the lock order and can deadlock the whole mount.
     //
-    {
-        const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
-
-        if(fent.cend() == fent.find(path)){
-            S3FS_PRN_INFO("Already path(%s) element does not exist in fent map.", path);
-            return false;
-        }
-    }
-
+    // Whether "path" is still mapped to this entity in fent -- and therefore
+    // whether it actually needs to be re-keyed to a temporary path -- is decided
+    // later in UpdateEntityToTempPath, which already runs under fd_manager_lock.
+    //
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
     except_fent[path] = std::move(ent);
 
@@ -816,28 +812,27 @@ bool FdManager::UpdateEntityToTempPath()
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
 
     for(auto except_iter = except_fent.cbegin(); except_iter != except_fent.cend(); ){
-        std::string tmppath;
-        FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
-
         auto iter = fent.find(except_iter->first);
         if(fent.cend() != iter && iter->second.get() == except_iter->second.get()){
-            // Move the entry to the new key
+            // The path is still mapped to this entity, so move it to a new
+            // temporary key.
+            std::string tmppath;
+            FdManager::MakeRandomTempPath(except_iter->first.c_str(), tmppath);
+
             fent[tmppath] = std::move(iter->second);
             fent.erase(iter);
             except_iter   = except_fent.erase(except_iter);
         }else{
             // [NOTE]
-            // ChangeEntityToTempPath method is called and the FdEntity pointer
-            // set into except_fent is mapped into fent.
-            // And since this method is always called before manipulating fent,
-            // it will not enter here.
-            // Thus, if it enters here, a warning is output.
+            // The path is no longer mapped to this entity in fent.  This happens
+            // when a cache directory has not been specified, or when
+            // NoCacheLoadAndPost has already moved this entity to a temporary
+            // path.  In either case the entity is already registered correctly,
+            // so just drop the staging entry without creating a new fent mapping.
+            // (This is the case the old fd_manager_lock guarded pre-check in
+            // ChangeEntityToTempPath used to filter out.)
             //
-            S3FS_PRN_WARN("For some reason the FdEntity pointer(for %s) is not found in the fent map. Recovery procedures are being performed, but the cause needs to be identified.", except_iter->first.c_str());
-
-            // Add the entry for recovery procedures
-            fent[tmppath] = except_iter->second;
-            except_iter   = except_fent.erase(except_iter);
+            except_iter = except_fent.erase(except_iter);
         }
     }
     return true;
