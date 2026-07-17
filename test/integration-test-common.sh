@@ -267,7 +267,10 @@ function start_s3fs {
     #
     local DIRECT_IO_OPT=""
     if [ "$(uname)" = "Darwin" ]; then
-       sudo mdutil -a -i off
+       # Skip sudo when indexing is already disabled, e.g., non-interactive runs
+       if mdutil -a -s | grep -q -i 'enabled'; then
+           sudo mdutil -a -i off
+       fi
     fi
 
     # Set environment variables or options for proxy.
