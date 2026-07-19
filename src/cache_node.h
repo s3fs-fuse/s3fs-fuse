@@ -24,6 +24,7 @@
 #include <iosfwd>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include "common.h"
 #include "metaheader.h"
@@ -134,7 +135,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         bool HasMetaHasLock() const REQUIRES(StatCacheNode::cache_lock);
         bool GetNoTruncateHasLock() const REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetHasLock(headers_t* pmeta, struct stat* pst) REQUIRES(StatCacheNode::cache_lock);
-        virtual bool GetExtraHasLock(std::string& value) REQUIRES(StatCacheNode::cache_lock);
+        virtual std::optional<std::string> GetExtraHasLock() REQUIRES(StatCacheNode::cache_lock);
         virtual s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) const REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetS3ObjListHasLock(S3ObjList& list) const REQUIRES(StatCacheNode::cache_lock);
 
@@ -207,7 +208,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         struct timespec GetDate() const;
         unsigned long GetHitCount() const;
         unsigned long IncrementHitCount();
-        bool GetExtra(std::string& value);
+        std::optional<std::string> GetExtra();
         s3obj_type_map_t::size_type GetChildMap(s3obj_type_map_t& childmap) const;
         bool GetS3ObjList(S3ObjList& list);
 

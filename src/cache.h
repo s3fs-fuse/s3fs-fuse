@@ -22,6 +22,7 @@
 #define S3FS_CACHE_H_
 
 #include <mutex>
+#include <optional>
 #include <string>
 #include <sys/stat.h>
 
@@ -120,7 +121,7 @@ class StatCache
         bool DelStat(const std::string& key);
 
         // Cache for symbolic link
-        bool GetSymlink(const std::string& key, std::string& value);
+        std::optional<std::string> GetSymlink(const std::string& key);
         bool AddSymlink(const std::string& key, const struct stat& stbuf, const headers_t& meta, const std::string& value);
 
         // Get List/Map

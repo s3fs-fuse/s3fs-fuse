@@ -27,6 +27,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "common.h"
@@ -289,7 +290,7 @@ class S3fsCurl
         static bool IsSetSseKmsId() { return !S3fsCurl::ssekmsid.empty(); }
         static const char* GetSseKmsId() { return S3fsCurl::ssekmsid.c_str(); }
         static bool GetSseKey(std::string& md5, std::string& ssekey);
-        static bool GetSseKeyMd5(size_t pos, std::string& md5);
+        static std::optional<std::string> GetSseKeyMd5(size_t pos);
         static size_t GetSseKeyCount();
         static bool SetContentMd5(bool flag);
         static bool SetVerbose(bool flag);
@@ -324,10 +325,10 @@ class S3fsCurl
         bool DestroyCurlHandle(bool clear_internal_data = true);
         bool DestroyCurlHandleHasLock(bool clear_internal_data = true) REQUIRES(S3fsCurl::curl_handles_lock);
 
-        bool GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response);
-        bool GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token);
-        bool GetResponseCode(long& responseCode, bool from_curl_handle = true) const;
-        bool GetCurlErrorString(std::string& strError) const;
+        std::optional<std::string> GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key);
+        std::optional<std::string> GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token);
+        std::optional<long> GetResponseCode(bool from_curl_handle = true) const;
+        std::optional<std::string> GetCurlErrorString() const;
         int RequestPerform(bool dontAddAuthHeaders=false);
         int DeleteRequest(const char* tpath);
         int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);

@@ -651,15 +651,15 @@ bool S3fsCurl::PushbackSseKeys(const std::string& input)
     }
 
     // make MD5
-    std::string strMd5;
-    if(!make_md5_from_binary(raw_key.c_str(), raw_key.length(), strMd5)){
+    auto strMd5 = make_md5_from_binary(raw_key.c_str(), raw_key.length());
+    if(!strMd5){
         S3FS_PRN_ERR("Could not make MD5 from SSE-C keys(%s).", mask_sensitive_string(raw_key.c_str()));
         return false;
     }
     // mapped MD5 = SSE Key
     sseckeymap_t md5map;
     md5map.clear();
-    md5map[strMd5] = base64_key;
+    md5map[*strMd5] = base64_key;
     S3fsCurl::sseckeys.push_back(std::move(md5map));
 
     return true;
@@ -808,19 +808,18 @@ bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
     return false;
 }
 
-bool S3fsCurl::GetSseKeyMd5(size_t pos, std::string& md5)
+std::optional<std::string> S3fsCurl::GetSseKeyMd5(size_t pos)
 {
     if(S3fsCurl::sseckeys.size() <= pos){
-        return false;
+        return std::nullopt;
     }
     size_t cnt = 0;
     for(auto iter = S3fsCurl::sseckeys.cbegin(); iter != S3fsCurl::sseckeys.cend(); ++iter, ++cnt){
         if(pos == cnt){
-            md5 = iter->begin()->first;
-            return true;
+            return iter->begin()->first;
         }
     }
-    return false;
+    return std::nullopt;
 }
 
 size_t S3fsCurl::GetSseKeyCount()
@@ -1112,9 +1111,8 @@ int S3fsCurl::MapPutErrorResponse(int result) const
     //     </Error>
     //
     const char* pstrbody = bodydata.c_str();
-    std::string code;
-    if(simple_parse_xml(pstrbody, bodydata.size(), "Code", code)){
-        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or nullptr). The request failed during copying the object in S3.  Code: %s", code.c_str());
+    if(auto code = simple_parse_xml(pstrbody, bodydata.size(), "Code")){
+        S3FS_PRN_ERR("Put request get 200 status response, but it included error body(or nullptr). The request failed during copying the object in S3.  Code: %s", code->c_str());
         // TODO: parse more specific error from <Code>
         result = -EIO;
     }
@@ -1603,31 +1601,26 @@ bool S3fsCurl::SetUseAhbe(bool ahbe)
     return old;
 }
 
-bool S3fsCurl::GetResponseCode(long& responseCode, bool from_curl_handle) const
+std::optional<long> S3fsCurl::GetResponseCode(bool from_curl_handle) const
 {
-    responseCode = -1;
-
     if(!from_curl_handle){
-        responseCode = LastResponseCode;
-    }else{
-        if(!hCurl){
-            return false;
-        }
-        if(CURLE_OK != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
-            return false;
-        }
-        responseCode = LastResponseCode;
+        return LastResponseCode;
     }
-    return true;
+    if(!hCurl){
+        return std::nullopt;
+    }
+    if(CURLE_OK != curl_easy_getinfo(hCurl, CURLINFO_RESPONSE_CODE, &LastResponseCode)){
+        return std::nullopt;
+    }
+    return LastResponseCode;
 }
 
-bool S3fsCurl::GetCurlErrorString(std::string& strError) const
+std::optional<std::string> S3fsCurl::GetCurlErrorString() const
 {
     if(CURLE_OK == curlCode){
-        return false;
+        return std::nullopt;
     }
-    strError = "CURL ERROR("s + std::to_string(curlCode) + "): "s + curl_easy_strerror(curlCode);
-    return true;
+    return "CURL ERROR("s + std::to_string(curlCode) + "): "s + curl_easy_strerror(curlCode);
 }
 
 //
@@ -2021,16 +2014,15 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
 
                 {
                     // Try to parse more specific AWS error code otherwise fall back to HTTP error code.
-                    std::string value;
-                    if(simple_parse_xml(bodydata.c_str(), bodydata.size(), "Code", value)){
+                    if(auto value = simple_parse_xml(bodydata.c_str(), bodydata.size(), "Code")){
                         // TODO: other error codes
-                        if(value == "EntityTooLarge"){
+                        if(*value == "EntityTooLarge"){
                             result = -EFBIG;
                             break;
-                        }else if(value == "InvalidObjectState"){
+                        }else if(*value == "InvalidObjectState"){
                             result = -EREMOTE;
                             break;
-                        }else if(value == "KeyTooLongError"){
+                        }else if(*value == "KeyTooLongError"){
                             result = -ENAMETOOLONG;
                             break;
                         }
@@ -2618,20 +2610,19 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
-bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, std::string& response)
+std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key)
 {
     if(!cred_url){
         S3FS_PRN_ERR("url is null.");
-        return false;
+        return std::nullopt;
     }
     url = cred_url;
-    response.clear();
 
     // at first set type for handle
     type = REQTYPE::IAMCRED;
 
     if(!CreateCurlHandle()){
-        return false;
+        return std::nullopt;
     }
     requestHeaders  = nullptr;
     responseHeaders.clear();
@@ -2654,16 +2645,16 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
         requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", "Basic Yng6Yng=");
 
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){              // POST
-            return false;
+            return std::nullopt;
         }
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
-            return false;
+            return std::nullopt;
         }
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
-            return false;
+            return std::nullopt;
         }
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){
-            return false;
+            return std::nullopt;
         }
     }
 
@@ -2672,16 +2663,16 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     }
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
-        return false;
+        return std::nullopt;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
-        return false;
+        return std::nullopt;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
-        return false;
+        return std::nullopt;
     }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent
-        return false;
+        return std::nullopt;
     }
 
     // [NOTE]
@@ -2691,27 +2682,27 @@ bool S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token,
     int result = RequestPerform(true);
 
     // analyzing response
+    std::optional<std::string> response;
     if(0 == result){
-        response.swap(bodydata);
+        response = std::move(bodydata);
     }else{
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAM role name.", result);
     }
     bodydata.clear();
 
-    return (0 == result);
+    return response;
 }
 
 //
 // Get IAM role name automatically.
 //
-bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token, std::string& token)
+std::optional<std::string> S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token)
 {
     if(!cred_url){
         S3FS_PRN_ERR("url is null.");
-        return false;
+        return std::nullopt;
     }
     url = cred_url;
-    token.clear();
 
     S3FS_PRN_INFO3("Get IAM Role name");
 
@@ -2719,7 +2710,7 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     type = REQTYPE::IAMROLE;
 
     if(!CreateCurlHandle()){
-        return false;
+        return std::nullopt;
     }
     requestHeaders  = nullptr;
     responseHeaders.clear();
@@ -2730,16 +2721,16 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     }
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
-        return false;
+        return std::nullopt;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
-        return false;
+        return std::nullopt;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
-        return false;
+        return std::nullopt;
     }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent
-        return false;
+        return std::nullopt;
     }
 
     // [NOTE]
@@ -2749,14 +2740,15 @@ bool S3fsCurl::GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_t
     int result = RequestPerform(true);
 
     // analyzing response
+    std::optional<std::string> token;
     if(0 == result){
-        token.swap(bodydata);
+        token = std::move(bodydata);
     }else{
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAM role name from meta data.", result);
     }
     bodydata.clear();
 
-    return (0 == result);
+    return token;
 }
 
 bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool is_copy)
@@ -2827,9 +2819,9 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
 
     // requestHeaders(SSE-C)
     if(SIZE_MAX != ssekey_pos && ssekey_pos < S3fsCurl::sseckeys.size()){
-        std::string md5;
-        if(!S3fsCurl::GetSseKeyMd5(ssekey_pos, md5) || !AddSseRequestHead(sse_type_t::SSE_C, md5, false)){
-            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, mask_sensitive_string(md5.c_str()));
+        auto md5 = S3fsCurl::GetSseKeyMd5(ssekey_pos);
+        if(!md5 || !AddSseRequestHead(sse_type_t::SSE_C, *md5, false)){
+            S3FS_PRN_ERR("Failed to set SSE-C headers for sse-c key pos(%zu)(=md5(%s)).", ssekey_pos, mask_sensitive_string(md5.value_or("").c_str()));
             return false;
         }
     }
@@ -3449,10 +3441,12 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
         return result;
     }
 
-    if(!simple_parse_xml(bodydata.c_str(), bodydata.size(), "UploadId", upload_id)){
+    auto parsed_upload_id = simple_parse_xml(bodydata.c_str(), bodydata.size(), "UploadId");
+    if(!parsed_upload_id){
         bodydata.clear();
         return -EIO;
     }
+    upload_id = std::move(*parsed_upload_id);
 
     bodydata.clear();
     return 0;
@@ -3882,9 +3876,9 @@ bool S3fsCurl::MultipartUploadContentPartComplete()
 
 bool S3fsCurl::MultipartUploadCopyPartComplete()
 {
-    std::string etag;
-    partdata.uploaded = simple_parse_xml(bodydata.c_str(), bodydata.size(), "ETag", etag);
-    partdata.petag->etag = peeloff(std::move(etag));
+    auto etag = simple_parse_xml(bodydata.c_str(), bodydata.size(), "ETag");
+    partdata.uploaded = etag.has_value();
+    partdata.petag->etag = peeloff(std::move(etag).value_or(""));
 
     return true;
 }

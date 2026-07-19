@@ -844,28 +844,26 @@ int FdEntity::SetFileTimesHasLock(const FileTimes& ts_times)
     return 0;
 }
 
-bool FdEntity::GetSize(off_t& size) const
+std::optional<off_t> FdEntity::GetSize() const
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
     if(-1 == physical_fd){
-        return false;
+        return std::nullopt;
     }
 
     const std::lock_guard<std::mutex> data_lock(fdent_data_lock);
-    size = pagelist.Size();
-    return true;
+    return pagelist.Size();
 }
 
-bool FdEntity::GetXattr(std::string& xattr) const
+std::optional<std::string> FdEntity::GetXattr() const
 {
     const std::lock_guard<std::mutex> lock(fdent_lock);
 
     auto iter = orgmeta.find("x-amz-meta-xattr");
     if(iter == orgmeta.cend()){
-        return false;
+        return std::nullopt;
     }
-    xattr = iter->second;
-    return true;
+    return iter->second;
 }
 
 bool FdEntity::SetXattr(const std::string& xattr)
@@ -1209,8 +1207,8 @@ int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, 
     }
 
     // get upload id
-    std::string upload_id;
-    if(!pseudo_obj->GetUploadId(upload_id)){
+    auto upload_id = pseudo_obj->GetUploadId();
+    if(!upload_id){
         return -EIO;
     }
 
@@ -1222,8 +1220,8 @@ int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, 
 
     // request to thread
     int result;
-    if(0 != (result = await_multipart_upload_part_request(path, tgfd, start, size, petag->part_num, upload_id, petag, false))){
-        S3FS_PRN_ERR("Failed No Cache Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][fd=%d][start=%lld][size=%lld]", result, path.c_str(), upload_id.c_str(), tgfd, static_cast<long long int>(start), static_cast<long long int>(size));
+    if(0 != (result = await_multipart_upload_part_request(path, tgfd, start, size, petag->part_num, *upload_id, petag, false))){
+        S3FS_PRN_ERR("Failed No Cache Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][fd=%d][start=%lld][size=%lld]", result, path.c_str(), upload_id->c_str(), tgfd, static_cast<long long int>(start), static_cast<long long int>(size));
         return result;
     }
     return 0;
@@ -1236,20 +1234,20 @@ int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, 
 int FdEntity::NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj)
 {
     // get upload id and etag list
-    std::string upload_id;
+    auto upload_id = pseudo_obj->GetUploadId();
     etaglist_t  parts;
-    if(!pseudo_obj->GetUploadId(upload_id) || !pseudo_obj->GetEtaglist(parts)){
+    if(!upload_id || !pseudo_obj->GetEtaglist(parts)){
         return -EIO;
     }
 
     int result;
-    if(0 != (result = complete_multipart_upload_request(path, upload_id, parts))){
+    if(0 != (result = complete_multipart_upload_request(path, *upload_id, parts))){
         S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
         untreated_list.ClearAll();
         pseudo_obj->ClearUploadInfo(); // clear multipart upload info
 
         int result2;
-        if(0 != (result2 = abort_multipart_upload_request(path, upload_id))){
+        if(0 != (result2 = abort_multipart_upload_request(path, *upload_id))){
             S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
         }
         return result;
@@ -1896,21 +1894,21 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
         // Complete uploading
         //
-        std::string upload_id;
+        auto upload_id = pseudo_obj->GetUploadId();
         etaglist_t  parts;
-        if(!pseudo_obj->GetUploadId(upload_id) || !pseudo_obj->GetEtaglist(parts)){
+        if(!upload_id || !pseudo_obj->GetEtaglist(parts)){
             S3FS_PRN_ERR("There is no upload id or etag list.");
             untreated_list.ClearAll();
             pseudo_obj->ClearUploadInfo();     // clear multipart upload info
             return -EIO;
         }else{
-            if(0 != (result = complete_multipart_upload_request(path, upload_id, parts))){
+            if(0 != (result = complete_multipart_upload_request(path, *upload_id, parts))){
                 S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
                 untreated_list.ClearAll();
                 pseudo_obj->ClearUploadInfo(); // clear multipart upload info
 
                 int result2;
-                if(0 != (result2 = abort_multipart_upload_request(path, upload_id))){
+                if(0 != (result2 = abort_multipart_upload_request(path, *upload_id))){
                     S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
                 }
                 return result;

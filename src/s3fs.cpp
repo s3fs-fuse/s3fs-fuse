@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unistd.h>
 #include <utility>
@@ -124,10 +125,10 @@ static int clone_directory_object(const char* from, const char* to, bool update_
 static int rename_directory(const char* from, const char* to);
 static int update_mctime_parent_directory(const char* _path);
 static int remote_mountpath_exists(const char* path, bool compat_dir);
-static bool get_meta_xattr_value(const char* path, std::string& rawvalue);
-static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue);
-static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key);
-static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue);
+static std::optional<std::string> get_meta_xattr_value(const char* path);
+static std::optional<std::string> get_parent_meta_xattr_value(const char* path);
+static std::optional<std::string> get_xattr_posix_key_value(const char* path, bool default_key);
+static std::optional<std::string> build_inherited_xattr_value(const char* path);
 static std::string build_xattrs(const xattrs_t& xattrs);
 static int s3fs_check_service();
 static bool set_mountpoint_attribute(struct stat& mpst);
@@ -973,7 +974,13 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
     }
 
     // get symlink path
-    if(!found_cache || !StatCache::getStatCacheData()->GetSymlink(strPath, strValue)){
+    std::optional<std::string> cachedlink;
+    if(found_cache){
+        cachedlink = StatCache::getStatCacheData()->GetSymlink(strPath);
+    }
+    if(cachedlink){
+        strValue = std::move(*cachedlink);
+    }else{
         // could not get symlink path from stat cache, so read symlink path from file.
         ssize_t ressize = 0;
         {
@@ -986,11 +993,12 @@ static int s3fs_readlink(const char* _path, char* buf, size_t size)
             }
 
             // Get size
-            off_t readsize;
-            if(!ent->GetSize(readsize)){
+            auto entsize = ent->GetSize();
+            if(!entsize){
                 S3FS_PRN_ERR("could not get file size(file=%s)", strPath.c_str());
                 return -EIO;
             }
+            off_t readsize = *entsize;
             if(static_cast<off_t>(size) <= readsize){
                 readsize = size - 1;
             }
@@ -1149,10 +1157,9 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
     meta["x-amz-meta-mtime"] = strnow;
     meta["x-amz-meta-ctime"] = strnow;
 
-    std::string xattrvalue;
-    if(build_inherited_xattr_value(strpath.c_str(), xattrvalue)){
-        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(xattrvalue).c_str());
-        meta["x-amz-meta-xattr"] = xattrvalue;
+    if(auto xattrvalue = build_inherited_xattr_value(strpath.c_str())){
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(*xattrvalue).c_str());
+        meta["x-amz-meta-xattr"] = *xattrvalue;
     }
 
     // Set stat structure
@@ -1257,13 +1264,8 @@ static int s3fs_mkdir(const char* _path, mode_t mode)
         return result;
     }
 
-    std::string xattrvalue;
-    const char* pxattrvalue;
-    if(get_parent_meta_xattr_value(path, xattrvalue)){
-        pxattrvalue = xattrvalue.c_str();
-    }else{
-        pxattrvalue = nullptr;
-    }
+    auto xattrvalue = get_parent_meta_xattr_value(path);
+    const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
     struct timespec now;
     s3fs_realtime(now);
@@ -1554,10 +1556,9 @@ static int rename_object(const char* from, const char* to, bool update_ctime)
     meta["Content-Type"]             = S3fsCurl::LookupMimeType(to);
     meta["x-amz-metadata-directive"] = "REPLACE";
 
-    std::string xattrvalue;
-    if(get_meta_xattr_value(from, xattrvalue)){
-        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(xattrvalue).c_str());
-        meta["x-amz-meta-xattr"] = xattrvalue;
+    if(auto xattrvalue = get_meta_xattr_value(from)){
+        S3FS_PRN_DBG("Set xattrs = %s", urlDecode(*xattrvalue).c_str());
+        meta["x-amz-meta-xattr"] = *xattrvalue;
     }
 
     // [NOTE]
@@ -1879,13 +1880,8 @@ static int rename_directory(const char* from, const char* to)
     // rename directory objects.
     for(auto mn_cur = mvnodes.cbegin(); mn_cur != mvnodes.cend(); ++mn_cur){
         if(mn_cur->is_dir && !mn_cur->old_path.empty()){
-            std::string xattrvalue;
-            const char* pxattrvalue;
-            if(get_meta_xattr_value(mn_cur->old_path.c_str(), xattrvalue)){
-                pxattrvalue = xattrvalue.c_str();
-            }else{
-                pxattrvalue = nullptr;
-            }
+            auto xattrvalue = get_meta_xattr_value(mn_cur->old_path.c_str());
+            const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
             // [NOTE]
             // The ctime is updated only for the top (from) directory.
@@ -2038,13 +2034,8 @@ static int s3fs_chmod(const char* _path, mode_t mode, struct fuse_file_info* inf
     }
 
     if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2184,13 +2175,8 @@ static int s3fs_chmod_nocopy(const char* _path, mode_t mode, struct fuse_file_in
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
@@ -2290,13 +2276,8 @@ static int s3fs_chown(const char* _path, uid_t uid, gid_t gid, struct fuse_file_
     }
 
     if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2442,13 +2423,8 @@ static int s3fs_chown_nocopy(const char* _path, uid_t uid, gid_t gid, struct fus
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
@@ -2579,13 +2555,8 @@ static int update_mctime_parent_directory(const char* _path)
     if(nocopyapi || NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(parentpath.c_str())){
         // Should rebuild directory object(except new type)
         // Need to remove old dir("dir" etc) and make new dir("dir/")
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(parentpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(parentpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
         // At first, remove directory old object
         if(!curpath.empty()){
@@ -2683,13 +2654,8 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct f
     }
 
     if(S_ISDIR(stbuf.st_mode) && (NEED_REPLACEDIR_OBJ(ObjType) || IS_CREATE_MP_STAT(normpath.c_str()))){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild directory object(except new type)
             // Need to remove old dir("dir" etc) and make new dir("dir/")
@@ -2841,13 +2807,8 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], s
     }
 
     if(S_ISDIR(stbuf.st_mode)){
-        std::string xattrvalue;
-        const char* pxattrvalue;
-        if(get_meta_xattr_value(curpath.c_str(), xattrvalue)){
-            pxattrvalue = xattrvalue.c_str();
-        }else{
-            pxattrvalue = nullptr;
-        }
+        auto xattrvalue = get_meta_xattr_value(curpath.c_str());
+        const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
         if(NEED_REPLACEDIR_OBJ(ObjType)){
             // Should rebuild all directory object
@@ -3071,9 +3032,11 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         //
         if(nullptr != (ent = autoent.OpenExistFdEntity(path)) && ent->IsModified()){
             // sets the file size being edited.
-            if(!ent->GetSize(st.st_size)){
+            auto entsize = ent->GetSize();
+            if(!entsize){
                 return -EIO;
             }
+            st.st_size = *entsize;
         }
     }
 
@@ -3129,8 +3092,8 @@ static int s3fs_read(const char* _path, char* buf, size_t size, off_t offset, st
     }
 
     // check real file size
-    off_t realsize = 0;
-    if(!ent->GetSize(realsize) || 0 == realsize){
+    auto realsize = ent->GetSize();
+    if(!realsize || 0 == *realsize){
         S3FS_PRN_DBG("file size is 0, so break to read.");
         return 0;
     }
@@ -3712,8 +3675,8 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                 // If did not specify "delimiter", s3 did not return "NextMarker".
                 // On this case, can use last name for next marker.
                 //
-                std::string lastname;
-                if(!head.GetLastName(lastname)){
+                auto lastname = head.GetLastName();
+                if(!lastname){
                     S3FS_PRN_WARN("Could not find next marker, thus break loop.");
                     truncated = false;
                 }else{
@@ -3721,7 +3684,7 @@ static int list_bucket(const char* path, S3ObjList& head, const char* delimiter,
                     if(s3_realpath.empty() || '/' != *s3_realpath.rbegin()){
                         next_marker += "/";
                     }
-                    next_marker += lastname;
+                    next_marker += *lastname;
                 }
             }
         }
@@ -3762,57 +3725,52 @@ static int remote_mountpath_exists(const char* path, bool compat_dir)
     return 0;
 }
 
-static bool get_meta_xattr_value(const char* path, std::string& rawvalue)
+static std::optional<std::string> get_meta_xattr_value(const char* path)
 {
     if(!path || '\0' == path[0]){
         S3FS_PRN_ERR("path is empty.");
-        return false;
+        return std::nullopt;
     }
     S3FS_PRN_DBG("[path=%s]", path);
-
-    rawvalue.clear();
 
     headers_t meta;
     if(0 != get_object_attribute(path, nullptr, &meta)){
         S3FS_PRN_ERR("Failed to get object(%s) headers", path);
-        return false;
+        return std::nullopt;
     }
 
     headers_t::const_iterator iter;
     if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
-        return false;
+        return std::nullopt;
     }
-    rawvalue = iter->second;
-    return true;
+    return iter->second;
 }
 
-static bool get_parent_meta_xattr_value(const char* path, std::string& rawvalue)
+static std::optional<std::string> get_parent_meta_xattr_value(const char* path)
 {
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
         // path is mount point, thus does not have parent.
-        return false;
+        return std::nullopt;
     }
 
     std::string parent = mydirname(path);
     if(parent.empty()){
         S3FS_PRN_ERR("Could not get parent path for %s.", path);
-        return false;
+        return std::nullopt;
     }
-    return get_meta_xattr_value(parent.c_str(), rawvalue);
+    return get_meta_xattr_value(parent.c_str());
 }
 
-static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue, bool default_key)
+static std::optional<std::string> get_xattr_posix_key_value(const char* path, bool default_key)
 {
-    xattrvalue.clear();
-
-    std::string rawvalue;
-    if(!get_meta_xattr_value(path, rawvalue)){
-        return false;
+    auto rawvalue = get_meta_xattr_value(path);
+    if(!rawvalue){
+        return std::nullopt;
     }
 
     xattrs_t xattrs;
-    if(0 == parse_xattrs(rawvalue, xattrs)){
-        return false;
+    if(0 == parse_xattrs(*rawvalue, xattrs)){
+        return std::nullopt;
     }
 
     std::string targetkey;
@@ -3824,13 +3782,11 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
 
     xattrs_t::iterator iter;
     if(xattrs.cend() == (iter = xattrs.find(targetkey))){
-        return false;
+        return std::nullopt;
     }
 
     // convert value by base64
-    xattrvalue = s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
-
-    return true;
+    return s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
 }
 
 // [NOTE]
@@ -3838,37 +3794,34 @@ static bool get_xattr_posix_key_value(const char* path, std::string& xattrvalue,
 // the parent directory as a POSIX ACL(system.posix_acl_access) value.
 // Returns false if the parent directory has no POSIX ACL defaults.
 //
-static bool build_inherited_xattr_value(const char* path, std::string& xattrvalue)
+static std::optional<std::string> build_inherited_xattr_value(const char* path)
 {
     S3FS_PRN_DBG("[path=%s]", path);
 
-    xattrvalue.clear();
-
     if(0 == strcmp(path, "/") || 0 == strcmp(path, ".")){
         // path is mount point, thus does not have parent.
-        return false;
+        return std::nullopt;
     }
 
     std::string parent = mydirname(path);
     if(parent.empty()){
         S3FS_PRN_ERR("Could not get parent path for %s.", path);
-        return false;
+        return std::nullopt;
     }
 
     // get parent's "system.posix_acl_default" value(base64'd).
-    std::string parent_default_value;
-    if(!get_xattr_posix_key_value(parent.c_str(), parent_default_value, true)){
-        return false;
+    auto parent_default_value = get_xattr_posix_key_value(parent.c_str(), true);
+    if(!parent_default_value){
+        return std::nullopt;
     }
 
     // build "system.posix_acl_access" from parent's default value
     std::string raw_xattr_value;
     raw_xattr_value  = "{\"system.posix_acl_access\":\"";
-    raw_xattr_value += parent_default_value;
+    raw_xattr_value += *parent_default_value;
     raw_xattr_value += "\"}";
 
-    xattrvalue = urlEncodePath(raw_xattr_value);
-    return true;
+    return urlEncodePath(raw_xattr_value);
 }
 
 static std::string build_xattrs(const xattrs_t& xattrs)
@@ -4006,14 +3959,13 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
     bool         need_put_header = true;
     if(nullptr != (ent = autoent.OpenExistFdEntity(curpath.c_str()))){
         // get xattr and make new xattr
-        std::string strxattr;
-        if(ent->GetXattr(strxattr)){
-            updatemeta["x-amz-meta-xattr"] = strxattr;
+        if(auto strxattr = ent->GetXattr()){
+            updatemeta["x-amz-meta-xattr"] = *strxattr;
         }else{
             // [NOTE]
             // Set an empty xattr.
             // This requires the key to be present in order to add xattr.
-            ent->SetXattr(strxattr);
+            ent->SetXattr(std::string());
         }
         // cppcheck-suppress unmatchedSuppression
         // cppcheck-suppress knownConditionTrueFalse
@@ -4503,22 +4455,18 @@ static int s3fs_access(const char* path, int mask)
 //
 // So this is cheap code but s3fs should get correct region automatically.
 //
-static bool check_region_error(const char* pbody, size_t len, std::string& expectregion)
+static std::optional<std::string> check_region_error(const char* pbody, size_t len)
 {
     if(!pbody){
-        return false;
+        return std::nullopt;
     }
 
-    std::string code;
-    if(!simple_parse_xml(pbody, len, "Code", code) || code != "AuthorizationHeaderMalformed"){
-        return false;
+    auto code = simple_parse_xml(pbody, len, "Code");
+    if(!code || *code != "AuthorizationHeaderMalformed"){
+        return std::nullopt;
     }
 
-    if(!simple_parse_xml(pbody, len, "Region", expectregion)){
-        return false;
-    }
-
-    return true;
+    return simple_parse_xml(pbody, len, "Region");
 }
 
 //
@@ -4549,9 +4497,11 @@ static bool check_invalid_access(long responseCode, const char* pbody, size_t le
     if(!pbody){
         return false;
     }
-    if(!simple_parse_xml(pbody, len, "Code", strErrorCode)){
+    auto code = simple_parse_xml(pbody, len, "Code");
+    if(!code){
         return false;
     }
+    strErrorCode = std::move(*code);
 
     if(400 == responseCode){
         for(const auto& strTgCode: strErrCodes400){
@@ -4569,22 +4519,18 @@ static bool check_invalid_access(long responseCode, const char* pbody, size_t le
     return false;
 }
 
-static bool check_endpoint_error(const char* pbody, size_t len, std::string& expectendpoint)
+static std::optional<std::string> check_endpoint_error(const char* pbody, size_t len)
 {
     if(!pbody){
-        return false;
+        return std::nullopt;
     }
 
-    std::string code;
-    if(!simple_parse_xml(pbody, len, "Code", code) || code != "PermanentRedirect"){
-        return false;
+    auto code = simple_parse_xml(pbody, len, "Code");
+    if(!code || *code != "PermanentRedirect"){
+        return std::nullopt;
     }
 
-    if(!simple_parse_xml(pbody, len, "Endpoint", expectendpoint)){
-        return false;
-    }
-
-    return true;
+    return simple_parse_xml(pbody, len, "Endpoint");
 }
 
 static bool check_invalid_sse_arg_error(const char* pbody, size_t len)
@@ -4593,27 +4539,23 @@ static bool check_invalid_sse_arg_error(const char* pbody, size_t len)
         return false;
     }
 
-    std::string code;
-    if(!simple_parse_xml(pbody, len, "Code", code) || code != "InvalidArgument"){
+    auto code = simple_parse_xml(pbody, len, "Code");
+    if(!code || *code != "InvalidArgument"){
         return false;
     }
-    std::string argname;
-    if(!simple_parse_xml(pbody, len, "ArgumentName", argname) || argname != "x-amz-server-side-encryption"){
+    auto argname = simple_parse_xml(pbody, len, "ArgumentName");
+    if(!argname || *argname != "x-amz-server-side-encryption"){
         return false;
     }
     return true;
 }
 
-static bool check_error_message(const char* pbody, size_t len, std::string& message)
+static std::optional<std::string> check_error_message(const char* pbody, size_t len)
 {
-    message.clear();
     if(!pbody){
-        return false;
+        return std::nullopt;
     }
-    if(!simple_parse_xml(pbody, len, "Message", message)){
-        return false;
-    }
-    return true;
+    return simple_parse_xml(pbody, len, "Message");
 }
 
 // [NOTE]
@@ -4652,12 +4594,11 @@ static int s3fs_check_service()
             // check wrong region, and automatically switch region
             if(300 <= responseCode && responseCode < 500){
                 // check region error(for putting message or retrying)
-                std::string expectregion;
-                std::string expectendpoint;
                 std::string invalidAccessCode;
 
                 // Check if any case can be retried
-                if(check_region_error(responseBody.c_str(), responseBody.size(), expectregion)){
+                if(auto regionopt = check_region_error(responseBody.c_str(), responseBody.size())){
+                    const std::string& expectregion = *regionopt;
                     // [NOTE]
                     // If region is not specified(using us-east-1 region) and
                     // an error is encountered accessing a different region, we
@@ -4702,12 +4643,12 @@ static int s3fs_check_service()
                     S3FS_PRN_CRIT("Received '%s' error from the S3 service. Please check and resolve the cause of this error and try again.", invalidAccessCode.c_str());
                     return EXIT_FAILURE;
 
-                }else if(check_endpoint_error(responseBody.c_str(), responseBody.size(), expectendpoint)){
+                }else if(auto expectendpoint = check_endpoint_error(responseBody.c_str(), responseBody.size())){
                     // redirect error
                     if(pathrequeststyle){
                         S3FS_PRN_CRIT("S3 service returned PermanentRedirect (current is url(%s) and region(%s)). You need to specify correct url(http(s)://s3-<region>.amazonaws.com) and region option with use_path_request_style option.", s3host.c_str(), region.c_str());
                     }else{
-                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and region(%s)). You need to specify correct region option.", expectendpoint.c_str(), s3host.c_str(), region.c_str());
+                        S3FS_PRN_CRIT("S3 service returned PermanentRedirect with %s (current is url(%s) and region(%s)). You need to specify correct region option.", expectendpoint->c_str(), s3host.c_str(), region.c_str());
                     }
                     return EXIT_FAILURE;
 
@@ -4730,8 +4671,7 @@ static int s3fs_check_service()
                     S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : (host=%s, message=\"%s\")", s3host.c_str(), responseBody.c_str());
                 }else{
                     // parse error message if existed
-                    std::string errMessage;
-                    check_error_message(responseBody.c_str(), responseBody.size(), errMessage);
+                    std::string errMessage = check_error_message(responseBody.c_str(), responseBody.size()).value_or("");
 
                     if(responseCode == 400){
                         S3FS_PRN_CRIT("Failed to check bucket and directory for mount point : Bad Request(host=%s, message=%s)", s3host.c_str(), errMessage.c_str());
@@ -5828,7 +5768,9 @@ int main(int argc, char* argv[])
                 if(nullptr != optarg && 0 == strcasecmp(optarg, "all")){ // all is 0s
                     incomp_abort_time = 0;
                 }else if(nullptr != optarg){
-                    if(!convert_unixtime_from_option_arg(optarg, incomp_abort_time)){
+                    if(auto converted = convert_unixtime_from_option_arg(optarg)){
+                        incomp_abort_time = *converted;
+                    }else{
                         S3FS_PRN_EXIT("--incomplete-mpu-abort option argument is wrong.");
                         exit(EXIT_FAILURE);
                     }

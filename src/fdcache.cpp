@@ -555,8 +555,8 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         //
         if(!ignore_modify && ent->IsModified()){
             // If the file is being modified and it's size is larger than size parameter, it will not be resized.
-            off_t cur_size = 0;
-            if(ent->GetSize(cur_size) && size <= cur_size){
+            auto cur_size = ent->GetSize();
+            if(cur_size && size <= *cur_size){
                 size = -1;
             }
         }

@@ -682,25 +682,24 @@ unsigned long StatCacheNode::IncrementHitCount()
     return ++hit_count;
 }
 
-bool StatCacheNode::GetExtraHasLock(std::string& value)
+std::optional<std::string> StatCacheNode::GetExtraHasLock()
 {
     if(!has_extval){
-        return false;
+        return std::nullopt;
     }
-    value = extvalue;
 
     if(StatCacheNode::IsExpireIntervalType){
         SetCurrentTime(cache_date);
     }
     ++hit_count;
 
-    return true;
+    return extvalue;
 }
 
-bool StatCacheNode::GetExtra(std::string& value)
+std::optional<std::string> StatCacheNode::GetExtra()
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
-    return GetExtraHasLock(value);
+    return GetExtraHasLock();
 }
 
 s3obj_type_map_t::size_type StatCacheNode::GetChildMapHasLock(s3obj_type_map_t& childmap) const

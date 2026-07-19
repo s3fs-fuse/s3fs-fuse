@@ -489,14 +489,11 @@ int append_objects_from_xml(const char* path, xmlDocPtr doc, S3ObjList& head)
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
-bool simple_parse_xml(const char* data, size_t len, const char* key, std::string& value)
+std::optional<std::string> simple_parse_xml(const char* data, size_t len, const char* key)
 {
-    bool result = false;
-
     if(!data || !key || 0 == len){
-        return false;
+        return std::nullopt;
     }
-    value.clear();
 
     // [NOTE]
     // If data is not nullptr and len is 0, this function will output the message
@@ -513,11 +510,11 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
         }else{
             S3FS_PRN_ERR("xmlReadMemory returns with error.");
         }
-        return false;
+        return std::nullopt;
     }
 
     if(nullptr == doc->children){
-        return false;
+        return std::nullopt;
     }
     for(xmlNodePtr cur_node = doc->children->children; nullptr != cur_node; cur_node = cur_node->next){
         // For DEBUG
@@ -532,16 +529,14 @@ bool simple_parse_xml(const char* data, size_t len, const char* key, std::string
             if(cur_node->children){
                 if(XML_TEXT_NODE == cur_node->children->type){
                     if(elementName == key) {
-                        value = reinterpret_cast<const char *>(cur_node->children->content);
-                        result    = true;
-                        break;
+                        return std::string(reinterpret_cast<const char *>(cur_node->children->content));
                     }
                 }
             }
         }
     }
 
-    return result;
+    return std::nullopt;
 }
 
 /*

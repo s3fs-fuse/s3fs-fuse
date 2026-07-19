@@ -73,7 +73,9 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        if(!s3fscurl.GetResponseCode(responseCode, false)){
+        if(auto rc = s3fscurl.GetResponseCode(false)){
+            responseCode = *rc;
+        }else{
             result = -EIO;
             break;
         }
@@ -304,9 +306,8 @@ void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     // output to the Body here.
     //
     if(0 > pthparam->result && S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == s3fscurl.GetLastResponseCode()){
-        std::string curlError;
-        if(s3fscurl.GetCurlErrorString(curlError)){
-            *(pthparam->presponseBody) = curlError;
+        if(auto curlError = s3fscurl.GetCurlErrorString()){
+            *(pthparam->presponseBody) = *curlError;
         }else{
             *(pthparam->presponseBody) = s3fscurl.GetBodyData();
         }
@@ -457,7 +458,9 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        if(!s3fscurl.GetResponseCode(responseCode, false)){
+        if(auto rc = s3fscurl.GetResponseCode(false)){
+            responseCode = *rc;
+        }else{
             result = -EIO;
             break;
         }
@@ -468,9 +471,9 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
                 {
                     const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
 
-                    std::string etag;
-                    pthparam->ppartdata->uploaded    = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag", etag);
-                    pthparam->ppartdata->petag->etag = peeloff(std::move(etag));
+                    auto etag = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag");
+                    pthparam->ppartdata->uploaded    = etag.has_value();
+                    pthparam->ppartdata->petag->etag = peeloff(std::move(etag).value_or(""));
                 }
                 result = 0;
                 break;
@@ -578,7 +581,9 @@ void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         bool     isResetOffset= true;
         CURLcode curlCode     = s3fscurl.GetCurlCode();
         long     responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
-        if(!s3fscurl.GetResponseCode(responseCode, false)){
+        if(auto rc = s3fscurl.GetResponseCode(false)){
+            responseCode = *rc;
+        }else{
             result = -EIO;
             break;
         }
@@ -1522,7 +1527,9 @@ int get_iamrole_request(const std::string& strurl, const std::string& striamtoke
 
     S3fsCurl s3fscurl;
     int      result = 0;
-    if(!s3fscurl.GetIAMRoleFromMetaData(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()), token)){
+    if(auto iamrole = s3fscurl.GetIAMRoleFromMetaData(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()))){
+        token = std::move(*iamrole);
+    }else{
         S3FS_PRN_ERR("Something error occurred during getting IAM Role from MetaData.");
         result = -EIO;
     }
@@ -1538,7 +1545,9 @@ int get_iamcred_request(const std::string& strurl, const std::string& striamtoke
 
     S3fsCurl s3fscurl;
     int      result = 0;
-    if(!s3fscurl.GetIAMCredentials(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()), (stribmsecret.empty() ? nullptr : stribmsecret.c_str()), cred)){
+    if(auto iamcred = s3fscurl.GetIAMCredentials(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()), (stribmsecret.empty() ? nullptr : stribmsecret.c_str()))){
+        cred = std::move(*iamcred);
+    }else{
         S3FS_PRN_ERR("Something error occurred during getting IAM Credentials.");
         result = -EIO;
     }

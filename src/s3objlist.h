@@ -22,6 +22,7 @@
 #define S3FS_S3OBJLIST_H_
 
 #include <map>
+#include <optional>
 #include <string>
 #include <sys/types.h>
 #include <utility>
@@ -75,7 +76,7 @@ class S3ObjList
         bool IsDir(const char* name) const;
         bool GetNameList(s3obj_list_t& list, bool OnlyNormalized = true, bool CutSlash = true) const;
         bool GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized = true, bool CutSlash = true) const;
-        bool GetLastName(std::string& lastname) const;
+        std::optional<std::string> GetLastName() const;
         bool HasName(const std::string& strName) const;
         bool Remove(const std::string& strName);
         void Dump(const std::string& indent, std::ostringstream& oss) const;
