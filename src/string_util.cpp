@@ -472,7 +472,7 @@ bool s3fs_wtf8_encode(const char *s, std::string *result)
     bool invalid = false;
 
     // Pass valid utf8 code through
-    for (; *s; s++) {
+    for (; s && *s; s++) {
         const unsigned char c = *s;
 
         // single byte encoding
@@ -549,7 +549,7 @@ std::string s3fs_wtf8_encode(const std::string &s)
 bool s3fs_wtf8_decode(const char *s, std::string *result)
 {
     bool encoded = false;
-    for (; *s; s++) {
+    for (; s && *s; s++) {
         unsigned char c = *s;
         // look for a three byte tuple matching our encoding code
         if ((c & 0xf0) == 0xe0 && (s[1] & 0xc0) == 0x80 && (s[2] & 0xc0) == 0x80) {

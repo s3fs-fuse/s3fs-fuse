@@ -373,6 +373,11 @@ For a distributed object storage which is compatibility S3 API without PUT (copy
 This option is a subset of nocopyapi option. The nocopyapi option does not use copy-api for all command (ex. chmod, chown, touch, mv, etc), but this option does not use copy-api for only rename command (ex. mv).
 If this option is specified with nocopyapi, then s3fs ignores it.
 .TP
+\fB\-o\fR hard_remove - remove objects which are unlinked while open.
+By default, a file which is removed while another process has it open is renamed to a hidden ".fuse_hidden*" object and removed when it is finally closed, which costs an extra server side copy.
+If this option is specified, the object is removed immediately and s3fs keeps serving the open file handles from the local cache.
+Pending writes to such a file are discarded at close, because the object no longer exists.
+.TP
 \fB\-o\fR use_path_request_style (use legacy API calling style)
 Enable compatibility with S3-like APIs which do not support the virtual-host request style, by using the older path request style.
 .TP

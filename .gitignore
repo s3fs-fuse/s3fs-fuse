@@ -93,6 +93,7 @@ test/write_multiblock
 test/mknod_test
 test/truncate_read_file
 test/cr_filename
+test/unlink_open_file
 
 #
 # Windows ports

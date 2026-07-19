@@ -640,6 +640,37 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
     return nullptr;
 }
 
+// [NOTE]
+// This method finds the entity that owns the pseudo fd without a path.
+// It is used by FUSE handlers when the path argument is null, which
+// happens when the file was unlinked(or renamed over) while it is
+// still open.
+// Pseudo fds are unique across all entities(see PseudoFdManager), so
+// the pseudo fd alone identifies the entity.
+// This method does not create a new pseudo fd.
+//
+FdEntity* FdManager::GetFdEntityByPseudoFd(int existfd)
+{
+    S3FS_PRN_DBG("[pseudo_fd=%d]", existfd);
+
+    if(-1 == existfd){
+        return nullptr;
+    }
+
+    const std::lock_guard<std::mutex> lock(FdManager::fd_manager_lock);
+
+    UpdateEntityToTempPath();
+
+    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
+        if(iter->second && iter->second->FindPseudoFd(existfd)){
+            return iter->second.get();
+        }
+    }
+
+    // not found entity
+    return nullptr;
+}
+
 FdEntity* FdManager::OpenExistFdEntity(const char* path, int& fd, int flags)
 {
     S3FS_PRN_DBG("[path=%s][flags=0x%x]", SAFESTRPTR(path), flags);

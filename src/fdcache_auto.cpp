@@ -76,6 +76,23 @@ FdEntity* AutoFdEntity::Attach(const char* path, int existfd)
     return pFdEntity;
 }
 
+// [NOTE]
+// Same as Attach, but finds the entity by pseudo fd alone.
+// This is used when the path is not available(null path from FUSE for
+// a file which was unlinked while open).
+//
+FdEntity* AutoFdEntity::AttachByPseudoFd(int existfd)
+{
+    Close();
+
+    if(nullptr == (pFdEntity = FdManager::get()->GetFdEntityByPseudoFd(existfd))){
+        S3FS_PRN_DBG("Could not find fd entity object(pseudo_fd=%d)", existfd);
+        return nullptr;
+    }
+    pseudo_fd = existfd;
+    return pFdEntity;
+}
+
 FdEntity* AutoFdEntity::Open(const char* path, const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, int* error)
 {
     Close();
@@ -106,6 +123,18 @@ FdEntity* AutoFdEntity::GetExistFdEntity(const char* path, int existfd)
         return nullptr;
     }
     return ent;
+}
+
+// [NOTE]
+// Same as GetExistFdEntity, but finds the entity by pseudo fd alone.
+// This is used when the path is not available(null path from FUSE for
+// a file which was unlinked while open).
+//
+FdEntity* AutoFdEntity::GetExistFdEntityByPseudoFd(int existfd)
+{
+    Close();
+
+    return FdManager::get()->GetFdEntityByPseudoFd(existfd);
 }
 
 FdEntity* AutoFdEntity::OpenExistFdEntity(const char* path, int flags)

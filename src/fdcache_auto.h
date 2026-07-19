@@ -53,10 +53,12 @@ class AutoFdEntity
       bool Close();
       int Detach();
       FdEntity* Attach(const char* path, int existfd);
+      FdEntity* AttachByPseudoFd(int existfd);
       int GetPseudoFd() const { return pseudo_fd; }
 
       FdEntity* Open(const char* path, const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags, bool force_tmpfile, bool is_create, bool ignore_modify, int* error = nullptr);
       FdEntity* GetExistFdEntity(const char* path, int existfd = -1);
+      FdEntity* GetExistFdEntityByPseudoFd(int existfd);
       FdEntity* OpenExistFdEntity(const char* path, int flags = O_RDONLY);
 };
 
