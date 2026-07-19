@@ -47,11 +47,6 @@ bool                    S3fsLog::time_stamp       = true;
 //-------------------------------------------------------------------
 // S3fsLog class : class methods
 //-------------------------------------------------------------------
-bool S3fsLog::IsS3fsLogLevel(S3fsLog::Level level)
-{
-    return static_cast<int>(level) == (static_cast<int>(S3fsLog::debug_level) & static_cast<int>(level));
-}
-
 std::string S3fsLog::GetCurrentTime()
 {
     std::ostringstream current_time;
