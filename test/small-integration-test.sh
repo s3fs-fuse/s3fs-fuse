@@ -51,6 +51,7 @@ if [ -n "${ALL_TESTS}" ]; then
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat"
         enable_content_md5
         disable_noobj_cache
+        fastreaddir
         "max_stat_cache_size=100"
         nocopyapi
         nomultipart
