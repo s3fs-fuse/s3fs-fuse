@@ -978,7 +978,7 @@ bool S3fsCurl::SetProxy(const char* url)
         pos += strlen("://");
 
         // Check if it is other than "http://"
-        if(is_prefix(tmpurl.c_str(), "http://")){
+        if(!is_prefix(tmpurl.c_str(), "http://")){
             is_http = false;
         }
     }else{
