@@ -86,6 +86,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:26.04" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         autotools-dev
@@ -112,6 +113,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         autotools-dev
@@ -138,6 +140,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         autotools-dev
@@ -166,6 +169,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         autotools-dev
@@ -194,6 +198,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         autotools-dev
@@ -231,6 +236,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
     PACKAGE_INSTALL_ADDITIONAL_OPTIONS="--allowerasing"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         automake
         curl
@@ -263,6 +269,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         automake
         curl
@@ -294,6 +301,7 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:44" ] ||
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         automake
         curl
@@ -324,6 +332,7 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:16.0" ]; then
     PACKAGE_INSTALL_OPTIONS="install -y"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         automake
         curl
@@ -348,6 +357,7 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.24" ]; then
     PACKAGE_INSTALL_OPTIONS="add --no-progress --no-cache"
 
     INSTALL_PACKAGES=(
+        acl
         attr
         autoconf
         automake
