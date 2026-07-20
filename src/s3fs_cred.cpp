@@ -118,20 +118,6 @@ bool UpdateS3fsCredential(char** ppaccess_key_id, char** ppsecret_access_key, ch
 //-------------------------------------------------------------------
 // Class Variables
 //-------------------------------------------------------------------
-constexpr char S3fsCred::ALLBUCKET_FIELDS_TYPE[];
-constexpr char S3fsCred::KEYVAL_FIELDS_TYPE[];
-constexpr char S3fsCred::AWS_ACCESSKEYID[];
-constexpr char S3fsCred::AWS_SECRETKEY[];
-
-constexpr char S3fsCred::ECS_IAM_ENV_VAR[];
-constexpr char S3fsCred::IAMCRED_ACCESSKEYID[];
-constexpr char S3fsCred::IAMCRED_SECRETACCESSKEY[];
-constexpr char S3fsCred::IAMCRED_ROLEARN[];
-
-constexpr char S3fsCred::IAMv2_token_url[];
-constexpr char S3fsCred::IAMv2_token_ttl_hdr[];
-constexpr char S3fsCred::IAMv2_token_hdr[];
-
 std::string S3fsCred::bucket_name;
 
 //-------------------------------------------------------------------

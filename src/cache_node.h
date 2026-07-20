@@ -34,7 +34,7 @@
 //-------------------------------------------------------------------
 // Utilities
 //-------------------------------------------------------------------
-#define MAX_STAT_CACHE_COUNTER  6
+inline constexpr int MAX_STAT_CACHE_COUNTER = 6;
 
 constexpr int stat_counter_pos(objtype_t type)
 {

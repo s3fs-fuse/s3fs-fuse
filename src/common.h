@@ -31,8 +31,8 @@
 // Global variables
 //-------------------------------------------------------------------
 // TODO: namespace these
-static constexpr int64_t  FIVE_GB            = 5LL * 1024LL * 1024LL * 1024LL;
-static constexpr off_t    MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
+inline constexpr int64_t  FIVE_GB            = 5LL * 1024LL * 1024LL * 1024LL;
+inline constexpr off_t    MIN_MULTIPART_SIZE = 5 * 1024 * 1024;
 
 extern bool           foreground;
 extern bool           nomultipart;

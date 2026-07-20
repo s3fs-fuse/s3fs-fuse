@@ -35,9 +35,6 @@
 //-------------------------------------------------------------------
 // S3fsLog class : variables
 //-------------------------------------------------------------------
-constexpr char          S3fsLog::LOGFILEENV[];
-constexpr const char*   S3fsLog::nest_spaces[];
-constexpr char          S3fsLog::MSGTIMESTAMP[];
 S3fsLog*                S3fsLog::pSingleton       = nullptr;
 S3fsLog::Level          S3fsLog::debug_level      = S3fsLog::Level::CRIT;
 FILE*                   S3fsLog::logfp            = nullptr;
