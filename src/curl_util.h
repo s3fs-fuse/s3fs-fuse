@@ -25,6 +25,7 @@
 #include <curl/curl.h>
 #include <optional>
 #include <string>
+#include <string_view>
 #include "metaheader.h"
 
 enum class sse_type_t : uint8_t;
@@ -36,18 +37,18 @@ struct curl_slist* curl_slist_sort_insert(struct curl_slist* list, const char* k
 struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key);
 std::string get_sorted_header_keys(const struct curl_slist* list);
 std::string get_canonical_headers(const struct curl_slist* list, bool only_amz = false);
-std::string get_header_value(const struct curl_slist* list, const std::string &key);
+std::string get_header_value(const struct curl_slist* list, std::string_view key);
 bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
 int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_st_size = true);    // implement in s3fs.cpp
 
 std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length);
-std::string url_to_host(const std::string &url);
+std::string url_to_host(std::string_view url);
 std::string get_bucket_host();
 const char* getCurlDebugHead(curl_infotype type);
 
-bool etag_equals(const std::string& s1, const std::string& s2);
+bool etag_equals(std::string_view s1, std::string_view s2);
 
 #endif // S3FS_CURL_UTIL_H_
 

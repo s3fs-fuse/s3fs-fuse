@@ -159,7 +159,7 @@ static constexpr char encode_general_except_chars[] = ".-_~";    // For general 
 static constexpr char encode_path_except_chars[]    = ".-_~/";   // For fuse(included path) URL encode
 static constexpr char encode_query_except_chars[]   = ".-_~=&%"; // For query params(and encoded string)
 
-static std::string rawUrlEncode(const std::string &s, const char* except_chars)
+static std::string rawUrlEncode(std::string_view s, const char* except_chars)
 {
     std::string result;
     for(unsigned char c : s){
@@ -177,22 +177,22 @@ static std::string rawUrlEncode(const std::string &s, const char* except_chars)
     return result;
 }
 
-std::string urlEncodeGeneral(const std::string &s)
+std::string urlEncodeGeneral(std::string_view s)
 {
     return rawUrlEncode(s, encode_general_except_chars);
 }
 
-std::string urlEncodePath(const std::string &s)
+std::string urlEncodePath(std::string_view s)
 {
     return rawUrlEncode(s, encode_path_except_chars);
 }
 
-std::string urlEncodeQuery(const std::string &s)
+std::string urlEncodeQuery(std::string_view s)
 {
     return rawUrlEncode(s, encode_query_except_chars);
 }
 
-std::string urlDecode(const std::string& s)
+std::string urlDecode(std::string_view s)
 {
     std::string result;
     for(size_t i = 0; i < s.length(); ++i){

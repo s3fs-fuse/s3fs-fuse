@@ -144,7 +144,7 @@ std::string get_sorted_header_keys(const struct curl_slist* list)
     return sorted_headers;
 }
 
-std::string get_header_value(const struct curl_slist* list, const std::string &key)
+std::string get_header_value(const struct curl_slist* list, std::string_view key)
 {
     if(!list){
         return "";
@@ -154,7 +154,7 @@ std::string get_header_value(const struct curl_slist* list, const std::string &k
         std::string strkey = list->data;
         size_t pos;
         if(std::string::npos != (pos = strkey.find(':', 0))){
-            if(0 == strcasecmp(trim(strkey.substr(0, pos)).c_str(), key.c_str())){
+            if(CaseInsensitiveStringView(trim(strkey.substr(0, pos))) == key){
                 return trim(strkey.substr(pos+1));
             }
         }
@@ -221,9 +221,9 @@ std::string prepare_url(const char* url)
     size_t bucket_length = token.size();
     size_t uri_length = 0;
 
-    if(is_prefix(url_str.c_str(), "https://")){
+    if(is_prefix(url_str, "https://")){
         uri_length = 8;
-    } else if(is_prefix(url_str.c_str(), "http://")) {
+    } else if(is_prefix(url_str, "http://")) {
         uri_length = 7;
     }
     uri  = url_str.substr(0, uri_length);
@@ -262,17 +262,17 @@ std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length)
     return s3fs_base64(binary.data(), binary.size());
 }
 
-std::string url_to_host(const std::string &url)
+std::string url_to_host(std::string_view url)
 {
-    S3FS_PRN_INFO3("url is %s", url.c_str());
+    S3FS_PRN_INFO3("url is %.*s", static_cast<int>(url.size()), url.data());
 
     static constexpr char HTTP[] = "http://";
     static constexpr char HTTPS[] = "https://";
     std::string hostname;
 
-    if (is_prefix(url.c_str(), HTTP)) {
+    if (is_prefix(url, HTTP)) {
         hostname = url.substr(sizeof(HTTP) - 1);
-    } else if (is_prefix(url.c_str(), HTTPS)) {
+    } else if (is_prefix(url, HTTPS)) {
         hostname = url.substr(sizeof(HTTPS) - 1);
     } else {
         S3FS_PRN_EXIT("url does not begin with http:// or https://");
@@ -321,9 +321,15 @@ const char* getCurlDebugHead(curl_infotype type)
 //
 // compare ETag ignoring quotes and case
 //
-bool etag_equals(const std::string& s1, const std::string& s2)
+bool etag_equals(std::string_view s1, std::string_view s2)
 {
-    return 0 == strcasecmp(peeloff(s1).c_str(), peeloff(s2).c_str());
+    if(2 <= s1.size() && '"' == s1.front() && '"' == s1.back()){
+        s1 = s1.substr(1, s1.size() - 2);
+    }
+    if(2 <= s2.size() && '"' == s2.front() && '"' == s2.back()){
+        s2 = s2.substr(1, s2.size() - 2);
+    }
+    return CaseInsensitiveStringView(s1) == s2;
 }
 
 /*
