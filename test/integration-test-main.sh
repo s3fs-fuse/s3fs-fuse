@@ -1172,10 +1172,12 @@ function test_update_time_touch_a() {
         fi
     else
         # [macos] fuse-t
-        # atime/ctime/mtime are all updated.
+        # atime/ctime are updated.  mtime depends on the macOS NFS client:
+        # older versions (e.g. macOS 14) update it while newer versions
+        # (e.g. macOS 26) preserve it like POSIX requires.
         #
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime != $mtime"
+        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ]; then
+            echo "touch with -a option expected updated ctime: $base_ctime != $ctime and atime: $base_atime != $atime"
             return 1
         fi
     fi
@@ -1414,10 +1416,12 @@ function test_update_directory_time_touch_a {
         fi
     else
         # [macos] fuse-t
-        # atime/ctime/mtime are all updated.
+        # atime/ctime are updated.  mtime depends on the macOS NFS client:
+        # older versions (e.g. macOS 14) update it while newer versions
+        # (e.g. macOS 26) preserve it like POSIX requires.
         #
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime != $mtime"
+        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ]; then
+            echo "touch with -a option expected updated ctime: $base_ctime != $ctime and atime: $base_atime != $atime"
             return 1
         fi
     fi
