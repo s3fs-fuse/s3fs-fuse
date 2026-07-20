@@ -107,7 +107,7 @@ class PageList
 
         bool Init(off_t size, bool is_loaded, bool is_modified);
         off_t Size() const;
-        bool Resize(off_t size, bool is_loaded, bool is_modified);
+        void Resize(off_t size, bool is_loaded, bool is_modified);
 
         bool IsPageLoaded(off_t start = 0, off_t size = 0) const;                  // size=0 is checking to end of list
         bool SetPageLoadedStatus(off_t start, off_t size, PageList::page_status pstatus = page_status::LOADED, bool is_compress = true);
@@ -119,9 +119,9 @@ class PageList
 
         off_t BytesModified() const;
         bool IsModified() const;
-        bool ClearAllModified();
+        void ClearAllModified();
 
-        bool Compress();
+        void Compress();
         bool Deserialize(CacheFileStat& file, ino_t inode);
         void Dump() const;
         bool CompareSparseFile(int fd, size_t file_size, fdpage_list_t& err_area_list, fdpage_list_t& warn_area_list) const;

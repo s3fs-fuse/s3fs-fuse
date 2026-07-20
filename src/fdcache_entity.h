@@ -89,7 +89,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         void Clear();
         ino_t GetInode() const REQUIRES(FdEntity::fdent_data_lock);
         int OpenMirrorFile() REQUIRES(FdEntity::fdent_data_lock);
-        int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
+        [[nodiscard]] int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
         void FreeUploadedRange(off_t start, off_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
         bool IsUploading() const REQUIRES(FdEntity::fdent_lock);
@@ -99,22 +99,22 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         int SetFileTimesHasLock(const FileTimes& ts_times) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
-        int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj, const char* tpath = nullptr) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
-        int NoCachePreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
-        int NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
-        int RowFlushHasLock(int fd, const char* tpath, bool force_sync) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
-        int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj, const char* tpath = nullptr) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
+        [[nodiscard]] int NoCachePreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
+        [[nodiscard]] int NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);
+        [[nodiscard]] int RowFlushHasLock(int fd, const char* tpath, bool force_sync) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int RowFlushNoMultipart(const PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         void AbortStreamUpload(PseudoFdInfo* pseudo_obj, const std::string& strpath) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteNoMultipart(const PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         ssize_t WriteStreamUpload(PseudoFdInfo* pseudo_obj, const char* bytes, off_t start, size_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
-        int UploadPendingHasLock(int fd) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
+        [[nodiscard]] int UploadPendingHasLock(int fd) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
         bool ReserveDiskSpace(off_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
 
@@ -151,9 +151,9 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
             const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
             return ro_path;
         }
-        int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
+        [[nodiscard]] int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
 
-        int LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
+        [[nodiscard]] int LoadAll(int fd, off_t* size = nullptr, bool force_load = false);
         int Dup(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             return DupWithLock(fd);
@@ -176,7 +176,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         bool MergeOrgMeta(headers_t& updatemeta);
         bool GetOrgMeta(headers_t& meta) const;
 
-        int UploadPending(int fd) {
+        [[nodiscard]] int UploadPending(int fd) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return UploadPendingHasLock(fd);
@@ -229,15 +229,15 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         bool SetContentType(const char* path);
         bool GetStatsFromMeta(struct stat& st) const;
 
-        int Load(off_t start, off_t size, bool is_modified_flag = false) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);  // size=0 means loading to end
+        [[nodiscard]] int Load(off_t start, off_t size, bool is_modified_flag = false) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);  // size=0 means loading to end
 
         off_t BytesModified() const;
-        int RowFlush(int fd, const char* tpath, bool force_sync = false) {
+        [[nodiscard]] int RowFlush(int fd, const char* tpath, bool force_sync = false) {
             const std::lock_guard<std::mutex> lock(fdent_lock);
             const std::lock_guard<std::mutex> lock_data(fdent_data_lock);
             return RowFlushHasLock(fd, tpath, force_sync);
         }
-        int Flush(int fd, bool force_sync = false) {
+        [[nodiscard]] int Flush(int fd, bool force_sync = false) {
             return RowFlush(fd, nullptr, force_sync);
         }
 

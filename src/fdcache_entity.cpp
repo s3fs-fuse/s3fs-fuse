@@ -426,10 +426,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
                 return -errno;
             }
             // resize page list
-            if(!pagelist.Resize(size, false, true)){      // Areas with increased size are modified
-                S3FS_PRN_ERR("failed to truncate temporary file information(physical_fd=%d).", physical_fd);
-                return -EIO;
-            }
+            pagelist.Resize(size, false, true);           // Areas with increased size are modified
         }
 
         // set untreated area

@@ -389,7 +389,7 @@ off_t PageList::Size() const
     return riter->next();
 }
 
-bool PageList::Compress()
+void PageList::Compress()
 {
     fdpage* lastpage = nullptr;
     for(auto iter = pages.begin(); iter != pages.end(); ){
@@ -423,7 +423,6 @@ bool PageList::Compress()
             }
         }
     }
-    return true;
 }
 
 bool PageList::Parse(off_t new_pos)
@@ -443,7 +442,7 @@ bool PageList::Parse(off_t new_pos)
     return false;
 }
 
-bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
+void PageList::Resize(off_t size, bool is_loaded, bool is_modified)
 {
     off_t total = Size();
 
@@ -481,7 +480,7 @@ bool PageList::Resize(off_t size, bool is_loaded, bool is_modified)
         // nothing to do
     }
     // compress area
-    return Compress();
+    Compress();
 }
 
 bool PageList::IsPageLoaded(off_t start, off_t size) const
@@ -538,7 +537,10 @@ bool PageList::SetPageLoadedStatus(off_t start, off_t size, PageList::page_statu
         }
     }
     // compress area
-    return (is_compress ? Compress() : true);
+    if(is_compress){
+        Compress();
+    }
+    return true;
 }
 
 bool PageList::FindUnloadedPage(off_t start, off_t& resstart, off_t& ressize) const
@@ -649,7 +651,7 @@ size_t PageList::GetUnloadedPages(fdpage_list_t& unloaded_list, off_t start, off
 bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_list_t& mixuppages, off_t max_partsize)
 {
     // compress before this processing
-    Compress();         // always true
+    Compress();
 
     // make a list by modified flag
     fdpage_list_t modified_pages;
@@ -750,7 +752,7 @@ bool PageList::GetPageListsForMultipartUpload(fdpage_list_t& dlpages, fdpage_lis
 bool PageList::GetNoDataPageLists(fdpage_list_t& nodata_pages, off_t start, size_t size)
 {
     // compress before this processing
-    Compress();         // always true
+    Compress();
 
     // extract areas without data
     fdpage_list_t tmp_pagelist;
@@ -808,7 +810,7 @@ bool PageList::IsModified() const
     return false;
 }
 
-bool PageList::ClearAllModified()
+void PageList::ClearAllModified()
 {
     is_shrink = false;
 
@@ -817,7 +819,7 @@ bool PageList::ClearAllModified()
             iter->modified = false;
         }
     }
-    return Compress();
+    Compress();
 }
 
 bool PageList::Serialize(const CacheFileStat& file, ino_t inode) const

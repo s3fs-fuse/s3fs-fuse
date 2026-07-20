@@ -41,14 +41,14 @@ std::string get_realpath(const char *path);
 
 void init_sysconf_vars();
 std::string get_username(uid_t uid);
-int is_uid_include_group(uid_t uid, gid_t gid);
+[[nodiscard]] int is_uid_include_group(uid_t uid, gid_t gid);
 
 std::string mydirname(std::string path);
 std::string mybasename(std::string path);
 
-int mkdirp(const std::string& path, mode_t mode);
+[[nodiscard]] int mkdirp(const std::string& path, mode_t mode);
 std::string get_exist_directory_path(const std::string& path);
-bool check_exist_dir_permission(const char* dirpath);
+[[nodiscard]] bool check_exist_dir_permission(const char* dirpath);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
 void print_launch_message(int argc, char** argv);
