@@ -83,12 +83,14 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
+        static int CopyFdBytes(int srcfd, int dstfd, off_t start, off_t size);
         static ino_t GetInode(int fd);
 
         void Clear();
         ino_t GetInode() const REQUIRES(FdEntity::fdent_data_lock);
         int OpenMirrorFile() REQUIRES(FdEntity::fdent_data_lock);
         int NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start = 0, off_t size = 0) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);    // size=0 means loading to end
+        void FreeUploadedRange(off_t start, off_t size) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         PseudoFdInfo* CheckPseudoFdFlags(int fd, bool writable) REQUIRES(FdEntity::fdent_lock);
         bool IsUploading() const REQUIRES(FdEntity::fdent_lock);
         int SetCtimeHasLock(struct timespec time) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);

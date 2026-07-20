@@ -283,6 +283,21 @@ bool PseudoFdInfo::AppendUploadPart(off_t start, off_t size, bool is_copy, etagp
     return true;
 }
 
+// [NOTE]
+// Returns the position immediately following the last uploaded part, which
+// is where the next part must start(see AppendUploadPart).  Returns 0 if
+// no part has been uploaded yet.
+//
+off_t PseudoFdInfo::GetNextUploadPos() const
+{
+    const std::lock_guard<std::mutex> lock(upload_list_lock);
+
+    if(upload_list.empty()){
+        return 0;
+    }
+    return (upload_list.back().startpos + upload_list.back().size);
+}
+
 //
 // Utility for sorting upload list
 //
