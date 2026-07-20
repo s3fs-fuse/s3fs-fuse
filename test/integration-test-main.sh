@@ -417,6 +417,25 @@ function test_external_directory_creation {
     rm -f directory/"${TEST_TEXT_FILE}"
 }
 
+function test_external_no_slash_directory_object {
+    describe "Test old style directory object without trailing slash ..."
+    local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/no_slash_dir
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" --header "Content-Type: application/x-directory" < /dev/null
+    [ -d no_slash_dir ]
+    # updating metadata replaces the old style "dir" object with "dir/"
+    chmod 700 no_slash_dir
+    get_permissions no_slash_dir | grep -q 700$
+    touch no_slash_dir/"${TEST_TEXT_FILE}"
+    rm no_slash_dir/"${TEST_TEXT_FILE}"
+    rmdir no_slash_dir
+    if s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}"; then
+        return 1
+    fi
+    if s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}/"; then
+        return 1
+    fi
+}
+
 function test_external_modification {
     describe "Test external modification to an object ..."
     echo "old" > "${TEST_TEXT_FILE}"
@@ -2986,6 +3005,7 @@ function add_all_tests {
     add_tests test_list
     add_tests test_remove_nonempty_directory
     add_tests test_external_directory_creation
+    add_tests test_external_no_slash_directory_object
     add_tests test_external_modification
     add_tests test_external_creation
     add_tests test_read_external_object

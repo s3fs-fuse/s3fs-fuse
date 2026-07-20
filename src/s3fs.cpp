@@ -479,35 +479,19 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
         }else if(is_symlink_fmt(*pmeta)){
             *pObjType = objtype_t::SYMLINK;
         }else if(is_dir_fmt(*pmeta)){
-            if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0)){
-                // check to send a head request for "dir/"
-                //
-                // [NOTE][FIXME]
-                // Some backends, a Head request to a "dir" path will succeed when only the
-                // "dir/" object exists(s3proxy is one of them).
-                // When detected as "dir" in this way, the directory type is no longer accurate,
-                // so the Head request must be re-examined as "dir/".
-                // In this case, the AWS S3 server fails to detect "dir". So in most cases, this
-                // process should have little impact on performance. (Currently, s3fs-fuse tests
-                // are affected by this process.)
-                //
-                std::string recheckPath = strpath + "/";
-                headers_t   recheckHead;
-                if(0 == head_request(recheckPath, recheckHead)){
-                    if(is_dir_fmt(recheckHead)){
-                        strpath   = recheckPath;
-                        *pmeta    = recheckHead;
-                    }else{
-                        S3FS_PRN_ERR("Both objects \"%s\" and \"%s\" were found, but \"%s\" is a directory and \"%s\" is not a directory. \"%s\" will be ignored.", strpath.c_str(), recheckPath.c_str(), strpath.c_str(), recheckPath.c_str(), recheckPath.c_str());
-                    }
-                }
-                if('/' != *strpath.rbegin() && is_need_check_obj_detail(*pmeta)){
-                    // check a case of that "object" does not have attribute and "object" is possible to be directory.
-                    if(-ENOTEMPTY == directory_empty(strpath.c_str())){
-                        // found "non-existed directory object".
-                        strpath  += "/";
-                        *pObjType = objtype_t::DIR_NOT_EXIST_OBJECT;
-                    }
+            // [NOTE]
+            // A no-slash path here is an old style(before 1.63) "dir" object and
+            // is classified as objtype_t::DIR_NOT_TERMINATE_SLASH below.
+            // A backend that conflates "dir" with the "dir/" directory marker
+            // (ex. s3proxy older than 3.3.0) also returns 200 here when only
+            // "dir/" exists; it is treated the same way and handled gracefully.
+            //
+            if('/' != *strpath.rbegin() && std::string::npos == strpath.find("_$folder$", 0) && is_need_check_obj_detail(*pmeta)){
+                // check a case of that "object" does not have attribute and "object" is possible to be directory.
+                if(-ENOTEMPTY == directory_empty(strpath.c_str())){
+                    // found "non-existed directory object".
+                    strpath  += "/";
+                    *pObjType = objtype_t::DIR_NOT_EXIST_OBJECT;
                 }
             }
         }
