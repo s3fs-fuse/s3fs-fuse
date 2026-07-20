@@ -5694,7 +5694,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
                 length = s3host.length();
             }
             // Check url for http / https protocol std::string
-            if(!is_prefix(s3host.c_str(), "https://") && !is_prefix(s3host.c_str(), "http://")){
+            if(!is_prefix(s3host, "https://") && !is_prefix(s3host, "http://")){
                 S3FS_PRN_EXIT("option url has invalid format, missing http / https protocol");
                 return -1;
             }
@@ -5792,7 +5792,8 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         // debug level option
         //
         else if(is_prefix(arg, "dbglevel=")){
-            auto strlevel = CaseInsensitiveStringView(strchr(arg, '=') + sizeof(char));
+            const char* pstrlevel = strchr(arg, '=') + sizeof(char);
+            auto strlevel = CaseInsensitiveStringView(pstrlevel);
             if(strlevel == "silent" || strlevel == "critical" || strlevel == "crit"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::CRIT);
             }else if(strlevel == "error" || strlevel == "err"){
@@ -5804,7 +5805,7 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             }else if(strlevel == "dbg" || strlevel == "debug"){
                 S3fsLog::SetLogLevel(S3fsLog::Level::DBG);
             }else{
-                S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", strlevel.c_str());
+                S3FS_PRN_EXIT("option dbglevel has unknown parameter(%s).", pstrlevel);
                 return -1;
             }
             return 0;
@@ -5842,14 +5843,15 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             S3fsCurl::SetVerbose(true);
             return 0;
         }else if(is_prefix(arg, "curldbg=")){
-            auto strlevel = CaseInsensitiveStringView(strchr(arg, '=') + sizeof(char));
+            const char* pstrlevel = strchr(arg, '=') + sizeof(char);
+            auto strlevel = CaseInsensitiveStringView(pstrlevel);
             if(strlevel == "normal"){
                 S3fsCurl::SetVerbose(true);
             }else if(strlevel == "body"){
                 S3fsCurl::SetVerbose(true);
                 S3fsCurl::SetDumpBody(true);
             }else{
-                S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", strlevel.c_str());
+                S3FS_PRN_EXIT("option curldbg has unknown parameter(%s).", pstrlevel);
                 return -1;
             }
             return 0;

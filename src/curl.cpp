@@ -481,7 +481,7 @@ size_t S3fsCurl::HeaderCallback(void* data, size_t blockSize, size_t numBlocks, 
     if(getline(ss, key, ':')){
         // Force to lower, only "x-amz"
         std::string lkey = lower(key);
-        if(is_prefix(lkey.c_str(), "x-amz")){
+        if(is_prefix(lkey, "x-amz")){
             key = lkey;
         }
         std::string value;
@@ -747,7 +747,7 @@ bool S3fsCurl::FinalCheckSse()
 
             // SSL/TLS is required for KMS
             //
-            if(!is_prefix(s3host.c_str(), "https://")){
+            if(!is_prefix(s3host, "https://")){
                 S3FS_PRN_ERR("The sse type is SSE-KMS, but it is not configured to use SSL/TLS. SSE-KMS requires SSL/TLS communication.");
                 return false;
             }
@@ -977,7 +977,7 @@ bool S3fsCurl::SetProxy(const char* url)
         pos += strlen("://");
 
         // Check if it is other than "http://"
-        if(!is_prefix(tmpurl.c_str(), "http://")){
+        if(!is_prefix(tmpurl, "http://")){
             is_http = false;
         }
     }else{
@@ -2317,9 +2317,9 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
         StringCQ += uriencode + "\n";
     }else if(method == "GET" && uriencode.empty()){
         StringCQ +="/\n";
-    }else if(method == "GET" && is_prefix(uriencode.c_str(), "/")){
+    }else if(method == "GET" && is_prefix(uriencode, "/")){
         StringCQ += uriencode +"\n";
-    }else if(method == "GET" && !is_prefix(uriencode.c_str(), "/")){
+    }else if(method == "GET" && !is_prefix(uriencode, "/")){
         StringCQ += "/\n" + urlEncodeQuery(canonical_uri) +"\n";
     }else if(method == "POST"){
         StringCQ += uriencode + "\n";

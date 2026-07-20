@@ -21,10 +21,10 @@
 #ifndef S3FS_STRING_UTIL_H_
 #define S3FS_STRING_UTIL_H_
 
-#include <cstring>
 #include <ctime>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <strings.h>
 
 #include "types.h"
@@ -42,17 +42,15 @@ inline constexpr char SPACES[] = " \t\r\n";
 //-------------------------------------------------------------------
 class CaseInsensitiveStringView {
 public:
-    explicit CaseInsensitiveStringView(const char *str) : str(str) {}
-    explicit CaseInsensitiveStringView(const std::string &str) : str(str.c_str()) {}
-    bool operator==(const char *other) const { return strcasecmp(str, other) == 0; }
-    bool operator!=(const char *other) const { return !(*this == other); }
-    bool is_prefix(const char *prefix) const { return strncasecmp(str, prefix, strlen(prefix)) == 0; }
-    const char *c_str() const { return str; }
+    explicit CaseInsensitiveStringView(std::string_view str) : str(str) {}
+    bool operator==(std::string_view other) const { return str.size() == other.size() && is_prefix(other); }
+    bool operator!=(std::string_view other) const { return !(*this == other); }
+    // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): strncasecmp is bounded by the passed size
+    bool is_prefix(std::string_view prefix) const { return prefix.size() <= str.size() && 0 == strncasecmp(str.data(), prefix.data(), prefix.size()); }
 private:
-    const char *str;
+    std::string_view str;
 };
-// TODO: constexpr with C++17
-static inline bool is_prefix(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
+static constexpr bool is_prefix(std::string_view str, std::string_view prefix) { return str.substr(0, prefix.size()) == prefix; }
 static constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
@@ -110,10 +108,10 @@ std::optional<time_t> convert_unixtime_from_option_arg(const char* argv);
 //
 // For encoding
 //
-std::string urlEncodeGeneral(const std::string &s);
-std::string urlEncodePath(const std::string &s);
-std::string urlEncodeQuery(const std::string &s);
-std::string urlDecode(const std::string& s);
+std::string urlEncodeGeneral(std::string_view s);
+std::string urlEncodePath(std::string_view s);
+std::string urlEncodeQuery(std::string_view s);
+std::string urlDecode(std::string_view s);
 
 bool takeout_str_dquart(std::string& str);
 std::optional<std::string> get_keyword_value(const std::string& target, const char* keyword);
