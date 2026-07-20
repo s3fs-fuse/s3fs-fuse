@@ -44,7 +44,6 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir, off_t si
         return false;
     }
 
-    s3obj_t::iterator iter;
     std::string newname;
     std::string orgname = name;
     objtype_t   type    = objtype_t::UNKNOWN;
@@ -73,49 +72,32 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir, off_t si
     // Check derived name object.
     if(is_dir || IS_DIR_OBJ(type)){
         std::string chkname = newname.substr(0, newname.length() - 1);
-        if(objects.cend() != (iter = objects.find(chkname))){
+        if(auto iter = objects.find(chkname); objects.cend() != iter){
             // found "dir" object --> remove it.
             objects.erase(iter);
         }
     }else{
         std::string chkname = newname + "/";
-        if(objects.cend() != (iter = objects.find(chkname))){
+        if(objects.cend() != objects.find(chkname)){
             // found "dir/" object --> not add new object.
             // and add normalization
             return insert_normalized(orgname.c_str(), chkname.c_str(), type);
         }
     }
 
-    // Add object
-    if(objects.cend() != (iter = objects.find(newname))){
-        // Found same object --> update information.
-        iter->second.normalname.clear();
-        iter->second.orgname = orgname;
-        iter->second.type    = type;
-        if(etag){
-            iter->second.etag = etag;  // over write
-        }
-        if(0 <= size){
-            iter->second.size = size;
-        }
-        if(last_modified){
-            iter->second.last_modified = last_modified;
-        }
-    }else{
-        // add new object
-        s3obj_entry newobject;
-        newobject.orgname = orgname;
-        newobject.type    = type;
-        if(etag){
-            newobject.etag = etag;
-        }
-        if(0 <= size){
-            newobject.size = size;
-        }
-        if(last_modified){
-            newobject.last_modified = last_modified;
-        }
-        objects[newname] = std::move(newobject);
+    // Add new object or update the information of the found same object.
+    s3obj_entry& entry = objects.try_emplace(newname).first->second;
+    entry.normalname.clear();
+    entry.orgname = orgname;
+    entry.type    = type;
+    if(etag){
+        entry.etag = etag;  // over write
+    }
+    if(0 <= size){
+        entry.size = size;
+    }
+    if(last_modified){
+        entry.last_modified = last_modified;
     }
 
     // add normalization

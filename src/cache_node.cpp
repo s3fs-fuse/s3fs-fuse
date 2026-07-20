@@ -1134,7 +1134,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
 
             // add as a child
-            children[strLeafName] = std::move(pstatcache);
+            children.try_emplace(strLeafName, std::move(pstatcache));
 
         }else{
             // create and add as a direct child
@@ -1199,7 +1199,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             }
 
             // add as a child
-            children[strLeafName] = std::move(pstatcache);
+            children.try_emplace(strLeafName, std::move(pstatcache));
         }
     }
 
