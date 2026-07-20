@@ -60,7 +60,7 @@ class UntreatedParts
         bool ReplaceLastUpdatePart(off_t start, off_t size);
         bool RemoveLastUpdatePart();
 
-        bool Duplicate(untreated_list_t& list) const;
+        void Duplicate(untreated_list_t& list) const;
 
         void Dump() const;
 };

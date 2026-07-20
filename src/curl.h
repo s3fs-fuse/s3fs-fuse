@@ -249,11 +249,11 @@ class S3fsCurl
         }
         std::string CalcSignatureV2(const std::string& method, const std::string& strMD5, const std::string& content_type, const std::string& date, const std::string& resource, const std::string& secret_access_key, const std::string& access_token);
         std::string CalcSignature(const std::string& method, const std::string& canonical_uri, const std::string& query_string, const std::string& strdate, const std::string& payload_hash, const std::string& date8601, const std::string& secret_access_key, const std::string& access_token);
-        int MultipartUploadContentPartSetup(const char* tpath, int part_num, const std::string& upload_id);
-        int MultipartUploadCopyPartSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
+        [[nodiscard]] int MultipartUploadContentPartSetup(const char* tpath, int part_num, const std::string& upload_id);
+        [[nodiscard]] int MultipartUploadCopyPartSetup(const char* from, const char* to, int part_num, const std::string& upload_id, const headers_t& meta);
         bool MultipartUploadContentPartComplete();
         bool MultipartUploadCopyPartComplete();
-        int MapPutErrorResponse(int result) const;
+        [[nodiscard]] int MapPutErrorResponse(int result) const;
 
     public:
         // class methods
@@ -329,24 +329,24 @@ class S3fsCurl
         std::optional<std::string> GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token);
         std::optional<long> GetResponseCode(bool from_curl_handle = true) const;
         std::optional<std::string> GetCurlErrorString() const;
-        int RequestPerform(bool dontAddAuthHeaders=false);
-        int DeleteRequest(const char* tpath);
-        int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
-        int HeadRequest(const char* tpath, headers_t& meta);
-        int PutHeadRequest(const char* tpath, const headers_t& meta, bool is_copy);
-        int PutRequest(const char* tpath, headers_t& meta, int fd);
-        int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
-        int GetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
-        int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
-        int ListBucketRequest(const char* tpath, const char* query);
-        int PreMultipartUploadRequest(const char* tpath, const headers_t& meta, std::string& upload_id);
-        int MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
-        int MultipartUploadComplete(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
+        [[nodiscard]] int RequestPerform(bool dontAddAuthHeaders=false);
+        [[nodiscard]] int DeleteRequest(const char* tpath);
+        [[nodiscard]] int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
+        [[nodiscard]] int HeadRequest(const char* tpath, headers_t& meta);
+        [[nodiscard]] int PutHeadRequest(const char* tpath, const headers_t& meta, bool is_copy);
+        [[nodiscard]] int PutRequest(const char* tpath, headers_t& meta, int fd);
+        [[nodiscard]] int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
+        [[nodiscard]] int GetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
+        [[nodiscard]] int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
+        [[nodiscard]] int ListBucketRequest(const char* tpath, const char* query);
+        [[nodiscard]] int PreMultipartUploadRequest(const char* tpath, const headers_t& meta, std::string& upload_id);
+        [[nodiscard]] int MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
+        [[nodiscard]] int MultipartUploadComplete(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
         bool MultipartUploadPartComplete();
-        int MultipartListRequest(std::string& body);
-        int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
-        int MultipartPutHeadRequest(const std::string& from, const std::string& to, int part_number, const std::string& upload_id, const headers_t& meta);
-        int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
+        [[nodiscard]] int MultipartListRequest(std::string& body);
+        [[nodiscard]] int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
+        [[nodiscard]] int MultipartPutHeadRequest(const std::string& from, const std::string& to, int part_number, const std::string& upload_id, const headers_t& meta);
+        [[nodiscard]] int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
 
         // methods(variables)
         const std::string& GetPath() const { return path; }

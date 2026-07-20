@@ -1056,7 +1056,8 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
                 continue;
             }
-            cfstat.Release();
+            // Ignore the result since Release logs errors and they do not affect the check.
+            static_cast<void>(cfstat.Release());
 
             // compare cache file size and stats information
             if(st.st_size != pagelist.Size()){
