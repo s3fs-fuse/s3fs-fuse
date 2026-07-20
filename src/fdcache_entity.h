@@ -97,7 +97,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         int SetFileTimesHasLock(const FileTimes& ts_times) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatus(bool is_loaded) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         bool SetAllStatusUnloaded() REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock) { return SetAllStatus(false); }
-        int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
+        int PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj, const char* tpath = nullptr) REQUIRES(FdEntity::fdent_lock, fdent_data_lock);
         int NoCachePreMultipartUploadRequest(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock, FdEntity::fdent_data_lock);
         int NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, off_t start, off_t size) REQUIRES(FdEntity::fdent_lock);
         int NoCacheMultipartUploadComplete(PseudoFdInfo* pseudo_obj) REQUIRES(FdEntity::fdent_lock);

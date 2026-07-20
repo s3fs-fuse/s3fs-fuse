@@ -1154,8 +1154,10 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
 
 // [NOTE]
 // If the request is successful, initialize upload_id.
+// If tpath is specified, the multipart upload is started for tpath
+// instead of the current path(when renaming).
 //
-int FdEntity::PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj)
+int FdEntity::PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj, const char* tpath)
 {
     if(!pseudo_obj){
         S3FS_PRN_ERR("Internal error, pseudo fd object pointer is null.");
@@ -1163,7 +1165,7 @@ int FdEntity::PreMultipartUploadRequest(PseudoFdInfo* pseudo_obj)
     }
 
     int result;
-    if(0 != (result = pseudo_obj->PreMultipartUploadRequest(path, orgmeta))){
+    if(0 != (result = pseudo_obj->PreMultipartUploadRequest((tpath ? tpath : path), orgmeta))){
         return result;
     }
 
@@ -1729,6 +1731,20 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
     }
     int result = 0;
 
+    // [NOTE]
+    // If tpath is specified(renaming), the parts that the stream upload
+    // has already uploaded belong to a multipart upload for the current
+    // path, which cannot be completed under tpath.  Finish that upload
+    // for the current path first, then upload the whole file to tpath
+    // below.
+    //
+    if(tpath && path != tpath && pseudo_obj->IsUploading()){
+        if(0 != (result = RowFlushStreamMultipart(pseudo_obj, nullptr))){
+            return result;
+        }
+    }
+    const std::string strpath = tpath ? tpath : path;
+
     if(pagelist.Size() <= S3fsCurl::GetMultipartSize()){
         //
         // Use normal upload instead of multipart upload(too small part size)
@@ -1748,7 +1764,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
 
         // parameter for thread worker
         put_req_thparam thargs;
-        thargs.path   = path;
+        thargs.path   = strpath;
         thargs.meta   = orgmeta;            // copy
         thargs.fd     = physical_fd;
         thargs.ahbe   = true;
@@ -1784,12 +1800,17 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
         // Make upload/download/copy/cancel lists from file
         //
+        // [NOTE]
+        // Copy multipart upload is not available when uploading to tpath,
+        // because the copy source would be the target object, which does
+        // not exist yet.
+        //
         mp_part_list_t  to_upload_list;
         mp_part_list_t  to_copy_list;
         mp_part_list_t  to_download_list;
         filepart_list_t cancel_uploaded_list;
         bool            wait_upload_complete = false;
-        if(!pseudo_obj->ExtractUploadPartsFromAllArea(untreated_list, to_upload_list, to_copy_list, to_download_list, cancel_uploaded_list, wait_upload_complete, S3fsCurl::GetMultipartSize(), pagelist.Size(), FdEntity::mixmultipart)){
+        if(!pseudo_obj->ExtractUploadPartsFromAllArea(untreated_list, to_upload_list, to_copy_list, to_download_list, cancel_uploaded_list, wait_upload_complete, S3fsCurl::GetMultipartSize(), pagelist.Size(), (FdEntity::mixmultipart && nullptr == tpath))){
             S3FS_PRN_ERR("Failed to extract various upload parts list from all area: errno(EIO)");
             return -EIO;
         }
@@ -1839,7 +1860,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             //
             // Multipart uploading hasn't started yet, so start it.
             //
-            if(0 != (result = PreMultipartUploadRequest(pseudo_obj))){
+            if(0 != (result = PreMultipartUploadRequest(pseudo_obj, tpath))){
                 return result;
             }
         }
@@ -1878,7 +1899,7 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
         //
         // Upload multipart and copy parts and wait exiting them
         //
-        if(!pseudo_obj->ParallelMultipartUploadAll(path.c_str(), to_upload_list, to_copy_list, result)){
+        if(!pseudo_obj->ParallelMultipartUploadAll(strpath.c_str(), to_upload_list, to_copy_list, result)){
             S3FS_PRN_ERR("Failed to upload multipart parts.");
             untreated_list.ClearAll();
             pseudo_obj->ClearUploadInfo();     // clear multipart upload info
@@ -1902,13 +1923,13 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             pseudo_obj->ClearUploadInfo();     // clear multipart upload info
             return -EIO;
         }else{
-            if(0 != (result = complete_multipart_upload_request(path, *upload_id, parts))){
+            if(0 != (result = complete_multipart_upload_request(strpath, *upload_id, parts))){
                 S3FS_PRN_ERR("failed to complete multipart upload by errno(%d)", result);
                 untreated_list.ClearAll();
                 pseudo_obj->ClearUploadInfo(); // clear multipart upload info
 
                 int result2;
-                if(0 != (result2 = abort_multipart_upload_request(path, *upload_id))){
+                if(0 != (result2 = abort_multipart_upload_request(strpath, *upload_id))){
                     S3FS_PRN_ERR("failed to abort multipart upload by errno(%d)", result2);
                 }
                 return result;
