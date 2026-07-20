@@ -56,7 +56,7 @@ if [ -n "${ALL_TESTS}" ]; then
         nomultipart
         sigv2
         sigv4
-        "singlepart_copy_limit=10"  # limit size to exercise multipart code paths
+        "singlepart_copy_limit=10 -o multipart_copy_size=10"  # limit sizes to exercise multipart copy code paths
         #use_sse  # TODO: S3Proxy does not support SSE
         #use_sse=custom:/tmp/ssekey  # TODO: S3Proxy does not support SSE
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o streamupload"

@@ -717,6 +717,32 @@ function test_multipart_copy {
     rm_test_file "${BIG_FILE}-copy"
 }
 
+function test_multipart_copy_chmod {
+    describe "Testing chmod with multi-part copy ..."
+
+    # BIG_FILE_LENGTH(25MB) >= multipart_threshold(25MB), so updating the
+    # metadata goes through put_headers() -> multipart_put_head_request(),
+    # and with multipart_copy_size=10 the server-side copy uses 3 parts.
+    ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${TEMP_DIR}/${BIG_FILE}"
+    dd if="${TEMP_DIR}/${BIG_FILE}" of="${BIG_FILE}" bs="${BIG_FILE_BLOCK_SIZE}" count="${BIG_FILE_COUNT}"
+
+    chmod 613 "${BIG_FILE}"
+
+    local permissions; permissions=$(get_permissions "${BIG_FILE}")
+    if [ "${permissions}" != "613" ]; then
+        echo "chmod expected 613, got ${permissions}"
+        return 1
+    fi
+
+    # Verify the copy did not corrupt the contents
+    if ! cmp "${TEMP_DIR}/${BIG_FILE}" "${BIG_FILE}"; then
+        return 1
+    fi
+
+    rm -f "${TEMP_DIR}/${BIG_FILE}"
+    rm_test_file "${BIG_FILE}"
+}
+
 function test_multipart_mix {
     describe "Testing multi-part mix ..."
 
@@ -2965,6 +2991,9 @@ function add_all_tests {
     add_tests test_rename_before_close
     add_tests test_multipart_upload
     add_tests test_multipart_copy
+    if s3fs_args | grep -q multipart_copy_size; then
+        add_tests test_multipart_copy_chmod
+    fi
 
     if ! uname | grep -q Darwin || ! s3fs_args | grep -q nocopyapi; then
         # FIXME:

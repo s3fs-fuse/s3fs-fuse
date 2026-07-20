@@ -176,7 +176,7 @@ struct multipart_put_head_req_thparam
     int         part_number   = 0;
     headers_t   meta;
     std::mutex* pthparam_lock = nullptr;
-    filepart*   ppartdata     = nullptr;
+    etagpair*   petag         = nullptr;
     int*        pretrycount   = nullptr;
     int*        presult       = nullptr;
 };
