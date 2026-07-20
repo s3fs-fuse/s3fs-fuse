@@ -2396,67 +2396,82 @@ function test_mix_upload_entities() {
 
 #
 # [NOTE]
-# This test runs last because it uses up disk space and may not recover.
-# This may be a problem, especially on MacOS. (See the comment near the definition
-# line for the ENSURE_DISKFREE_SIZE variable)
+# This test temporarily consumes most of the fake_diskfree budget with a
+# filler file, so it runs last to avoid influencing other tests.
 #
-function test_ensurespace_move_file() {
-    describe "Testing upload(mv) file when disk space is not enough ..."
+function test_ensurespace_evict_cache_file() {
+    describe "Testing cache eviction when disk space is not enough ..."
 
-    #
-    # Make test file which is not under mountpoint
-    #
-    mkdir -p "${CACHE_DIR}/.s3fs_test_tmpdir"
-    ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}"
+    local DIR_NAME; DIR_NAME=$(basename "${PWD}")
+    local EVICTABLE_FILE="ensurespace-evictable.bin"
+    local READ_FILE="ensurespace-read.bin"
 
-    #
-    # Backup file stat
-    #
-    local ORIGINAL_PERMISSIONS
-    ORIGINAL_PERMISSIONS=$(get_user_and_group "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}")
-
-    #
-    # Fill the disk size
-    #
-    local NOW_CACHE_DISK_AVAIL_SIZE; NOW_CACHE_DISK_AVAIL_SIZE=$(get_disk_avail_size "${CACHE_DIR}")
-    local TMP_FILE_NO=0
-    while true; do
-      local ALLOWED_USING_SIZE=$((NOW_CACHE_DISK_AVAIL_SIZE - ENSURE_DISKFREE_SIZE))
-      if [ "${ALLOWED_USING_SIZE}" -gt "${BIG_FILE_LENGTH}" ]; then
-          cp -p "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}_${TMP_FILE_NO}"
-          local TMP_FILE_NO=$((TMP_FILE_NO + 1))
-      else
-          break;
-      fi
-    done
-
-    #
-    # move file
-    #
-    mv "${CACHE_DIR}/.s3fs_test_tmpdir/${BIG_FILE}" "${BIG_FILE}"
-
-    #
-    # file stat
-    #
-    local MOVED_PERMISSIONS
-    MOVED_PERMISSIONS=$(get_user_and_group "${BIG_FILE}")
-    local MOVED_FILE_LENGTH
-    MOVED_FILE_LENGTH=$(get_size "${BIG_FILE}")
-
-    #
-    # check
-    #
-    if [ "${MOVED_PERMISSIONS}" != "${ORIGINAL_PERMISSIONS}" ]; then
-        echo "Failed to move file with permission"
-        return 1
-    fi
-    if [ "${MOVED_FILE_LENGTH}" -ne "${BIG_FILE_LENGTH}" ]; then
-        echo "Failed to move file with file length: ${MOVED_FILE_LENGTH} ${BIG_FILE_LENGTH}"
-        return 1
-    fi
-
-    rm_test_file "${BIG_FILE}"
+    # Each test runs in its own subshell, so this trap deletes the filler
+    # even when the test aborts halfway: leaving it would starve all of the
+    # following tests of the fake_diskfree budget.
     rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"
+    mkdir -p "${CACHE_DIR}/.s3fs_test_tmpdir"
+    trap 'rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"' EXIT
+
+    #
+    # Cache a closed file that the ensure free disk space processing can
+    # evict later.
+    #
+    ../../junk_data $((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT)) > "${TEMP_DIR}/${EVICTABLE_FILE}"
+    cp "${TEMP_DIR}/${EVICTABLE_FILE}" "${EVICTABLE_FILE}"
+    if [ ! -f "${CACHE_DIR}/${TEST_BUCKET_1}/${DIR_NAME}/${EVICTABLE_FILE}" ]; then
+        echo "Expect to find cache file of ${EVICTABLE_FILE}, but it is not found"
+        return 1
+    fi
+
+    #
+    # Create the object to read externally so that s3fs has no cache pages
+    # for it.
+    #
+    ../../junk_data $((26 * 1024 * 1024)) > "${TEMP_DIR}/${READ_FILE}"
+    s3_cp "${TEST_BUCKET_1}/${DIR_NAME}/${READ_FILE}" < "${TEMP_DIR}/${READ_FILE}"
+
+    #
+    # Consume the fake free disk space(FAKE_FREE_DISK_SIZE) down to about
+    # 25MB with real bytes.  The budget is drained by everything written to
+    # the cache file system since mounting(in CI a single file system holds
+    # the cache directory, TEMP_DIR and the s3proxy object store), so the
+    # filler is sized from the free space recorded just before mounting
+    # (CACHE_AVAIL_AT_MOUNT) instead of assuming who consumed it.
+    #
+    local NOW_AVAIL; NOW_AVAIL=$(get_disk_avail_size "${CACHE_DIR}")
+    local FILLER_SIZE=$((NOW_AVAIL - CACHE_AVAIL_AT_MOUNT + FAKE_FREE_DISK_SIZE - 25))
+    if [ "${FILLER_SIZE}" -gt 0 ]; then
+        ../../junk_data $((FILLER_SIZE * 1024 * 1024)) > "${CACHE_DIR}/.s3fs_test_tmpdir/filler"
+    fi
+
+    #
+    # Read the whole external object.  Loading it needs more cache space
+    # than the remaining budget, so s3fs must evict the unused cache file
+    # on the way.  A read consumes no disk space besides the cache pages,
+    # which keeps this working when other consumers share the file system.
+    #
+    if ! cmp "${TEMP_DIR}/${READ_FILE}" "${READ_FILE}"; then
+        return 1
+    fi
+
+    if [ -f "${CACHE_DIR}/${TEST_BUCKET_1}/${DIR_NAME}/${EVICTABLE_FILE}" ]; then
+        echo "Expect the cache file of ${EVICTABLE_FILE} to be evicted, but it remains"
+        return 1
+    fi
+
+    #
+    # The evicted file is still readable(downloaded again).
+    #
+    rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"
+    if ! cmp "${TEMP_DIR}/${EVICTABLE_FILE}" "${EVICTABLE_FILE}"; then
+        return 1
+    fi
+
+    rm -f "${TEMP_DIR}/${EVICTABLE_FILE}"
+    rm -f "${TEMP_DIR}/${READ_FILE}"
+    rm_test_file "${EVICTABLE_FILE}"
+    rm_test_file "${READ_FILE}"
 }
 
 function test_not_existed_dir_obj() {
@@ -3110,11 +3125,11 @@ function add_all_tests {
         add_tests test_not_existed_dir_obj
     fi
     add_tests test_cr_filename
-    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
-        add_tests test_ensurespace_move_file
-    fi
     add_tests test_write_data_with_skip
     add_tests test_not_boundary_writes
+    if s3fs_args | grep -q fake_diskfree && ! s3fs_args | grep -q streamupload && ! uname | grep -q Darwin; then
+        add_tests test_ensurespace_evict_cache_file
+    fi
 
     # [NOTE]
     # The test on CI will fail depending on the permissions, so skip these(chmod/chown).
