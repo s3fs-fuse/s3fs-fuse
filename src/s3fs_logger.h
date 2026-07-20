@@ -225,7 +225,7 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define PRINT_FUSE_CTX(level, indent, fmt, ...) do {                    \
     if(S3fsLog::IsS3fsLogLevel(level)){                                 \
         struct fuse_context *ctx = fuse_get_context();                  \
-        if(ctx == NULL){                                                \
+        if(ctx == nullptr){                                             \
             S3FS_LOW_LOGPRN2(level, indent, fmt, ##__VA_ARGS__);        \
         }else{                                                          \
             S3FS_LOW_LOGPRN2(level, indent, fmt"[pid=%u,uid=%u,gid=%u]",\

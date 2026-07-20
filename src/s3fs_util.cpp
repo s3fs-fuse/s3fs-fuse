@@ -183,12 +183,8 @@ std::string mydirname(std::string path)
         return "";
     }
 
-    // [TODO]
-    // Currently, use "&str[pos]" to make it possible to build with C++14.
-    // Once we support C++17 or later, we will use "str.data()".
-    //
     path.push_back('\0');     // terminate with a null character and allocate space for it.
-    return dirname(&path[0]); // NOLINT(readability-container-data-pointer)
+    return dirname(path.data());
 }
 
 // safe variant of basename
@@ -201,12 +197,8 @@ std::string mybasename(std::string path)
         return "";
     }
 
-    // [TODO]
-    // Currently, use "&str[pos]" to make it possible to build with C++14.
-    // Once we support C++17 or later, we will use "str.data()".
-    //
     path.push_back('\0');      // terminate with a null character and allocate space for it.
-    return basename(&path[0]); // NOLINT(readability-container-data-pointer)
+    return basename(path.data());
 }
 
 // mkdir --parents

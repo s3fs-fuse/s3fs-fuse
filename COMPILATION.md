@@ -12,9 +12,9 @@ Keep in mind using the pre-built packages when available.
 
 * fuse >= 3.0.0
 * automake
-* C++14 compiler
-    - gcc-c++ >= 5
-    - clang++ >= 3.5
+* C++17 compiler
+    - gcc-c++ >= 8
+    - clang++ >= 7
 * make
 * libcurl
 * libxml2 >= 2.9
