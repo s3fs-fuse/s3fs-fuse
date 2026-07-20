@@ -861,6 +861,25 @@ function test_multipart_mix {
     fi
 }
 
+function test_max_dirty_data_flush {
+    describe "Testing mid-write flush by max_dirty_data ..."
+
+    local MAX_DIRTY_DATA_FILE="max-dirty-data-test.bin"
+
+    # Writing 64MB crosses max_dirty_data=50, forcing a flush while the file
+    # is still open for writing; the final flush at close then combines
+    # copying the already-uploaded head with uploading the modified tail.
+    ../../junk_data $((64 * 1024 * 1024)) > "${TEMP_DIR}/${MAX_DIRTY_DATA_FILE}"
+    cp "${TEMP_DIR}/${MAX_DIRTY_DATA_FILE}" "${MAX_DIRTY_DATA_FILE}"
+
+    if ! cmp "${TEMP_DIR}/${MAX_DIRTY_DATA_FILE}" "${MAX_DIRTY_DATA_FILE}"; then
+        return 1
+    fi
+
+    rm -f "${TEMP_DIR}/${MAX_DIRTY_DATA_FILE}"
+    rm_test_file "${MAX_DIRTY_DATA_FILE}"
+}
+
 function test_utimens_during_multipart {
     describe "Testing utimens calling during multipart copy ..."
 
@@ -3029,6 +3048,9 @@ function add_all_tests {
         # Please pay attention to future developments in macos-fuse-t.
         #
         add_tests test_multipart_mix
+    fi
+    if s3fs_args | grep -q max_dirty_data; then
+        add_tests test_max_dirty_data_flush
     fi
 
     add_tests test_utimens_during_multipart
