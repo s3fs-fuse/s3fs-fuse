@@ -3714,7 +3714,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
                     syncfiller.Fill(bpath, nullptr, 0);
                 }else{
                     // Add stat cache
-                    if(StatCache::getStatCacheData()->AddStat(dirpath, st, dummy_header, objtype_t::DIR_NOT_EXIST_OBJECT, false)){
+                    if(!StatCache::getStatCacheData()->AddStat(dirpath, st, dummy_header, objtype_t::DIR_NOT_EXIST_OBJECT, false)){
                         S3FS_PRN_ERR("failed adding stat cache [path=%s], so fill empty stat.", dirpath.c_str());
                         syncfiller.Fill(bpath, nullptr, 0);
                     }else{
