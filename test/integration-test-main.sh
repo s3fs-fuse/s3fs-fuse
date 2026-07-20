@@ -1938,7 +1938,6 @@ function test_posix_acl {
     local POSIX_ACL_TEST_FILE2="posix_acl_dir1/posix_acl_file2"
     local POSIX_ACL_TEST_FILE3="posix_acl_dir2/posix_acl_file3"
     local POSIX_ACL_TEST_FILE4="posix_acl_dir2/posix_acl_file4"
-    mkdir "${POSIX_ACL_TEST_DIR2}"
     touch "${POSIX_ACL_TEST_FILE1}"
 
     #
@@ -3087,7 +3086,11 @@ function add_all_tests {
             add_tests test_update_parent_directory_time
         fi
     fi
-    if ! s3fs_args | grep -q use_xattr; then
+    # [NOTE]
+    # Requires the xattr handlers, which are registered only with use_xattr
+    # (always passed by start_s3fs).  macOS has no setfacl/getfacl.
+    #
+    if ! uname | grep -q Darwin && command -v setfacl >/dev/null 2>&1; then
         add_tests test_posix_acl
     fi
 
