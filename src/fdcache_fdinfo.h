@@ -89,6 +89,7 @@ class PseudoFdInfo
         bool GetEtaglist(etaglist_t& list) const;
 
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = nullptr);
+        off_t GetNextUploadPos() const;
 
         bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, int& result);
         int PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta);
