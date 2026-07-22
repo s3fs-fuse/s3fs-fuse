@@ -154,6 +154,27 @@ function test_truncate_shrink_read_file {
     rm_test_file
 }
 
+function test_truncate_closed_file {
+    describe "Testing truncate(2) on a file which is not open ..."
+
+    # [NOTE]
+    # path_truncate calls truncate(2) with a path, unlike the truncate
+    # command which opens the file and calls ftruncate(2). The file is
+    # not open, so s3fs must upload the resized file by itself.
+    #
+    printf '0123456789' > "${TEST_TEXT_FILE}"
+
+    ../../path_truncate "${TEST_TEXT_FILE}" 4
+    check_file_size "${TEST_TEXT_FILE}" 4
+    cmp "${TEST_TEXT_FILE}" <(printf '0123')
+
+    ../../path_truncate "${TEST_TEXT_FILE}" 8
+    check_file_size "${TEST_TEXT_FILE}" 8
+    cmp "${TEST_TEXT_FILE}" <(printf '0123\0\0\0\0')
+
+    rm_test_file
+}
+
 function test_unlink_open_file {
     describe "Testing operations on a file which is unlinked while open ..."
 
@@ -3013,6 +3034,7 @@ function add_all_tests {
     add_tests test_truncate_shrink_file
     add_tests test_truncate_grow_file
     add_tests test_truncate_shrink_read_file
+    add_tests test_truncate_closed_file
     add_tests test_unlink_open_file
     add_tests test_mv_file
     add_tests test_mv_to_exist_file
