@@ -2478,6 +2478,64 @@ function test_ensurespace_move_file() {
     rm -rf "${CACHE_DIR}/.s3fs_test_tmpdir"
 }
 
+#
+# [NOTE]
+# This test temporarily consumes most of the fake_diskfree budget with a
+# filler file, so it runs near the end to avoid influencing other tests.
+#
+function test_diskfull_fallback_upload() {
+    describe "Testing multipart upload fallback when local disk is full ..."
+
+    local DIR_NAME; DIR_NAME=$(basename "${PWD}")
+    local FALLBACK_FILE="diskfull-fallback-test.bin"
+
+    # Each test runs in its own subshell, so this trap deletes the filler
+    # even when the test aborts halfway: leaving it would starve all of the
+    # following tests of the fake_diskfree budget.
+    rm -rf "${CACHE_DIR}/.s3fs_test_diskfull"
+    mkdir -p "${CACHE_DIR}/.s3fs_test_diskfull"
+    trap 'rm -rf "${CACHE_DIR}/.s3fs_test_diskfull"' EXIT
+
+    #
+    # Create the object externally so that s3fs has no local cache pages for it.
+    #
+    ../../junk_data $((26 * 1024 * 1024)) > "${TEMP_DIR}/${FALLBACK_FILE}"
+    s3_cp "${TEST_BUCKET_1}/${DIR_NAME}/${FALLBACK_FILE}" < "${TEMP_DIR}/${FALLBACK_FILE}"
+
+    #
+    # Consume the fake free disk space(FAKE_FREE_DISK_SIZE) down to about
+    # 25MB with real bytes, leaving less room than loading the whole file
+    # locally would need.  The budget is drained by everything written to
+    # the cache file system since mounting(in CI a single file system holds
+    # the cache directory, TEMP_DIR and the s3proxy object store), so the
+    # filler is sized from the free space recorded just before mounting
+    # (CACHE_AVAIL_AT_MOUNT) instead of assuming who consumed it.
+    #
+    local NOW_AVAIL; NOW_AVAIL=$(get_disk_avail_size "${CACHE_DIR}")
+    local FILLER_SIZE=$((NOW_AVAIL - CACHE_AVAIL_AT_MOUNT + FAKE_FREE_DISK_SIZE - 25))
+    if [ "${FILLER_SIZE}" -gt 0 ]; then
+        ../../junk_data $((FILLER_SIZE * 1024 * 1024)) > "${CACHE_DIR}/.s3fs_test_diskfull/filler"
+    fi
+
+    #
+    # Modify 16 bytes every 4MB through one file descriptor.  The unloaded
+    # gaps between the writes are each smaller than the 5MB minimum part
+    # size, so the mix upload cannot copy them server-side and must download
+    # them, which no longer fits in the cache: s3fs switches to the
+    # multipart upload without cache(NoCacheLoadAndPost) mid-write.
+    #
+    ../../write_multiblock -f "${FALLBACK_FILE}" -f "${TEMP_DIR}/${FALLBACK_FILE}" -p "0:16" -p "$((4 * 1024 * 1024)):16" -p "$((8 * 1024 * 1024)):16" -p "$((12 * 1024 * 1024)):16" -p "$((16 * 1024 * 1024)):16" -p "$((20 * 1024 * 1024)):16" -p "$((24 * 1024 * 1024)):16"
+
+    rm -rf "${CACHE_DIR}/.s3fs_test_diskfull"
+
+    if ! cmp "${TEMP_DIR}/${FALLBACK_FILE}" "${FALLBACK_FILE}"; then
+        return 1
+    fi
+
+    rm -f "${TEMP_DIR}/${FALLBACK_FILE}"
+    rm_test_file "${FALLBACK_FILE}"
+}
+
 function test_not_existed_dir_obj() {
     describe "Test not existed directory object..."
 
@@ -3139,6 +3197,9 @@ function add_all_tests {
     fi
     add_tests test_write_data_with_skip
     add_tests test_not_boundary_writes
+    if s3fs_args | grep -q fake_diskfree && ! s3fs_args | grep -q streamupload && ! uname | grep -q Darwin; then
+        add_tests test_diskfull_fallback_upload
+    fi
 
     # [NOTE]
     # The test on CI will fail depending on the permissions, so skip these(chmod/chown).
