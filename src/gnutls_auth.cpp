@@ -311,6 +311,14 @@ bool s3fs_sha256_fd(int fd, off_t start, off_t size, sha256_t* result)
     struct sha256_ctx ctx_sha256;
     off_t             bytes;
 
+    if(-1 == size){
+        struct stat st;
+        if(-1 == fstat(fd, &st)){
+            return false;
+        }
+        size = st.st_size;
+    }
+
     sha256_init(&ctx_sha256);
 
     for(off_t total = 0; total < size; total += bytes){
