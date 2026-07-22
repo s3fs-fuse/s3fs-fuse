@@ -80,6 +80,7 @@ doc/man/s3fs.1
 *.trs
 default_commit_hash
 src/s3fs
+src/test_auth
 src/test_curl_util
 src/test_page_list
 src/test_string_util
