@@ -34,6 +34,7 @@ noinst_PROGRAMS = \
     write_multiblock \
     mknod_test \
     truncate_read_file \
+    path_truncate \
     cr_filename \
     unlink_open_file
 
@@ -41,6 +42,7 @@ junk_data_SOURCES          = junk_data.cc
 write_multiblock_SOURCES   = write_multiblock.cc
 mknod_test_SOURCES         = mknod_test.cc
 truncate_read_file_SOURCES = truncate_read_file.cc
+path_truncate_SOURCES      = path_truncate.cc
 cr_filename_SOURCES        = cr_filename.cc
 unlink_open_file_SOURCES   = unlink_open_file.cc
 
@@ -50,6 +52,7 @@ clang-tidy:
     $(write_multiblock_SOURCES) \
     $(mknod_test_SOURCES) \
     $(truncate_read_file_SOURCES) \
+    $(path_truncate_SOURCES) \
     $(cr_filename_SOURCES) \
     $(unlink_open_file_SOURCES) \
     -- $(DEPS_CFLAGS) $(CPPFLAGS)

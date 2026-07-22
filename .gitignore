@@ -92,6 +92,7 @@ test/s3proxy-*
 test/write_multiblock
 test/mknod_test
 test/truncate_read_file
+test/path_truncate
 test/cr_filename
 test/unlink_open_file
 
