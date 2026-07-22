@@ -109,6 +109,14 @@ class StatCache
         bool AddStat(const std::string& key, const struct stat& stbuf, const headers_t& meta, objtype_t type, bool notruncate = false);
         bool AddStat(const std::string& key, const struct stat& stbuf, objtype_t type, bool notruncate = false);
         bool AddNegativeStat(const std::string& key);
+
+        // [NOTE]
+        // The cached S3ObjList must always be the complete one-level
+        // listing(delimiter=/) of the directory, as stored by
+        // s3fs_readdir.  Never store truncated or recursive(no
+        // delimiter) listings, because every caller of GetS3ObjList
+        // assumes this shape.
+        //
         bool AddS3ObjList(std::string key, const S3ObjList& list);
 
         // Update meta stats
