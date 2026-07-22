@@ -298,11 +298,15 @@ bool S3ObjList::GetNameMap(s3obj_type_map_t& objmap, bool OnlyNormalized, bool C
 
 bool S3ObjList::HasName(const std::string& strName) const
 {
+    if(strName.empty()){
+        return false;
+    }
+
     std::string strWitoutSlash;
     std::string strWithSlash;
 
     if('/' == strName.back()){
-        strWitoutSlash = strName.substr(strName.size() - 1);
+        strWitoutSlash = strName.substr(0, strName.size() - 1);
         strWithSlash   = strName;
     }else{
         strWitoutSlash = strName;
@@ -316,11 +320,15 @@ bool S3ObjList::HasName(const std::string& strName) const
 
 bool S3ObjList::Remove(const std::string& strName)
 {
+    if(strName.empty()){
+        return false;
+    }
+
     std::string strWitoutSlash;
     std::string strWithSlash;
 
     if('/' == strName.back()){
-        strWitoutSlash = strName.substr(strName.size() - 1);
+        strWitoutSlash = strName.substr(0, strName.size() - 1);
         strWithSlash   = strName;
     }else{
         strWitoutSlash = strName;

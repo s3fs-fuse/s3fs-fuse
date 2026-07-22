@@ -74,6 +74,7 @@ s3fs_LDADD = $(DEPS_LIBS)
 noinst_PROGRAMS = \
     test_curl_util \
     test_page_list \
+    test_s3objlist \
     test_string_util
 
 test_curl_util_SOURCES = \
@@ -94,16 +95,19 @@ test_page_list_SOURCES = \
     string_util.cpp \
     test_page_list.cpp
 
+test_s3objlist_SOURCES = s3objlist.cpp test_s3objlist.cpp
+
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 
 TESTS = \
     test_curl_util \
     test_page_list \
+    test_s3objlist \
     test_string_util
 
 clang-tidy:
 	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
-		*.h $(s3fs_SOURCES) test_curl_util.cpp test_page_list.cpp test_string_util.cpp \
+		*.h $(s3fs_SOURCES) test_curl_util.cpp test_page_list.cpp test_s3objlist.cpp test_string_util.cpp \
 		-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #
