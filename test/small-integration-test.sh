@@ -74,6 +74,71 @@ if ! s3_head "${TEST_BUCKET_1}"; then
     s3_mb "${TEST_BUCKET_1}"
 fi
 
+# Regression test for the bucket check at startup: mounting a bucket
+# that does not exist must fail promptly instead of retrying forever.
+function test_mount_nonexistent_bucket {
+    echo "testing mount of nonexistent bucket"
+
+    local bucket="s3fs-nonexistent-bucket-$$"
+    local mountpoint="nonexistent-bucket-mountpoint"
+    local logfile="nonexistent-bucket-s3fs.log"
+
+    if [ -n "${PUBLIC}" ]; then
+        local AUTH_OPT="-o public_bucket=1"
+    elif [ -n "${S3FS_PROFILE}" ]; then
+        local AUTH_OPT="-o profile=${S3FS_PROFILE}"
+    else
+        local AUTH_OPT="-o passwd_file=${S3FS_CREDENTIALS_FILE}"
+    fi
+
+    mkdir -p "${mountpoint}"
+
+    # shellcheck disable=SC2086
+    CURL_CA_BUNDLE="${S3PROXY_CACERT_FILE}" "${S3FS}" "${bucket}" "${mountpoint}" \
+        -o use_path_request_style \
+        -o url="${S3_URL}" \
+        -o region="${S3_ENDPOINT}" \
+        ${AUTH_OPT} \
+        -o dbglevel="${DBGLEVEL:=info}" \
+        -o retries=3 \
+        -f > "${logfile}" 2>&1 &
+    local pid=$!
+
+    # s3fs must exit on its own; give it 30 seconds before declaring a hang
+    local rc=""
+    for _ in $(seq 300); do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            rc=0
+            wait "${pid}" || rc=$?
+            break
+        fi
+        sleep 0.1
+    done
+
+    if [ -z "${rc}" ]; then
+        kill -9 "${pid}" 2>/dev/null || true
+        fusermount3 -u "${mountpoint}" 2>/dev/null || umount "${mountpoint}" 2>/dev/null || true
+        cat "${logfile}"
+        echo "s3fs did not exit after mounting nonexistent bucket: ${bucket}"
+        return 1
+    fi
+    if [ "${rc}" -eq 0 ]; then
+        cat "${logfile}"
+        echo "s3fs unexpectedly succeeded mounting nonexistent bucket: ${bucket}"
+        return 1
+    fi
+    if ! grep -q "Bucket or directory not found" "${logfile}"; then
+        cat "${logfile}"
+        echo "s3fs did not report a missing bucket: ${bucket}"
+        return 1
+    fi
+
+    rm -f "${logfile}"
+    rmdir "${mountpoint}"
+}
+
+test_mount_nonexistent_bucket
+
 for flag in "${FLAGS[@]}"; do
     echo "testing s3fs flag: ${flag}"
 

@@ -4863,16 +4863,19 @@ static int s3fs_check_service()
                     }
                     return EXIT_FAILURE;
 
-                }else if(check_invalid_sse_arg_error(responseBody.c_str(), responseBody.size())){
+                }else if(!forceNoSSE && check_invalid_sse_arg_error(responseBody.c_str(), responseBody.size())){
                     // SSE argument error, so retry it without SSE
                     S3FS_PRN_CRIT("S3 service returned InvalidArgument(x-amz-server-side-encryption), so retry without adding x-amz-server-side-encryption.");
 
                     // Retry without sse parameters
                     forceNoSSE = true;
+                }else{
+                    // No retry condition matched(ex. NoSuchBucket), so do not retry
+                    isLoop = false;
                 }
 
-            }else if(S3fsCurl::S3FSCURL_RESPONSECODE_FATAL_ERROR == responseCode){
-                // Curl error cases(ex, about SSL)
+            }else{
+                // Curl error cases(ex, about SSL), 5xx errors, etc. are not retried
                 isLoop = false;
             }
 
