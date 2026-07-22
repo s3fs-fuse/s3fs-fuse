@@ -424,6 +424,71 @@ function test_remove_nonempty_directory {
     rm_test_dir
 }
 
+function test_list_directory_after_failed_rmdir {
+    describe "Test listing a non-empty directory after a failed rmdir ..."
+
+    # [NOTE]
+    # The objects are created with s3_cp(not through the mount
+    # point) like a directory written by another client, so that the
+    # children are not in the stat cache.  s3fs_readdir merges stat
+    # cache entries into its result, which would hide an incomplete
+    # listing cache entry.
+    #
+    local DIR_NAME; DIR_NAME="dir_$(basename "${PWD}")_failed_rmdir"
+    local OBJECT_PREFIX; OBJECT_PREFIX=$(basename "${PWD}")/"${DIR_NAME}"
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/" --header "Content-Type: application/x-directory" < /dev/null
+    echo data1 | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file1"
+    echo data2 | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file2"
+    echo data3 | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file3"
+
+    # rmdir must fail, and must not poison the listing cache with the
+    # truncated(max-keys=2) listing requested for the emptiness check.
+    (
+        set +o pipefail
+        rmdir "${DIR_NAME}" 2>&1 | grep -q "Directory not empty"
+    )
+
+    local FILE_CNT; FILE_CNT=$(find "${DIR_NAME}" -mindepth 1 -maxdepth 1 | wc -l)
+    if [ "${FILE_CNT}" -ne 3 ]; then
+        echo "Expected 3 files in ${DIR_NAME} but got ${FILE_CNT}"
+        return 1
+    fi
+
+    rm -r "${DIR_NAME}"
+}
+
+function test_rename_directory_after_list {
+    describe "Test renaming a directory with a subdirectory after listing it ..."
+
+    # [NOTE]
+    # The objects are created with s3_cp like in
+    # test_list_directory_after_failed_rmdir.
+    #
+    local DIR_NAME; DIR_NAME="dir_$(basename "${PWD}")_rename_after_list"
+    local TO_DIR_NAME; TO_DIR_NAME="${DIR_NAME}_renamed"
+    local OBJECT_PREFIX; OBJECT_PREFIX=$(basename "${PWD}")/"${DIR_NAME}"
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/" --header "Content-Type: application/x-directory" < /dev/null
+    echo direct | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file1"
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/subdir/" --header "Content-Type: application/x-directory" < /dev/null
+    echo nested | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/subdir/file2"
+
+    # Listing the directory stores the one-level list in the listing
+    # cache; the rename must not consume it as the recursive object
+    # list, otherwise objects under the subdirectory are left behind.
+    ls "${DIR_NAME}" > /dev/null
+
+    mv "${DIR_NAME}" "${TO_DIR_NAME}"
+
+    cmp "${TO_DIR_NAME}/file1" <(echo direct)
+    cmp "${TO_DIR_NAME}/subdir/file2" <(echo nested)
+    if [ -e "${DIR_NAME}" ]; then
+        echo "${DIR_NAME} still exists after mv"
+        return 1
+    fi
+
+    rm -r "${TO_DIR_NAME}"
+}
+
 function test_external_directory_creation {
     describe "Test external directory creation ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/directory/"${TEST_TEXT_FILE}"
@@ -3024,6 +3089,8 @@ function add_all_tests {
     add_tests test_chown
     add_tests test_list
     add_tests test_remove_nonempty_directory
+    add_tests test_list_directory_after_failed_rmdir
+    add_tests test_rename_directory_after_list
     add_tests test_external_directory_creation
     add_tests test_external_no_slash_directory_object
     add_tests test_external_modification
