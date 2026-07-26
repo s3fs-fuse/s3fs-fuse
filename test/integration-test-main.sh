@@ -479,6 +479,31 @@ function test_external_no_slash_directory_object {
 
 function test_chmod_listed_directory_keeps_metadata {
     describe "Test chmod after listing copies the directory object ..."
+
+    # [NOTE]
+    # With nocopyapi the directory object is always recreated instead of
+    # copied, so metadata from other clients cannot be preserved.
+    #
+    if s3fs_args | grep -q nocopyapi; then
+        echo "This test does not run with nocopyapi"
+        return 0
+    fi
+
+    # [NOTE]
+    # macos fuse-t mounts over NFS and hands s3fs permission-only modes(the
+    # S_IFDIR/S_IFREG type bits are stripped), so the copied directory object
+    # carries x-amz-meta-mode 488 rather than 16872 and the assertion below
+    # cannot match.  fuse-t is also run with "noattrcache", so the kernel
+    # issues a getattr before the chmod that reloads the directory type
+    # directly from a HEAD, healing the stat cache regardless of what the
+    # listing stored.  The test therefore cannot probe the poisoned-type
+    # path on macos.
+    #
+    if [ "$(uname)" = "Darwin" ]; then
+        echo "This test does not run on macos"
+        return 0
+    fi
+
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_DIR}"/
 
     # Create a "dir/" object externally, carrying metadata from another client.
