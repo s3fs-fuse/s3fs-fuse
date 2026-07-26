@@ -477,6 +477,45 @@ function test_external_no_slash_directory_object {
     fi
 }
 
+function test_chmod_listed_directory_keeps_metadata {
+    describe "Test chmod after listing copies the directory object ..."
+    local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${TEST_DIR}"/
+
+    # Create a "dir/" object externally, carrying metadata from another client.
+    # x-amz-meta-mode 16877 is 0755 with S_IFDIR.
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_NAME}" \
+        --header "Content-Type: application/x-directory" \
+        --header "x-amz-meta-mode: 16877" \
+        --header "x-amz-meta-foreign: keepme" < /dev/null
+    local HEADERS; HEADERS=$(s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}")
+    echo "${HEADERS}" | grep -qi "x-amz-meta-foreign: keepme"
+
+    # List the parent so that readdir fills the stat cache from the listing.
+    # shellcheck disable=SC2010
+    ls | grep -q "${TEST_DIR}"
+
+    # A metadata update on a directory backed by a "dir/" object must copy
+    # the object in place, which keeps metadata set by other clients and
+    # adds no metadata of its own except the changed values.  If the
+    # listing poisoned the cached directory type, s3fs instead deletes the
+    # "dir" key and recreates "dir/" from a full fresh header set.
+    chmod 750 "${TEST_DIR}"
+    get_permissions "${TEST_DIR}" | grep -q 750$
+    HEADERS=$(s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}")
+    # metadata from the other client survives
+    echo "${HEADERS}" | grep -qi "x-amz-meta-foreign: keepme"
+    # 16872 is 0750 with S_IFDIR
+    echo "${HEADERS}" | grep -qi "x-amz-meta-mode: 16872"
+    # recreating the directory object stamps time metadata that chmod on a
+    # copied object never adds
+    if echo "${HEADERS}" | grep -qi "x-amz-meta-mtime"; then
+        echo "chmod recreated the ${OBJECT_NAME} object instead of copying it"
+        return 1
+    fi
+
+    rm_test_dir
+}
+
 function test_external_modification {
     describe "Test external modification to an object ..."
     echo "old" > "${TEST_TEXT_FILE}"
@@ -3140,6 +3179,7 @@ function add_all_tests {
     add_tests test_remove_nonempty_directory
     add_tests test_external_directory_creation
     add_tests test_external_no_slash_directory_object
+    add_tests test_chmod_listed_directory_keeps_metadata
     add_tests test_external_modification
     add_tests test_external_creation
     add_tests test_read_external_object

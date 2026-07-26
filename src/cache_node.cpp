@@ -1114,9 +1114,22 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
                 // The type(other than negative type) of object found is different
                 return false;
             }
-            // Already has strpath child, so set stat and meta.
-            if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
-                return false;
+            if(IS_DIR_OBJ(type) && type != iter->second->GetTypeHasLock()){
+                // [NOTE]
+                // Both are directories but the sub-type changed(ex. a legacy
+                // "dir" object was replaced by a "dir/" object).  Re-enter
+                // the child node itself: its own-path branch updates the
+                // type and all data depending on it, and sets stat and meta
+                // in the same way as below.
+                //
+                if(!iter->second->AddHasLock(strpath, pstat, pmeta, type, is_notruncate)){
+                    return false;
+                }
+            }else{
+                // Already has strpath child, so set stat and meta.
+                if(!iter->second->UpdateHasLock(pstat, pmeta, true) || !iter->second->UpdateHasLock(is_notruncate) || !iter->second->UpdateHasLock()){
+                    return false;
+                }
             }
             if(has_s3obj && !s3obj.HasName(strLeafName)){
                 ClearS3ObjListHasLock();        // always true

@@ -73,6 +73,7 @@ s3fs_LDADD = $(DEPS_LIBS)
 
 noinst_PROGRAMS = \
     test_auth \
+    test_cache_node \
     test_curl_util \
     test_page_list \
     test_s3objlist \
@@ -99,6 +100,16 @@ test_curl_util_SOURCES = \
 
 test_curl_util_LDADD = $(DEPS_LIBS)
 
+test_cache_node_SOURCES = \
+    cache_node.cpp \
+    filetimes.cpp \
+    metaheader.cpp \
+    s3fs_global.cpp \
+    s3fs_logger.cpp \
+    s3objlist.cpp \
+    string_util.cpp \
+    test_cache_node.cpp
+
 test_page_list_SOURCES = \
     fdcache_page.cpp \
     s3fs_global.cpp \
@@ -112,6 +123,7 @@ test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 
 TESTS = \
     test_auth \
+    test_cache_node \
     test_curl_util \
     test_page_list \
     test_s3objlist \
@@ -119,7 +131,7 @@ TESTS = \
 
 clang-tidy:
 	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
-		*.h $(s3fs_SOURCES) test_auth.cpp test_curl_util.cpp test_page_list.cpp test_s3objlist.cpp test_string_util.cpp \
+		*.h $(s3fs_SOURCES) test_auth.cpp test_cache_node.cpp test_curl_util.cpp test_page_list.cpp test_s3objlist.cpp test_string_util.cpp \
 		-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #

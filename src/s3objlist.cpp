@@ -34,9 +34,10 @@
 // If name is terminated by "_$folder$", it is forced dir type.
 // If is_dir is true, the name ends with "/", or the name ends with "_$folder$",
 // it will be determined to be a directory.
-// If it is determined to be a directory, one of the directory types in objtype_t
-// will be set to type. If it is not a directory(file, symbolic link), type will
-// be set to objtype_t::UNKNOWN.
+// If it is determined to be a directory, the type is set from the evidence in
+// the name: "_$folder$" gives objtype_t::DIR_FOLDER_SUFFIX, everything else
+// gives objtype_t::DIR_NORMAL. If it is not a directory(file, symbolic link),
+// type will be set to objtype_t::UNKNOWN.
 //
 bool S3ObjList::insert(const char* name, const char* etag, bool is_dir, off_t size, const char* last_modified)
 {
@@ -64,7 +65,18 @@ bool S3ObjList::insert(const char* name, const char* etag, bool is_dir, off_t si
         if(is_dir || IS_DIR_OBJ(type)){
             newname += "/";
             if(!IS_DIR_OBJ(type)){
-                type = objtype_t::DIR_NOT_TERMINATE_SLASH;
+                // [NOTE]
+                // A name without a slash and with is_dir=true comes from a
+                // CommonPrefixes element, whose trailing slash was cut when
+                // the name was extracted.  It carries no evidence of a
+                // legacy "dir" object(a Contents key without a slash would),
+                // so do not type it as DIR_NOT_TERMINATE_SLASH: readdir
+                // forwards this type to the stat cache once a HEAD request
+                // for "dir/" succeeds, and a wrong sub-type makes every
+                // later metadata update replace the directory object(and
+                // delete the "dir" key) instead of copying it.
+                //
+                type = objtype_t::DIR_NORMAL;
             }
         }
     }

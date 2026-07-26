@@ -81,6 +81,7 @@ doc/man/s3fs.1
 default_commit_hash
 src/s3fs
 src/test_auth
+src/test_cache_node
 src/test_curl_util
 src/test_page_list
 src/test_s3objlist
