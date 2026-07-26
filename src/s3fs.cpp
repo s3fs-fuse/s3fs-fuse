@@ -3032,9 +3032,13 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
             return -EIO;
         }
 
+        mode_t filemask = umask(0);      // macos does not have getumask()
+        umask(filemask);
+
         std::string strnow       = s3fs_str_realtime();
         meta["Content-Type"]     = "application/octet-stream"; // Static
-        meta["x-amz-meta-mode"]  = std::to_string(S_IFLNK | S_IRWXU | S_IRWXG | S_IRWXO);
+        meta["x-amz-meta-mode"]  = std::to_string(S_IFREG | (~filemask & (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)));
+        meta["x-amz-meta-atime"] = strnow;
         meta["x-amz-meta-ctime"] = strnow;
         meta["x-amz-meta-mtime"] = strnow;
         meta["x-amz-meta-uid"]   = std::to_string(pcxt->uid);
