@@ -72,9 +72,20 @@ s3fs_SOURCES = \
 s3fs_LDADD = $(DEPS_LIBS)
 
 noinst_PROGRAMS = \
+    test_auth \
     test_curl_util \
     test_page_list \
     test_string_util
+
+test_auth_SOURCES = \
+    common_auth.cpp \
+    string_util.cpp \
+    test_auth.cpp \
+    s3fs_global.cpp \
+    s3fs_logger.cpp \
+    $(AUTH_SOURCES)
+
+test_auth_LDADD = $(DEPS_LIBS)
 
 test_curl_util_SOURCES = \
     common_auth.cpp \
@@ -97,13 +108,14 @@ test_page_list_SOURCES = \
 test_string_util_SOURCES = string_util.cpp test_string_util.cpp s3fs_logger.cpp
 
 TESTS = \
+    test_auth \
     test_curl_util \
     test_page_list \
     test_string_util
 
 clang-tidy:
 	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
-		*.h $(s3fs_SOURCES) test_curl_util.cpp test_page_list.cpp test_string_util.cpp \
+		*.h $(s3fs_SOURCES) test_auth.cpp test_curl_util.cpp test_page_list.cpp test_string_util.cpp \
 		-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #
