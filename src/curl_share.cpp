@@ -210,15 +210,9 @@ CURLSH* S3fsCurlShare::GetCurlShareHandle()
     }
 
     // set map
-    S3fsCurlShare::ShareHandles.emplace(ThreadId, std::move(hShare));
-    S3fsCurlShare::ShareLocks.emplace(ThreadId, std::move(pLocks));
+    handle_iter = S3fsCurlShare::ShareHandles.try_emplace(ThreadId, std::move(hShare)).first;
+    S3fsCurlShare::ShareLocks.try_emplace(ThreadId, std::move(pLocks));
 
-    // For clang-tidy measures
-    handle_iter = S3fsCurlShare::ShareHandles.find(ThreadId);
-    if(handle_iter == S3fsCurlShare::ShareHandles.end()){
-        S3FS_PRN_ERR("Failed to insert curl share to map.");
-        return nullptr;
-    }
     return handle_iter->second.get();
 }
 

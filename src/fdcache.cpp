@@ -586,7 +586,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
 
         if(!cache_path.empty()){
             // using cache
-            return (fent[path] = std::move(ent)).get();
+            return fent.try_emplace(path, std::move(ent)).first->second.get();
         }else{
             // not using cache, so the key of fdentity is set not really existing path.
             // (but not strictly unexisting path.)
@@ -597,7 +597,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
             //
             std::string tmppath;
             FdManager::MakeRandomTempPath(path, tmppath);
-            return (fent[tmppath] = std::move(ent)).get();
+            return fent.try_emplace(tmppath, std::move(ent)).first->second.get();
         }
     }else{
         return nullptr;
@@ -750,7 +750,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         }
 
         // set new fd entity to map
-        fent[fentmapkey] = std::move(ent);
+        fent.insert_or_assign(fentmapkey, std::move(ent));
     }
 }
 

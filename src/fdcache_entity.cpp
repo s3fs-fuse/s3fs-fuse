@@ -248,7 +248,7 @@ int FdEntity::DupWithLock(int fd)
     const PseudoFdInfo* org_pseudoinfo = iter->second.get();
     auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, (org_pseudoinfo ? org_pseudoinfo->GetFlags() : 0));
     int             pseudo_fd      = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]       = std::move(ppseudoinfo);
+    pseudo_fd_map.try_emplace(pseudo_fd, std::move(ppseudoinfo));
 
     return pseudo_fd;
 }
@@ -264,7 +264,7 @@ int FdEntity::OpenPseudoFd(int flags)
     }
     auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, flags);
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
+    pseudo_fd_map.try_emplace(pseudo_fd, std::move(ppseudoinfo));
 
     return pseudo_fd;
 }
@@ -618,7 +618,7 @@ int FdEntity::Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times
     // create new pseudo fd, and set it to map
     auto ppseudoinfo = std::make_unique<PseudoFdInfo>(physical_fd, flags);
     int             pseudo_fd   = ppseudoinfo->GetPseudoFd();
-    pseudo_fd_map[pseudo_fd]    = std::move(ppseudoinfo);
+    pseudo_fd_map.try_emplace(pseudo_fd, std::move(ppseudoinfo));
 
     // if there is untreated area, set it to pseudo object.
     if(0 < truncated_size){
