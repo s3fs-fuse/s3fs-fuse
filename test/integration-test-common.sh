@@ -321,6 +321,17 @@ function start_s3fs {
     #     Keep s3fs in foreground instead of daemonizing
     #
 
+    # [NOTE]
+    # Record the free space(MB) of the cache file system just before
+    # mounting: s3fs snapshots the same value at startup to compute the
+    # fake_diskfree offset, and tests exercising fake_diskfree need this
+    # baseline to size their disk consumption.
+    #
+    if [ -n "${CACHE_DIR:-}" ] && [ -d "${CACHE_DIR:-}" ]; then
+        read -r _ _ _ CACHE_AVAIL_AT_MOUNT _ < <(BLOCKSIZE=$((1024 * 1024)) df "${CACHE_DIR}" | tail -n 1)
+        export CACHE_AVAIL_AT_MOUNT
+    fi
+
     # subshell with set -x to log exact invocation of s3fs-fuse
     # shellcheck disable=SC2086
     (
