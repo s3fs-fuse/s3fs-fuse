@@ -1498,7 +1498,7 @@ bool S3fsCred::CheckForbiddenBucketParams()
         return false;
     }
 
-    if(!pathrequeststyle && is_prefix(s3host.c_str(), "https://") && bucket_name.find_first_of('.') != std::string::npos) {
+    if(!pathrequeststyle && is_prefix(s3host, "https://") && bucket_name.find_first_of('.') != std::string::npos) {
         S3FS_PRN_EXIT("BUCKET %s -- cannot mount bucket with . while using HTTPS without use_path_request_style", bucket_name.c_str());
         return false;
     }
