@@ -53,7 +53,7 @@ class CacheFileStat
 
         bool Open();
         bool ReadOnlyOpen();
-        bool Release();
+        [[nodiscard]] bool Release();
         bool SetPath(const char* tpath, bool is_open = true);
         int GetFd() const { return fd; }
         bool OverWriteFile(const std::string& strall) const;

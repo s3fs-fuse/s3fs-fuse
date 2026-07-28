@@ -51,8 +51,8 @@ class SyncFiller
         SyncFiller& operator=(const SyncFiller&) = delete;
         SyncFiller& operator=(SyncFiller&&) = delete;
 
-        int Fill(const std::string& name, const struct stat *stbuf, off_t off);
-        int SufficiencyFill(const std::vector<std::string>& pathlist);
+        [[nodiscard]] int Fill(const std::string& name, const struct stat *stbuf, off_t off);
+        [[nodiscard]] int SufficiencyFill(const std::vector<std::string>& pathlist);
 };
 
 #endif // SYNCFILLER_H_

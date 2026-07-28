@@ -219,12 +219,11 @@ bool UntreatedParts::RemoveLastUpdatePart()
 //
 // Duplicate the internally untreated_list.
 //
-bool UntreatedParts::Duplicate(untreated_list_t& list) const
+void UntreatedParts::Duplicate(untreated_list_t& list) const
 {
     const std::lock_guard<std::mutex> lock(untreated_list_lock);
 
     list = untreated_list;
-    return true;
 }
 
 void UntreatedParts::Dump() const
