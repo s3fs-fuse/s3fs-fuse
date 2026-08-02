@@ -371,7 +371,10 @@ void* multipart_upload_part_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     // Set result for exiting
     {
         const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-        *(pthparam->presult) = result;
+        if(0 == *(pthparam->presult) && 0 != result){
+            // keep first error
+            *(pthparam->presult) = result;
+        }
     }
 
     return reinterpret_cast<void*>(result);
