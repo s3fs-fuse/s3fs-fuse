@@ -150,10 +150,28 @@ void test_slist_remove()
     curl_slist_free_all(list);
 }
 
+void test_make_md5_from_binary()
+{
+    // A binary key is length-delimited and may contain or even start
+    // with a NUL byte(a random SSE-C key does so with probability 1/256).
+    char binary_key[32];
+    for(size_t i = 0; i < sizeof(binary_key); ++i){
+        binary_key[i] = static_cast<char>(i);
+    }
+    auto md5 = make_md5_from_binary(binary_key, sizeof(binary_key));
+    ASSERT_TRUE(md5.has_value());
+    ASSERT_STREQUALS("tP/LI3N87DFaSk0aoqYgzg==", md5.value_or("").c_str());
+
+    // A null or empty key is invalid.
+    ASSERT_FALSE(make_md5_from_binary(nullptr, sizeof(binary_key)).has_value());
+    ASSERT_FALSE(make_md5_from_binary(binary_key, 0).has_value());
+}
+
 int main(int argc, const char *argv[])
 {
     test_sort_insert();
     test_slist_remove();
+    test_make_md5_from_binary();
     return 0;
 }
 

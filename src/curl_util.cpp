@@ -250,7 +250,12 @@ std::string prepare_url(const char* url)
 
 std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length)
 {
-    if(!pstr || '\0' == pstr[0]){
+    // [NOTE]
+    // The input is a length-delimited binary buffer(ex. a raw SSE-C key)
+    // which may legally start with a NUL byte, so do not test it as a
+    // C string.
+    //
+    if(!pstr || 0 == length){
         S3FS_PRN_ERR("Parameter is wrong.");
         return std::nullopt;
     }
