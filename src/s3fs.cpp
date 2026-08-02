@@ -2956,6 +2956,7 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
 
     WTF8_ENCODE(path)
     int          result;
+    struct stat  stbuf;
     headers_t    meta;
     AutoFdEntity autoent;
     FdEntity*    ent = nullptr;
@@ -2972,36 +2973,44 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
     }
 
     // Get file information
-    if(0 == (result = get_object_attribute(path, nullptr, &meta))){
+    if(0 == (result = get_object_attribute(path, &stbuf, &meta))){
         // File exists
 
         // [NOTE]
-        // If the file exists, the file has already been opened by FUSE before
-        // truncate is called. Then the call below will change the file size.
-        // (When an already open file is changed the file size, FUSE will not
-        // reopen it.)
-        // The Flush is called before this file is closed, so there is no need
-        // to do it here.
+        // If the file is open, changing the size of the temporary FdEntity
+        // below is sufficient, because the file is flushed before it is
+        // closed.
+        // If no file descriptor is open(truncate(2) was called on a closed
+        // file), the temporary FdEntity is released without flushing when
+        // this function returns, so the resized file must be uploaded here.
         //
         // [NOTICE]
         // FdManager::Open() ignores changes that reduce the file size for the
         // file you are editing. However, if user opens only once, edit it,
         // and then shrink the file, it should be done.
-        // When this function is called, the file is already open by FUSE or
-        // some other operation. Therefore, if the number of open files is 1,
-        // no edits other than that fd will be made, and the files will be
-        // shrunk using ignore_modify flag even while editing.
+        // Therefore, if the number of open files is 1 or less, no edits
+        // other than that fd will be made, and the files will be shrunk
+        // using ignore_modify flag even while editing.
         // See the comments when merging this code for FUSE2 limitations.
         // (In FUSE3, it will be possible to handle it reliably using fuse_file_info.)
         //
+        int  open_fd_count = FdManager::GetOpenFdCount(path);
         bool ignore_modify;
-        if(1 < FdManager::GetOpenFdCount(path)){
+        if(1 < open_fd_count){
             ignore_modify = false;
         }else{
             ignore_modify = true;
         }
 
-        FileTimes ts_times;     // Default: all time values are set UTIME_OMIT
+        // [NOTE]
+        // The current file times are set like s3fs_open, so that a newly
+        // created FdEntity marks the retained area as unloaded(lazily
+        // downloaded) instead of modified. Otherwise the flush below would
+        // upload zeros for the retained area.
+        //
+        FileTimes ts_times;
+        ts_times.SetAll(stbuf);
+
         int error = 0;
         if(nullptr == (ent = autoent.Open(path, &meta, size, ts_times, O_RDWR, false, true, ignore_modify, &error))){
             if(0 == error){
@@ -3011,19 +3020,33 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
             return error;
         }
 
+        bool need_flush = (0 == open_fd_count);
+
 #ifdef __APPLE__
         // [NOTE]
         // Only for macos, this truncate calls to "size=0" do not reflect size.
         // The cause is unknown now, but it can be avoided by flushing the file.
         //
         if(0 == size){
+            need_flush = true;
+        }
+#endif
+
+        if(need_flush){
+            // successful truncate(2) updates ctime and mtime
+            struct timespec ts_now;
+            s3fs_realtime(ts_now);
+            if(0 != (result = ent->SetCtime(ts_now)) || 0 != (result = ent->SetMtime(ts_now))){
+                S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
+                return result;
+            }
+
             if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(path);
         }
-#endif
 
     }else if(-ENOENT == result){
         // Creates a sized temporary file only if it doesn't exist(-ENOENT).
