@@ -145,8 +145,17 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
 
         // reset curl handle
         if(!s3fscurl.CreateCurlHandle(true)){
-            S3FS_PRN_ERR("Failed to re-create curl handle.");
-            break;
+            // [NOTE]
+            // The acquired semaphore token corresponds to one queued
+            // instruction, which must not be left stranded: the request
+            // function below creates its own curl handle(and reports the
+            // error through its own result plumbing if that fails too),
+            // and the waiting semaphore is released after running it.
+            // Breaking out here instead would leave the instruction
+            // queued with no token, block its waiter forever and
+            // terminate this worker thread.
+            //
+            S3FS_PRN_ERR("Failed to re-create curl handle, but continue to run the instruction.");
         }
 
         // get instruction
