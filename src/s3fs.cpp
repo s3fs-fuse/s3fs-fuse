@@ -1971,6 +1971,18 @@ static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
         return -ESTALE;
     }
 
+    // [NOTE]
+    // S3 has no atomic rename, so neither RENAME_NOREPLACE(the target
+    // could appear between the check and the copy) nor RENAME_EXCHANGE
+    // (both objects would have to swap atomically) can be honored.
+    // Unsupported flags must be rejected with EINVAL, otherwise a plain
+    // rename runs instead and destroys the target object.
+    //
+    if(0 != flags){
+        S3FS_PRN_DBG("rename flags(0x%x) are not supported", flags);
+        return -EINVAL;
+    }
+
     WTF8_ENCODE(from)
     WTF8_ENCODE(to)
     struct stat buf;
