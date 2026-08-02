@@ -1625,7 +1625,7 @@ std::optional<std::string> S3fsCurl::GetCurlErrorString() const
 //
 // Reset all options for retrying
 //
-bool S3fsCurl::RemakeHandle()
+bool S3fsCurl::RemakeHandle(bool keepAuthHeader)
 {
     S3FS_PRN_INFO3("Retry request. [type=%d][url=%s][path=%s]", static_cast<int>(type), url.c_str(), path.c_str());
 
@@ -1647,7 +1647,15 @@ bool S3fsCurl::RemakeHandle()
     }
 
     // reinitialize internal data
-    requestHeaders = curl_slist_remove(requestHeaders, "Authorization");
+    if(!keepAuthHeader){
+        // [NOTE]
+        // The Authorization header is remade by insertAuthHeaders before
+        // each attempt.  When the request runs with dontAddAuthHeaders
+        // (ex. the IBM IAM credential request, which sets Authorization
+        // manually), nothing would re-add it, so it must be kept.
+        //
+        requestHeaders = curl_slist_remove(requestHeaders, "Authorization");
+    }
     responseHeaders.clear();
     bodydata.clear();
     headdata.clear();
@@ -2243,7 +2251,7 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
         if(S3FSCURL_PERFORM_RESULT_NOTSET == result){
             S3FS_PRN_INFO("Communication error(%d time): Retry up to the limit.", retrycnt);
 
-            if(!RemakeHandle()){
+            if(!RemakeHandle(dontAddAuthHeaders)){
                 S3FS_PRN_INFO("Failed to reset handle and internal data for retrying.");
                 result = -EIO;
                 break;
