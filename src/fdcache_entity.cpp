@@ -88,6 +88,34 @@ int FdEntity::FillFile(int fd, unsigned char byte, off_t size, off_t start)
 }
 
 // [NOTE]
+// Copies the data in the range [start, start + size) from srcfd to dstfd
+// at the same offsets.  If srcfd ends before the range does, the rest is
+// skipped(the caller prepares the destination so that it reads as zeros).
+//
+int FdEntity::CopyFdBytes(int srcfd, int dstfd, off_t start, off_t size)
+{
+    char bytes[1024 * 32];         // 32kb
+
+    for(off_t total = 0, onread = 0; total < size; total += onread){
+        if(-1 == (onread = pread(srcfd, bytes, std::min(static_cast<off_t>(sizeof(bytes)), size - total), start + total))){
+            S3FS_PRN_ERR("pread failed. errno(%d)", errno);
+            return -errno;
+        }
+        if(0 == onread){
+            // reached the end of the source file
+            break;
+        }
+        for(off_t wrote = 0, onwrote = 0; wrote < onread; wrote += onwrote){
+            if(-1 == (onwrote = pwrite(dstfd, &bytes[wrote], static_cast<size_t>(onread - wrote), start + total + wrote))){
+                S3FS_PRN_ERR("pwrite failed. errno(%d)", errno);
+                return -errno;
+            }
+        }
+    }
+    return 0;
+}
+
+// [NOTE]
 // If fd is wrong or something error is occurred, return 0.
 // The ino_t is allowed zero, but inode 0 is not realistic.
 // So this method returns 0 on error assuming the correct
@@ -1032,121 +1060,95 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
         return (0 == errno ? -EIO : -errno);
     }
 
-    // loop uploading by multipart
-    for(auto iter = pagelist.pages.begin(); iter != pagelist.pages.end(); ++iter){
-        if(iter->end() < start){
-            continue;
-        }
-        if(0 != size && start + size <= iter->offset){
-            break;
-        }
-        // download each multipart size(default 10MB) in unit
-        for(off_t oneread = 0, totalread = (iter->offset < start ? start : 0); totalread < iter->bytes; totalread += oneread){
-            int   upload_fd = physical_fd;
-            off_t offset    = iter->offset + totalread;
-            oneread         = std::min(iter->bytes - totalread, S3fsCurl::GetMultipartSize());
+    // upload target area is [start, upload_end)
+    off_t upload_end = (0 == size ? pagelist.Size() : std::min(start + size, pagelist.Size()));
 
-            // check rest size is over minimum part size
-            //
-            // [NOTE]
-            // If the final part size is smaller than 5MB, it is not allowed by S3 API.
-            // For this case, if the previous part of the final part is not over 5GB,
-            // we incorporate the final part to the previous part. If the previous part
-            // is over 5GB, we want to even out the last part and the previous part.
-            //
-            if((iter->bytes - totalread - oneread) < MIN_MULTIPART_SIZE){
-                if(FIVE_GB < iter->bytes - totalread){
-                    oneread = (iter->bytes - totalread) / 2;
-                }else{
-                    oneread = iter->bytes - totalread;
-                }
-            }
+    // [NOTE]
+    // The parts of the multipart upload must be contiguous and in order, so
+    // the area is uploaded in multipart size chunks regardless of the page
+    // boundaries.  A chunk is uploaded directly from the cache file when all
+    // of it is loaded, otherwise it is assembled in the temporary file from
+    // the loaded areas of the cache file, downloads of the unloaded areas
+    // and zeros beyond the original file size.
+    //
+    for(off_t chunk_start = start, chunk_size = 0; chunk_start < upload_end; chunk_start += chunk_size){
+        chunk_size = std::min(upload_end - chunk_start, S3fsCurl::GetMultipartSize());
 
-            if(!iter->loaded){
-                //
-                // loading or initializing
-                //
-                upload_fd = tmpfd;
-
-                // load offset & size
-                size_t need_load_size = 0;
-                if(size_orgmeta <= offset){
-                    // all area is over of original size
-                    need_load_size      = 0;
-                }else{
-                    if(size_orgmeta < (offset + oneread)){
-                        // original file size(on S3) is smaller than request.
-                        need_load_size    = size_orgmeta - offset;
-                    }else{
-                        need_load_size    = oneread;
-                    }
-                }
-                size_t over_size      = oneread - need_load_size;
-
-                // [NOTE]
-                // truncate file to zero and set length to part offset + size
-                // after this, file length is (offset + size), but file does not use any disk space.
-                //
-                if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (offset + oneread))){
-                    S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", tmpfd, errno);
-                    result = -errno;
-                    break;
-                }
-
-                // single area get request
-                if(0 < need_load_size){
-                    if(0 != (result = get_object_request(path, tmpfd, offset, oneread))){
-                        S3FS_PRN_ERR("failed to get object(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), tmpfd);
-                        break;
-                    }
-                }
-                // initialize fd without loading
-                if(0 < over_size){
-                    if(0 != (result = FdEntity::FillFile(tmpfd, 0, over_size, offset + need_load_size))){
-                        S3FS_PRN_ERR("failed to fill rest bytes for physical_fd(%d). errno(%d)", tmpfd, result);
-                        break;
-                    }
-                }
+        // check rest size is over minimum part size
+        //
+        // [NOTE]
+        // If the final part size is smaller than 5MB, it is not allowed by S3 API.
+        // For this case, if the previous part of the final part is not over 5GB,
+        // we incorporate the final part to the previous part. If the previous part
+        // is over 5GB, we want to even out the last part and the previous part.
+        //
+        if((upload_end - chunk_start - chunk_size) < MIN_MULTIPART_SIZE){
+            if(FIVE_GB < (upload_end - chunk_start)){
+                chunk_size = (upload_end - chunk_start) / 2;
             }else{
-                // already loaded area
+                chunk_size = upload_end - chunk_start;
             }
-            // single area upload by multipart upload
-            if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, upload_fd, offset, oneread))){
-                S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(offset), static_cast<long long int>(oneread), upload_fd);
+        }
+
+        int           upload_fd = physical_fd;
+        fdpage_list_t unloaded_pages;
+        if(0 < pagelist.GetUnloadedPages(unloaded_pages, chunk_start, chunk_size)){
+            //
+            // assemble the chunk in the temporary file
+            //
+            upload_fd = tmpfd;
+
+            // [NOTE]
+            // truncate the temporary file to zero and set length to the chunk
+            // end: the file length is (chunk_start + chunk_size), but it does
+            // not use any disk space and unwritten areas are read as zeros.
+            //
+            if(-1 == ftruncate(tmpfd, 0) || -1 == ftruncate(tmpfd, (chunk_start + chunk_size))){
+                S3FS_PRN_ERR("failed to truncate temporary file(physical_fd=%d) by errno(%d).", tmpfd, errno);
+                result = -errno;
+                break;
+            }
+
+            off_t copy_pos = chunk_start;
+            for(auto iter = unloaded_pages.cbegin(); iter != unloaded_pages.cend(); ++iter){
+                // copy the loaded area in front of this unloaded area
+                if(copy_pos < iter->offset){
+                    if(0 != (result = FdEntity::CopyFdBytes(physical_fd, tmpfd, copy_pos, iter->offset - copy_pos))){
+                        break;
+                    }
+                }
+                // download the unloaded area up to the original file size
+                // (the area beyond it remains zeros)
+                if(iter->offset < size_orgmeta){
+                    off_t download_size = std::min(iter->bytes, size_orgmeta - iter->offset);
+                    if(0 != (result = get_object_request(path, tmpfd, iter->offset, download_size))){
+                        S3FS_PRN_ERR("failed to get object(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(iter->offset), static_cast<long long int>(download_size), tmpfd);
+                        break;
+                    }
+                }
+                copy_pos = iter->next();
+            }
+            if(0 == result && copy_pos < (chunk_start + chunk_size)){
+                result = FdEntity::CopyFdBytes(physical_fd, tmpfd, copy_pos, chunk_start + chunk_size - copy_pos);
+            }
+            if(0 != result){
                 break;
             }
         }
-        if(0 != result){
+
+        // upload one chunk as one part
+        if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, upload_fd, chunk_start, chunk_size))){
+            S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(chunk_start), static_cast<long long int>(chunk_size), upload_fd);
             break;
         }
-
-        // set loaded flag
-        if(!iter->loaded){
-            if(iter->offset < start){
-                fdpage page(iter->offset, start - iter->offset, iter->loaded, false);
-                iter->bytes -= (start - iter->offset);
-                iter->offset = start;
-                iter = pagelist.pages.insert(iter, page);
-            }
-            if(0 != size && start + size < iter->next()){
-                fdpage page(iter->offset, start + size - iter->offset, true, false);
-                iter->bytes -= (start + size - iter->offset);
-                iter->offset = start + size;
-                iter = pagelist.pages.insert(iter, page);
-            }else{
-                iter->loaded   = true;
-                iter->modified = false;
-            }
-        }
     }
-    if(0 == result){
-        // compress pagelist
-        pagelist.Compress();
 
-        // fd data do empty
-        if(-1 == ftruncate(physical_fd, 0)){
-            S3FS_PRN_ERR("failed to truncate file(physical_fd=%d), but continue...", physical_fd);
-        }
+    if(0 == result && start < upload_end){
+        // The uploaded area no longer needs its local data: mark it as loaded
+        // and not modified("loaded" here means the multipart upload already
+        // holds the data), and release its bytes from the cache file.
+        pagelist.SetPageLoadedStatus(start, upload_end - start, PageList::page_status::LOADED);
+        FreeUploadedRange(start, upload_end - start);
     }
 
     return result;
@@ -1538,15 +1540,21 @@ int FdEntity::RowFlushMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // Already start uploading
 
         // upload rest data
-        off_t untreated_start = 0;
-        off_t untreated_size  = 0;
-        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize(), 0) && 0 < untreated_size){
-            if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, physical_fd, untreated_start, untreated_size))){
-                S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
+        //
+        // [NOTE]
+        // The parts of the multipart upload must be contiguous and in order,
+        // so everything from the position following the already uploaded
+        // parts to the end of the file is uploaded here.  This includes the
+        // areas written after switching to the uploading without cache and
+        // the areas between them(which are downloaded or zero).
+        //
+        if(pseudo_obj->GetNextUploadPos() < pagelist.Size()){
+            if(0 != (result = NoCacheLoadAndPost(pseudo_obj, pseudo_obj->GetNextUploadPos(), 0))){
+                S3FS_PRN_ERR("failed to upload rest area for file(physical_fd=%d).", physical_fd);
                 return result;
             }
-            untreated_list.ClearParts(untreated_start, untreated_size);
         }
+        untreated_list.ClearAll();
         // complete multipart uploading.
         if(0 != (result = NoCacheMultipartUploadComplete(pseudo_obj))){
             S3FS_PRN_ERR("failed to complete(finish) multipart upload for file(physical_fd=%d).", physical_fd);
@@ -1687,15 +1695,21 @@ int FdEntity::RowFlushMixMultipart(PseudoFdInfo* pseudo_obj, const char* tpath)
         // Already start uploading
 
         // upload rest data
-        off_t untreated_start = 0;
-        off_t untreated_size  = 0;
-        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize(), 0) && 0 < untreated_size){
-            if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, physical_fd, untreated_start, untreated_size))){
-                S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
+        //
+        // [NOTE]
+        // The parts of the multipart upload must be contiguous and in order,
+        // so everything from the position following the already uploaded
+        // parts to the end of the file is uploaded here.  This includes the
+        // areas written after switching to the uploading without cache and
+        // the areas between them(which are downloaded or zero).
+        //
+        if(pseudo_obj->GetNextUploadPos() < pagelist.Size()){
+            if(0 != (result = NoCacheLoadAndPost(pseudo_obj, pseudo_obj->GetNextUploadPos(), 0))){
+                S3FS_PRN_ERR("failed to upload rest area for file(physical_fd=%d).", physical_fd);
                 return result;
             }
-            untreated_list.ClearParts(untreated_start, untreated_size);
         }
+        untreated_list.ClearAll();
         // complete multipart uploading.
         if(0 != (result = NoCacheMultipartUploadComplete(pseudo_obj))){
             S3FS_PRN_ERR("failed to complete(finish) multipart upload for file(physical_fd=%d).", physical_fd);
@@ -2191,15 +2205,31 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
                 S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                 return result;
             }
-            // start multipart uploading
-            if(0 != (result = NoCacheLoadAndPost(pseudo_obj, 0, start))){
-                S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
-                return result;
+            // start multipart uploading with the whole area in front of
+            // this write(nothing to upload yet if the write is at offset 0)
+            if(0 < start){
+                if(0 != (result = NoCacheLoadAndPost(pseudo_obj, 0, start))){
+                    S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
+                    return result;
+                }
+                // only the uploaded area is treated now, the rest is
+                // uploaded by the flush at close
+                untreated_list.ClearParts(0, start);
             }
-            untreated_list.ClearAll();
         }
     }else{
         // already start multipart uploading
+
+        // [NOTE]
+        // The parts of the multipart upload must be uploaded in order, and
+        // the local bytes before the already uploaded position have been
+        // discarded, so a write before that position can no longer be
+        // stored.  Refuse it instead of corrupting the upload.
+        //
+        if(start < pseudo_obj->GetNextUploadPos()){
+            S3FS_PRN_ERR("could not write at offset(%lld) before the already uploaded position(%lld) in multipart uploading without cache(path=%s).", static_cast<long long int>(start), static_cast<long long int>(pseudo_obj->GetNextUploadPos()), path.c_str());
+            return -ENOSPC;
+        }
     }
 
     // Writing
@@ -2227,21 +2257,17 @@ ssize_t FdEntity::WriteMultipart(PseudoFdInfo* pseudo_obj, const char* bytes, of
         // get last untreated part(maximum size is multipart size)
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize())){
-            // when multipart max size is reached
+        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && untreated_start == pseudo_obj->GetNextUploadPos()){
+            // when multipart max size is reached and the part directly
+            // follows the already uploaded parts(other parts are left to
+            // the flush at close)
             if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
 
-            // [NOTE]
-            // truncate file to zero and set length to part offset + size
-            // after this, file length is (offset + size), but file does not use any disk space.
-            //
-            if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, (untreated_start + untreated_size))){
-                S3FS_PRN_ERR("failed to truncate file(physical_fd=%d).", physical_fd);
-                return -errno;
-            }
+            // release the local bytes of the uploaded part
+            FreeUploadedRange(untreated_start, untreated_size);
             untreated_list.ClearParts(untreated_start, untreated_size);
         }
     }
@@ -2275,15 +2301,31 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
                 S3FS_PRN_ERR("failed to switch multipart uploading with no cache(errno=%d)", result);
                 return result;
             }
-            // start multipart uploading
-            if(0 != (result = NoCacheLoadAndPost(pseudo_obj, 0, start))){
-                S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
-                return result;
+            // start multipart uploading with the whole area in front of
+            // this write(nothing to upload yet if the write is at offset 0)
+            if(0 < start){
+                if(0 != (result = NoCacheLoadAndPost(pseudo_obj, 0, start))){
+                    S3FS_PRN_ERR("failed to load uninitialized area and multipart uploading it(errno=%d)", result);
+                    return result;
+                }
+                // only the uploaded area is treated now, the rest is
+                // uploaded by the flush at close
+                untreated_list.ClearParts(0, start);
             }
-            untreated_list.ClearAll();
         }
     }else{
         // already start multipart uploading
+
+        // [NOTE]
+        // The parts of the multipart upload must be uploaded in order, and
+        // the local bytes before the already uploaded position have been
+        // discarded, so a write before that position can no longer be
+        // stored.  Refuse it instead of corrupting the upload.
+        //
+        if(start < pseudo_obj->GetNextUploadPos()){
+            S3FS_PRN_ERR("could not write at offset(%lld) before the already uploaded position(%lld) in multipart uploading without cache(path=%s).", static_cast<long long int>(start), static_cast<long long int>(pseudo_obj->GetNextUploadPos()), path.c_str());
+            return -ENOSPC;
+        }
     }
 
     // Writing
@@ -2302,21 +2344,17 @@ ssize_t FdEntity::WriteMixMultipart(PseudoFdInfo* pseudo_obj, const char* bytes,
         // get last untreated part(maximum size is multipart size)
         off_t untreated_start = 0;
         off_t untreated_size  = 0;
-        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize())){
-            // when multipart max size is reached
+        if(untreated_list.GetLastUpdatedPart(untreated_start, untreated_size, S3fsCurl::GetMultipartSize()) && untreated_start == pseudo_obj->GetNextUploadPos()){
+            // when multipart max size is reached and the part directly
+            // follows the already uploaded parts(other parts are left to
+            // the flush at close)
             if(0 != (result = NoCacheMultipartUploadRequest(pseudo_obj, physical_fd, untreated_start, untreated_size))){
                 S3FS_PRN_ERR("failed to multipart upload(start=%lld, size=%lld) for file(physical_fd=%d).", static_cast<long long int>(untreated_start), static_cast<long long int>(untreated_size), physical_fd);
                 return result;
             }
 
-            // [NOTE]
-            // truncate file to zero and set length to part offset + size
-            // after this, file length is (offset + size), but file does not use any disk space.
-            //
-            if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, (untreated_start + untreated_size))){
-                S3FS_PRN_ERR("failed to truncate file(physical_fd=%d).", physical_fd);
-                return -errno;
-            }
+            // release the local bytes of the uploaded part
+            FreeUploadedRange(untreated_start, untreated_size);
             untreated_list.ClearParts(untreated_start, untreated_size);
         }
     }
@@ -2526,6 +2564,41 @@ bool FdEntity::PunchHole(off_t start, size_t size)
         S3FS_PRN_DBG("made a hole at [%lld - %lld bytes](into a boundary) of the cache file.", static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes));
     }
     return true;
+}
+
+// [NOTE]
+// Releases the local bytes of the area [start, start + size) which has been
+// uploaded by the multipart uploading without cache.
+// If no area after it still has local bytes, the file is shrunk to zero and
+// restored to its length, which releases the disk space on any file system.
+// (The areas in front of it were uploaded earlier and already released.)
+// Otherwise a hole is punched over the area only, which is a best effort
+// like PunchHole(Linux specific), and on failure the bytes are kept.
+//
+void FdEntity::FreeUploadedRange(off_t start, off_t size)
+{
+    S3FS_PRN_DBG("[path=%s][physical_fd=%d][offset=%lld][size=%lld]", path.c_str(), physical_fd, static_cast<long long int>(start), static_cast<long long int>(size));
+
+    bool has_local_data_after = false;
+    for(auto iter = pagelist.pages.cbegin(); iter != pagelist.pages.cend(); ++iter){
+        if((iter->loaded || iter->modified) && (start + size) < iter->next()){
+            has_local_data_after = true;
+            break;
+        }
+    }
+    if(!has_local_data_after){
+        // [NOTE]
+        // truncate file to zero and restore the length: after this, the file
+        // length is (start + size), but the file does not use any disk space.
+        //
+        if(-1 == ftruncate(physical_fd, 0) || -1 == ftruncate(physical_fd, (start + size))){
+            S3FS_PRN_ERR("failed to truncate file(physical_fd=%d), but continue...", physical_fd);
+        }
+    }else{
+        if(0 != fallocate(physical_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, start, size)){
+            S3FS_PRN_WARN("failed to punch a hole to file(physical_fd=%d) by errno(%d), could not release the disk space, but continue...", physical_fd, errno);
+        }
+    }
 }
 
 // [NOTE]
