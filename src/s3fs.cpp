@@ -1347,27 +1347,28 @@ static int s3fs_unlink(const char* _path)
 
 static int directory_empty(const char* path)
 {
-    int       result = 0;
     S3ObjList head;
 
     // check s3objlist in cache
+    //
+    // [NOTE]
+    // The cached list is always the complete one-level listing stored
+    // by s3fs_readdir, so it can answer whether the directory is empty.
+    // On a cache miss, only a truncated listing(max-keys=2) is requested
+    // here.  It must not be stored in the cache, because s3fs_readdir
+    // would serve it as if it were the complete listing.
+    //
     if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+        int result;
         if((result = list_bucket(path, head, "/", true)) != 0){
             S3FS_PRN_ERR("list_bucket returns error.");
             return result;
         }
-        if(!head.IsEmpty()){
-            if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
-                S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
-            }
-            result = -ENOTEMPTY;
-        }
-    }else{
-        if(!head.IsEmpty()){
-            result = -ENOTEMPTY;
-        }
     }
-    return result;
+    if(!head.IsEmpty()){
+        return -ENOTEMPTY;
+    }
+    return 0;
 }
 
 static int s3fs_rmdir(const char* _path)
@@ -1848,15 +1849,16 @@ static int rename_directory(const char* from, const char* to)
     // No delimiter is specified, the result(head) is all object keys.
     // (CommonPrefixes is empty, but all object is listed in Key.)
     //
-    if(!StatCache::getStatCacheData()->GetS3ObjList(basepath, head)){
-        // get a list of all the objects
-        if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
-            S3FS_PRN_ERR("list_bucket returns error.");
-            return result;
-        }
-        if(!StatCache::getStatCacheData()->AddS3ObjList(basepath, head)){
-            S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", basepath.c_str());
-        }
+    // [NOTE]
+    // The S3ObjList cache is not used here.  It holds the one-level
+    // listing(delimiter=/) stored by s3fs_readdir, which does not
+    // include objects under subdirectories, so a rename based on it
+    // would leave those objects behind.  For the same reason, this
+    // recursive listing must not be stored in the cache.
+    //
+    if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
+        S3FS_PRN_ERR("list_bucket returns error.");
+        return result;
     }
     head.GetNameList(headlist);                                             // get name without "/".
 
