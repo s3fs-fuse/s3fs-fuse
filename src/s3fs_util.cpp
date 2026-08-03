@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <cerrno>
 #include <grp.h>

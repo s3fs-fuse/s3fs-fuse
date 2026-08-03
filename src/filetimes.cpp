@@ -25,38 +25,12 @@
 //-------------------------------------------------------------------
 // Utility functions
 //-------------------------------------------------------------------
-//
-// result: -1  ts1 <  ts2
-//          0  ts1 == ts2
-//          1  ts1 >  ts2
-//
 bool valid_timespec(const struct timespec& ts)
 {
     if(0 > ts.tv_sec || UTIME_OMIT == ts.tv_nsec || UTIME_NOW == ts.tv_nsec){
         return false;
     }
     return true;
-}
-
-//
-// result: -1  ts1 <  ts2
-//          0  ts1 == ts2
-//          1  ts1 >  ts2
-//
-constexpr int compare_timespec(const struct timespec& ts1, const struct timespec& ts2)
-{
-    if(ts1.tv_sec < ts2.tv_sec){
-        return -1;
-    }else if(ts1.tv_sec > ts2.tv_sec){
-        return 1;
-    }else{
-        if(ts1.tv_nsec < ts2.tv_nsec){
-            return -1;
-        }else if(ts1.tv_nsec > ts2.tv_nsec){
-            return 1;
-        }
-    }
-    return 0;
 }
 
 //
