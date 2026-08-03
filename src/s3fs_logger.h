@@ -142,6 +142,16 @@ class S3fsLog
 //-------------------------------------------------------------------
 // Debug macros
 //-------------------------------------------------------------------
+// [NOTE]
+// All formatting, branching and output logic lives in the functions
+// below, so it is emitted once instead of being inlined at every call
+// site. The level-guarded macros keep a cheap inline IsS3fsLogLevel()
+// check at the call site so the log arguments are not evaluated when
+// the level is disabled; the out-of-line function is called only when
+// the check passes. The macros also capture __FILE__/__func__/__LINE__,
+// which a plain function cannot obtain on its own before C++20's
+// std::source_location.
+//
 void s3fs_low_logprn(S3fsLog::Level level, const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 5, 6)));
 #define S3FS_LOW_LOGPRN(level, fmt, ...) \
         do{ \
@@ -158,58 +168,21 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
             } \
         }while(0)
 
-#define S3FS_LOW_CURLDBG(fmt, ...) \
-        do{ \
-            if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s[CURL DBG] " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), __VA_ARGS__); \
-            }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__); \
-            } \
-        }while(0)
+void s3fs_low_curldbg(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-#define S3FS_LOW_LOGPRN_EXIT(fmt, ...) \
-        do{ \
-            if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::Printf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
-            }else{ \
-                S3fsLog::Printf(S3fsLog::GetErrorLogFile(), "s3fs: " fmt "%s\n", __VA_ARGS__); \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::CRIT), "%ss3fs: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
-            } \
-        }while(0)
+void s3fs_low_logprn_exit(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-// Special macro for init message
+// Special function for init message
+void s3fs_low_init_info(const char* file, const char *func, int line, const char *fmt, ...) __attribute__ ((format (printf, 4, 5)));
 #define S3FS_PRN_INIT_INFO(fmt, ...) \
-        do{ \
-            if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s%s%s:%s(%d): " fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), S3fsLog::GetS3fsLogNest(0), __FILE__, __func__, __LINE__, __VA_ARGS__, ""); \
-            }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s%s" fmt "%s", instance_name.c_str(), S3fsLog::GetS3fsLogNest(0), __VA_ARGS__, ""); \
-            } \
-        }while(0)
+        s3fs_low_init_info(__FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__)
 
-#define S3FS_PRN_LAUNCH_INFO(fmt, ...) \
-        do{ \
-            if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::Printf(S3fsLog::GetOutputLogFile(), "%s%s" fmt "%s\n", S3fsLog::GetCurrentTime().c_str(), S3fsLog::GetLevelString(S3fsLog::Level::INFO), __VA_ARGS__, ""); \
-            }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s" fmt "%s", instance_name.c_str(), __VA_ARGS__, ""); \
-            } \
-        }while(0)
+void s3fs_low_launch_info(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-// Special macro for checking cache files
-#define S3FS_LOW_CACHE(fp, fmt, ...) \
-        do{ \
-            if(foreground || S3fsLog::IsSetLogFile()){ \
-                S3fsLog::Printf(fp, fmt "%s\n", __VA_ARGS__); \
-            }else{ \
-                syslog(S3fsLog::GetSyslogLevel(S3fsLog::Level::INFO), "%s: " fmt "%s", instance_name.c_str(), __VA_ARGS__); \
-            } \
-        }while(0)
+// Special function for checking cache files
+void s3fs_low_cache(FILE* fp, const char* fmt, ...) __attribute__ ((format (printf, 2, 3)));
 
-// [NOTE]
-// small trick for VA_ARGS
-//
-#define S3FS_PRN_EXIT(fmt, ...)   S3FS_LOW_LOGPRN_EXIT(fmt, ##__VA_ARGS__, "")
+#define S3FS_PRN_EXIT(fmt, ...)   s3fs_low_logprn_exit(fmt, ##__VA_ARGS__)
 #define S3FS_PRN_CRIT(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::Level::CRIT, fmt, ##__VA_ARGS__)
 #define S3FS_PRN_ERR(fmt, ...)    S3FS_LOW_LOGPRN(S3fsLog::Level::ERR,  fmt, ##__VA_ARGS__)
 #define S3FS_PRN_WARN(fmt, ...)   S3FS_LOW_LOGPRN(S3fsLog::Level::WARN, fmt, ##__VA_ARGS__)
@@ -218,8 +191,9 @@ void s3fs_low_logprn2(S3fsLog::Level level, int nest, const char* file, const ch
 #define S3FS_PRN_INFO1(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 1, fmt, ##__VA_ARGS__)
 #define S3FS_PRN_INFO2(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 2, fmt, ##__VA_ARGS__)
 #define S3FS_PRN_INFO3(fmt, ...)  S3FS_LOW_LOGPRN2(S3fsLog::Level::INFO, 3, fmt, ##__VA_ARGS__)
-#define S3FS_PRN_CURL(fmt, ...)   S3FS_LOW_CURLDBG(fmt, ##__VA_ARGS__, "")
-#define S3FS_PRN_CACHE(fp, ...)   S3FS_LOW_CACHE(fp, ##__VA_ARGS__, "")
+#define S3FS_PRN_CURL(fmt, ...)   s3fs_low_curldbg(fmt, ##__VA_ARGS__)
+#define S3FS_PRN_CACHE(fp, ...)   s3fs_low_cache(fp, ##__VA_ARGS__)
+#define S3FS_PRN_LAUNCH_INFO(fmt, ...)  s3fs_low_launch_info(fmt, ##__VA_ARGS__)
 
 // Macros to print log with fuse context
 #define PRINT_FUSE_CTX(level, indent, fmt, ...) do {                    \
