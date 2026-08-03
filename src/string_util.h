@@ -50,8 +50,8 @@ public:
 private:
     std::string_view str;
 };
-static constexpr bool is_prefix(std::string_view str, std::string_view prefix) { return str.substr(0, prefix.size()) == prefix; }
-static constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
+constexpr bool is_prefix(std::string_view str, std::string_view prefix) { return str.substr(0, prefix.size()) == prefix; }
+constexpr const char* SAFESTRPTR(const char *strptr) { return strptr ? strptr : ""; }
 
 //-------------------------------------------------------------------
 // Macros(WTF8)

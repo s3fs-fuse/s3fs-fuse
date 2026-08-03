@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -679,7 +680,7 @@ const char* mask_sensitive_string_with_flag(const char* sensitive, bool nomask)
 
 std::string mask_sensitive_header(const char* pheader, size_t length)
 {
-    static const char* SensitiveHeaders[] = {
+    static constexpr std::array<std::string_view, 8> SensitiveHeaders = {
         "authorization:",                                   // do not change this position(see. isAuthHeader)
         "x-amz-security-token:",
         "x-amz-credential:",
@@ -687,8 +688,7 @@ std::string mask_sensitive_header(const char* pheader, size_t length)
         "x-amz-server-side-encryption-customer-key-md5:",
         "x-amz-server-side-encryption-aws-kms-key-id:",
         "x-amz-copy-source-server-side-encryption-customer-key:",
-        "x-amz-copy-source-server-side-encryption-customer-key-md5:",
-        nullptr
+        "x-amz-copy-source-server-side-encryption-customer-key-md5:"
     };
 
     if(!pheader || length == 0){
@@ -697,11 +697,8 @@ std::string mask_sensitive_header(const char* pheader, size_t length)
     std::string strHeader(pheader, length);
 
     bool isAuthHeader = true;
-    for(const auto* one_sensitive: SensitiveHeaders){
-        if(one_sensitive == nullptr){
-            break;
-        }
-        if(0 == strncasecmp(strHeader.c_str(), one_sensitive, strlen(one_sensitive))){
+    for(const auto& one_sensitive: SensitiveHeaders){
+        if(CaseInsensitiveStringView(strHeader).is_prefix(one_sensitive)){
             if(isAuthHeader){
                 // mask the element in Authorization header
                 static const std::regex aws4_check(R"(\s*AWS4-HMAC-SHA256\s+)", std::regex::icase);
@@ -717,11 +714,11 @@ std::string mask_sensitive_header(const char* pheader, size_t length)
                     strHeader = std::regex_replace(strHeader, std::regex(R"((\s*AWS\s+)(.+))", std::regex::icase), "$1[SENSITIVE]");
                 }else{
                     // wrong format
-                    strHeader.resize(strlen(one_sensitive));
+                    strHeader.resize(one_sensitive.size());
                     strHeader += " [SENSITIVE(wrong format)]";
                 }
             }else{
-                strHeader.resize(strlen(one_sensitive));
+                strHeader.resize(one_sensitive.size());
                 strHeader += " [SENSITIVE]";
             }
             break;

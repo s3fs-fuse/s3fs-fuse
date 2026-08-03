@@ -38,7 +38,31 @@ enum class stat_time_type : uint8_t {
 // Utility Functions for timespecs
 //-------------------------------------------------------------------
 bool valid_timespec(const struct timespec& ts);
-constexpr int compare_timespec(const struct timespec& ts1, const struct timespec& ts2);
+
+//
+// result: -1  ts1 <  ts2
+//          0  ts1 == ts2
+//          1  ts1 >  ts2
+//
+// [NOTE]
+// This must be defined in the header since constexpr implies inline.
+//
+constexpr int compare_timespec(const struct timespec& ts1, const struct timespec& ts2)
+{
+    if(ts1.tv_sec < ts2.tv_sec){
+        return -1;
+    }else if(ts1.tv_sec > ts2.tv_sec){
+        return 1;
+    }else{
+        if(ts1.tv_nsec < ts2.tv_nsec){
+            return -1;
+        }else if(ts1.tv_nsec > ts2.tv_nsec){
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int compare_timespec(const struct stat& st, stat_time_type type, const struct timespec& ts);
 void set_timespec_to_stat(struct stat& st, stat_time_type type, const struct timespec& ts);
 struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type, struct timespec& ts);
