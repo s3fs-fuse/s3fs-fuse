@@ -377,7 +377,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.24" ]; then
         openssl
         perl-test-harness-utils
         procps
-        sed
     )
 
 else
