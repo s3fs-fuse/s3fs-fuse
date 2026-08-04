@@ -119,6 +119,12 @@ jobs:
     runs-on: macos-14
 
     # [NOTE]
+    # This job usually completes in 10 minutes but sometimes hangs and
+    # reaches the default 360 minute limit, so set a shorter timeout.
+    #
+    timeout-minutes: 20
+
+    # [NOTE]
     # In macos-14 (and maybe later), the location of the CA certificate is different and you need to specify it.
     # We give the CA path as an environment variable.
     #
