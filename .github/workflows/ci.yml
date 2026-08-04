@@ -107,6 +107,29 @@ jobs:
           make check -C src
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
 
+      # [NOTE]
+      # Only a filtered excerpt of the test logs reaches the console, and a
+      # run cancelled by a job timeout prints nothing at all because automake
+      # writes test-suite.log only after the whole run finishes, so attach
+      # the full logs (including the incrementally written per-test logs) as
+      # an artifact for debugging.
+      # Artifact names must be unique in a workflow run and must not contain
+      # characters like "/" and ":", so matrix.container is sanitized first.
+      #
+      - name: Set artifact name
+        if: failure() || cancelled()
+        run: echo "SANITIZED_CONTAINER_NAME=$(echo '${{ matrix.container }}' | tr '/:' '--')" >> "$GITHUB_ENV"
+
+      - name: Upload test logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-logs-${{ env.SANITIZED_CONTAINER_NAME }}
+          path: |
+            src/test-suite.log
+            test/*.log
+          if-no-files-found: ignore
+
   # [NOTE]
   # Using macos-fuse-t
   #   This product(package) is a workaround for osxfuse which required an OS reboot(macos 11 and later).
@@ -170,6 +193,16 @@ jobs:
         run: |
           make check -C src
           make ALL_TESTS=1 check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)
+
+      - name: Upload test logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-logs-macos-14
+          path: |
+            src/test-suite.log
+            test/*.log
+          if-no-files-found: ignore
 
   MemoryTest:
     runs-on: ubuntu-latest
@@ -271,6 +304,14 @@ jobs:
       - name: Test suite
         run: |
           /bin/sh -c "ALL_TESTS=1 ASAN_OPTIONS=${ASAN_OPTIONS} TSAN_OPTIONS=${TSAN_OPTIONS} VALGRIND=${VALGRIND} RETRIES=${RETRIES} make check -C test || (test/filter-suite-log.sh test/test-suite.log; exit 1)"
+
+      - name: Upload test logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-logs-${{ matrix.checktype }}
+          path: test/*.log
+          if-no-files-found: ignore
 
   static-checks:
     runs-on: ubuntu-latest
