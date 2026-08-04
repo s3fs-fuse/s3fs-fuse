@@ -89,13 +89,13 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:26.04" ]; then
         acl
         attr
         autoconf
+        automake
         autotools-dev
         build-essential
         curl
         fuse3
         g++
         git
-        jq
         libcurl4-openssl-dev
         libfuse3-dev
         libssl-dev
@@ -105,6 +105,7 @@ if [ "${CONTAINER_FULLNAME}" = "ubuntu:26.04" ]; then
         mailcap
         openjdk-25-jre-headless
         pkg-config
+        procps
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
@@ -116,13 +117,13 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
         acl
         attr
         autoconf
+        automake
         autotools-dev
         build-essential
         curl
         fuse3
         g++
         git
-        jq
         libcurl4-openssl-dev
         libfuse3-dev
         libssl-dev
@@ -132,6 +133,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
         mailcap
         openjdk-25-jre-headless
         pkg-config
+        procps
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
@@ -143,13 +145,13 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
         acl
         attr
         autoconf
+        automake
         autotools-dev
         build-essential
         curl
         fuse3
         g++
         git
-        jq
         libcurl4-openssl-dev
         libfuse3-dev
         libssl-dev
@@ -159,6 +161,7 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
         mime-support
         openjdk-25-jre-headless
         pkg-config
+        procps
     )
 
     CURL_DIRECT_INSTALL=1
@@ -172,13 +175,13 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
         acl
         attr
         autoconf
+        automake
         autotools-dev
         build-essential
         curl
         fuse3
         g++
         git
-        jq
         libcurl4-openssl-dev
         libfuse3-dev
         libssl-dev
@@ -201,13 +204,13 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
         acl
         attr
         autoconf
+        automake
         autotools-dev
         build-essential
         curl
         fuse3
         g++
         git
-        jq
         libcurl4-openssl-dev
         libfuse3-dev
         libssl-dev
@@ -249,7 +252,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
         git
         glibc-langpack-en
         java-25-openjdk-headless
-        jq
         libstdc++-devel
         libxml2-devel
         mailcap
@@ -258,7 +260,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:10" ] ||
         openssl-devel
         perl-Test-Harness
         procps
-        xz
     )
 
     CURL_DIRECT_INSTALL=1
@@ -282,7 +283,6 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
         git
         glibc-langpack-en
         java-21-openjdk-headless
-        jq
         libstdc++-devel
         libxml2-devel
         mailcap
@@ -290,6 +290,7 @@ elif [ "${CONTAINER_FULLNAME}" = "rockylinux/rockylinux:8" ]; then
         openssl
         openssl-devel
         perl-Test-Harness
+        procps
     )
 
     CURL_DIRECT_INSTALL=1
@@ -315,7 +316,6 @@ elif [ "${CONTAINER_FULLNAME}" = "fedora:44" ] ||
         git
         glibc-langpack-en
         java-latest-openjdk-headless
-        jq
         libstdc++-devel
         libxml2-devel
         mailcap
@@ -342,13 +342,11 @@ elif [ "${CONTAINER_FULLNAME}" = "opensuse/leap:16.0" ]; then
         fuse3-devel
         gcc-c++
         java-21-openjdk-headless
-        jq
         libxml2-devel
         make
         openssl
         openssl-devel
         procps
-        python3
     )
 
 elif [ "${CONTAINER_FULLNAME}" = "alpine:3.24" ]; then
@@ -368,7 +366,6 @@ elif [ "${CONTAINER_FULLNAME}" = "alpine:3.24" ]; then
         fuse3-dev
         g++
         git
-        jq
         libtool
         libxml2-dev
         mailcap
