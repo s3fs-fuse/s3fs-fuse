@@ -168,6 +168,7 @@ S3fsCred::S3fsCred() :
     is_ecs(false),
     is_use_session_token(false),
     is_ibm_iam_auth(false),
+    is_ibm_trusted_profile(false),
     IAM_cred_url("http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
     IAM_api_version(2),
     IAM_field_count(4),
@@ -274,6 +275,22 @@ bool S3fsCred::SetIsIBMIAMAuth(bool flag)
     bool old = is_ibm_iam_auth;
     is_ibm_iam_auth = flag;
     return old;
+}
+
+bool S3fsCred::SetIsIBMTrustedProfile(bool flag)
+{
+    bool old = is_ibm_trusted_profile;
+    is_ibm_trusted_profile = flag;
+    return old;
+}
+
+bool S3fsCred::SetIBMTrustedProfileId(const char* profile_id)
+{
+    if(!profile_id || '\0' == profile_id[0]){
+        return false;
+    }
+    ibm_trusted_profile_id = profile_id;
+    return true;
 }
 
 bool S3fsCred::SetIAMRole(const char* role)
@@ -435,8 +452,13 @@ bool S3fsCred::LoadIAMCredentials()
         stribmsecret = AWSSecretAccessKey;
     }
 
+    std::string strtrustedprofileid;
+    if(IsIBMTrustedProfileAuth()){
+        strtrustedprofileid = ibm_trusted_profile_id;
+    }
+
     // Get IAM Credentials
-    if(0 == get_iamcred_request(url, striamtoken, stribmsecret, cred)){
+    if(0 == get_iamcred_request(url, striamtoken, stribmsecret, strtrustedprofileid, cred)){
         S3FS_PRN_DBG("Succeed to set IAM credentials");
     }else{
         S3FS_PRN_ERR("Something error occurred, could not set IAM credentials.");
@@ -1384,6 +1406,26 @@ int S3fsCred::DetectParam(const char* arg)
         return 0;
     }
 
+    if(is_prefix(arg, "ibm_trusted_profile_id=")){
+        const char* profile_id = strchr(arg, '=') + sizeof(char);
+        if(!SetIBMTrustedProfileId(profile_id)){
+            S3FS_PRN_EXIT("option ibm_trusted_profile_id has empty value");
+            return -1;
+        }
+        SetIsIBMTrustedProfile(true);
+        // Implicitly enable IBM IAM auth — trusted profile always uses IBM IAM token exchange
+        if(!is_ibm_iam_auth){
+            SetIsIBMIAMAuth(true);
+            SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
+            SetIAMTokenField("\"access_token\"");
+            SetIAMExpiryField("\"expiration\"");
+            SetIAMFieldCount(2);
+            SetIMDSVersionHasLock(1);
+        }
+        set_builtin_cred_opts = true;
+        return 0;
+    }
+
     if(0 == strcmp(arg, "use_session_token")){
         SetIsUseSessionToken(true);
         set_builtin_cred_opts = true;
@@ -1551,6 +1593,21 @@ bool S3fsCred::CheckAllParams()
         }
     }
 
+    // check Trusted Profile requirements
+    if(is_ibm_trusted_profile){
+        // ibm_iam_auth is auto-enabled by ibm_trusted_profile_id in DetectParam,
+        // but guard here in case the object was configured programmatically.
+        if(!is_ibm_iam_auth){
+            S3FS_PRN_EXIT("ibm_trusted_profile_id requires IBM IAM auth; set ibm_iam_auth or use ibm_trusted_profile_id which enables it automatically");
+            return false;
+        }
+        if(ibm_trusted_profile_id.empty()){
+            S3FS_PRN_EXIT("option ibm_trusted_profile_id has empty value");
+            return false;
+        }
+        S3FS_PRN_INFO("IBM Trusted Profile authentication enabled [profile_id=%s]", ibm_trusted_profile_id.c_str());
+    }
+
     // check External Credential Library
     //
     // [NOTE]
@@ -1558,7 +1615,7 @@ bool S3fsCred::CheckAllParams()
     // no other Credential related options can be specified. It is exclusive.
     //
     if(set_builtin_cred_opts && (IsSetExtCredLib() || IsSetExtCredLibOpts())){
-        S3FS_PRN_EXIT("The \"credlib\" or \"credlib_opts\" option and other credential-related options(passwd_file, iam_role, profile, use_session_token, ecs, imdsv1only, ibm_iam_auth, ibm_iam_endpoint, etc) cannot be specified together.");
+        S3FS_PRN_EXIT("The \"credlib\" or \"credlib_opts\" option and other credential-related options(passwd_file, iam_role, profile, use_session_token, ecs, imdsv1only, ibm_iam_auth, ibm_iam_endpoint, ibm_trusted_profile_id, etc) cannot be specified together.");
         return false;
     }
 

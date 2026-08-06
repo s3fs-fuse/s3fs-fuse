@@ -325,7 +325,7 @@ class S3fsCurl
         bool DestroyCurlHandle(bool clear_internal_data = true);
         bool DestroyCurlHandleHasLock(bool clear_internal_data = true) REQUIRES(S3fsCurl::curl_handles_lock);
 
-        std::optional<std::string> GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key);
+        std::optional<std::string> GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, const char* ibm_trusted_profile_id = nullptr);
         std::optional<std::string> GetIAMRoleFromMetaData(const char* cred_url, const char* iam_v2_token);
         std::optional<long> GetResponseCode(bool from_curl_handle = true) const;
         std::optional<std::string> GetCurlErrorString() const;

@@ -1554,13 +1554,13 @@ int get_iamrole_request(const std::string& strurl, const std::string& striamtoke
 //
 // Directly calls S3fsCurl::GetIAMCredentials
 //
-int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, std::string& cred)
+int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, const std::string& strtrustedprofileid, std::string& cred)
 {
-    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()), mask_sensitive_string(stribmsecret.c_str()));
+    S3FS_PRN_INFO3("Get IAM Credentials Request directly [url=%s][iam token=%s][ibm secret access key=%s][trusted profile id=%s]", strurl.c_str(), mask_sensitive_string(striamtoken.c_str()), mask_sensitive_string(stribmsecret.c_str()), strtrustedprofileid.c_str());
 
     S3fsCurl s3fscurl;
     int      result = 0;
-    if(auto iamcred = s3fscurl.GetIAMCredentials(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()), (stribmsecret.empty() ? nullptr : stribmsecret.c_str()))){
+    if(auto iamcred = s3fscurl.GetIAMCredentials(strurl.c_str(), (striamtoken.empty() ? nullptr : striamtoken.c_str()), (stribmsecret.empty() ? nullptr : stribmsecret.c_str()), (strtrustedprofileid.empty() ? nullptr : strtrustedprofileid.c_str()))){
         cred = std::move(*iamcred);
     }else{
         S3FS_PRN_ERR("Something error occurred during getting IAM Credentials.");

@@ -73,6 +73,8 @@ class S3fsCred
         bool                is_ecs;
         bool                is_use_session_token;
         bool                is_ibm_iam_auth;
+        bool                is_ibm_trusted_profile;
+        std::string         ibm_trusted_profile_id;
 
         std::string         IAM_cred_url;
         int                 IAM_api_version GUARDED_BY(token_lock);
@@ -114,6 +116,10 @@ class S3fsCred
         bool SetIsUseSessionToken(bool flag);
 
         bool SetIsIBMIAMAuth(bool flag);
+        bool SetIsIBMTrustedProfile(bool flag);
+        bool SetIBMTrustedProfileId(const char* profile_id);
+        const std::string& GetIBMTrustedProfileId() const { return ibm_trusted_profile_id; }
+        bool IsIBMTrustedProfile() const { return is_ibm_trusted_profile; }
 
         int SetIMDSVersionHasLock(int version) REQUIRES(S3fsCred::token_lock);
         int SetIMDSVersion(int version)
@@ -185,6 +191,7 @@ class S3fsCred
         S3fsCred& operator=(S3fsCred&&) = delete;
 
         bool IsIBMIAMAuth() const { return is_ibm_iam_auth; }
+        bool IsIBMTrustedProfileAuth() const { return is_ibm_iam_auth && is_ibm_trusted_profile; }
 
         bool LoadIAMRoleFromMetaData();
 
