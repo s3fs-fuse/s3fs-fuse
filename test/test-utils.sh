@@ -437,12 +437,12 @@ function s3fs_args() {
 # $1:    sleep seconds
 # $2:    OS type(ex. 'Darwin', unset(means all os type))
 #
-# [NOTE] macos fuse-t
-# macos fuse-t mounts over NFS, and the mtime/ctime/atime attribute
-# values are in seconds(not m/u/n-sec).
-# Therefore, unlike tests on other OSs, we have to wait at least 1
-# second.
-# This function is called primarily for this purpose.
+# [NOTE]
+# Sleeps to let timing-sensitive state settle, optionally only on
+# one OS type.
+# This previously waited out fuse-t's NFS timestamp granularity on
+# macos, but fuse-t(1.2.7 and later) passes nanosecond timestamps
+# through, so timestamp resolution is no longer a reason to wait.
 #
 function wait_ostype() {
     if [ -z "$2" ] || uname | grep -q "$2"; then
