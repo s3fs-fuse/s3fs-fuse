@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <curl/curl.h>
 #include <string>
 
@@ -298,29 +299,6 @@ std::string get_bucket_host()
         return S3fsCred::GetBucket() + "." + url_to_host(s3host);
     }
     return url_to_host(s3host);
-}
-
-const char* getCurlDebugHead(curl_infotype type)
-{
-    const char* unknown = "";
-    const char* dataIn  = "BODY <";
-    const char* dataOut = "BODY >";
-    const char* headIn  = "<";
-    const char* headOut = ">";
-
-    switch(type){
-        case CURLINFO_DATA_IN:
-            return dataIn;
-        case CURLINFO_DATA_OUT:
-            return dataOut;
-        case CURLINFO_HEADER_IN:
-            return headIn;
-        case CURLINFO_HEADER_OUT:
-            return headOut;
-        default:
-            break;
-    }
-    return unknown;
 }
 
 //

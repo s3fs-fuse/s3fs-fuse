@@ -34,7 +34,7 @@
 #include <fuse.h>  // NOLINT(misc-include-cleaner)
 
 // FUSE_FILL_DIR_DEFAULTS requirse FUSE 3.17
-static constexpr fuse_fill_dir_flags S3FS_FUSE_FILL_DIR_DEFAULTS = static_cast<fuse_fill_dir_flags>(0);  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
+inline constexpr fuse_fill_dir_flags S3FS_FUSE_FILL_DIR_DEFAULTS = static_cast<fuse_fill_dir_flags>(0);  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
 
 #define S3FS_FUSE_EXIT() \
         do{ \

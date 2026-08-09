@@ -18,11 +18,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 
 #include "s3fs_logger.h"
 #include "cache_node.h"
+#include "filetimes.h"
 #include "string_util.h"
 
 //===================================================================
@@ -36,32 +38,13 @@ static void SetCurrentTime(struct timespec& ts)
     }
 }
 
-static constexpr int CompareStatCacheTime(const struct timespec& ts1, const struct timespec& ts2)
-{
-    // return -1:  ts1 < ts2
-    //         0:  ts1 == ts2
-    //         1:  ts1 > ts2
-    if(ts1.tv_sec < ts2.tv_sec){
-        return -1;
-    }else if(ts1.tv_sec > ts2.tv_sec){
-        return 1;
-    }else{
-        if(ts1.tv_nsec < ts2.tv_nsec){
-            return -1;
-        }else if(ts1.tv_nsec > ts2.tv_nsec){
-            return 1;
-        }
-    }
-    return 0;
-}
-
 static bool IsExpireStatCacheTime(const struct timespec& ts, time_t expire)
 {
     struct timespec nowts;
     SetCurrentTime(nowts);
     nowts.tv_sec -= expire;
 
-    return (0 < CompareStatCacheTime(nowts, ts));
+    return (0 < compare_timespec(nowts, ts));
 }
 
 //
@@ -175,7 +158,7 @@ bool StatCacheNode::NeedExpireCheckHasLock(const struct timespec& ts)
     // checking is not necessary.
     //
     if(0L < StatCacheNode::DisableCheckingExpire){
-        if(0 >= CompareStatCacheTime(StatCacheNode::DisableExpireDate, ts)){
+        if(0 >= compare_timespec(StatCacheNode::DisableExpireDate, ts)){
             return false;
         }
     }
