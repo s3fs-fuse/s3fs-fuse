@@ -29,6 +29,13 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# [NOTE]
+# The jobs only need to read the repository contents, so restrict the
+# GITHUB_TOKEN for all jobs to read-only access.
+#
+permissions:
+  contents: read
+
 #
 # Jobs
 #
