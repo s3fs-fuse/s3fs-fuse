@@ -51,10 +51,10 @@ BIG_FILE_LENGTH=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
 export LC_ALL=en_US.UTF-8
 
 # [NOTE]
-# truncate and sed installed on macos do not work as
+# truncate installed on macos does not work as
 # expected(not compatible with Linux).
 # Therefore, macos installs a brew package such as coreutils
-# and uses gnu commands(gtruncate, gsed).
+# and uses gnu commands(gtruncate).
 # Set your PATH appropriately so that you can find these commands.
 #
 if [ "$(uname)" = "Darwin" ]; then
