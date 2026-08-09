@@ -530,13 +530,24 @@ size_t S3fsCurl::DownloadWriteCallback(void* ptr, size_t size, size_t nmemb, voi
     if(1 > (size * nmemb)){
         return 0;
     }
-    if(-1 == pCurl->partdata.fd || 0 >= pCurl->partdata.size){
-        return 0;
-    }
 
     // Buffer initial bytes in case it is an XML error response.
     if(pCurl->bodydata.size() < GET_OBJECT_RESPONSE_LIMIT){
         pCurl->bodydata.append(static_cast<const char*>(ptr), std::min(size * nmemb, GET_OBJECT_RESPONSE_LIMIT - pCurl->bodydata.size()));
+    }
+
+    // An error response body is not object data and is usually longer than the
+    // requested range.  Writing it to the cache file would both corrupt the file
+    // and, since a short return makes libcurl fail with CURLE_WRITE_ERROR, hide
+    // the HTTP status behind a write error that RequestPerform then retries.
+    // Discard it here so the caller sees the response code, e.g. 404 -> ENOENT.
+    long responseCode = 0;
+    if(CURLE_OK == curl_easy_getinfo(pCurl->hCurl, CURLINFO_RESPONSE_CODE, &responseCode) && 300 <= responseCode){
+        return size * nmemb;
+    }
+
+    if(-1 == pCurl->partdata.fd || 0 >= pCurl->partdata.size){
+        return 0;
     }
 
     // write size
