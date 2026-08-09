@@ -51,31 +51,18 @@ BIG_FILE_LENGTH=$((BIG_FILE_BLOCK_SIZE * BIG_FILE_COUNT))
 export LC_ALL=en_US.UTF-8
 
 # [NOTE]
-# stdbuf, truncate and sed installed on macos do not work as
+# truncate and sed installed on macos do not work as
 # expected(not compatible with Linux).
 # Therefore, macos installs a brew package such as coreutils
-# and uses gnu commands(gstdbuf, gtruncate, gsed).
+# and uses gnu commands(gtruncate, gsed).
 # Set your PATH appropriately so that you can find these commands.
 #
 if [ "$(uname)" = "Darwin" ]; then
     export STAT_BIN="gstat"
-    # [NOTE][TODO]
-    # In macos-14(and maybe later), currently coreutils' gstdbuf doesn't
-    # work with the Github Actions Runner.
-    # This is because libstdbuf.so is arm64, when arm64e is required.
-    # To resolve this case, we'll avoid making calls to stdbuf. This can
-    # result in mixed log output, but there is currently no workaround.
-    #
-    if lipo -archs /opt/homebrew/Cellar/coreutils/9.8/libexec/coreutils/libstdbuf.so 2>/dev/null | grep -q 'arm64e'; then
-        export STDBUF_BIN="gstdbuf"
-    else
-        export STDBUF_BIN=""
-    fi
     export TRUNCATE_BIN="gtruncate"
     export SHA256SUM_BIN="gsha256sum"
 else
     export STAT_BIN="stat"
-    export STDBUF_BIN="stdbuf"
     export TRUNCATE_BIN="truncate"
     export SHA256SUM_BIN="sha256sum"
 fi
