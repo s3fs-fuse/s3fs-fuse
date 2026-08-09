@@ -147,7 +147,6 @@ jobs:
             automake
             coreutils
             cppcheck
-            jq
             python3
             shellcheck
           )
