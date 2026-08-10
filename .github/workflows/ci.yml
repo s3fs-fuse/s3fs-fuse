@@ -41,7 +41,7 @@ permissions:
 #
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     #
     # build matrix for containers
     #
@@ -217,7 +217,7 @@ jobs:
           if-no-files-found: ignore
 
   MemoryTest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     #
     # build matrix for containers
