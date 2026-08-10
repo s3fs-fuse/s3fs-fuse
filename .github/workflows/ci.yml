@@ -145,8 +145,8 @@ jobs:
   #   This job doesn't work with GitHub Actions using macOS 11+ because "load_osxfuse" returns
   #   "exit code = 1".(requires OS reboot)
   #
-  macos-14:
-    runs-on: macos-14
+  macos-26:
+    runs-on: macos-26
 
     # [NOTE]
     # This job usually completes in 10 minutes but sometimes hangs and
@@ -155,7 +155,7 @@ jobs:
     timeout-minutes: 20
 
     # [NOTE]
-    # In macos-14 (and maybe later), the location of the CA certificate is different and you need to specify it.
+    # In macos-14 and later, the location of the CA certificate is different and you need to specify it.
     # We give the CA path as an environment variable.
     #
     env:
@@ -210,7 +210,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: test-logs-macos-14
+          name: test-logs-macos-26
           path: |
             src/test-suite.log
             test/*.log
