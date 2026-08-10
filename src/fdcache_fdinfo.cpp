@@ -334,7 +334,7 @@ bool PseudoFdInfo::InsertUploadPart(off_t start, off_t size, int part_num, bool 
     return true;
 }
 
-bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy)
+bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, const std::string& srcssekeymd5)
 {
     //S3FS_PRN_DBG("[path=%s][mplist(%zu)]", SAFESTRPTR(path), mplist.size());
 
@@ -365,7 +365,7 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
 
         // setup instruction and request on another thread
         int result;
-        if(0 != (result = multipart_upload_part_request(strpath, tmp_upload_fd, iter->start, iter->size, iter->part_num, tmp_upload_id, petag, is_copy, &uploaded_sem, &upload_list_lock, &last_result))){
+        if(0 != (result = multipart_upload_part_request(strpath, tmp_upload_fd, iter->start, iter->size, iter->part_num, tmp_upload_id, petag, is_copy, srcssekeymd5, &uploaded_sem, &upload_list_lock, &last_result))){
             S3FS_PRN_ERR("failed setup instruction for Multipart Upload Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d][is_copy=%s]", result, strpath.c_str(), static_cast<long long int>(iter->start), static_cast<long long int>(iter->size), iter->part_num, (is_copy ? "true" : "false"));
             return false;
         }
@@ -376,7 +376,7 @@ bool PseudoFdInfo::ParallelMultipartUpload(const char* path, const mp_part_list_
     return true;
 }
 
-bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, int& result)
+bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, const std::string& srcssekeymd5, int& result)
 {
     S3FS_PRN_DBG("[path=%s][to_upload_list(%zu)][copy_list(%zu)]", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
 
@@ -385,7 +385,7 @@ bool PseudoFdInfo::ParallelMultipartUploadAll(const char* path, const mp_part_li
     if(!OpenUploadFd()){
         return false;
     }
-    if(!ParallelMultipartUpload(path, to_upload_list, false) || !ParallelMultipartUpload(path, copy_list, true)){
+    if(!ParallelMultipartUpload(path, to_upload_list, false, "") || !ParallelMultipartUpload(path, copy_list, true, srcssekeymd5)){
         S3FS_PRN_ERR("Failed setup instruction for uploading(path=%s, to_upload_list=%zu, copy_list=%zu).", SAFESTRPTR(path), to_upload_list.size(), copy_list.size());
         return false;
     }
@@ -521,7 +521,7 @@ ssize_t PseudoFdInfo::UploadBoundaryLastUntreatedArea(const char* path, const he
     //
     // Upload Multipart parts
     //
-    if(!ParallelMultipartUpload(path, to_upload_list, false)){
+    if(!ParallelMultipartUpload(path, to_upload_list, false, "")){
         S3FS_PRN_ERR("Failed to upload multipart parts.");
         return -EIO;
     }

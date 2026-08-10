@@ -374,7 +374,7 @@ void* multipart_upload_part_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     // Request
     //
     int result;
-    if(0 != (result = s3fscurl.MultipartUploadPartRequest(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->upload_id, pthparam->petag, pthparam->is_copy))){
+    if(0 != (result = s3fscurl.MultipartUploadPartRequest(pthparam->path.c_str(), pthparam->upload_fd, pthparam->start, pthparam->size, pthparam->part_num, pthparam->upload_id, pthparam->petag, pthparam->is_copy, pthparam->srcssekeymd5))){
         S3FS_PRN_ERR("Failed Multipart Upload Part Worker with error(%d) [path=%s][upload_id=%s][upload_fd=%d][start=%lld][size=%lld][is_copy=%s][part_num=%d]", result, pthparam->path.c_str(), pthparam->upload_id.c_str(), pthparam->upload_fd, static_cast<long long int>(pthparam->start), static_cast<long long int>(pthparam->size), (pthparam->is_copy ? "true" : "false"), pthparam->part_num);
     }
 
@@ -937,7 +937,7 @@ int pre_multipart_upload_request(const std::string& path, const headers_t& meta,
 //
 // Calls S3fsCurl::MultipartUploadPartRequest via multipart_upload_part_req_threadworker
 //
-int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, Semaphore* psem, std::mutex* pthparam_lock, int* req_result)
+int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5, Semaphore* psem, std::mutex* pthparam_lock, int* req_result)
 {
     // parameter for thread worker (freed in multipart_upload_part_req_threadworker)
     auto thargs            = std::make_unique<multipart_upload_part_req_thparam>();
@@ -947,6 +947,7 @@ int multipart_upload_part_request(const std::string& path, int upload_fd, off_t 
     thargs->start          = start;
     thargs->size           = size;
     thargs->is_copy        = is_copy;
+    thargs->srcssekeymd5   = srcssekeymd5;
     thargs->part_num       = part_num;
     thargs->pthparam_lock  = pthparam_lock;
     thargs->petag          = petag;
@@ -971,7 +972,7 @@ int multipart_upload_part_request(const std::string& path, int upload_fd, off_t 
 //
 // Calls and Await S3fsCurl::MultipartUploadPartRequest via multipart_upload_part_req_threadworker
 //
-int await_multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy)
+int await_multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5)
 {
     std::mutex thparam_lock;
     int        req_result = 0;
@@ -984,6 +985,7 @@ int await_multipart_upload_part_request(const std::string& path, int upload_fd, 
     thargs->start          = start;
     thargs->size           = size;
     thargs->is_copy        = is_copy;
+    thargs->srcssekeymd5   = srcssekeymd5;
     thargs->part_num       = part_num;
     thargs->pthparam_lock  = &thparam_lock;
     thargs->petag          = petag;
@@ -1055,7 +1057,7 @@ int multipart_upload_request(const std::string& path, const headers_t& meta, int
         S3FS_PRN_INFO3("Multipart Upload Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(start), static_cast<long long int>(chunk), (req_count + 1));
 
         // setup instruction and request on another thread
-        if(0 != (result = multipart_upload_part_request(path, upload_fd, start, chunk, (req_count + 1), upload_id, petag, false, &upload_sem, &result_lock, &last_result))){
+        if(0 != (result = multipart_upload_part_request(path, upload_fd, start, chunk, (req_count + 1), upload_id, petag, false, "", &upload_sem, &result_lock, &last_result))){
             S3FS_PRN_ERR("failed setup instruction for Multipart Upload Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(start), static_cast<long long int>(chunk), (req_count + 1));
 
             // [NOTE]
@@ -1099,7 +1101,7 @@ int multipart_upload_request(const std::string& path, const headers_t& meta, int
 //      abort_multipart_upload_request()
 //      complete_multipart_upload_request()
 //
-int mix_multipart_upload_request(const std::string& path, headers_t& meta, int upload_fd, const fdpage_list_t& mixuppages)
+int mix_multipart_upload_request(const std::string& path, const headers_t& meta, int upload_fd, const fdpage_list_t& mixuppages)
 {
     S3FS_PRN_INFO3("Mix Multipart Upload Request [path=%s][upload_fd=%d]", path.c_str(), upload_fd);
 
@@ -1117,12 +1119,14 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
         return result;
     }
 
-    // Prepare headers for Multipart Upload Copy
-    std::string srcresource;
-    std::string srcurl;
-    MakeUrlResource(get_realpath(path.c_str()).c_str(), srcresource, srcurl);
-    meta["Content-Type"]      = S3fsCurl::LookupMimeType(path);
-    meta["x-amz-copy-source"] = srcresource;
+    // The md5 of the SSE-C key that encrypted the source object, which
+    // each copy part presents to read it.  The other copy headers are
+    // made by S3fsCurl::MultipartUploadPartSetup.
+    std::string srcssekeymd5;
+    auto        ssekeyiter = meta.find("x-amz-server-side-encryption-customer-key-md5");
+    if(meta.cend() != ssekeyiter){
+        srcssekeymd5 = ssekeyiter->second;
+    }
 
     Semaphore  upload_sem(0);
     std::mutex result_lock;         // protects last_result
@@ -1143,7 +1147,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
             S3FS_PRN_INFO3("Mix Multipart Upload Content Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), (req_count + 1));
 
             // setup instruction and request on another thread
-            if(0 != (result = multipart_upload_part_request(path, upload_fd, iter->offset, iter->bytes, (req_count + 1), upload_id, petag, false, &upload_sem, &result_lock, &last_result))){
+            if(0 != (result = multipart_upload_part_request(path, upload_fd, iter->offset, iter->bytes, (req_count + 1), upload_id, petag, false, "", &upload_sem, &result_lock, &last_result))){
                 S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Content Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset), static_cast<long long int>(iter->bytes), (req_count + 1));
                 // [NOTE]
                 // Hold onto result until all request finish.
@@ -1173,11 +1177,6 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
                     }
                 }
 
-                // Set headers for Multipart Upload Copy
-                std::ostringstream strrange;
-                strrange << "bytes=" << (iter->offset + processed_bytes) << "-" << (iter->offset + processed_bytes + request_bytes - 1);
-                meta["x-amz-copy-source-range"] = strrange.str();
-
                 // add new etagpair to etaglist_t list
                 list.emplace_back(nullptr, (req_count + 1));
                 etagpair* petag = &list.back();
@@ -1185,7 +1184,7 @@ int mix_multipart_upload_request(const std::string& path, headers_t& meta, int u
                 S3FS_PRN_INFO3("Mix Multipart Upload Copy Part [path=%s][start=%lld][size=%lld][part_num=%d]", path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
 
                 // setup instruction and request on another thread
-                if(0 != (result = multipart_upload_part_request(path, upload_fd, (iter->offset + processed_bytes), request_bytes, (req_count + 1), upload_id, petag, true, &upload_sem, &result_lock, &last_result))){
+                if(0 != (result = multipart_upload_part_request(path, upload_fd, (iter->offset + processed_bytes), request_bytes, (req_count + 1), upload_id, petag, true, srcssekeymd5, &upload_sem, &result_lock, &last_result))){
                     S3FS_PRN_ERR("Failed setup instruction for Mix Multipart Upload Copy Part Request by error(%d) [path=%s][start=%lld][size=%lld][part_num=%d]", result, path.c_str(), static_cast<long long int>(iter->offset + processed_bytes), static_cast<long long int>(request_bytes), (req_count + 1));
                     // [NOTE]
                     // This loop breaks because result is not 0.

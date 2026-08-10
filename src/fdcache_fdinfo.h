@@ -60,7 +60,7 @@ class PseudoFdInfo
         void RowInitialUploadInfo(const std::string& id, bool is_cancel_mp);
         void IncreaseInstructionCount();
         bool GetUploadInfo(std::string& id, int& fd) const;
-        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy);
+        bool ParallelMultipartUpload(const char* path, const mp_part_list_t& mplist, bool is_copy, const std::string& srcssekeymd5);
         bool InsertUploadPart(off_t start, off_t size, int part_num, bool is_copy, etagpair** ppetag);
         void CancelAllThreads();
         bool ExtractUploadPartsFromUntreatedArea(off_t untreated_start, off_t untreated_size, mp_part_list_t& to_upload_list, filepart_list_t& cancel_upload_list, off_t max_mp_size);
@@ -91,7 +91,7 @@ class PseudoFdInfo
         bool AppendUploadPart(off_t start, off_t size, bool is_copy = false, etagpair** ppetag = nullptr);
         off_t GetNextUploadPos() const;
 
-        bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, int& result);
+        bool ParallelMultipartUploadAll(const char* path, const mp_part_list_t& to_upload_list, const mp_part_list_t& copy_list, const std::string& srcssekeymd5, int& result);
         int PreMultipartUploadRequest(const std::string& strpath, const headers_t& meta);
 
         int WaitAllThreadsExit();

@@ -340,13 +340,13 @@ class S3fsCurl
         [[nodiscard]] int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);
         [[nodiscard]] int ListBucketRequest(const char* tpath, const char* query);
         [[nodiscard]] int PreMultipartUploadRequest(const char* tpath, const headers_t& meta, std::string& upload_id);
-        [[nodiscard]] int MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
+        [[nodiscard]] int MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5);
         [[nodiscard]] int MultipartUploadComplete(const char* tpath, const std::string& upload_id, const etaglist_t& parts);
         bool MultipartUploadPartComplete();
         [[nodiscard]] int MultipartListRequest(std::string& body);
         [[nodiscard]] int AbortMultipartUpload(const char* tpath, const std::string& upload_id);
         [[nodiscard]] int MultipartPutHeadRequest(const std::string& from, const std::string& to, int part_number, const std::string& upload_id, const headers_t& meta);
-        [[nodiscard]] int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy);
+        [[nodiscard]] int MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5);
 
         // methods(variables)
         const std::string& GetPath() const { return path; }
