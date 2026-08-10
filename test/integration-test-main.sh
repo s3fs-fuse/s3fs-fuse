@@ -558,6 +558,10 @@ function test_external_modification {
     # This extends the expiration date of the target file(1 sec by
     # stat_cache_interval_expire option).
     # Therefore, on MacOS, you need to add an additional 1 sec.
+    # (Verified on macos/fuse-t: with use_cache and only a 1 second
+    # wait, about 1 in 3 runs still read stale data, while 2 seconds
+    # is reliable.  This is a caching effect, not NFS timestamp
+    # granularity.)
     #
     sleep 1
     wait_ostype 1 "Darwin"
@@ -1080,11 +1084,6 @@ function test_extended_attributes {
     # over write value
     set_xattr key1 value1 "${TEST_TEXT_FILE}"
     get_xattr key1 "${TEST_TEXT_FILE}" | grep -q '^value1$'
-
-    # [NOTE]
-    # macOS still caches extended attributes even when told not to.
-    # Thus we need to wait one second here.
-    wait_ostype 1 "Darwin"
 
     # append value
     set_xattr key2 value2 "${TEST_TEXT_FILE}"

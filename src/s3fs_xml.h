@@ -33,9 +33,9 @@
 
 // S3 responses never use DTDs — block external entity loading.
 #ifdef XML_PARSE_NO_XXE
-static constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NO_XXE;
+inline constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NO_XXE;
 #else
-static constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NONET;
+inline constexpr int S3FS_XML_PARSE_FLAGS = XML_PARSE_NONET;
 #endif
 
 class S3ObjList;

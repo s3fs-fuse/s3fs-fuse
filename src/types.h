@@ -22,8 +22,9 @@
 #define S3FS_TYPES_H_
 
 #include <cstdint>
-#include <cstring>
+#include <strings.h>
 #include <string>
+#include <string_view>
 #include <map>
 #include <list>
 #include <utility>
@@ -91,23 +92,23 @@ constexpr const char* str(acl_t value)
     abort();
 }
 
-inline acl_t to_acl(const char *acl)
+constexpr acl_t to_acl(std::string_view acl)
 {
-    if(0 == strcmp(acl, "private")){
+    if(acl == "private"){
         return acl_t::PRIVATE;
-    }else if(0 == strcmp(acl, "public-read")){
+    }else if(acl == "public-read"){
         return acl_t::PUBLIC_READ;
-    }else if(0 == strcmp(acl, "public-read-write")){
+    }else if(acl == "public-read-write"){
         return acl_t::PUBLIC_READ_WRITE;
-    }else if(0 == strcmp(acl, "aws-exec-read")){
+    }else if(acl == "aws-exec-read"){
         return acl_t::AWS_EXEC_READ;
-    }else if(0 == strcmp(acl, "authenticated-read")){
+    }else if(acl == "authenticated-read"){
         return acl_t::AUTHENTICATED_READ;
-    }else if(0 == strcmp(acl, "bucket-owner-read")){
+    }else if(acl == "bucket-owner-read"){
         return acl_t::BUCKET_OWNER_READ;
-    }else if(0 == strcmp(acl, "bucket-owner-full-control")){
+    }else if(acl == "bucket-owner-full-control"){
         return acl_t::BUCKET_OWNER_FULL_CONTROL;
-    }else if(0 == strcmp(acl, "log-delivery-write")){
+    }else if(acl == "log-delivery-write"){
         return acl_t::LOG_DELIVERY_WRITE;
     }else{
         return acl_t::UNKNOWN;

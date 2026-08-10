@@ -20,6 +20,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cerrno>
 #include <climits>  // NOLINT(misc-include-cleaner)
 #include <unistd.h>
