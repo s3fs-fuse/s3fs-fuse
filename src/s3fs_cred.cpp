@@ -422,7 +422,8 @@ bool S3fsCred::LoadIAMCredentials()
 {
     std::string url;
     std::string striamtoken;
-    std::string stribmsecret;
+    std::string strpostbody;
+    std::string strauthorization;
     std::string cred;
 
     // get parameters(check iam role)
@@ -433,11 +434,16 @@ bool S3fsCred::LoadIAMCredentials()
         striamtoken = GetIAMv2APIToken();
     }
     if(IsIBMIAMAuth()){
-        stribmsecret = AWSSecretAccessKey;
+        // The IBM IAM token endpoint is an OAuth endpoint: it takes the
+        // secret access key as an apikey in a POST body, authenticated as
+        // the well-known "bx:bx" public client.
+        //
+        strpostbody      = "grant_type=urn:ibm:params:oauth:grant-type:apikey&response_type=cloud_iam&apikey="s + AWSSecretAccessKey;
+        strauthorization = "Basic Yng6Yng=";
     }
 
     // Get IAM Credentials
-    if(0 == get_iamcred_request(url, striamtoken, stribmsecret, cred)){
+    if(0 == get_iamcred_request(url, striamtoken, strpostbody, strauthorization, cred)){
         S3FS_PRN_DBG("Succeed to set IAM credentials");
     }else{
         S3FS_PRN_ERR("Something error occurred, could not set IAM credentials.");

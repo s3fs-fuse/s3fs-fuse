@@ -1915,7 +1915,13 @@ bool S3fsCurl::RemakeHandle(bool keepAuthHeader)
             if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
                 return false;
             }
-            if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
+            // [NOTE]
+            // Some credential endpoints(ex. IBM IAM) require the request to
+            // be a POST carrying a body.  GetIAMCredentials sets the options
+            // below itself, so this branch only matters when RemakeHandle
+            // restores postdata for a retry.
+            //
+            if(postdata){
                 if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){
                     return false;
                 }
@@ -2628,7 +2634,12 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
-std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key)
+// [NOTE]
+// post_body and authorization are for credential endpoints which require a
+// POST request with credentials of their own(ex. the IBM IAM token endpoint).
+// Both are optional and this method does not interpret their contents.
+//
+std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* post_body, const char* authorization)
 {
     if(!cred_url){
         S3FS_PRN_ERR("url is null.");
@@ -2645,22 +2656,25 @@ std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, con
     requestHeaders  = nullptr;
     responseHeaders.clear();
     bodydata.clear();
+
+    // [NOTE]
+    // postdata points into this buffer, so it must live until RequestPerform
+    // (including its retries) returns.
+    //
     std::string postContent;
 
-    if(ibm_secret_access_key){
-        // make contents
-        postContent += "grant_type=urn:ibm:params:oauth:grant-type:apikey";
-        postContent += "&response_type=cloud_iam";
-        postContent += "&apikey=";
-        postContent += ibm_secret_access_key;
+    if(authorization){
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", authorization);
+    }
+
+    if(post_body){
+        postContent = post_body;
 
         // set postdata
         postdata             = reinterpret_cast<const unsigned char*>(postContent.c_str());
         b_postdata           = postdata;
         postdata_remaining   = postContent.size(); // without null
         b_postdata_remaining = postdata_remaining;
-
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", "Basic Yng6Yng=");
 
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){              // POST
             return std::nullopt;
