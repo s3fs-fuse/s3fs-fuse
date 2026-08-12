@@ -51,6 +51,7 @@ s3fs_SOURCES = \
     cache_node.cpp \
     string_util.cpp \
     s3fs_cred.cpp \
+    s3fs_cred_ibm.cpp \
     s3fs_util.cpp \
     s3fs_threadreqs.cpp \
     fdcache.cpp \
@@ -74,6 +75,7 @@ s3fs_LDADD = $(DEPS_LIBS)
 noinst_PROGRAMS = \
     test_auth \
     test_cache_node \
+    test_cred_ibm \
     test_curl_util \
     test_metaheader \
     test_page_list \
@@ -100,6 +102,18 @@ test_curl_util_SOURCES = \
     $(AUTH_SOURCES)
 
 test_curl_util_LDADD = $(DEPS_LIBS)
+
+test_cred_ibm_SOURCES = \
+    common_auth.cpp \
+    curl_util.cpp \
+    s3fs_cred_ibm.cpp \
+    s3fs_global.cpp \
+    s3fs_logger.cpp \
+    string_util.cpp \
+    test_cred_ibm.cpp \
+    $(AUTH_SOURCES)
+
+test_cred_ibm_LDADD = $(DEPS_LIBS)
 
 test_cache_node_SOURCES = \
     cache_node.cpp \
@@ -132,6 +146,7 @@ test_metaheader_SOURCES = \
 TESTS = \
     test_auth \
     test_cache_node \
+    test_cred_ibm \
     test_curl_util \
     test_metaheader \
     test_page_list \
@@ -140,7 +155,7 @@ TESTS = \
 
 clang-tidy:
 	clang-tidy -extra-arg-before=-xc++ -extra-arg=-std=@CPP_VERSION@ -header-filter= \
-		*.h $(s3fs_SOURCES) test_auth.cpp test_cache_node.cpp test_curl_util.cpp test_metaheader.cpp test_page_list.cpp test_s3objlist.cpp test_string_util.cpp \
+		*.h $(s3fs_SOURCES) test_auth.cpp test_cache_node.cpp test_cred_ibm.cpp test_curl_util.cpp test_metaheader.cpp test_page_list.cpp test_s3objlist.cpp test_string_util.cpp \
 		-- $(DEPS_CFLAGS) $(CPPFLAGS)
 
 #

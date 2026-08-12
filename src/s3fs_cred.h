@@ -27,6 +27,7 @@
 #include <string>
 
 #include "common.h"
+#include "s3fs_cred_ibm.h"
 #include "s3fs_extcred.h"
 #include "types.h"
 
@@ -55,6 +56,8 @@ class S3fsCred
         static constexpr char IAMCRED_ACCESSKEYID[] = "AccessKeyId";
         static constexpr char IAMCRED_SECRETACCESSKEY[] = "SecretAccessKey";
         static constexpr char IAMCRED_ROLEARN[] = "RoleArn";
+        static constexpr char IAMCRED_TOKEN[] = "Token";
+        static constexpr char IAMCRED_EXPIRATION[] = "Expiration";
 
         static std::string  bucket_name;
 
@@ -72,14 +75,13 @@ class S3fsCred
 
         bool                is_ecs;
         bool                is_use_session_token;
-        bool                is_ibm_iam_auth;
+
+        IbmIamCred          ibm;
 
         std::string         IAM_cred_url;
         int                 IAM_api_version GUARDED_BY(token_lock);
         std::string         IAMv2_api_token GUARDED_BY(token_lock);
         size_t              IAM_field_count;
-        std::string         IAM_token_field;
-        std::string         IAM_expiry_field;
         std::string         IAM_role GUARDED_BY(token_lock);
 
         bool                set_builtin_cred_opts;  // true if options other than "credlib" is set
@@ -113,8 +115,6 @@ class S3fsCred
         bool SetIsECS(bool flag);
         bool SetIsUseSessionToken(bool flag);
 
-        bool SetIsIBMIAMAuth(bool flag);
-
         int SetIMDSVersionHasLock(int version) REQUIRES(S3fsCred::token_lock);
         int SetIMDSVersion(int version)
         {
@@ -136,8 +136,6 @@ class S3fsCred
         bool IsSetIAMRole() const REQUIRES(S3fsCred::token_lock);
         size_t SetIAMFieldCount(size_t field_count);
         std::string SetIAMCredentialsURL(const char* url);
-        std::string SetIAMTokenField(const char* token_field);
-        std::string SetIAMExpiryField(const char* expiry_field);
 
         bool IsReadableS3fsPasswdFile() const;
         bool CheckS3fsPasswdFilePerms();
@@ -148,7 +146,7 @@ class S3fsCred
         bool ReadAwsCredentialFile(const std::string &filename) REQUIRES(S3fsCred::token_lock);
 
         bool InitialS3fsCredentials() REQUIRES(S3fsCred::token_lock);
-        bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval) const;
+        static bool ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval);
 
         bool GetIAMCredentialsURL(std::string& url, bool check_iam_role) REQUIRES(S3fsCred::token_lock);
         bool LoadIAMCredentials() REQUIRES(S3fsCred::token_lock);
@@ -184,7 +182,7 @@ class S3fsCred
         S3fsCred& operator=(const S3fsCred&) = delete;
         S3fsCred& operator=(S3fsCred&&) = delete;
 
-        bool IsIBMIAMAuth() const { return is_ibm_iam_auth; }
+        bool IsIBMIAMAuth() const { return ibm.IsEnabled(); }
 
         bool LoadIAMRoleFromMetaData();
 

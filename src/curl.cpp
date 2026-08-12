@@ -38,6 +38,7 @@
 #include "curl_util.h"
 #include "s3fs_auth.h"
 #include "s3fs_cred.h"
+#include "s3fs_cred_ibm.h"
 #include "s3fs_util.h"
 #include "string_util.h"
 #include "addhead.h"
@@ -2502,16 +2503,6 @@ void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::stri
     }
 }
 
-void S3fsCurl::insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token)
-{
-    requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", ("Bearer " + access_token).c_str());
-
-    if(op == "PUT" && path == mount_prefix + "/"){
-        // ibm-service-instance-id header is required for bucket creation requests
-        requestHeaders = curl_slist_sort_insert(requestHeaders, "ibm-service-instance-id", access_key_id.c_str());
-    }
-}
-
 bool S3fsCurl::insertAuthHeaders()
 {
     std::string access_key_id;
@@ -2525,7 +2516,7 @@ bool S3fsCurl::insertAuthHeaders()
     }
 
     if(S3fsCurl::ps3fscred->IsIBMIAMAuth()){
-        insertIBMIAMHeaders(access_key_id, access_token);
+        IbmIamCred::InsertAuthHeaders(requestHeaders, op, path, access_key_id, access_token);
     }else if(S3fsCurl::signature_type == signature_type_t::V2_ONLY){
         insertV2Headers(access_key_id, secret_access_key, access_token);
     }else{

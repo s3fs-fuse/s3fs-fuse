@@ -168,12 +168,9 @@ S3fsCred::S3fsCred() :
     AWSAccessTokenExpire(0),
     is_ecs(false),
     is_use_session_token(false),
-    is_ibm_iam_auth(false),
     IAM_cred_url("http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
     IAM_api_version(2),
     IAM_field_count(4),
-    IAM_token_field("Token"),
-    IAM_expiry_field("Expiration"),
     set_builtin_cred_opts(false),
     hExtCredLib(nullptr),
     pFuncCredVersion(VersionS3fsCredential),
@@ -225,7 +222,11 @@ bool S3fsCred::SetIAMRoleMetadataType(bool flag)
 
 bool S3fsCred::SetAccessKey(const char* AccessKeyId, const char* SecretAccessKey)
 {
-    if((!is_ibm_iam_auth && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0]){
+    // [NOTE]
+    // Under IBM IAM authentication the access key id holds the Service-Instance-ID,
+    // which is only needed for bucket creation and may be left empty.
+    //
+    if((!ibm.IsEnabled() && (!AccessKeyId || '\0' == AccessKeyId[0])) || !SecretAccessKey || '\0' == SecretAccessKey[0]){
         return false;
     }
     AWSAccessKeyId     = AccessKeyId;
@@ -240,7 +241,7 @@ bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
     bool secret_access_key_is_empty = SecretAccessKey == nullptr || '\0' == SecretAccessKey[0];
     bool session_token_is_empty     = SessionToken == nullptr    || '\0' == SessionToken[0];
 
-    if((!is_ibm_iam_auth && access_key_is_empty) || secret_access_key_is_empty || session_token_is_empty){
+    if((!ibm.IsEnabled() && access_key_is_empty) || secret_access_key_is_empty || session_token_is_empty){
         return false;
     }
     AWSAccessKeyId      = AccessKeyId;
@@ -253,7 +254,7 @@ bool S3fsCred::SetAccessKeyWithSessionToken(const char* AccessKeyId, const char*
 
 bool S3fsCred::IsSetAccessKeys() const
 {
-    return IsSetIAMRole() || ((!AWSAccessKeyId.empty() || is_ibm_iam_auth) && !AWSSecretAccessKey.empty());
+    return IsSetIAMRole() || ((!AWSAccessKeyId.empty() || ibm.IsEnabled()) && !AWSSecretAccessKey.empty());
 }
 
 bool S3fsCred::SetIsECS(bool flag)
@@ -267,13 +268,6 @@ bool S3fsCred::SetIsUseSessionToken(bool flag)
 {
     bool old = is_use_session_token;
     is_use_session_token = flag;
-    return old;
-}
-
-bool S3fsCred::SetIsIBMIAMAuth(bool flag)
-{
-    bool old = is_ibm_iam_auth;
-    is_ibm_iam_auth = flag;
     return old;
 }
 
@@ -307,24 +301,14 @@ std::string S3fsCred::SetIAMCredentialsURL(const char* url)
     return old;
 }
 
-std::string S3fsCred::SetIAMTokenField(const char* token_field)
-{
-    std::string old = IAM_token_field;
-    IAM_token_field = token_field ? token_field : "";
-    return old;
-}
-
-std::string S3fsCred::SetIAMExpiryField(const char* expiry_field)
-{
-    std::string old = IAM_expiry_field;
-    IAM_expiry_field = expiry_field ? expiry_field : "";
-    return old;
-}
-
+// [NOTE]
+// This is only reached for the AWS style credential sources(IMDS and ECS).
+// IBM IAM builds its own URL; see IbmIamCred::GetCredentialsURL.
+//
 bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
 {
     // check
-    if(check_iam_role && !is_ecs && !IsIBMIAMAuth()){
+    if(check_iam_role && !is_ecs){
         if(!IsSetIAMRole()) {
             S3FS_PRN_ERR("IAM role name is empty.");
             return false;
@@ -339,9 +323,6 @@ bool S3fsCred::GetIAMCredentialsURL(std::string& url, bool check_iam_role)
             return false;
         }
         url = IAM_cred_url + env;
-
-    }else if(IsIBMIAMAuth()){
-        url = IAM_cred_url;
 
     }else{
         // [NOTE]
@@ -426,20 +407,22 @@ bool S3fsCred::LoadIAMCredentials()
     std::string strauthorization;
     std::string cred;
 
-    // get parameters(check iam role)
-    if(!GetIAMCredentialsURL(url, true)){
-        return false;
-    }
-    if(GetIMDSVersion() > 1){
-        striamtoken = GetIAMv2APIToken();
-    }
-    if(IsIBMIAMAuth()){
-        // The IBM IAM token endpoint is an OAuth endpoint: it takes the
-        // secret access key as an apikey in a POST body, authenticated as
-        // the well-known "bx:bx" public client.
+    // get parameters
+    if(ibm.IsEnabled()){
+        // The IBM IAM token endpoint is an OAuth endpoint: the secret access
+        // key is sent as an apikey in a POST body and no IMDS token applies.
         //
-        strpostbody      = "grant_type=urn:ibm:params:oauth:grant-type:apikey&response_type=cloud_iam&apikey="s + AWSSecretAccessKey;
-        strauthorization = "Basic Yng6Yng=";
+        url              = ibm.GetCredentialsURL();
+        strpostbody      = IbmIamCred::MakePostBody(AWSSecretAccessKey);
+        strauthorization = IbmIamCred::GetAuthorization();
+    }else{
+        // get url(check iam role)
+        if(!GetIAMCredentialsURL(url, true)){
+            return false;
+        }
+        if(GetIMDSVersion() > 1){
+            striamtoken = GetIAMv2APIToken();
+        }
     }
 
     // Get IAM Credentials
@@ -501,6 +484,21 @@ bool S3fsCred::SetIAMCredentials(const char* response)
 {
     S3FS_PRN_INFO3("IAM credential response = \"%s\"", mask_sensitive_string(response));
 
+    if(ibm.IsEnabled()){
+        std::string token;
+        time_t      expire = 0;
+        if(!IbmIamCred::ParseCredentialResponse(response, token, expire)){
+            return false;
+        }
+        // [NOTE]
+        // The IBM response carries no keys: the access key id stays as
+        // configured and the secret access key remains the apikey.
+        //
+        AWSAccessToken       = token;
+        AWSAccessTokenExpire = expire;
+        return true;
+    }
+
     iamcredmap_t keyval;
 
     if(!ParseIAMCredentialResponse(response, keyval)){
@@ -511,32 +509,19 @@ bool S3fsCred::SetIAMCredentials(const char* response)
         return false;
     }
 
-    auto aws_access_token = keyval.find(IAM_token_field);
-    if(aws_access_token == keyval.end()){
+    auto aws_access_token = keyval.find(S3fsCred::IAMCRED_TOKEN);
+    auto access_key_id = keyval.find(S3fsCred::IAMCRED_ACCESSKEYID);
+    auto secret_access_key = keyval.find(S3fsCred::IAMCRED_SECRETACCESSKEY);
+    auto access_token_expire = keyval.find(S3fsCred::IAMCRED_EXPIRATION);
+    if(aws_access_token == keyval.end() || access_key_id == keyval.end() || secret_access_key == keyval.end() || access_token_expire == keyval.end()){
         return false;
     }
 
-    if(is_ibm_iam_auth){
-        auto access_token_expire = keyval.find(IAM_expiry_field);
-        off_t tmp_expire = 0;
-        if(access_token_expire == keyval.end() || !s3fs_strtoofft(&tmp_expire, access_token_expire->second.c_str(), /*base=*/ 10)){
-            return false;
-        }
-        AWSAccessTokenExpire = static_cast<time_t>(tmp_expire);
-    }else{
-        auto access_key_id = keyval.find(S3fsCred::IAMCRED_ACCESSKEYID);
-        auto secret_access_key = keyval.find(S3fsCred::IAMCRED_SECRETACCESSKEY);
-        auto access_token_expire = keyval.find(IAM_expiry_field);
-        if(access_key_id == keyval.end() || secret_access_key == keyval.end() || access_token_expire == keyval.end()){
-            return false;
-        }
-
-        AWSAccessKeyId = access_key_id->second;
-        AWSSecretAccessKey = secret_access_key->second;
-        AWSAccessTokenExpire = cvtIAMExpireStringToTime(access_token_expire->second.c_str());
-    }
-
+    AWSAccessKeyId = access_key_id->second;
+    AWSSecretAccessKey = secret_access_key->second;
+    AWSAccessTokenExpire = cvtIAMExpireStringToTime(access_token_expire->second.c_str());
     AWSAccessToken = aws_access_token->second;
+
     return true;
 }
 
@@ -1052,7 +1037,7 @@ bool S3fsCred::InitialS3fsCredentials()
 //-------------------------------------------------------------------
 // Methods : for IAM
 //-------------------------------------------------------------------
-bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval) const
+bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& keyval)
 {
     if(!response){
       return false;
@@ -1068,10 +1053,10 @@ bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
             key = S3fsCred::IAMCRED_ACCESSKEYID;
         }else if(std::string::npos != (pos = oneline.find(S3fsCred::IAMCRED_SECRETACCESSKEY))){
             key = S3fsCred::IAMCRED_SECRETACCESSKEY;
-        }else if(std::string::npos != (pos = oneline.find(IAM_token_field))){
-            key = IAM_token_field;
-        }else if(std::string::npos != (pos = oneline.find(IAM_expiry_field))){
-            key = IAM_expiry_field;
+        }else if(std::string::npos != (pos = oneline.find(S3fsCred::IAMCRED_TOKEN))){
+            key = S3fsCred::IAMCRED_TOKEN;
+        }else if(std::string::npos != (pos = oneline.find(S3fsCred::IAMCRED_EXPIRATION))){
+            key = S3fsCred::IAMCRED_EXPIRATION;
         }else if(std::string::npos != (pos = oneline.find(S3fsCred::IAMCRED_ROLEARN))){
             key = S3fsCred::IAMCRED_ROLEARN;
         }else{
@@ -1081,27 +1066,16 @@ bool S3fsCred::ParseIAMCredentialResponse(const char* response, iamcredmap_t& ke
             continue;
         }
 
-        if(is_ibm_iam_auth && key == IAM_expiry_field){
-            // parse integer value
-            if(std::string::npos == (pos = oneline.find_first_of("0123456789", pos))){
-                continue;
-            }
-            oneline.erase(0, pos);
-            if(std::string::npos == (pos = oneline.find_last_of("0123456789"))){
-                continue;
-            }
-            val = oneline.substr(0, pos+1);
-        }else{
-            // parse std::string value (starts and ends with quotes)
-            if(std::string::npos == (pos = oneline.find('\"', pos))){
-                continue;
-            }
-            oneline.erase(0, pos+1);
-            if(std::string::npos == (pos = oneline.find('\"'))){
-                continue;
-            }
-            val = oneline.substr(0, pos);
+        // parse std::string value (starts and ends with quotes)
+        if(std::string::npos == (pos = oneline.find('\"', pos))){
+            continue;
         }
+        oneline.erase(0, pos+1);
+        if(std::string::npos == (pos = oneline.find('\"'))){
+            continue;
+        }
+        val = oneline.substr(0, pos);
+
         keyval[key] = val;
     }
     return true;
@@ -1111,7 +1085,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
 {
     const std::lock_guard<std::mutex> lock(token_lock);
 
-    if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || IsSetIAMRole()){
+    if(ibm.IsEnabled() || IsSetExtCredLib() || is_ecs || IsSetIAMRole()){
         if(AWSAccessTokenExpire < (time(nullptr) + S3fsCred::IAM_EXPIRE_MERGING)){
             S3FS_PRN_INFO("IAM Access Token refreshing...");
 
@@ -1139,7 +1113,7 @@ bool S3fsCred::CheckIAMCredentialUpdate(std::string* access_key_id, std::string*
         *secret_access_key = AWSSecretAccessKey;
     }
     if(access_token){
-        if(IsIBMIAMAuth() || IsSetExtCredLib() || is_ecs || is_use_session_token || IsSetIAMRole()){
+        if(ibm.IsEnabled() || IsSetExtCredLib() || is_ecs || is_use_session_token || IsSetIAMRole()){
             *access_token = AWSAccessToken;
         }else{
             access_token->clear();
@@ -1380,34 +1354,16 @@ int S3fsCred::DetectParam(const char* arg)
         return 0;
     }
 
-    if(0 == strcmp(arg, "ibm_iam_auth")){
-        SetIsIBMIAMAuth(true);
-        SetIAMCredentialsURL("https://iam.cloud.ibm.com/identity/token");
-        SetIAMTokenField("\"access_token\"");
-        SetIAMExpiryField("\"expiration\"");
-        SetIAMFieldCount(2);
-        SetIMDSVersionHasLock(1);
-        set_builtin_cred_opts = true;
-        return 0;
+    // IBM IAM options("ibm_iam_auth" and "ibm_iam_endpoint")
+    if(int result = ibm.DetectParam(arg); 1 != result){
+        if(0 == result){
+            set_builtin_cred_opts = true;
+        }
+        return result;
     }
 
     if(0 == strcmp(arg, "use_session_token")){
         SetIsUseSessionToken(true);
-        set_builtin_cred_opts = true;
-        return 0;
-    }
-
-    if(is_prefix(arg, "ibm_iam_endpoint=")){
-        std::string endpoint_url;
-        const char* iam_endpoint = strchr(arg, '=') + sizeof(char);
-
-        // Check url for http / https protocol std::string
-        if(!is_prefix(iam_endpoint, "https://") && !is_prefix(iam_endpoint, "http://")){
-             S3FS_PRN_EXIT("option ibm_iam_endpoint has invalid format, missing http / https protocol");
-             return -1;
-        }
-        endpoint_url = iam_endpoint + "/identity/token"s;
-        SetIAMCredentialsURL(endpoint_url.c_str());
         set_builtin_cred_opts = true;
         return 0;
     }
@@ -1419,7 +1375,7 @@ int S3fsCred::DetectParam(const char* arg)
     }
 
     if(0 == strcmp(arg, "ecs")){
-        if(IsIBMIAMAuth()){
+        if(ibm.IsEnabled()){
             S3FS_PRN_EXIT("option ecs cannot be used in conjunction with ibm");
             return -1;
         }
@@ -1432,7 +1388,7 @@ int S3fsCred::DetectParam(const char* arg)
     }
 
     if(is_prefix(arg, "iam_role")){
-        if(is_ecs || IsIBMIAMAuth()){
+        if(is_ecs || ibm.IsEnabled()){
             S3FS_PRN_EXIT("option iam_role cannot be used in conjunction with ecs or ibm");
             return -1;
         }
@@ -1549,13 +1505,18 @@ bool S3fsCred::CheckAllParams()
     }
 
     // check IBM IAM requirements
-    if(IsIBMIAMAuth()){
-        // check that default ACL is either public-read or private
-        acl_t defaultACL = S3fsCurl::GetDefaultAcl();
-        if(defaultACL != acl_t::PRIVATE && defaultACL != acl_t::PUBLIC_READ){
-            S3FS_PRN_EXIT("can only use 'public-read' or 'private' ACL while using ibm_iam_auth");
-            return false;
-        }
+    //
+    // [NOTE]
+    // DetectParam rejects these combinations as soon as it can, but only
+    // catches them when "ibm_iam_auth" comes first.  Check again here, where
+    // the order the options were given no longer matters.
+    //
+    if(ibm.IsEnabled() && (is_ecs || load_iamrole || IsSetIAMRole())){
+        S3FS_PRN_EXIT("option ibm_iam_auth cannot be used in conjunction with ecs or iam_role.");
+        return false;
+    }
+    if(!ibm.CheckAcl(S3fsCurl::GetDefaultAcl())){
+        return false;
     }
 
     // check External Credential Library

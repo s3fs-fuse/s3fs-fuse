@@ -240,7 +240,6 @@ class S3fsCurl
         bool ClearInternalData();
         bool insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
         void insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token);
-        void insertIBMIAMHeaders(const std::string& access_key_id, const std::string& access_token);
         bool insertAuthHeaders();
         bool AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool is_copy);
         bool PreHeadRequest(const char* tpath, size_t ssekey_pos = SIZE_MAX);
