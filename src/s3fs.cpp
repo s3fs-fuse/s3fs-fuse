@@ -3781,6 +3781,28 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
             return result;
         }
 
+        // [NOTE]
+        // A file exists as soon as it is created, but its object is only
+        // uploaded when it is flushed, so a listing taken in between does not
+        // mention it.  The Stat Cache does know about it(the entry is kept
+        // with NoTruncate until the upload happens), so merge in the children
+        // it holds, as rename_directory() does for the same reason.
+        //
+        // Without this the file is missing from readdir(2) and, because this
+        // listing is then cached, from the emptiness check that rmdir(2)
+        // makes: the directory is removed and the object that arrives
+        // afterwards is left unreachable.
+        //
+        s3obj_type_map_t cachedchildren;
+        if(!StatCache::getStatCacheData()->GetChildStatMap(path, cachedchildren)){
+            S3FS_PRN_WARN("failed to get child stat cache list for %s, but continue...", path);
+        }
+        for(const auto& child : cachedchildren){
+            if(!head.HasName(child.first)){
+                head.insert(child.first.c_str(), nullptr, IS_DIR_OBJ(child.second));
+            }
+        }
+
         if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
             S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
         }
