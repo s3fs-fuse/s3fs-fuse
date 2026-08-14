@@ -82,8 +82,18 @@ struct timespec get_mtime(const headers_t& meta, bool overcheck)
         return mtime;
     }
     if(overcheck){
-        mtime = {get_lastmodified(meta), 0};
-        return mtime;
+        // [NOTE]
+        // get_lastmodified() reports a missing or unparsable Last-Modified
+        // header as -1, and a directory that exists only as the prefix of
+        // other keys has no header at all.  That is an absence rather than a
+        // time one second before the epoch, so it must not be handed back as
+        // a timestamp: report it as omitted and let the caller default it.
+        //
+        time_t lastmodified = get_lastmodified(meta);
+        if(-1 != lastmodified){
+            mtime = {lastmodified, 0};
+            return mtime;
+        }
     }
     return OMIT_TIMESPEC;
 }
@@ -95,8 +105,12 @@ struct timespec get_ctime(const headers_t& meta, bool overcheck)
         return ctime;
     }
     if(overcheck){
-        ctime = {get_lastmodified(meta), 0};
-        return ctime;
+        // See the note in get_mtime() about a missing Last-Modified header.
+        time_t lastmodified = get_lastmodified(meta);
+        if(-1 != lastmodified){
+            ctime = {lastmodified, 0};
+            return ctime;
+        }
     }
     return OMIT_TIMESPEC;
 }
@@ -108,8 +122,12 @@ struct timespec get_atime(const headers_t& meta, bool overcheck)
         return atime;
     }
     if(overcheck){
-        atime = {get_lastmodified(meta), 0};
-        return atime;
+        // See the note in get_mtime() about a missing Last-Modified header.
+        time_t lastmodified = get_lastmodified(meta);
+        if(-1 != lastmodified){
+            atime = {lastmodified, 0};
+            return atime;
+        }
     }
     return OMIT_TIMESPEC;
 }

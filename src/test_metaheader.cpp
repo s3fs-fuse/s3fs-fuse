@@ -67,6 +67,16 @@ static void test_missing_times()
     headers_t lastmod;
     lastmod["Last-Modified"] = "Mon, 03 Feb 2020 04:05:06 GMT";
     ASSERT_TRUE(0 < get_mtime(lastmod, true).tv_sec);
+
+    //
+    // With overcheck and no Last-Modified either, there is no time to report.
+    // get_lastmodified() answers -1 in that case, and handing that back would
+    // date a directory that only exists as a key prefix to one second before
+    // the epoch instead of defaulting it.
+    //
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_mtime(empty, true).tv_nsec);
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_ctime(empty, true).tv_nsec);
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_atime(empty, true).tv_nsec);
 }
 
 //
