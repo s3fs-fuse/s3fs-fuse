@@ -1352,20 +1352,20 @@ static int directory_empty(const char* path)
 
     // check s3objlist in cache
     if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+        // [NOTE]
+        // Only the presence of a child matters here, so this listing is
+        // deliberately truncated(max-keys=2 and no paging).  It must not be
+        // stored in the shared child listing cache: readdir() reads that cache
+        // as the complete list of a directory's children, so caching this would
+        // make a directory with many entries appear to hold at most two.
+        //
         if((result = list_bucket(path, head, "/", true)) != 0){
             S3FS_PRN_ERR("list_bucket returns error.");
             return result;
         }
-        if(!head.IsEmpty()){
-            if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
-                S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
-            }
-            result = -ENOTEMPTY;
-        }
-    }else{
-        if(!head.IsEmpty()){
-            result = -ENOTEMPTY;
-        }
+    }
+    if(!head.IsEmpty()){
+        result = -ENOTEMPTY;
     }
     return result;
 }
@@ -1848,15 +1848,17 @@ static int rename_directory(const char* from, const char* to)
     // No delimiter is specified, the result(head) is all object keys.
     // (CommonPrefixes is empty, but all object is listed in Key.)
     //
-    if(!StatCache::getStatCacheData()->GetS3ObjList(basepath, head)){
-        // get a list of all the objects
-        if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
-            S3FS_PRN_ERR("list_bucket returns error.");
-            return result;
-        }
-        if(!StatCache::getStatCacheData()->AddS3ObjList(basepath, head)){
-            S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", basepath.c_str());
-        }
+    // [NOTE]
+    // The shared child listing cache holds only the direct children of a
+    // directory, because readdir() fills it with a "/" delimited listing.
+    // That cannot stand in for the recursive listing needed here, and storing
+    // this recursive listing there would in turn make readdir() report nested
+    // paths as if they were direct entries.  So this listing is neither taken
+    // from nor written back to that cache.
+    //
+    if(0 != (result = list_bucket(basepath.c_str(), head, nullptr))){
+        S3FS_PRN_ERR("list_bucket returns error.");
+        return result;
     }
     head.GetNameList(headlist);                                             // get name without "/".
 
