@@ -27,7 +27,11 @@
 //-------------------------------------------------------------------
 bool valid_timespec(const struct timespec& ts)
 {
-    if(0 > ts.tv_sec || UTIME_OMIT == ts.tv_nsec || UTIME_NOW == ts.tv_nsec){
+    // [NOTE]
+    // A negative tv_sec is a valid time before the epoch, so only the
+    // UTIME_OMIT/UTIME_NOW markers make a timespec unusable here.
+    //
+    if(UTIME_OMIT == ts.tv_nsec || UTIME_NOW == ts.tv_nsec){
         return false;
     }
     return true;

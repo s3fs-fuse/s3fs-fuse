@@ -27,7 +27,6 @@
 #include "string_util.h"
 #include "filetimes.h"
 
-static constexpr struct timespec ERROR_TIMESPEC = {-1, 0};
 static constexpr struct timespec OMIT_TIMESPEC  = {0, UTIME_OMIT};
 
 //-------------------------------------------------------------------
@@ -55,24 +54,31 @@ static struct timespec cvt_string_to_time(const char *str)
     return ts;
 }
 
-static struct timespec get_time(const headers_t& meta, const char *header)
+// [NOTE]
+// Returns false if the header is not present at all. A present header is
+// parsed even when it holds a negative number of seconds, because times
+// before the epoch are legitimate(utimensat(2) accepts them). Absence is
+// reported separately rather than as a negative sentinel so that a real
+// pre-1970 timestamp is not mistaken for a missing header.
+//
+static bool get_time(const headers_t& meta, const char *header, struct timespec& ts)
 {
     headers_t::const_iterator iter;
     if(meta.cend() == (iter = meta.find(header))){
-        return ERROR_TIMESPEC;
+        return false;
     }
-    return cvt_string_to_time((*iter).second.c_str());
+    ts = cvt_string_to_time((*iter).second.c_str());
+    return true;
 }
 
 struct timespec get_mtime(const headers_t& meta, bool overcheck)
 {
-    struct timespec mtime = get_time(meta, "x-amz-meta-mtime");
-    if(0 <= mtime.tv_sec && UTIME_OMIT != mtime.tv_nsec){
+    struct timespec mtime;
+    if(get_time(meta, "x-amz-meta-mtime", mtime) && UTIME_OMIT != mtime.tv_nsec){
         return mtime;
     }
 
-    mtime = get_time(meta, "x-amz-meta-goog-reserved-file-mtime");
-    if(0 <= mtime.tv_sec && UTIME_OMIT != mtime.tv_nsec){
+    if(get_time(meta, "x-amz-meta-goog-reserved-file-mtime", mtime) && UTIME_OMIT != mtime.tv_nsec){
         return mtime;
     }
     if(overcheck){
@@ -84,8 +90,8 @@ struct timespec get_mtime(const headers_t& meta, bool overcheck)
 
 struct timespec get_ctime(const headers_t& meta, bool overcheck)
 {
-    struct timespec ctime = get_time(meta, "x-amz-meta-ctime");
-    if(0 <= ctime.tv_sec && UTIME_OMIT != ctime.tv_nsec){
+    struct timespec ctime;
+    if(get_time(meta, "x-amz-meta-ctime", ctime) && UTIME_OMIT != ctime.tv_nsec){
         return ctime;
     }
     if(overcheck){
@@ -97,8 +103,8 @@ struct timespec get_ctime(const headers_t& meta, bool overcheck)
 
 struct timespec get_atime(const headers_t& meta, bool overcheck)
 {
-    struct timespec atime = get_time(meta, "x-amz-meta-atime");
-    if(0 <= atime.tv_sec && UTIME_OMIT != atime.tv_nsec){
+    struct timespec atime;
+    if(get_time(meta, "x-amz-meta-atime", atime) && UTIME_OMIT != atime.tv_nsec){
         return atime;
     }
     if(overcheck){
@@ -436,23 +442,27 @@ bool convert_header_to_stat(const std::string& strpath, const headers_t& meta, s
     }
     stbuf.st_blksize = 4096;
 
+    // [NOTE]
+    // Only an omitted(absent) time falls back to the epoch. A negative
+    // tv_sec is a valid time before 1970 and is passed through as-is.
+    //
     // mtime
     struct timespec mtime = get_mtime(meta);
-    if(mtime.tv_sec < 0){
+    if(UTIME_OMIT == mtime.tv_nsec){
         mtime = {0, 0};
     }
     set_timespec_to_stat(stbuf, stat_time_type::MTIME, mtime);
 
     // ctime
     struct timespec ctime = get_ctime(meta);
-    if(ctime.tv_sec < 0){
+    if(UTIME_OMIT == ctime.tv_nsec){
         ctime = {0, 0};
     }
     set_timespec_to_stat(stbuf, stat_time_type::CTIME, ctime);
 
     // atime
     struct timespec atime = get_atime(meta);
-    if(atime.tv_sec < 0){
+    if(UTIME_OMIT == atime.tv_nsec){
         atime = {0, 0};
     }
     set_timespec_to_stat(stbuf, stat_time_type::ATIME, atime);
