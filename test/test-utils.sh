@@ -356,11 +356,32 @@ function get_disk_avail_size() {
     echo "${DISK_AVAIL_SIZE}"
 }
 
+# When s3fs runs with use_sse=custom, objects written through the mount
+# are encrypted, and reading or replacing them from outside of s3fs
+# needs the same key.  While S3FS_SSE_CUSTOM_KEYFILE is exported, the
+# object helpers below send the SSE-C headers for the first key in that
+# file, which is the key that s3fs encrypts new objects with.
+function set_sse_curl_args() {
+    SSE_CURL_ARGS=()
+    if [ -n "${S3FS_SSE_CUSTOM_KEYFILE:-}" ]; then
+        local KEY KEY_MD5
+        KEY=$(head -n 1 "${S3FS_SSE_CUSTOM_KEYFILE}")
+        KEY_MD5=$(echo "${KEY}" | openssl base64 -d | openssl md5 -binary | base64)
+        SSE_CURL_ARGS=(
+            --header "x-amz-server-side-encryption-customer-algorithm: AES256"
+            --header "x-amz-server-side-encryption-customer-key: ${KEY}"
+            --header "x-amz-server-side-encryption-customer-key-md5: ${KEY_MD5}"
+        )
+    fi
+}
+
 function s3_head() {
     local S3_PATH=$1
     shift
+    set_sse_curl_args
     curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
         --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
+        "${SSE_CURL_ARGS[@]}" \
         "$@" \
         --head "$S3_URL/$S3_PATH"
 }
@@ -390,10 +411,12 @@ function s3_cp() {
             Content-Type:*) CONTENT_TYPE_HEADER=(); break ;;
         esac
     done
+    set_sse_curl_args
     curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
         --cacert "$S3PROXY_CACERT_FILE" --fail --silent \
         --header "Content-Length: $(wc -c < "$TEMPNAME")" \
         "${CONTENT_TYPE_HEADER[@]}" \
+        "${SSE_CURL_ARGS[@]}" \
         "$@" \
         --request PUT --data-binary "@$TEMPNAME" "$S3_URL/$S3_PATH"
     rm -f "$TEMPNAME"

@@ -58,8 +58,8 @@ if [ -n "${ALL_TESTS}" ]; then
         sigv2
         sigv4
         "singlepart_copy_limit=10 -o multipart_copy_size=10"  # limit sizes to exercise multipart copy code paths
-        #use_sse  # TODO: S3Proxy does not support SSE
-        #use_sse=custom:/tmp/ssekey  # TODO: S3Proxy does not support SSE
+        #use_sse  # TODO: needs an S3Proxy release with SSE support
+        #use_sse=custom:/tmp/ssekey  # TODO: needs an S3Proxy release with SSE support
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o streamupload"
         hard_remove  # exercise null-path file handle operations
     )
@@ -142,6 +142,18 @@ test_mount_nonexistent_bucket
 
 for flag in "${FLAGS[@]}"; do
     echo "testing s3fs flag: ${flag}"
+
+    # When testing use_sse=custom, tell the raw request helpers the key
+    # file, so that they can read what the mount encrypts.
+    case "${flag}" in
+        *use_sse=custom:*)
+            S3FS_SSE_CUSTOM_KEYFILE="${flag#*use_sse=custom:}"
+            export S3FS_SSE_CUSTOM_KEYFILE="${S3FS_SSE_CUSTOM_KEYFILE%% *}"
+            ;;
+        *)
+            unset S3FS_SSE_CUSTOM_KEYFILE
+            ;;
+    esac
 
     # shellcheck disable=SC2086
     start_s3fs -o ${flag}
