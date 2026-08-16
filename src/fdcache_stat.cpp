@@ -174,7 +174,8 @@ CacheFileStat::CacheFileStat(const char* tpath) : fd(-1)
 
 CacheFileStat::~CacheFileStat()
 {
-    Release();
+    // Ignore the result since Release logs errors and the destructor cannot handle them.
+    static_cast<void>(Release());
 }
 
 bool CacheFileStat::SetPath(const char* tpath, bool is_open)
