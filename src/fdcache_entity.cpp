@@ -1221,7 +1221,7 @@ int FdEntity::NoCacheMultipartUploadRequest(PseudoFdInfo* pseudo_obj, int tgfd, 
 
     // request to thread
     int result;
-    if(0 != (result = await_multipart_upload_part_request(path, tgfd, start, size, petag->part_num, *upload_id, petag, false))){
+    if(0 != (result = await_multipart_upload_part_request(path, tgfd, start, size, petag->part_num, *upload_id, petag, false, ""))){
         S3FS_PRN_ERR("Failed No Cache Multipart Upload Part Request by error(%d) [path=%s][upload_id=%s][fd=%d][start=%lld][size=%lld]", result, path.c_str(), upload_id->c_str(), tgfd, static_cast<long long int>(start), static_cast<long long int>(size));
         return result;
     }
@@ -1942,10 +1942,18 @@ int FdEntity::RowFlushStreamMultipart(PseudoFdInfo* pseudo_obj, const char* tpat
             }
         }
 
+        // The md5 of the SSE-C key that encrypted the source object,
+        // which each copy part presents to read it.
+        std::string srcssekeymd5;
+        auto        ssekeyiter = orgmeta.find("x-amz-server-side-encryption-customer-key-md5");
+        if(orgmeta.cend() != ssekeyiter){
+            srcssekeymd5 = ssekeyiter->second;
+        }
+
         //
         // Upload multipart and copy parts and wait exiting them
         //
-        if(!pseudo_obj->ParallelMultipartUploadAll(strpath.c_str(), to_upload_list, to_copy_list, result)){
+        if(!pseudo_obj->ParallelMultipartUploadAll(strpath.c_str(), to_upload_list, to_copy_list, srcssekeymd5, result)){
             S3FS_PRN_ERR("Failed to upload multipart parts.");
             AbortStreamUpload(pseudo_obj, strpath);     // abort upload and rebuild untreated list
             return -EIO;

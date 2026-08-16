@@ -3470,7 +3470,7 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
     return 0;
 }
 
-int S3fsCurl::MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy)
+int S3fsCurl::MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5)
 {
     // duplicate upload_fd
     if(!tpath || start < 0 || size <= 0 || !petag || (!is_copy && -1 == upload_fd)){
@@ -3506,6 +3506,12 @@ int S3fsCurl::MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t s
         std::ostringstream strrange;
         strrange << "bytes=" << start << "-" << (start + size - 1);
         meta["x-amz-copy-source-range"] = strrange.str();
+
+        // MultipartUploadCopyPartSetup maps this to the copy source
+        // SSE-C headers, without which the source cannot be read.
+        if(!srcssekeymd5.empty()){
+            meta["x-amz-server-side-encryption-customer-key-md5"] = srcssekeymd5;
+        }
 
         partdata.set_etag(petag);                               // [NOTE] be careful, the value is set directly
 
@@ -3942,7 +3948,7 @@ int S3fsCurl::MultipartPutHeadRequest(const std::string& from, const std::string
     return 0;
 }
 
-int S3fsCurl::MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy)
+int S3fsCurl::MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5)
 {
     S3FS_PRN_INFO3("Multipart Upload Part [tpath=%s][upload_fd=%d][start=%lld][size=%lld][part_num=%d][upload_id=%s][is_copy=%s]", SAFESTRPTR(tpath), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), part_num, upload_id.c_str(), (is_copy ? "true" : "false"));
 
@@ -3950,7 +3956,7 @@ int S3fsCurl::MultipartUploadPartRequest(const char* tpath, int upload_fd, off_t
     // Setup
     //
     int   result;
-    if(0 != (result = MultipartUploadPartSetup(tpath, upload_fd, start, size, part_num, upload_id, petag, is_copy))){
+    if(0 != (result = MultipartUploadPartSetup(tpath, upload_fd, start, size, part_num, upload_id, petag, is_copy, srcssekeymd5))){
         S3FS_PRN_ERR("Failed pre-setup for Multipart Upload Part [tpath=%s][upload_fd=%d][start=%lld][size=%lld][part_num=%d][upload_id=%s][is_copy=%s]", SAFESTRPTR(tpath), upload_fd, static_cast<long long int>(start), static_cast<long long int>(size), part_num, upload_id.c_str(), (is_copy ? "true" : "false"));
         return result;
     }
