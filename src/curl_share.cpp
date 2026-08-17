@@ -162,16 +162,14 @@ void S3fsCurlShare::DestroyCurlShareHandle()
     const std::lock_guard<std::mutex> lock(S3fsCurlShare::curl_share_lock);
 
     // find existed handle and cleanup it
-    auto handle_iter = S3fsCurlShare::ShareHandles.find(ThreadId);
-    if(handle_iter == S3fsCurlShare::ShareHandles.end()){
+    if(auto handle_iter = S3fsCurlShare::ShareHandles.find(ThreadId); handle_iter == S3fsCurlShare::ShareHandles.end()){
         S3FS_PRN_WARN("Not found curl share handle");
     }else{
         S3fsCurlShare::ShareHandles.erase(handle_iter);
     }
 
     // find lock and cleanup it
-    auto locks_iter = S3fsCurlShare::ShareLocks.find(ThreadId);
-    if(locks_iter == S3fsCurlShare::ShareLocks.end()){
+    if(auto locks_iter = S3fsCurlShare::ShareLocks.find(ThreadId); locks_iter == S3fsCurlShare::ShareLocks.end()){
         S3FS_PRN_WARN("Not found locks of curl share handle");
     }else{
         S3fsCurlShare::ShareLocks.erase(locks_iter);

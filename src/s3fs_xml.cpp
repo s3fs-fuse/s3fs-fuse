@@ -353,9 +353,9 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             continue;
         }
         xmlNodeSetPtr key_nodes = key->nodesetval;
-        auto result = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
+        auto [name_result, name] = get_object_name(doc, key_nodes->nodeTab[0]->xmlChildrenNode, path);
 
-        switch(result.first){
+        switch(name_result){
         case get_object_name_result::FAILURE:
             S3FS_PRN_WARN("name is something wrong. but continue.");
             break;
@@ -417,7 +417,7 @@ int append_objects_from_xml_ex(const char* path, xmlDocPtr doc, xmlXPathContextP
             // The XML data passed to this function is CR code(\r) encoded.
             // The function below decodes that encoded CR code.
             //
-            std::string decname = get_decoded_cr_code(result.second.c_str());
+            std::string decname = get_decoded_cr_code(name.c_str());
 
             if(prefix){
                 head.AddCommonPrefix(decname);

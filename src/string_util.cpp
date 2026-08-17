@@ -805,7 +805,7 @@ std::string raw_build_xattrs(const xattrs_t& xattrs)
 {
     std::string strxattrs;
     bool        is_set = false;
-    for(auto iter = xattrs.cbegin(); iter != xattrs.cend(); ++iter){
+    for(const auto& [key, value] : xattrs){
         if(is_set){
             strxattrs += ',';
         }else{
@@ -813,9 +813,9 @@ std::string raw_build_xattrs(const xattrs_t& xattrs)
             strxattrs = "{";
         }
         strxattrs += '\"';
-        strxattrs += iter->first;
+        strxattrs += key;
         strxattrs += "\":\"";
-        strxattrs += s3fs_base64(reinterpret_cast<const unsigned char*>(iter->second.c_str()), iter->second.length());
+        strxattrs += s3fs_base64(reinterpret_cast<const unsigned char*>(value.c_str()), value.length());
         strxattrs += '\"';
     }
     if(is_set){
