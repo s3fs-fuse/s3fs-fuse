@@ -63,11 +63,11 @@ static struct timespec cvt_string_to_time(const char *str)
 //
 static bool get_time(const headers_t& meta, const char *header, struct timespec& ts)
 {
-    headers_t::const_iterator iter;
-    if(meta.cend() == (iter = meta.find(header))){
+    auto iter = meta.find(header);
+    if(meta.cend() == iter){
         return false;
     }
-    ts = cvt_string_to_time((*iter).second.c_str());
+    ts = cvt_string_to_time(iter->second.c_str());
     return true;
 }
 
@@ -143,7 +143,7 @@ off_t get_size(const headers_t& meta)
     if(meta.cend() == iter){
         return 0;
     }
-    return get_size((*iter).second.c_str());
+    return get_size(iter->second.c_str());
 }
 
 mode_t get_mode(const char *s, int base)
@@ -158,12 +158,12 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
     headers_t::const_iterator iter;
 
     if(meta.cend() != (iter = meta.find("x-amz-meta-mode"))){
-        mode = get_mode((*iter).second.c_str());
+        mode = get_mode(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
-        mode = get_mode((*iter).second.c_str());
+        mode = get_mode(iter->second.c_str());
         isS3sync = true;
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
-        mode = get_mode((*iter).second.c_str(), 8);
+        mode = get_mode(iter->second.c_str(), 8);
     }else{
         // If another tool creates an object without permissions, default to owner
         // read-write and group readable.
@@ -180,7 +180,7 @@ mode_t get_mode(const headers_t& meta, const std::string& strpath, bool checkdir
                     mode |= S_IFDIR;
                 }else{
                     if(meta.cend() != (iter = meta.find("Content-Type"))){
-                        std::string strConType = (*iter).second;
+                        std::string strConType = iter->second;
                         // Leave just the mime type, remove any optional parameters (eg charset)
                         std::string::size_type pos = strConType.find(';');
                         if(std::string::npos != pos){
@@ -233,18 +233,18 @@ static mode_t convert_meta_to_mode_fmt(const headers_t& meta)
     headers_t::const_iterator iter;
 
     if(meta.cend() != (iter = meta.find("x-amz-meta-mode"))){
-        mode = get_mode((*iter).second.c_str());
+        mode = get_mode(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-permissions"))){ // for s3sync
-        mode = get_mode((*iter).second.c_str());
+        mode = get_mode(iter->second.c_str());
         isS3sync = true;
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-mode"))){ // for GCS
-        mode = get_mode((*iter).second.c_str(), 8);
+        mode = get_mode(iter->second.c_str(), 8);
     }
 
     if(!(mode & S_IFMT)){
         if(!isS3sync){
             if(meta.cend() != (iter = meta.find("Content-Type"))){
-                std::string strConType = (*iter).second;
+                std::string strConType = iter->second;
                 // Leave just the mime type, remove any optional parameters (eg charset)
                 std::string::size_type pos = strConType.find(';');
                 if(std::string::npos != pos){
@@ -304,8 +304,7 @@ objtype_t derive_object_type(const std::string& strpath, const headers_t& meta, 
         return objtype_t::FILE;
     }else if(0 == mode){
         // If the x-amz-meta-mode header is not present, mode is 0.
-        headers_t::const_iterator iter;
-        if(meta.cend() != (iter = meta.find("Content-Type"))){
+        if(auto iter = meta.find("Content-Type"); meta.cend() != iter){
             std::string strConType = iter->second;
             // Leave just the mime type, remove any optional parameters (eg charset)
             std::string::size_type pos = strConType.find(';');
@@ -329,11 +328,11 @@ uid_t get_uid(const headers_t& meta)
 {
     headers_t::const_iterator iter;
     if(meta.cend() != (iter = meta.find("x-amz-meta-uid"))){
-        return get_uid((*iter).second.c_str());
+        return get_uid(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-owner"))){ // for s3sync
-        return get_uid((*iter).second.c_str());
+        return get_uid(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-uid"))){ // for GCS
-        return get_uid((*iter).second.c_str());
+        return get_uid(iter->second.c_str());
     }else{
         return geteuid();
     }
@@ -348,11 +347,11 @@ gid_t get_gid(const headers_t& meta)
 {
     headers_t::const_iterator iter;
     if(meta.cend() != (iter = meta.find("x-amz-meta-gid"))){
-        return get_gid((*iter).second.c_str());
+        return get_gid(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-group"))){ // for s3sync
-        return get_gid((*iter).second.c_str());
+        return get_gid(iter->second.c_str());
     }else if(meta.cend() != (iter = meta.find("x-amz-meta-goog-reserved-posix-gid"))){ // for GCS
-        return get_gid((*iter).second.c_str());
+        return get_gid(iter->second.c_str());
     }else{
         return getegid();
     }
@@ -389,7 +388,7 @@ time_t get_lastmodified(const headers_t& meta)
     if(meta.cend() == iter){
         return -1;
     }
-    return get_lastmodified((*iter).second.c_str());
+    return get_lastmodified(iter->second.c_str());
 }
 
 //
@@ -399,8 +398,6 @@ time_t get_lastmodified(const headers_t& meta)
 //
 bool is_need_check_obj_detail(const headers_t& meta)
 {
-    headers_t::const_iterator iter;
-
     // directory object is Content-Length as 0.
     if(0 != get_size(meta)){
         return false;
@@ -420,10 +417,11 @@ bool is_need_check_obj_detail(const headers_t& meta)
     }
     // if there is not Content-Type, or Content-Type is "x-directory",
     // checking is no more.
-    if(meta.cend() == (iter = meta.find("Content-Type"))){
+    auto iter = meta.find("Content-Type");
+    if(meta.cend() == iter){
         return false;
     }
-    if("application/x-directory" == (*iter).second){
+    if("application/x-directory" == iter->second){
         return false;
     }
     return true;
@@ -435,10 +433,10 @@ bool is_need_check_obj_detail(const headers_t& meta)
 bool merge_headers(headers_t& base, const headers_t& additional, bool add_noexist)
 {
     bool added = false;
-    for(auto iter = additional.cbegin(); iter != additional.cend(); ++iter){
-        if(add_noexist || base.find(iter->first) != base.cend()){
-            base[iter->first] = iter->second;
-            added             = true;
+    for(const auto& [key, value] : additional){
+        if(add_noexist || base.find(key) != base.cend()){
+            base[key] = value;
+            added     = true;
         }
     }
     return added;

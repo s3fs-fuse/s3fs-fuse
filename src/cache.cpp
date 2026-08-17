@@ -22,7 +22,6 @@
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
-#include <utility>
 
 #include "s3fs_logger.h"
 #include "cache.h"
@@ -446,15 +445,15 @@ bool StatCache::RawGetChildStats(const std::string& dir, s3obj_list_t* plist, s3
     }
 
     // merge list
-    for(auto iter = childmap.cbegin(); iter != childmap.cend(); ++iter){
+    for(const auto& [path, type] : childmap){
         if(plist){
-            if(plist->cend() == std::find(plist->cbegin(), plist->cend(), iter->first)){
-               plist->push_back(iter->first);
+            if(plist->cend() == std::find(plist->cbegin(), plist->cend(), path)){
+               plist->push_back(path);
             }
         }
         if(pobjmap){
-            if(pobjmap->cend() == pobjmap->find(iter->first)){
-                (*pobjmap)[iter->first] = iter->second;
+            if(pobjmap->cend() == pobjmap->find(path)){
+                (*pobjmap)[path] = type;
             }
         }
     }

@@ -385,16 +385,16 @@ bool StatCacheNode::UpdateHasLock(const struct stat* pstat, const headers_t* pme
 
         // copy only some keys
         meta.clear();
-        for(auto iter = pmeta->cbegin(); iter != pmeta->cend(); ++iter){
-            if(!iter->second.empty()){
-                auto tag = CaseInsensitiveStringView(iter->first);
+        for(const auto& [header, value] : *pmeta){
+            if(!value.empty()){
+                auto tag = CaseInsensitiveStringView(header);
                 if(tag == "content-type"   ||
                    tag == "content-length" ||
                    tag == "etag"           ||
                    tag == "last-modified"  ||
                    tag.is_prefix("x-amz")  )
                 {
-                    meta[iter->first] = iter->second;
+                    meta[header] = value;
                 }
             }
         }
@@ -800,12 +800,12 @@ void StatCacheNode::DumpElementHasLock(const std::string& indent, std::ostringst
 
     oss << indent << "has_meta   = " << (has_meta ? "true" : "false")     << std::endl;
     oss << indent << "meta       = {"                                     << std::endl;
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        if(lower(iter->first) == "x-amz-meta-mode"){
+    for(const auto& [key, value] : meta){
+        if(lower(key) == "x-amz-meta-mode"){
             // ex. "x-amz-meta-mode = 0666(438)"
-            oss << indent << "  " << std::left << std::setw(20) << std::setfill(' ') << iter->first << "= " << std::setw(4) << std::setfill('0') << std::oct << static_cast<unsigned int>(cvt_strtoofft(iter->second.c_str(), 10)) << "(" << iter->second << ")" << std::endl;
+            oss << indent << "  " << std::left << std::setw(20) << std::setfill(' ') << key << "= " << std::setw(4) << std::setfill('0') << std::oct << static_cast<unsigned int>(cvt_strtoofft(value.c_str(), 10)) << "(" << value << ")" << std::endl;
         }else{
-            oss << indent << "  " << std::left << std::setw(20) << std::setfill(' ') << iter->first << "= " << iter->second << std::endl;
+            oss << indent << "  " << std::left << std::setw(20) << std::setfill(' ') << key << "= " << value << std::endl;
         }
     }
     oss << indent << "}" << std::endl;
@@ -996,8 +996,8 @@ bool DirStatCache::HasExistedChildHasLock() const
     //
 
     // NOLINTNEXTLINE(readability-use-anyofallof)
-    for(const auto& pair: children){
-        if(!pair.second->isNegativeHasLock()){
+    for(const auto& [name, child]: children){
+        if(!child->isNegativeHasLock()){
             return true;
         }
     }
@@ -1270,9 +1270,9 @@ s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& c
     childmap.clear();
 
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
-    for(const auto& pair: children){
-        if(!pair.second->isNegativeHasLock()){
-            childmap[pair.first] = pair.second->GetTypeHasLock();
+    for(const auto& [name, child]: children){
+        if(!child->isNegativeHasLock()){
+            childmap[name] = child->GetTypeHasLock();
         }
     }
     return childmap.size();
@@ -1512,8 +1512,8 @@ void DirStatCache::DumpHasLock(const std::string& indent, bool detail, std::ostr
 
         oss << child_indent << "children(" << children.size() << ") = [" << std::endl;
 
-        for(const auto& pair: children){
-            std::string child_path = GetPathHasLock() + pair.first;
+        for(const auto& [name, child]: children){
+            std::string child_path = GetPathHasLock() + name;
             children_paths.push_back(child_path);
         }
     }

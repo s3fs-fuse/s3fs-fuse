@@ -818,17 +818,17 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
 
     ssetype = sse_type_t::SSE_DISABLE;
     ssevalue.clear();
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto key = CaseInsensitiveStringView(iter->first);
-        auto value = CaseInsensitiveStringView(iter->second);
+    for(const auto& [header, rawvalue] : meta){
+        auto key = CaseInsensitiveStringView(header);
+        auto value = CaseInsensitiveStringView(rawvalue);
         if(key == "x-amz-server-side-encryption" && value == "AES256"){
             ssetype  = sse_type_t::SSE_S3;
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
             ssetype  = sse_type_t::SSE_KMS;
-            ssevalue = (*iter).second;
+            ssevalue = rawvalue;
         }else if(key == "x-amz-server-side-encryption-customer-key-md5"){
             ssetype  = sse_type_t::SSE_C;
-            ssevalue = (*iter).second;
+            ssevalue = rawvalue;
         }
     }
     return true;
@@ -1924,7 +1924,7 @@ static int rename_directory(const char* from, const char* to)
         // make "from" and "to" object name.
         std::string from_name = basepath + (*liter);
         std::string to_name   = strto + (*liter);
-        std::string etag      = head.GetETag((*liter).c_str());
+        std::string etag      = head.GetETag(liter->c_str());
 
         // Check subdirectory.
         if(!StatCache::getStatCacheData()->GetStat(from_name, &stbuf, etag.c_str())){    // Check ETag
@@ -1937,7 +1937,7 @@ static int rename_directory(const char* from, const char* to)
         if(S_ISDIR(stbuf.st_mode)){
             is_dir = true;
             if(0 != chk_dir_object_type(from_name.c_str(), normpath, from_name, nullptr, &ObjType) || !IS_DIR_OBJ(ObjType)){
-                S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), (*liter).c_str());
+                S3FS_PRN_WARN("failed to get %s%s object directory type.", basepath.c_str(), liter->c_str());
                 continue;
             }
             if(objtype_t::DIR_NOT_EXIST_OBJECT != ObjType){
@@ -3719,9 +3719,9 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     s3obj_list_t notfound_list;
 
     // Make single head request(with max).
-    for(auto iter = headmap.cbegin(); headmap.cend() != iter; ++iter){
-        std::string disppath = strpath + iter->first;
-        std::string etag     = head.GetETag(iter->first.c_str());
+    for(const auto& [path, objtype] : headmap){
+        std::string disppath = strpath + path;
+        std::string etag     = head.GetETag(path.c_str());
         struct stat st;
 
         // [NOTE]
@@ -3746,7 +3746,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
         // set one head request
         int result;
-        if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, iter->second, req_result, multi_head_sem))){
+        if(0 != (result = multi_head_request(disppath, syncfiller, thparam_lock, retrycount, notfound_list, use_wtf8, objtype, req_result, multi_head_sem))){
             // [NOTE]
             // Must drain already-scheduled workers before returning, since they
             // hold pointers to stack-local multi_head_sem/thparam_lock/
@@ -4438,8 +4438,8 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
     }
 
     // get xattrs
-    headers_t::iterator iter;
-    if(meta.cend() == (iter = meta.find("x-amz-meta-xattr"))){
+    auto iter = meta.find("x-amz-meta-xattr");
+    if(meta.cend() == iter){
         // object does not have xattrs
         return 0;
     }
@@ -4451,9 +4451,9 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
     // calculate total name length
     size_t total = 0;
-    for(auto xiter = xattrs.cbegin(); xiter != xattrs.cend(); ++xiter){
-        if(!xiter->first.empty()){
-            total += xiter->first.length() + 1;
+    for(const auto& [name, value] : xattrs){
+        if(!name.empty()){
+            total += name.length() + 1;
         }
     }
 
@@ -4471,10 +4471,10 @@ static int s3fs_listxattr(const char* path, char* list, size_t size)
 
     // copy to list
     char* setpos = list;
-    for(auto xiter = xattrs.cbegin(); xiter != xattrs.cend(); ++xiter){
-        if(!xiter->first.empty()){
-            size_t len = xiter->first.length() + 1;
-            memcpy(setpos, xiter->first.c_str(), len);
+    for(const auto& [name, value] : xattrs){
+        if(!name.empty()){
+            size_t len = name.length() + 1;
+            memcpy(setpos, name.c_str(), len);
             setpos += len;
         }
     }
@@ -4651,13 +4651,11 @@ static int s3fs_removexattr(const char* _path, const char* name)
         // process. In ent->MergeOrgMeta(), if "x-amz-meta-xattr" exists in
         // updatemeta but its value is empty, it will be deleted first.
         //
-        auto iter = updatemeta.find("x-amz-meta-xattr");
-        if(iter != updatemeta.end() && iter->second.empty()){
+        if(auto iter = updatemeta.find("x-amz-meta-xattr"); iter != updatemeta.end() && iter->second.empty()){
             updatemeta.erase(iter);
         }
         if(updatemeta.end() == updatemeta.find("x-amz-meta-xattr")){
-            auto miter = meta.find("x-amz-meta-xattr");
-            if(miter != meta.end()){
+            if(auto miter = meta.find("x-amz-meta-xattr"); miter != meta.end()){
                 meta.erase(miter);
             }
         }
@@ -4794,8 +4792,7 @@ static std::optional<std::string> check_region_error(const char* pbody, size_t l
         return std::nullopt;
     }
 
-    auto code = simple_parse_xml(pbody, len, "Code");
-    if(!code || *code != "AuthorizationHeaderMalformed"){
+    if(auto code = simple_parse_xml(pbody, len, "Code"); !code || *code != "AuthorizationHeaderMalformed"){
         return std::nullopt;
     }
 
@@ -4858,8 +4855,7 @@ static std::optional<std::string> check_endpoint_error(const char* pbody, size_t
         return std::nullopt;
     }
 
-    auto code = simple_parse_xml(pbody, len, "Code");
-    if(!code || *code != "PermanentRedirect"){
+    if(auto code = simple_parse_xml(pbody, len, "Code"); !code || *code != "PermanentRedirect"){
         return std::nullopt;
     }
 
@@ -4872,12 +4868,10 @@ static bool check_invalid_sse_arg_error(const char* pbody, size_t len)
         return false;
     }
 
-    auto code = simple_parse_xml(pbody, len, "Code");
-    if(!code || *code != "InvalidArgument"){
+    if(auto code = simple_parse_xml(pbody, len, "Code"); !code || *code != "InvalidArgument"){
         return false;
     }
-    auto argname = simple_parse_xml(pbody, len, "ArgumentName");
-    if(!argname || *argname != "x-amz-server-side-encryption"){
+    if(auto argname = simple_parse_xml(pbody, len, "ArgumentName"); !argname || *argname != "x-amz-server-side-encryption"){
         return false;
     }
     return true;

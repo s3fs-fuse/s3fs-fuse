@@ -456,8 +456,8 @@ int FdManager::GetOpenFdCount(const char* path)
 //------------------------------------------------
 FdManager::~FdManager()
 {
-    for(auto iter = fent.cbegin(); fent.cend() != iter; ++iter){
-        const FdEntity* ent = iter->second.get();
+    for(const auto& [entpath, entity] : fent){
+        const FdEntity* ent = entity.get();
         S3FS_PRN_WARN("To exit with the cache file opened: path=%s, refcnt=%d", ent->GetPath().c_str(), ent->GetOpenCount());
     }
     fent.clear();
@@ -474,8 +474,7 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
 
     UpdateEntityToTempPath();
 
-    auto fiter = fent.find(path);
-    if(fent.cend() != fiter && fiter->second){
+    if(auto fiter = fent.find(path); fent.cend() != fiter && fiter->second){
         if(-1 == existfd){
             if(newfd){
                 existfd = fiter->second->OpenPseudoFd(O_RDWR);    // [NOTE] O_RDWR flags
@@ -492,24 +491,24 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
     }
 
     if(-1 != existfd){
-        for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-            if(iter->second &&
-              iter->second->GetROPath() == path &&
-              iter->second->FindPseudoFd(existfd)){
+        for(const auto& [entpath, entity] : fent){
+            if(entity &&
+              entity->GetROPath() == path &&
+              entity->FindPseudoFd(existfd)){
                 // found opened fd in map
                 if(newfd){
-                    existfd = iter->second->Dup(existfd);
+                    existfd = entity->Dup(existfd);
                 }
-                return iter->second.get();
+                return entity.get();
             }
         }
     } else {
         // If the cache directory is not specified, s3fs opens a temporary file
         // when the file is opened.
         if(!FdManager::IsCacheDir()){
-            for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-                if(iter->second && iter->second->IsOpen() && iter->second->GetROPath() == path){
-                    return iter->second.get();
+            for(const auto& [entpath, entity] : fent){
+                if(entity && entity->IsOpen() && entity->GetROPath() == path){
+                    return entity.get();
                 }
             }
         }
@@ -619,20 +618,19 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
 
     // If use_cache is disabled, or the disk space is insufficient when use_cache
     // is enabled, the corresponding key of the entity in fent is not path.
-    auto iter = fent.find(std::string(path));
-    if(fent.end() != iter){
+    if(auto iter = fent.find(std::string(path)); fent.end() != iter){
       if(iter->second && iter->second->FindPseudoFd(existfd)){
         return iter->second.get();
       }
     } else {
       // no matter use_cache is enabled or not, search from all entities to
       // find the entity with the same path. And then compare the pseudo fd.
-      for(iter = fent.begin(); iter != fent.end(); ++iter) {
+      for(const auto& [entpath, entity] : fent) {
         // GetROPath() holds ro_path_lock rather than fdent_lock.
         // Therefore GetExistFdEntity does not contends with FdEntity::Read() / Write().
-        if(iter->second && (iter->second->GetROPath() == path)
-           && iter->second->FindPseudoFd(existfd)) {
-          return iter->second.get();
+        if(entity && (entity->GetROPath() == path)
+           && entity->FindPseudoFd(existfd)) {
+          return entity.get();
         }
       }
     }
@@ -662,9 +660,9 @@ FdEntity* FdManager::GetFdEntityByPseudoFd(int existfd)
 
     UpdateEntityToTempPath();
 
-    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-        if(iter->second && iter->second->FindPseudoFd(existfd)){
-            return iter->second.get();
+    for(const auto& [entpath, entity] : fent){
+        if(entity && entity->FindPseudoFd(existfd)){
+            return entity.get();
         }
     }
 
@@ -704,10 +702,10 @@ int FdManager::GetPseudoFdCount(const char* path)
     UpdateEntityToTempPath();
 
     // search from all entity.
-    for(auto iter = fent.cbegin(); iter != fent.cend(); ++iter){
-        if(iter->second && iter->second->GetPath() == path){
+    for(const auto& [entpath, entity] : fent){
+        if(entity && entity->GetPath() == path){
             // found the entity for the path
-            return iter->second->GetOpenCount();
+            return entity->GetOpenCount();
         }
     }
     // not found entity
@@ -813,8 +811,7 @@ bool FdManager::UpdateEntityToTempPath()
     const std::lock_guard<std::mutex> lock(FdManager::except_entmap_lock);
 
     for(auto except_iter = except_fent.cbegin(); except_iter != except_fent.cend(); ){
-        auto iter = fent.find(except_iter->first);
-        if(fent.cend() != iter && iter->second.get() == except_iter->second.get()){
+        if(auto iter = fent.find(except_iter->first); fent.cend() != iter && iter->second.get() == except_iter->second.get()){
             // The path is still mapped to this entity, so move it to a new
             // temporary key.
             std::string tmppath;
@@ -899,8 +896,7 @@ void FdManager::CleanupCacheDirInternal(const std::string &path)
             }
             UpdateEntityToTempPath();
 
-            auto iter = fent.find(next_path);
-            if(fent.cend() == iter) {
+            if(auto iter = fent.find(next_path); fent.cend() == iter) {
                 S3FS_PRN_DBG("cleaned up: %s", next_path.c_str());
                 FdManager::DeleteCacheFile(next_path.c_str());
             }
@@ -1015,8 +1011,7 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
 
                 UpdateEntityToTempPath();
 
-                auto iter = fent.find(object_file_path);
-                if(fent.cend() != iter){
+                if(auto iter = fent.find(object_file_path); fent.cend() != iter){
                     // This file is opened now, then we need to put warning message.
                     strOpenedWarn = CACHEDBG_FMT_WARN_OPEN;
                 }

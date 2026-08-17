@@ -774,8 +774,7 @@ bool S3fsCred::ReadS3fsPasswdFile()
     //
     // check key=value type format.
     //
-    auto it = bucketmap.find(S3fsCred::KEYVAL_FIELDS_TYPE);
-    if(bucketmap.cend() != it){
+    if(auto it = bucketmap.find(S3fsCred::KEYVAL_FIELDS_TYPE); bucketmap.cend() != it){
         // aws format
         std::string access_key_id;
         std::string secret_access_key;
@@ -797,7 +796,7 @@ bool S3fsCred::ReadS3fsPasswdFile()
         bucket_key = S3fsCred::bucket_name;
     }
 
-    it = bucketmap.find(bucket_key);
+    auto it = bucketmap.find(bucket_key);
     if(bucketmap.cend() == it){
         S3FS_PRN_EXIT("Not found access key/secret key in passwd file.");
         return false;

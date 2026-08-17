@@ -228,9 +228,9 @@ void ThreadPoolMan::StopThreads()
     }
 
     // wait for threads exiting
-    for(auto& pair : thread_list){
-        pair.first.join();
-        long retval = pair.second.get();
+    for(auto& [thread, future] : thread_list){
+        thread.join();
+        long retval = future.get();
         S3FS_PRN_DBG("join succeeded - return code(%ld)", reinterpret_cast<long>(retval));
     }
     thread_list.clear();

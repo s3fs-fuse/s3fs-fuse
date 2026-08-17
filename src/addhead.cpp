@@ -176,9 +176,9 @@ struct curl_slist* AdditionalHeader::AddHeader(struct curl_slist* list, const ch
     if(!AddHeader(meta, path)){
         return list;
     }
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
+    for(const auto& [key, value] : meta){
         // Adding header
-        list = curl_slist_sort_insert(list, iter->first.c_str(), iter->second.c_str());
+        list = curl_slist_sort_insert(list, key.c_str(), value.c_str());
     }
     meta.clear();
     return list;

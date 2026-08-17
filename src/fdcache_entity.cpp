@@ -224,8 +224,7 @@ void FdEntity::Close(int fd)
     S3FS_PRN_DBG("[path=%s][pseudo_fd=%d][physical_fd=%d]", path.c_str(), fd, physical_fd);
 
     // search pseudo fd and close it.
-    auto iter = pseudo_fd_map.find(fd);
-    if(pseudo_fd_map.cend() != iter){
+    if(auto iter = pseudo_fd_map.find(fd); pseudo_fd_map.cend() != iter){
         pseudo_fd_map.erase(iter);
     }else{
         S3FS_PRN_WARN("Not found pseudo_fd(%d) in entity object(%s)", fd, path.c_str());

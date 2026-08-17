@@ -335,7 +335,7 @@ class S3fsCurl
         [[nodiscard]] int GetIAMv2ApiToken(const char* token_url, int token_ttl, const char* token_ttl_hdr, std::string& response);
         [[nodiscard]] int HeadRequest(const char* tpath, headers_t& meta);
         [[nodiscard]] int PutHeadRequest(const char* tpath, const headers_t& meta, bool is_copy);
-        [[nodiscard]] int PutRequest(const char* tpath, headers_t& meta, int fd);
+        [[nodiscard]] int PutRequest(const char* tpath, const headers_t& meta, int fd);
         [[nodiscard]] int PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         [[nodiscard]] int GetObjectRequest(const char* tpath, int fd, off_t start, off_t size, sse_type_t ssetype, const std::string& ssevalue);
         [[nodiscard]] int CheckBucket(const char* check_path, bool compat_dir, bool force_no_sse);

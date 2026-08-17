@@ -237,15 +237,15 @@ std::optional<std::string> S3ObjList::GetLastName() const
 {
     bool result = false;
     std::string lastname;
-    for(auto iter = objects.cbegin(); iter != objects.cend(); ++iter){
-        if(!iter->second.orgname.empty()){
-            if(lastname.compare(iter->second.orgname) < 0){
-                lastname = iter->second.orgname;
+    for(const auto& [name, entry] : objects){
+        if(!entry.orgname.empty()){
+            if(lastname.compare(entry.orgname) < 0){
+                lastname = entry.orgname;
                 result = true;
             }
         }else{
-            if(lastname.compare(iter->second.normalname) < 0){
-                lastname = iter->second.normalname;
+            if(lastname.compare(entry.normalname) < 0){
+                lastname = entry.normalname;
                 result = true;
             }
         }
@@ -261,11 +261,11 @@ bool S3ObjList::RawGetNames(s3obj_list_t* plist, s3obj_type_map_t* pobjmap, bool
     if(!plist && !pobjmap){
         return false;
     }
-    for(auto iter = objects.cbegin(); objects.cend() != iter; ++iter){
-        if(OnlyNormalized && !iter->second.normalname.empty()){
+    for(const auto& [path, entry] : objects){
+        if(OnlyNormalized && !entry.normalname.empty()){
             continue;
         }
-        std::string name = iter->first;
+        std::string name = path;
         if(CutSlash && 1 < name.length() && '/' == *name.rbegin()){
             // only "/" std::string is skipped this.
             name.erase(name.length() - 1);
@@ -274,7 +274,7 @@ bool S3ObjList::RawGetNames(s3obj_list_t* plist, s3obj_type_map_t* pobjmap, bool
             plist->push_back(name);
         }
         if(pobjmap){
-            (*pobjmap)[name] = iter->second.type;
+            (*pobjmap)[name] = entry.type;
         }
     }
     return true;
@@ -342,14 +342,14 @@ void S3ObjList::Dump(const std::string& indent, std::ostringstream& oss) const
     std::string child_member_indent = child_indent + "  ";
 
     oss << indent << "S3ObjList::objects = {" << std::endl;
-    for(auto oiter = objects.cbegin(); objects.cend() != oiter; ++oiter){
-        oss << child_indent << "[" << oiter->first << "] = {" << std::endl;
-        oss << child_member_indent << "normalname    = " << oiter->second.normalname        << std::endl;
-        oss << child_member_indent << "orgname       = " << oiter->second.orgname           << std::endl;
-        oss << child_member_indent << "etag          = " << oiter->second.etag              << std::endl;
-        oss << child_member_indent << "size          = " << oiter->second.size              << std::endl;
-        oss << child_member_indent << "last_modified = " << oiter->second.last_modified     << std::endl;
-        oss << child_member_indent << "type          = " << STR_OBJTYPE(oiter->second.type) << std::endl;
+    for(const auto& [name, entry] : objects){
+        oss << child_indent << "[" << name << "] = {" << std::endl;
+        oss << child_member_indent << "normalname    = " << entry.normalname        << std::endl;
+        oss << child_member_indent << "orgname       = " << entry.orgname           << std::endl;
+        oss << child_member_indent << "etag          = " << entry.etag              << std::endl;
+        oss << child_member_indent << "size          = " << entry.size              << std::endl;
+        oss << child_member_indent << "last_modified = " << entry.last_modified     << std::endl;
+        oss << child_member_indent << "type          = " << STR_OBJTYPE(entry.type) << std::endl;
         oss << child_indent << "}" << std::endl;
     }
     oss << indent << "}" << std::endl;
@@ -391,10 +391,10 @@ bool S3ObjList::MakeHierarchizedList(s3obj_list_t& list, bool haveSlash)
     }
 
     // check map and add lost hierarchized directory.
-    for(auto hiter = h_map.cbegin(); hiter != h_map.cend(); ++hiter){
-        if(false == (*hiter).second){
+    for(const auto& [name, found] : h_map){
+        if(false == found){
             // add hierarchized directory.
-            std::string strtmp = (*hiter).first;
+            std::string strtmp = name;
             if(haveSlash){
                 strtmp += "/";
             }

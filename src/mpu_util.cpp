@@ -48,9 +48,9 @@ static void print_incomp_mpu_list(const incomp_mpu_list_t& list)
         printf("---------------------------------------------------------------\n");
 
         for(auto iter = list.cbegin(); iter != list.cend(); ++iter){
-            printf(" Path     : %s\n", (*iter).key.c_str());
-            printf(" UploadId : %s\n", (*iter).id.c_str());
-            printf(" Date     : %s\n", (*iter).date.c_str());
+            printf(" Path     : %s\n", iter->key.c_str());
+            printf(" UploadId : %s\n", iter->id.c_str());
+            printf(" Date     : %s\n", iter->date.c_str());
             printf("\n");
         }
         printf("---------------------------------------------------------------\n");
@@ -70,11 +70,11 @@ static bool abort_incomp_mpu_list(const incomp_mpu_list_t& list, time_t abort_ti
     // do removing.
     bool     result = true;
     for(auto iter = list.cbegin(); iter != list.cend(); ++iter){
-        const char* tpath     = (*iter).key.c_str();
-        std::string upload_id = (*iter).id;
+        const char* tpath     = iter->key.c_str();
+        std::string upload_id = iter->id;
 
         if(0 != abort_time){    // abort_time is 0, it means all.
-            auto date = get_unixtime_from_iso8601((*iter).date.c_str());
+            auto date = get_unixtime_from_iso8601(iter->date.c_str());
             if(!date){
                 S3FS_PRN_DBG("date format is not ISO 8601 for %s multipart uploading object, skip this.", tpath);
                 continue;
