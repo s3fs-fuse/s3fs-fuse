@@ -618,6 +618,34 @@ static int get_object_attribute(const char* path, struct stat* pstbuf, headers_t
 }
 
 //
+// The access mask which an open with these flags needs.
+//
+static int open_access_mask(int flags)
+{
+    if(O_RDONLY != (flags & O_ACCMODE)){
+        return W_OK;
+    }
+    #ifdef __linux__
+        // [NOTE]
+        // execve(2) needs only execute permission on the program and not read
+        // permission: a mode 0111 binary runs but cannot be read.  Linux opens
+        // it read only with __FMODE_EXEC added, a kernel internal flag which
+        // FUSE passes on to us, so an open carrying that flag must be checked
+        // against X_OK instead of R_OK.  No header available here names the
+        // flag, but its value has always been 0x20 and nothing in the Linux
+        // O_* space uses that bit.  Other platforms have no equivalent, and
+        // macOS gives 0x20 to O_EXLOCK, so only look at it here.
+        //
+        constexpr int FLAG_FMODE_EXEC = 0x20;
+
+        if(0 != (flags & FLAG_FMODE_EXEC)){
+            return X_OK;
+        }
+    #endif
+    return R_OK;
+}
+
+//
 // Check the object uid and gid for write/read/execute.
 // The param "mask" is as same as access() function.
 // If there is not a target file, this function returns -ENOENT.
@@ -3132,7 +3160,7 @@ static int s3fs_open(const char* _path, struct fuse_file_info* fi)
         }
     }
 
-    int mask = (O_RDONLY != (fi->flags & O_ACCMODE) ? W_OK : R_OK);
+    int mask = open_access_mask(fi->flags);
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
     }
