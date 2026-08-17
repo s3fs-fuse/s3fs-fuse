@@ -346,11 +346,10 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
     }
 
     // if we get here, then we have an extension (ext)
-    auto iter = S3fsCurl::mimeTypes.find(ext);
     // if the last extension matches a mimeType, then return
     // that mime type
-    if (iter != S3fsCurl::mimeTypes.cend()) {
-        result = (*iter).second;
+    if (auto iter = S3fsCurl::mimeTypes.find(ext); iter != S3fsCurl::mimeTypes.cend()) {
+        result = iter->second;
         return result;
     }
 
@@ -361,9 +360,8 @@ std::string S3fsCurl::LookupMimeType(const std::string& name)
 
     // Didn't find a mime-type for the first extension
     // Look for second extension in mimeTypes, return if found
-    iter = S3fsCurl::mimeTypes.find(ext2);
-    if (iter != S3fsCurl::mimeTypes.cend()) {
-        result = (*iter).second;
+    if (auto iter = S3fsCurl::mimeTypes.find(ext2); iter != S3fsCurl::mimeTypes.cend()) {
+        result = iter->second;
         return result;
     }
 
@@ -809,7 +807,7 @@ bool S3fsCurl::LoadEnvSseKmsid()
 bool S3fsCurl::GetSseKey(std::string& md5, std::string& ssekey)
 {
     for(auto iter = S3fsCurl::sseckeys.cbegin(); iter != S3fsCurl::sseckeys.cend(); ++iter){
-        if(md5.empty() || md5 == (*iter).cbegin()->first){
+        if(md5.empty() || md5 == iter->cbegin()->first){
             md5    = iter->begin()->first;
             ssekey = iter->begin()->second;
             return true;
@@ -2887,15 +2885,14 @@ int S3fsCurl::HeadRequest(const char* tpath, headers_t& meta)
     // file exists in s3
     // fixme: clean this up.
     meta.clear();
-    for(auto iter = responseHeaders.cbegin(); iter != responseHeaders.cend(); ++iter){
-        auto key          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
+    for(const auto& [header, value] : responseHeaders){
+        auto key = CaseInsensitiveStringView(header);
         if(key == "content-type" ||
            key == "content-length" ||
            key == "etag" ||
            key == "last-modified" ||
            key.is_prefix("x-amz")){
-            meta[iter->first] = value;
+            meta[header] = value;
         }
     }
     return 0;
@@ -2925,15 +2922,14 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
     requestHeaders      = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto key          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
+    for(const auto& [header, value] : meta){
+        auto key = CaseInsensitiveStringView(header);
         if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
         }else if(key.is_prefix("x-amz-meta")){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source"){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
@@ -3001,7 +2997,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
     return result;
 }
 
-int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
+int S3fsCurl::PutRequest(const char* tpath, const headers_t& meta, int fd)
 {
     struct stat st;
 
@@ -3064,13 +3060,12 @@ int S3fsCurl::PutRequest(const char* tpath, headers_t& meta, int fd)
     std::string contype = S3fsCurl::LookupMimeType(tpath);
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto key          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
+    for(const auto& [header, value] : meta){
+        auto key = CaseInsensitiveStringView(header);
         if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
         }else if(key.is_prefix("x-amz-meta")){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
@@ -3387,13 +3382,12 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
 
     std::string contype = S3fsCurl::LookupMimeType(tpath);
 
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto key          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
+    for(const auto& [header, value] : meta){
+        auto key = CaseInsensitiveStringView(header);
         if(key.is_prefix("x-amz-acl")){
             // not set value, but after set it.
         }else if(key.is_prefix("x-amz-meta")){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header, because this header is specified after logic.
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
@@ -3833,13 +3827,12 @@ int S3fsCurl::MultipartUploadCopyPartSetup(const char* from, const char* to, int
     requestHeaders = curl_slist_sort_insert(requestHeaders, "Content-Type", contype.c_str());
 
     // Make request headers
-    for(auto iter = meta.cbegin(); iter != meta.cend(); ++iter){
-        auto key          = CaseInsensitiveStringView(iter->first);
-        const auto& value = iter->second;
+    for(const auto& [header, value] : meta){
+        auto key = CaseInsensitiveStringView(header);
         if(key == "x-amz-copy-source"){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-copy-source-range"){
-            requestHeaders = curl_slist_sort_insert(requestHeaders, iter->first.c_str(), value.c_str());
+            requestHeaders = curl_slist_sort_insert(requestHeaders, header.c_str(), value.c_str());
         }else if(key == "x-amz-server-side-encryption" && value != "aws:kms"){
             // skip this header
         }else if(key == "x-amz-server-side-encryption-aws-kms-key-id"){
