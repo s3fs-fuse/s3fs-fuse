@@ -3300,7 +3300,15 @@ function add_all_tests {
     add_tests test_copy_file
     add_tests test_write_after_seek_ahead
     add_tests test_overwrite_existing_file_range
-    add_tests test_concurrent_directory_updates
+    # [NOTE]
+    # A macOS NFS client kernel bug can permanently wedge processes racing
+    # open/unlink/recreate of the same names, hanging the job until the CI
+    # timeout.  FUSE-T mounts are NFS, so this test cannot run safely there.
+    # https://github.com/macos-fuse-t/fuse-t/issues/112
+    #
+    if ! uname | grep -q Darwin; then
+        add_tests test_concurrent_directory_updates
+    fi
     add_tests test_concurrent_reads
     add_tests test_concurrent_writes
     add_tests test_open_second_fd
