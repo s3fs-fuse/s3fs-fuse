@@ -2625,10 +2625,42 @@ int S3fsCurl::GetIAMv2ApiToken(const char* token_url, int token_ttl, const char*
 }
 
 //
+// Extract the raw "access_token" string value from a JSON IAM response.
+// Uses a simple string search to avoid pulling in a JSON library.
+//
+static std::string extract_access_token_from_json(const std::string& json)
+{
+    // Look for "access_token":"<value>"
+    static const std::string key = "\"access_token\"";
+    auto pos = json.find(key);
+    if(pos == std::string::npos){
+        return "";
+    }
+    pos = json.find(':', pos + key.size());
+    if(pos == std::string::npos){
+        return "";
+    }
+    pos = json.find('"', pos + 1);
+    if(pos == std::string::npos){
+        return "";
+    }
+    auto end = json.find('"', pos + 1);
+    if(end == std::string::npos){
+        return "";
+    }
+    return json.substr(pos + 1, end - pos - 1);
+}
+
+//
 // Get AccessKeyId/SecretAccessKey/AccessToken/Expiration by IAM role,
 // and Set these value to class variable.
 //
-std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key)
+// For IBM Trusted Profile (Service ID mode) this performs a two-step exchange:
+//   Step 1: POST apikey grant -> obtain Service ID access token
+//   Step 2: POST assume grant with Step 1 token + profile_id -> obtain
+//           Trusted Profile-scoped token (this is what COS must receive)
+//
+std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, const char* iam_v2_token, const char* ibm_secret_access_key, const char* ibm_trusted_profile_id)
 {
     if(!cred_url){
         S3FS_PRN_ERR("url is null.");
@@ -2648,7 +2680,7 @@ std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, con
     std::string postContent;
 
     if(ibm_secret_access_key){
-        // make contents
+        // Step 1: standard apikey grant (no profile_id - that goes in Step 2)
         postContent += "grant_type=urn:ibm:params:oauth:grant-type:apikey";
         postContent += "&response_type=cloud_iam";
         postContent += "&apikey=";
@@ -2707,6 +2739,81 @@ std::optional<std::string> S3fsCurl::GetIAMCredentials(const char* cred_url, con
         S3FS_PRN_ERR("Error(%d) occurred, could not get IAM role name.", result);
     }
     bodydata.clear();
+
+    // Step 2: if Trusted Profile is requested, exchange the Service ID token
+    // for a Trusted Profile-scoped token using the "assume" grant type.
+    if(response && ibm_trusted_profile_id && ibm_trusted_profile_id[0] != '\0'){
+        std::string sid_access_token = extract_access_token_from_json(*response);
+        if(sid_access_token.empty()){
+            S3FS_PRN_ERR("Trusted Profile assume: could not extract access_token from Step 1 response.");
+            return std::nullopt;
+        }
+
+        S3FS_PRN_INFO3("Trusted Profile assume grant: exchanging Service ID token for profile-scoped token [profile_id=%s]", ibm_trusted_profile_id);
+
+        // Build assume grant POST body
+        std::string assumeContent;
+        assumeContent += "grant_type=urn:ibm:params:oauth:grant-type:assume";
+        assumeContent += "&response_type=cloud_iam";
+        assumeContent += "&access_token=";
+        assumeContent += sid_access_token;
+        assumeContent += "&profile_id=";
+        assumeContent += ibm_trusted_profile_id;
+
+        // Re-use the same curl handle for Step 2.
+        // Save url before DestroyCurlHandle - ClearInternalData() wipes it.
+        std::string step2_url = url;
+        if(!DestroyCurlHandle() || !CreateCurlHandle()){
+            return std::nullopt;
+        }
+        url             = step2_url;
+        type            = REQTYPE::IAMCRED;
+        requestHeaders  = nullptr;
+        responseHeaders.clear();
+        bodydata.clear();
+
+        postdata             = reinterpret_cast<const unsigned char*>(assumeContent.c_str());
+        b_postdata           = postdata;
+        postdata_remaining   = assumeContent.size();
+        b_postdata_remaining = postdata_remaining;
+
+        requestHeaders = curl_slist_sort_insert(requestHeaders, "Authorization", "Basic Yng6Yng=");
+
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POST, true)){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_POSTFIELDSIZE, static_cast<curl_off_t>(postdata_remaining))){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READDATA, reinterpret_cast<void*>(this))){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_READFUNCTION, S3fsCurl::ReadCallback)){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_URL, url.c_str())){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&bodydata))){
+            return std::nullopt;
+        }
+        if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
+            return std::nullopt;
+        }
+        if(!S3fsCurl::AddUserAgent(hCurl)){
+            return std::nullopt;
+        }
+
+        result = RequestPerform(true);
+        if(0 == result){
+            response = std::move(bodydata);
+            S3FS_PRN_INFO3("Trusted Profile assume grant succeeded.");
+        }else{
+            S3FS_PRN_ERR("Error(%d) occurred during Trusted Profile assume grant (Step 2).", result);
+            response = std::nullopt;
+        }
+        bodydata.clear();
+    }
 
     return response;
 }

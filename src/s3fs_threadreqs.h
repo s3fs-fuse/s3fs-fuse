@@ -254,7 +254,7 @@ int get_object_request(const std::string& path, int fd, off_t start, off_t size)
 //-------------------------------------------------------------------
 int get_iamv2api_token_request(const std::string& strurl, int tokenttl, const std::string& strttlhdr, std::string& token);
 int get_iamrole_request(const std::string& strurl, const std::string& striamtoken, std::string& token);
-int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, std::string& cred);
+int get_iamcred_request(const std::string& strurl, const std::string& striamtoken, const std::string& stribmsecret, const std::string& strtrustedprofileid, std::string& cred);
 
 #endif // S3FS_THREADREQS_H_
 
