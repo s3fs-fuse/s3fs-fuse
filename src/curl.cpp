@@ -2814,6 +2814,42 @@ bool S3fsCurl::AddSseRequestHead(sse_type_t ssetype, std::string ssevalue, bool 
 }
 
 //
+// Set the SSE headers that a HEAD response would carry into meta
+//
+// This is the counterpart of AddSseRequestHead() for the meta which is
+// built locally for a newly created object and then cached in place of
+// a HEAD response.  The object is stored with the current SSE setting,
+// so the meta must describe it the same way the server would, without
+// the SSE-C key itself which a response never echoes.  New objects are
+// encrypted with the latest SSE-C key(position 0).
+//
+bool S3fsCurl::AddSseResponseHead(headers_t& meta)
+{
+    switch(S3fsCurl::GetSseType()){
+        case sse_type_t::SSE_DISABLE:
+            return true;
+        case sse_type_t::SSE_S3:
+            meta["x-amz-server-side-encryption"] = "AES256";
+            return true;
+        case sse_type_t::SSE_C:
+            if(auto md5 = S3fsCurl::GetSseKeyMd5(0)){
+                meta["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
+                meta["x-amz-server-side-encryption-customer-key-md5"]   = *md5;
+                return true;
+            }
+            S3FS_PRN_ERR("Failed to insert SSE-C header.");
+            return false;
+        case sse_type_t::SSE_KMS:
+            meta["x-amz-server-side-encryption"]                = "aws:kms";
+            meta["x-amz-server-side-encryption-aws-kms-key-id"] = S3fsCurl::GetSseKmsId();
+            return true;
+    }
+    S3FS_PRN_ERR("sse type is unknown(%d).", static_cast<int>(S3fsCurl::ssetype));
+
+    return false;
+}
+
+//
 // tpath :      target path for head request
 // ssekey_pos : SIZE_MAX means "not" SSE-C type
 //              0 - X means SSE-C type and position for SSE-C key(0 is latest key)

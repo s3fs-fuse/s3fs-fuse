@@ -1183,6 +1183,15 @@ static int s3fs_create(const char* _path, mode_t mode, struct fuse_file_info* fi
         meta["x-amz-meta-xattr"] = *xattrvalue;
     }
 
+    // [NOTE]
+    // This meta is cached and used in place of a HEAD response, so it
+    // must carry the SSE headers describing how the object is stored.
+    //
+    if(!S3fsCurl::AddSseResponseHead(meta)){
+        S3FS_PRN_ERR("failed to set the SSE headers in the meta of %s", strpath.c_str());
+        return -EIO;
+    }
+
     // Set stat structure
     struct stat stbuf = {};
     if(!convert_header_to_stat(strpath, meta, stbuf, false)){
@@ -1502,6 +1511,15 @@ static int s3fs_symlink(const char* _from, const char* _to)
     headers["x-amz-meta-mtime"] = strnow;
     headers["x-amz-meta-uid"]   = std::to_string(pcxt->uid);
     headers["x-amz-meta-gid"]   = std::to_string(pcxt->gid);
+
+    // [NOTE]
+    // These headers are cached and used in place of a HEAD response, so
+    // they must describe how the object is stored.
+    //
+    if(!S3fsCurl::AddSseResponseHead(headers)){
+        S3FS_PRN_ERR("failed to set the SSE headers in the meta of %s", strTo.c_str());
+        return -EIO;
+    }
 
     // [NOTE]
     // Symbolic links do not set xattrs.

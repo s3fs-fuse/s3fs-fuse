@@ -290,6 +290,7 @@ class S3fsCurl
         static bool IsSetSseKmsId() { return !S3fsCurl::ssekmsid.empty(); }
         static const char* GetSseKmsId() { return S3fsCurl::ssekmsid.c_str(); }
         static bool GetSseKey(std::string& md5, std::string& ssekey);
+        static bool AddSseResponseHead(headers_t& meta);
         static std::optional<std::string> GetSseKeyMd5(size_t pos);
         static size_t GetSseKeyCount();
         static bool SetContentMd5(bool flag);
