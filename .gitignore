@@ -83,6 +83,7 @@ src/s3fs
 src/test_auth
 src/test_cache_node
 src/test_curl_util
+src/test_metaheader
 src/test_page_list
 src/test_s3objlist
 src/test_string_util

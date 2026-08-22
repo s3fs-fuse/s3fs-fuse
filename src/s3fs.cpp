@@ -3062,20 +3062,40 @@ static int s3fs_truncate(const char* _path, off_t size, struct fuse_file_info* i
         }
 #endif
 
-        if(need_flush){
-            // successful truncate(2) updates ctime and mtime
-            struct timespec ts_now;
-            s3fs_realtime(ts_now);
-            if(0 != (result = ent->SetCtime(ts_now)) || 0 != (result = ent->SetMtime(ts_now))){
-                S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
-                return result;
-            }
+        // [NOTE]
+        // A successful truncate(2)/ftruncate(2) updates ctime and mtime
+        // whether or not the file is currently open, so this must happen
+        // outside the need_flush branch below. When the file is open the
+        // new times are only recorded in the FdEntity, so the metadata is
+        // marked dirty to have them uploaded by the flush at close.
+        //
+        struct timespec ts_now;
+        s3fs_realtime(ts_now);
+        if(0 != (result = ent->SetCtime(ts_now)) || 0 != (result = ent->SetMtime(ts_now))){
+            S3FS_PRN_ERR("could not set mtime and ctime to file(%s): result=%d", path, result);
+            return result;
+        }
 
+        if(need_flush){
             if(0 != (result = ent->Flush(autoent.GetPseudoFd(), true))){
                 S3FS_PRN_ERR("could not upload file(%s): result=%d", path, result);
                 return result;
             }
             StatCache::getStatCacheData()->DelStat(path);
+        }else{
+            ent->MarkDirtyMetadata();
+
+            // Reflect the new times in the stat cache, which would otherwise
+            // keep serving the pre-truncate values until the upload happens.
+            headers_t newmeta;
+            struct stat newstbuf;
+            if(ent->GetOrgMeta(newmeta) && convert_header_to_stat(path, newmeta, newstbuf, false)){
+                if(!StatCache::getStatCacheData()->UpdateStat(path, newstbuf, newmeta)){
+                    StatCache::getStatCacheData()->DelStat(path);
+                }
+            }else{
+                StatCache::getStatCacheData()->DelStat(path);
+            }
         }
 
     }else if(-ENOENT == result){
@@ -4530,6 +4550,7 @@ static int s3fs_removexattr(const char* _path, const char* name)
     // set xattr all object
     std::string strSourcePath              = (mount_prefix.empty() && "/" == curpath) ? "//" : curpath;
     headers_t   updatemeta;
+    updatemeta["x-amz-meta-ctime"]         = s3fs_str_realtime();    // removexattr(2) updates ctime, as setxattr(2) does
     updatemeta["x-amz-copy-source"]        = urlEncodePath(service_path + S3fsCred::GetBucket() + get_realpath(strSourcePath.c_str()));
     updatemeta["x-amz-metadata-directive"] = "REPLACE";
     if(!xattrs.empty()){
