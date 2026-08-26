@@ -168,6 +168,9 @@ bool StatCache::AddS3ObjList(std::string key, const S3ObjList& list)
 {
     const std::lock_guard<std::mutex> lock(StatCache::stat_cache_lock);
 
+    if(key.empty()){
+        key = "/";
+    }
     if('/' != key.back()){
         key += '/';
     }
