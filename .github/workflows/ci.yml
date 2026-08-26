@@ -183,11 +183,21 @@ jobs:
             automake
             coreutils
             cppcheck
+            curl
             python3
             shellcheck
           )
           HOMEBREW_NO_AUTO_UPDATE=1 brew install "${S3FS_BREW_PACKAGES[@]}"
           HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade "${S3FS_BREW_PACKAGES[@]}"
+
+      # [NOTE]
+      # macOS ships curl 8.7.1, which sorts the sigv4 canonical headers by
+      # the whole "name:value" string instead of by the header name and thus
+      # signs the SSE-C requests that the tests make incorrectly.  Homebrew
+      # keeps its own curl keg-only, so put it ahead of the system one.
+      #
+      - name: Use the Homebrew curl
+        run: echo "$(brew --prefix curl)/bin" >> "$GITHUB_PATH"
 
       - name: Build
         run: |

@@ -136,6 +136,8 @@ elif [ "${CONTAINER_FULLNAME}" = "ubuntu:24.04" ]; then
         procps
     )
 
+    CURL_DIRECT_INSTALL=1
+
 elif [ "${CONTAINER_FULLNAME}" = "ubuntu:22.04" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
