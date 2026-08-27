@@ -199,14 +199,10 @@ std::string get_canonical_headers(const struct curl_slist* list, bool only_amz)
 }
 
 // function for using global values
-bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url)
+urlresource MakeUrlResource(const char* realpath)
 {
-    if(!realpath){
-        return false;
-    }
-    resourcepath = urlEncodePath(service_path + S3fsCred::GetBucket() + realpath);
-    url          = s3host + resourcepath;
-    return true;
+    std::string resourcepath = urlEncodePath(service_path + S3fsCred::GetBucket() + (realpath ? realpath : ""));
+    return {resourcepath, s3host + resourcepath};
 }
 
 std::string prepare_url(const char* url)

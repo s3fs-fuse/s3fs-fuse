@@ -1302,8 +1302,7 @@ int multipart_put_head_request(const std::string& strfrom, const std::string& st
     std::string contenttype;
     std::string srcresource;
     if(is_rename){
-        std::string srcurl;                                                             // this is not used
-        MakeUrlResource(get_realpath(strfrom.c_str()).c_str(), srcresource, srcurl);
+        srcresource = MakeUrlResource(get_realpath(strfrom.c_str()).c_str()).resource;
         contenttype = S3fsCurl::LookupMimeType(strto);
     }
 

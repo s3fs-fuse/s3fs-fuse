@@ -38,7 +38,12 @@ struct curl_slist* curl_slist_remove(struct curl_slist* list, const char* key);
 std::string get_sorted_header_keys(const struct curl_slist* list);
 std::string get_canonical_headers(const struct curl_slist* list, bool only_amz = false);
 std::string get_header_value(const struct curl_slist* list, std::string_view key);
-bool MakeUrlResource(const char* realpath, std::string& resourcepath, std::string& url);
+struct urlresource
+{
+    std::string resource;
+    std::string url;
+};
+urlresource MakeUrlResource(const char* realpath);
 std::string prepare_url(const char* url);
 bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& ssevalue);   // implement in s3fs.cpp
 [[nodiscard]] int put_headers(const char* path, const headers_t& meta, bool is_copy, bool use_st_size = true);    // implement in s3fs.cpp

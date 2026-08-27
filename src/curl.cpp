@@ -2480,10 +2480,8 @@ bool S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
 
 void S3fsCurl::insertV2Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
 {
-    std::string resource;
-    std::string turl;
     std::string server_path = type == REQTYPE::LISTBUCKET ? "/" : path;
-    MakeUrlResource(server_path.c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(server_path.c_str());
     if(!query_string.empty() && type != REQTYPE::CHKBUCKET && type != REQTYPE::LISTBUCKET){
         resource += "?" + query_string;
     }
@@ -2544,9 +2542,7 @@ int S3fsCurl::DeleteRequest(const char* tpath)
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
@@ -2873,9 +2869,7 @@ bool S3fsCurl::PreHeadRequest(const char* tpath, size_t ssekey_pos)
     if(!tpath){
         return false;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     // libcurl 7.17 does deep copy of url, deep copy "stable" url
     url             = prepare_url(turl.c_str());
@@ -2958,9 +2952,7 @@ int S3fsCurl::PutHeadRequest(const char* tpath, const headers_t& meta, bool is_c
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
@@ -3082,9 +3074,7 @@ int S3fsCurl::PutRequest(const char* tpath, const headers_t& meta, int fd)
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
@@ -3194,9 +3184,7 @@ int S3fsCurl::PreGetObjectRequest(const char* tpath, int fd, off_t start, off_t 
         return -EINVAL;
     }
 
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     url             = prepare_url(turl.c_str());
     path            = get_realpath(tpath);
@@ -3301,9 +3289,7 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
         urlargs = "?" + query_string;
     }
 
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(strCheckPath.c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(strCheckPath.c_str());
 
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
@@ -3358,9 +3344,7 @@ int S3fsCurl::ListBucketRequest(const char* tpath, const char* query)
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource("", resource, turl);    // NOTICE: path is "".
+    auto [resource, turl] = MakeUrlResource("");    // NOTICE: path is "".
     if(query){
         turl += "?";
         turl += query;
@@ -3418,9 +3402,7 @@ int S3fsCurl::PreMultipartUploadRequest(const char* tpath, const headers_t& meta
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     query_string   = "uploads";
     turl          += "?" + query_string;
@@ -3541,10 +3523,7 @@ int S3fsCurl::MultipartUploadPartSetup(const char* tpath, int upload_fd, off_t s
         }
     }else{
         headers_t   meta;
-        std::string srcresource;
-        std::string srcurl;
-
-        MakeUrlResource(get_realpath(tpath).c_str(), srcresource, srcurl);
+        std::string srcresource = MakeUrlResource(get_realpath(tpath).c_str()).resource;
         meta["x-amz-copy-source"] = srcresource;
 
         std::ostringstream strrange;
@@ -3609,9 +3588,7 @@ int S3fsCurl::MultipartUploadComplete(const char* tpath, const std::string& uplo
         b_postdata = nullptr;
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     // [NOTE]
     // Encode the upload_id here.
@@ -3688,10 +3665,8 @@ int S3fsCurl::MultipartListRequest(std::string& body)
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
     path            = get_realpath("/");
-    MakeUrlResource(path.c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(path.c_str());
 
     query_string    = "uploads";
     turl           += "?" + query_string;
@@ -3740,9 +3715,7 @@ int S3fsCurl::AbortMultipartUpload(const char* tpath, const std::string& upload_
     if(!CreateCurlHandle()){
         return -EIO;
     }
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     // [NOTE]
     // Encode the upload_id here.
@@ -3816,9 +3789,7 @@ int S3fsCurl::MultipartUploadContentPartSetup(const char* tpath, int part_num, c
     //
     query_string        = "partNumber=" + std::to_string(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(tpath).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(tpath).c_str());
 
     turl              += urlargs;
     url                = prepare_url(turl.c_str());
@@ -3861,9 +3832,7 @@ int S3fsCurl::MultipartUploadCopyPartSetup(const char* from, const char* to, int
     //
     query_string = "partNumber=" + std::to_string(part_num) + "&uploadId=" + urlEncodeGeneral(upload_id);
     std::string urlargs = "?" + query_string;
-    std::string resource;
-    std::string turl;
-    MakeUrlResource(get_realpath(to).c_str(), resource, turl);
+    auto [resource, turl] = MakeUrlResource(get_realpath(to).c_str());
 
     turl           += urlargs;
     url             = prepare_url(turl.c_str());
