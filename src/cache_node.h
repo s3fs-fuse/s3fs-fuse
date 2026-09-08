@@ -95,6 +95,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         headers_t               meta       GUARDED_BY(StatCacheNode::cache_lock);          // meta list
         bool                    has_extval GUARDED_BY(StatCacheNode::cache_lock) = false;  // valid extra value flag
         std::string             extvalue   GUARDED_BY(StatCacheNode::cache_lock);          // extra value for key(ex. used for symlink)
+        std::weak_ptr<StatCacheNode> parent GUARDED_BY(StatCacheNode::cache_lock);         // parent(directory) object
 
     protected:
         static void IncrementCacheCount(objtype_t type);
@@ -134,10 +135,13 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         bool HasStatHasLock() const REQUIRES(StatCacheNode::cache_lock);
         bool HasMetaHasLock() const REQUIRES(StatCacheNode::cache_lock);
         bool GetNoTruncateHasLock() const REQUIRES(StatCacheNode::cache_lock);
+        virtual void IncrementNoTruncateChildHasLock() REQUIRES(StatCacheNode::cache_lock);
+        virtual void DecrementNoTruncateChildHasLock() REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetHasLock(headers_t* pmeta, struct stat* pst) REQUIRES(StatCacheNode::cache_lock);
         virtual std::optional<std::string> GetExtraHasLock() REQUIRES(StatCacheNode::cache_lock);
         virtual s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) const REQUIRES(StatCacheNode::cache_lock);
         virtual bool GetS3ObjListHasLock(S3ObjList& list) const REQUIRES(StatCacheNode::cache_lock);
+        std::shared_ptr<StatCacheNode> GetParentHasLock() const REQUIRES(StatCacheNode::cache_lock);
 
         // Find
         virtual bool CheckETagValueHasLock(const char* petagval) const REQUIRES(StatCacheNode::cache_lock);
@@ -166,7 +170,7 @@ class StatCacheNode : public std::enable_shared_from_this<StatCacheNode>
         static bool ResumeExpireCheck();
 
         // Constructor/Destructor
-        explicit StatCacheNode(const char* path = nullptr, objtype_t type = objtype_t::UNKNOWN);
+        explicit StatCacheNode(const char* path = nullptr, const std::shared_ptr<StatCacheNode>& parentdir = nullptr, objtype_t type = objtype_t::UNKNOWN);
         virtual ~StatCacheNode();
 
         StatCacheNode(const StatCacheNode&) = delete;
@@ -232,7 +236,7 @@ using statcache_map_t = std::map<std::string, std::shared_ptr<StatCacheNode>>;
 class FileStatCache : public StatCacheNode
 {
     public:
-        explicit FileStatCache(const char* path = nullptr);
+        explicit FileStatCache(const char* path = nullptr, const std::shared_ptr<StatCacheNode>& parentdir = nullptr);
         ~FileStatCache() override;
 
         FileStatCache(const FileStatCache&) = delete;
@@ -260,6 +264,7 @@ class DirStatCache : public StatCacheNode
         statcache_map_t children        GUARDED_BY(dir_cache_lock);
         bool            has_s3obj       GUARDED_BY(dir_cache_lock) = false;
         S3ObjList       s3obj           GUARDED_BY(dir_cache_lock);
+        int             notruncate_cnt  GUARDED_BY(cache_lock) = 0;                         // number of children which have "no truncate" flag(includes directories).
 
     protected:
         bool ClearHasLock() override REQUIRES(StatCacheNode::cache_lock);
@@ -272,6 +277,8 @@ class DirStatCache : public StatCacheNode
         bool AddHasLock(const std::string& strpath, const struct stat* pstat, const headers_t* pmeta, objtype_t type, bool is_notruncate) override REQUIRES(StatCacheNode::cache_lock);
         bool AddS3ObjListHasLock(const std::string& strpath, const S3ObjList& list) override REQUIRES(StatCacheNode::cache_lock);
 
+        void IncrementNoTruncateChildHasLock() override REQUIRES(StatCacheNode::cache_lock);
+        void DecrementNoTruncateChildHasLock() override REQUIRES(StatCacheNode::cache_lock);
         s3obj_type_map_t::size_type GetChildMapHasLock(s3obj_type_map_t& childmap) const override REQUIRES(StatCacheNode::cache_lock);
         bool GetS3ObjListHasLock(S3ObjList& list) const override REQUIRES(StatCacheNode::cache_lock);
 
@@ -287,7 +294,7 @@ class DirStatCache : public StatCacheNode
         void DumpHasLock(const std::string& indent, bool detail, std::ostringstream& oss) override REQUIRES(StatCacheNode::cache_lock);
 
     public:
-        explicit DirStatCache(const char* path = nullptr, objtype_t type = objtype_t::DIR_NORMAL);
+        explicit DirStatCache(const char* path = nullptr, const std::shared_ptr<StatCacheNode>& parentdir = nullptr, objtype_t type = objtype_t::DIR_NORMAL);
         ~DirStatCache() override;
 
         DirStatCache(const DirStatCache&) = delete;
@@ -308,7 +315,7 @@ class SymlinkStatCache : public StatCacheNode
         bool ClearHasLock() override REQUIRES(StatCacheNode::cache_lock);
 
     public:
-        explicit SymlinkStatCache(const char* path = nullptr);
+        explicit SymlinkStatCache(const char* path = nullptr, const std::shared_ptr<StatCacheNode>& parentdir = nullptr);
         ~SymlinkStatCache() override;
 
         SymlinkStatCache(const SymlinkStatCache&) = delete;
@@ -328,7 +335,7 @@ class NegativeStatCache : public StatCacheNode
         bool IsExpiredHasLock() const override REQUIRES(StatCacheNode::cache_lock);
 
     public:
-        explicit NegativeStatCache(const char* path = nullptr);
+        explicit NegativeStatCache(const char* path = nullptr, const std::shared_ptr<StatCacheNode>& parentdir = nullptr);
         ~NegativeStatCache() override;
 
         NegativeStatCache(const NegativeStatCache&) = delete;

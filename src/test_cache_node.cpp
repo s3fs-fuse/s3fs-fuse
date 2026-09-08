@@ -72,20 +72,20 @@ static void test_common_prefix_type()
 //
 static void test_dir_subtype_heal()
 {
-    DirStatCache root("/");
+    auto         root = std::make_shared<DirStatCache>("/");
     struct stat  st   = make_dir_stat();
     headers_t    meta;
     meta["Content-Type"]       = "application/x-directory";
     meta["x-amz-meta-foreign"] = "keepme";
 
-    ASSERT_TRUE(root.Add("/dir/", &st, &meta, objtype_t::DIR_NOT_TERMINATE_SLASH, false));
-    std::shared_ptr<StatCacheNode> node = root.Find("/dir/");
+    ASSERT_TRUE(root->Add("/dir/", &st, &meta, objtype_t::DIR_NOT_TERMINATE_SLASH, false));
+    std::shared_ptr<StatCacheNode> node = root->Find("/dir/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_TERMINATE_SLASH), static_cast<int>(node->GetType()));
 
     // Update to the modern "dir/" representation.
-    ASSERT_TRUE(root.Add("/dir/", &st, &meta, objtype_t::DIR_NORMAL, false));
-    node = root.Find("/dir/");
+    ASSERT_TRUE(root->Add("/dir/", &st, &meta, objtype_t::DIR_NORMAL, false));
+    node = root->Find("/dir/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NORMAL), static_cast<int>(node->GetType()));
 
@@ -97,14 +97,14 @@ static void test_dir_subtype_heal()
     ASSERT_TRUE(getmeta.cend() != getmeta.find("x-amz-meta-foreign"));
 
     // The object was deleted externally and only the path remains.
-    ASSERT_TRUE(root.Add("/dir/", &st, &meta, objtype_t::DIR_NOT_EXIST_OBJECT, false));
-    node = root.Find("/dir/");
+    ASSERT_TRUE(root->Add("/dir/", &st, &meta, objtype_t::DIR_NOT_EXIST_OBJECT, false));
+    node = root->Find("/dir/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_EXIST_OBJECT), static_cast<int>(node->GetType()));
 
     // Re-adding with the same sub-type keeps the node untouched.
-    ASSERT_TRUE(root.Add("/dir/", &st, &meta, objtype_t::DIR_NOT_EXIST_OBJECT, false));
-    node = root.Find("/dir/");
+    ASSERT_TRUE(root->Add("/dir/", &st, &meta, objtype_t::DIR_NOT_EXIST_OBJECT, false));
+    node = root->Find("/dir/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_EXIST_OBJECT), static_cast<int>(node->GetType()));
 }
@@ -115,17 +115,17 @@ static void test_dir_subtype_heal()
 //
 static void test_nested_dir_subtype_heal()
 {
-    DirStatCache root("/");
-    struct stat  st = make_dir_stat();
+    auto         root = std::make_shared<DirStatCache>("/");
+    struct stat  st   = make_dir_stat();
 
-    ASSERT_TRUE(root.Add("/dir/", &st, nullptr, objtype_t::DIR_NORMAL, false));
-    ASSERT_TRUE(root.Add("/dir/sub/", &st, nullptr, objtype_t::DIR_NOT_TERMINATE_SLASH, false));
-    std::shared_ptr<StatCacheNode> node = root.Find("/dir/sub/");
+    ASSERT_TRUE(root->Add("/dir/", &st, nullptr, objtype_t::DIR_NORMAL, false));
+    ASSERT_TRUE(root->Add("/dir/sub/", &st, nullptr, objtype_t::DIR_NOT_TERMINATE_SLASH, false));
+    std::shared_ptr<StatCacheNode> node = root->Find("/dir/sub/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_TERMINATE_SLASH), static_cast<int>(node->GetType()));
 
-    ASSERT_TRUE(root.Add("/dir/sub/", &st, nullptr, objtype_t::DIR_NORMAL, false));
-    node = root.Find("/dir/sub/");
+    ASSERT_TRUE(root->Add("/dir/sub/", &st, nullptr, objtype_t::DIR_NORMAL, false));
+    node = root->Find("/dir/sub/");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NORMAL), static_cast<int>(node->GetType()));
 }
@@ -135,16 +135,16 @@ static void test_nested_dir_subtype_heal()
 //
 static void test_file_type_unchanged()
 {
-    DirStatCache root("/");
-    struct stat  st = make_file_stat();
+    auto         root = std::make_shared<DirStatCache>("/");
+    struct stat  st   = make_file_stat();
 
-    ASSERT_TRUE(root.Add("/file", &st, nullptr, objtype_t::FILE, false));
-    std::shared_ptr<StatCacheNode> node = root.Find("/file");
+    ASSERT_TRUE(root->Add("/file", &st, nullptr, objtype_t::FILE, false));
+    std::shared_ptr<StatCacheNode> node = root->Find("/file");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::FILE), static_cast<int>(node->GetType()));
 
-    ASSERT_TRUE(root.Add("/file", &st, nullptr, objtype_t::FILE, false));
-    node = root.Find("/file");
+    ASSERT_TRUE(root->Add("/file", &st, nullptr, objtype_t::FILE, false));
+    node = root->Find("/file");
     ASSERT_TRUE(nullptr != node);
     ASSERT_EQUALS(static_cast<int>(objtype_t::FILE), static_cast<int>(node->GetType()));
 }

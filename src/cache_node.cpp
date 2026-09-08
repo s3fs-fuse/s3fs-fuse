@@ -200,7 +200,7 @@ bool StatCacheNode::ResumeExpireCheck()
 //-------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------
-StatCacheNode::StatCacheNode(const char* path, objtype_t type) : cache_type(type), fullpath(path ? path: "")
+StatCacheNode::StatCacheNode(const char* path, const std::shared_ptr<StatCacheNode>& parentdir, objtype_t type) : cache_type(type), fullpath(path ? path: ""), parent(parentdir)
 {
     if(IS_DIR_OBJ(cache_type)){
         // directory type must end with '/'.
@@ -222,6 +222,19 @@ StatCacheNode::StatCacheNode(const char* path, objtype_t type) : cache_type(type
 
 StatCacheNode::~StatCacheNode()
 {
+    if(notruncate){
+        // [NOTE]
+        // No locking is performed when calling GetParentHasLock()
+        // within the destructor.
+        // Similarly, the call to pParent->DecrementNoTruncateChildHasLock()
+        // here does not involve locking. This is because the destructor for
+        // the StatCacheNode class (and its derived classes) is invoked with
+        // pParent already locked.
+        //
+        if(auto pParent = GetParentHasLock()){
+            pParent->DecrementNoTruncateChildHasLock();
+        }
+    }
     StatCacheNode::DecrementCacheCount(objtype_t::UNKNOWN);
 }
 
@@ -412,7 +425,18 @@ bool StatCacheNode::UpdateHasLock(const struct stat* pstat, bool clear_meta)
 
 bool StatCacheNode::UpdateHasLock(bool is_notruncate)
 {
-    notruncate = is_notruncate;
+    if(notruncate != is_notruncate){
+        if(is_notruncate){
+            if(auto pParent = GetParentHasLock()){
+                pParent->IncrementNoTruncateChildHasLock();
+            }
+        }else{
+            if(auto pParent = GetParentHasLock()){
+                pParent->DecrementNoTruncateChildHasLock();
+            }
+        }
+        notruncate = is_notruncate;
+    }
     return true;
 }
 
@@ -659,6 +683,16 @@ bool StatCacheNode::GetNoTruncateHasLock() const
     return notruncate;
 }
 
+void StatCacheNode::IncrementNoTruncateChildHasLock()
+{
+    // nothing to do for this base class
+}
+
+void StatCacheNode::DecrementNoTruncateChildHasLock()
+{
+    // nothing to do for this base class
+}
+
 unsigned long StatCacheNode::IncrementHitCount()
 {
     std::lock_guard<std::mutex> lock(StatCacheNode::cache_lock);
@@ -720,6 +754,11 @@ bool StatCacheNode::GetS3ObjList(S3ObjList& list)
     ++hit_count;
 
     return true;
+}
+
+std::shared_ptr<StatCacheNode> StatCacheNode::GetParentHasLock() const
+{
+    return parent.lock();
 }
 
 bool StatCacheNode::IsExpireStatCacheTimeHasLock() const
@@ -841,7 +880,7 @@ void StatCacheNode::Dump(bool detail)
 //
 // Methods
 //
-FileStatCache::FileStatCache(const char* path) : StatCacheNode(path, objtype_t::FILE)
+FileStatCache::FileStatCache(const char* path, const std::shared_ptr<StatCacheNode>& parentdir) : StatCacheNode(path, parentdir, objtype_t::FILE)
 {
     StatCacheNode::IncrementCacheCount(objtype_t::FILE);
 }
@@ -857,7 +896,7 @@ FileStatCache::~FileStatCache()
 //
 // Methods
 //
-DirStatCache::DirStatCache(const char* path, objtype_t type) : StatCacheNode(path, type), dir_cache_type(type)
+DirStatCache::DirStatCache(const char* path, const std::shared_ptr<StatCacheNode>& parentdir, objtype_t type) : StatCacheNode(path, parentdir, type), dir_cache_type(type)
 {
     std::lock_guard<std::mutex> dircachelock(dir_cache_lock);
     SetCurrentTime(last_check_date);
@@ -938,7 +977,11 @@ bool DirStatCache::RemoveChildHasLock(const std::string& strpath)
                 children.erase(iter);
             }else{
                 // if it is a directory type, first clear the data.
-                if(!iter->second->UpdateHasLock(nullptr, nullptr, true) || !iter->second->UpdateHasLock(false) || !iter->second->UpdateHasLock()){
+                if(iter->second->isRemovableHasLock()){
+                    if(!iter->second->UpdateHasLock(nullptr, nullptr, true) || !iter->second->UpdateHasLock(false) || !iter->second->UpdateHasLock()){
+                        result = false;
+                    }
+                }else{
                     result = false;
                 }
             }
@@ -947,6 +990,7 @@ bool DirStatCache::RemoveChildHasLock(const std::string& strpath)
             result = false;
         }
     }
+
     return result;
 }
 
@@ -963,7 +1007,7 @@ bool DirStatCache::RemoveChildInS3ObjListHasLock(const std::string& strChildLeaf
 
 bool DirStatCache::isRemovableHasLock() const
 {
-    if(HasStatHasLock() || HasMetaHasLock()){
+    if(0 < notruncate_cnt){
         return false;
     }
 
@@ -971,6 +1015,7 @@ bool DirStatCache::isRemovableHasLock() const
     if(HasExistedChildHasLock()){
         return false;
     }
+
     return true;
 }
 
@@ -1123,7 +1168,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
         if(hasNestedChildren){
             // First add directory child, and add an under child
             std::string subdir     = GetPathHasLock() + strLeafName + "/";  // terminate with "/". (if not terminated, it will added automatically.)
-            auto        pstatcache = std::make_shared<DirStatCache>(subdir.c_str());
+            auto        pstatcache = std::make_shared<DirStatCache>(subdir.c_str(), shared_from_this());
 
             if(!pstatcache->AddHasLock(strpath, pstat, pmeta, type, is_notruncate)){
                 return false;
@@ -1136,11 +1181,11 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
             // create and add as a direct child
             std::shared_ptr<StatCacheNode> pstatcache;
             if(IS_DIR_OBJ(type)){
-                pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), type);
+                pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), shared_from_this(), type);
             }else if(objtype_t::FILE == type){
-                pstatcache = std::make_shared<FileStatCache>(strpath.c_str());
+                pstatcache = std::make_shared<FileStatCache>(strpath.c_str(), shared_from_this());
             }else if(objtype_t::SYMLINK == type){
-                pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str());
+                pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str(), shared_from_this());
             }else if(objtype_t::NEGATIVE == type){
                 if(!StatCacheNode::IsEnabledNegativeCache()){
                     // Negative cache is invalid.
@@ -1148,7 +1193,7 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
                     //
                     return true;
                 }
-                pstatcache = std::make_shared<NegativeStatCache>(strpath.c_str());
+                pstatcache = std::make_shared<NegativeStatCache>(strpath.c_str(), shared_from_this());
             }else{  // objtype_t::UNKNOWN
                 // [NOTE]
                 // If the type of object is UNKNOWN,  it has not been determined
@@ -1158,22 +1203,22 @@ bool DirStatCache::AddHasLock(const std::string& strpath, const struct stat* pst
                 //
                 if(pstat){
                     if(S_ISREG(pstat->st_mode)){
-                        pstatcache = std::make_shared<FileStatCache>(strpath.c_str());
+                        pstatcache = std::make_shared<FileStatCache>(strpath.c_str(), shared_from_this());
                     }else if(S_ISLNK(pstat->st_mode)){
-                        pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str());
+                        pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str(), shared_from_this());
                     }else if(S_ISDIR(pstat->st_mode)){
-                        pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), objtype_t::DIR_NOT_TERMINATE_SLASH);   // objtype_t::DIR_NOT_TERMINATE_SLASH
+                        pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), shared_from_this(), objtype_t::DIR_NOT_TERMINATE_SLASH);   // objtype_t::DIR_NOT_TERMINATE_SLASH
                     }else{
                         S3FS_PRN_ERR("The object type of path(%s) is unspecified(objtype_t::UNKNOWN) and cannot be determined.", strpath.c_str());
                         return false;
                     }
                 }else if(pmeta){
                     if(is_reg_fmt(*pmeta)){
-                        pstatcache = std::make_shared<FileStatCache>(strpath.c_str());
+                        pstatcache = std::make_shared<FileStatCache>(strpath.c_str(), shared_from_this());
                     }else if(is_symlink_fmt(*pmeta)){
-                        pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str());
+                        pstatcache = std::make_shared<SymlinkStatCache>(strpath.c_str(), shared_from_this());
                     }else if(is_dir_fmt(*pmeta)){
-                        pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), objtype_t::DIR_NOT_TERMINATE_SLASH);   // objtype_t::DIR_NOT_TERMINATE_SLASH
+                        pstatcache = std::make_shared<DirStatCache>(strpath.c_str(), shared_from_this(), objtype_t::DIR_NOT_TERMINATE_SLASH);   // objtype_t::DIR_NOT_TERMINATE_SLASH
                     }else{
                         S3FS_PRN_ERR("The object type of path(%s) is unspecified(objtype_t::UNKNOWN) and cannot be determined.", strpath.c_str());
                         return false;
@@ -1246,8 +1291,17 @@ bool DirStatCache::AddS3ObjListHasLock(const std::string& strpath, const S3ObjLi
         auto iter = children.find(strLeafName);
         if(iter == children.end()){
             // Not found child
+            //
+            // [TODO]
+            // This occurs when an object along the path has not yet been cached,
+            // specifically when attempting to configure a subdirectory without
+            // having the cache for the parent directory.
+            // To maintain the S3Object cache, you should create a placeholder
+            // object for the intermediate path.
+            //
             return false;
         }
+
         if(!iter->second->isDirectoryHasLock()){
             // Found child is not directory cache
             return false;
@@ -1263,6 +1317,18 @@ bool DirStatCache::AddS3ObjListHasLock(const std::string& strpath, const S3ObjLi
         return false;
      }
     return true;
+}
+
+void DirStatCache::IncrementNoTruncateChildHasLock()
+{
+    ++notruncate_cnt;
+}
+
+void DirStatCache::DecrementNoTruncateChildHasLock()
+{
+    if(0 < notruncate_cnt){
+        --notruncate_cnt;
+    }
 }
 
 s3obj_type_map_t::size_type DirStatCache::GetChildMapHasLock(s3obj_type_map_t& childmap) const
@@ -1387,7 +1453,10 @@ bool DirStatCache::NeedTruncateProcessing() const
 //
 bool DirStatCache::IsExpiredHasLock() const
 {
-    if(GetNoTruncateHasLock()){
+    // [NOTE]
+    // If a notruncate flag exists in the children, can not expire the entry.
+    //
+    if(GetNoTruncateHasLock() || 0 < notruncate_cnt){
         // not truncate
         return false;
     }
@@ -1543,7 +1612,7 @@ void DirStatCache::DumpHasLock(const std::string& indent, bool detail, std::ostr
 //
 // Methods
 //
-SymlinkStatCache::SymlinkStatCache(const char* path) : StatCacheNode(path, objtype_t::SYMLINK)
+SymlinkStatCache::SymlinkStatCache(const char* path, const std::shared_ptr<StatCacheNode>& parentdir) : StatCacheNode(path, parentdir, objtype_t::SYMLINK)
 {
     StatCacheNode::IncrementCacheCount(objtype_t::SYMLINK);
 }
@@ -1565,7 +1634,7 @@ bool SymlinkStatCache::ClearHasLock()
 //
 // Methods
 //
-NegativeStatCache::NegativeStatCache(const char* path) : StatCacheNode(path, objtype_t::NEGATIVE)
+NegativeStatCache::NegativeStatCache(const char* path, const std::shared_ptr<StatCacheNode>& parentdir) : StatCacheNode(path, parentdir, objtype_t::NEGATIVE)
 {
     StatCacheNode::IncrementCacheCount(objtype_t::NEGATIVE);
 }

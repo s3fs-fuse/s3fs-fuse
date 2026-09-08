@@ -123,7 +123,7 @@ static int create_directory_object(const char* path, mode_t mode, const struct t
 static int rename_object(const char* from, const char* to, bool update_ctime);
 static int rename_object_nocopy(const char* from, const char* to, bool update_ctime);
 static int clone_directory_object(const char* from, const char* to, bool update_ctime, const char* pxattrvalue);
-static int rename_directory(const char* from, const char* to);
+static int rename_directory(const char* from, const char* to, bool is_nested);
 static int update_mctime_parent_directory(const char* _path);
 static int remote_mountpath_exists(const char* path, bool compat_dir);
 static std::optional<std::string> get_meta_xattr_value(const char* path);
@@ -1387,23 +1387,44 @@ static int directory_empty(const char* path)
     int       result = 0;
     S3ObjList head;
 
-    // check s3objlist in cache
-    if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+    if(0 < StatCache::getStatCacheData()->GetCacheSize()){
+        // use stat cache
+        if(!StatCache::getStatCacheData()->GetS3ObjList(path, head)){
+            // [NOTE]
+            // Call list_bucket without restrictions(check_content_only=false).
+            // If you only need to verify the existence of files under a specific directory,
+            // calling it with restrictions(check_content_only=true) yields a faster response.
+            // However, calling it without restrictions causes S3Object instances to be cached,
+            // so we expect the cache to function effectively for subsequent calls.
+            //
+            if((result = list_bucket(path, head, "/")) != 0){
+                S3FS_PRN_ERR("list_bucket returns error.");
+                return result;
+            }
+
+            // [NOTE]
+            // It caches the result even when S3ObjList is empty.
+            // This effectively caches the fact that the directory is empty.
+            //
+            if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
+                S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
+            }
+        }
+    }else{
+        // not use stat cache
+        //
+        // If the stat cache is invalid, the S3Object cache is also unnecessary, so list_bucket
+        // is called with the restriction(check_content_only=true).
+        //
         if((result = list_bucket(path, head, "/", true)) != 0){
             S3FS_PRN_ERR("list_bucket returns error.");
             return result;
         }
-        if(!head.IsEmpty()){
-            if(!StatCache::getStatCacheData()->AddS3ObjList(path, head)){
-                S3FS_PRN_WARN("failed to add s3objlist for %s, but continue...", path);
-            }
-            result = -ENOTEMPTY;
-        }
-    }else{
-        if(!head.IsEmpty()){
-            result = -ENOTEMPTY;
-        }
     }
+    if(!head.IsEmpty()){
+        result = -ENOTEMPTY;
+    }
+
     return result;
 }
 
@@ -1850,13 +1871,13 @@ static int clone_directory_object(const char* from, const char* to, bool update_
     return result;
 }
 
-static int rename_directory(const char* from, const char* to)
+static int rename_directory(const char* from, const char* to, bool is_nested)
 {
     S3ObjList    head;
     s3obj_list_t headlist;
     std::string  strfrom  = from ? from : "";   // from is without "/".
     std::string  strto    = to ? to : "";       // to is without "/" too.
-    std::string  basepath = strfrom + "/";
+    std::string  basepath = ('/' == strfrom.back() ? strfrom : (strfrom + "/"));
     std::string  normpath;                      // normalized path for "from name"(not used)
     objtype_t    ObjType;
     bool         normdir;
@@ -1966,13 +1987,23 @@ static int rename_directory(const char* from, const char* to)
             auto xattrvalue = get_meta_xattr_value(mn_cur->old_path.c_str());
             const char* pxattrvalue = xattrvalue ? xattrvalue->c_str() : nullptr;
 
-            // [NOTE]
-            // The ctime is updated only for the top (from) directory.
-            // Other than that, it will not be updated.
-            //
-            if(0 != (result = clone_directory_object(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), (strfrom == mn_cur->old_path), pxattrvalue))){
-                S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
-                return result;
+            if(strfrom == mn_cur->old_path){
+                // current directory for renaming
+                //
+                // [NOTE]
+                // The ctime is updated only for the top (from) directory.
+                // Other than that, it will not be updated.
+                //
+                if(0 != (result = clone_directory_object(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), !is_nested, pxattrvalue))){
+                    S3FS_PRN_ERR("clone_directory_object returned an error(%d)", result);
+                    return result;
+                }
+            }else{
+                // subdirectory to be renamed -> reentrant
+                if(0 != (result = rename_directory(mn_cur->old_path.c_str(), mn_cur->new_path.c_str(), true))){    // keep ctime
+                    S3FS_PRN_ERR("rename sub directory(reentrant) returned an error(%d)", result);
+                    return result;
+                }
             }
         }
     }
@@ -2067,7 +2098,7 @@ static int s3fs_rename(const char* _from, const char* _to, unsigned int flags)
 
     // files larger than 5GB must be modified via the multipart interface
     if(S_ISDIR(buf.st_mode)){
-        result = rename_directory(from, to);
+        result = rename_directory(from, to, false);             // update ctime for top directory
     }else if(!nomultipart && buf.st_size >= singlepart_copy_limit){
         result = rename_large_object(from, to);
     }else{
