@@ -196,8 +196,7 @@ elif [ "${CONTAINER_FULLNAME}" = "debian:trixie" ]; then
         procps
     )
 
-elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ] ||
-     [ "${CONTAINER_FULLNAME}" = "debian:bullseye" ]; then
+elif [ "${CONTAINER_FULLNAME}" = "debian:bookworm" ]; then
     PACKAGE_MANAGER_BIN="apt-get"
     PACKAGE_UPDATE_OPTIONS="update -y -qq"
     PACKAGE_INSTALL_OPTIONS="install -y"

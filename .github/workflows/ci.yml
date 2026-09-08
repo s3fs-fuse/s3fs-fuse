@@ -61,7 +61,6 @@ jobs:
           - ubuntu:22.04
           - debian:trixie
           - debian:bookworm
-          - debian:bullseye
           - rockylinux/rockylinux:10
           - rockylinux/rockylinux:9
           - rockylinux/rockylinux:8
