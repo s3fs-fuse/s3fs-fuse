@@ -143,6 +143,20 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
             break;
         }
 
+        // get instruction
+        thpoolman_param param;
+        {
+            const std::lock_guard<std::mutex> lock(psingleton->thread_list_lock);
+
+            if(psingleton->instruction_list.empty()){
+                S3FS_PRN_DBG("Got a semaphore, but the instruction is empty.");
+                continue;
+            }else{
+                param = psingleton->instruction_list.front();
+                psingleton->instruction_list.pop_front();
+            }
+        }
+
         // reset curl handle
         if(!s3fscurl.CreateCurlHandle(true)){
             // [NOTE]
@@ -156,20 +170,10 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
             // terminate this worker thread.
             //
             S3FS_PRN_ERR("Failed to re-create curl handle, but continue to run the instruction.");
-        }
-
-        // get instruction
-        thpoolman_param param;
-        {
-            const std::lock_guard<std::mutex> lock(psingleton->thread_list_lock);
-
-            if(psingleton->instruction_list.empty()){
-                S3FS_PRN_DBG("Got a semaphore, but the instruction is empty.");
-                continue;
-            }else{
-                param = psingleton->instruction_list.front();
-                psingleton->instruction_list.pop_front();
+            if(param.psem){
+                param.psem->release();
             }
+            break;
         }
 
         // run function
