@@ -260,6 +260,29 @@ function test_mv_to_exist_file {
     rm_test_file "${BIG_FILE}-mv"
 }
 
+function test_rename_onto_open_file {
+    describe "Testing rename onto an open file ..."
+
+    local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/"${ALT_TEST_TEXT_FILE}"
+
+    # Renaming an open file onto another open file leaves two descriptors on
+    # the same path.  s3fs must keep the fd entity of the replaced file for
+    # the descriptor which still refers to it, instead of destroying it or
+    # letting it answer for the path, and must never write it back over the
+    # object which was renamed in.
+    ../../rename_onto_open_file "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
+
+    # [NOTE]
+    # Check the object instead of the mount point: the test program has just
+    # read the renamed in file, so a write back of the replaced file would be
+    # hidden by the kernel page cache.  The renamed in file is 6 bytes long
+    # and the file it replaced was 25 bytes long.
+    #
+    s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}" | grep -qiE '^Content-Length: 6[[:space:]]*$'
+
+    rm_test_file "${ALT_TEST_TEXT_FILE}"
+}
+
 function test_mv_empty_directory {
     describe "Testing mv directory function ..."
     if [ -e "${TEST_DIR}" ]; then
@@ -3258,6 +3281,7 @@ function add_all_tests {
     add_tests test_unlink_open_file
     add_tests test_mv_file
     add_tests test_mv_to_exist_file
+    add_tests test_rename_onto_open_file
     add_tests test_mv_empty_directory
     add_tests test_mv_nonempty_directory
     add_tests test_redirects

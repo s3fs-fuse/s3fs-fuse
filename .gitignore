@@ -100,6 +100,7 @@ test/truncate_read_file
 test/path_truncate
 test/cr_filename
 test/unlink_open_file
+test/rename_onto_open_file
 
 #
 # Windows ports
