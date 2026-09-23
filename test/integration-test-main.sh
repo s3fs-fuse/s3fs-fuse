@@ -577,29 +577,49 @@ function test_chmod_listed_directory_keeps_metadata {
         --header "Content-Type: application/x-directory" \
         --header "x-amz-meta-mode: 16877" \
         --header "x-amz-meta-foreign: keepme" < /dev/null
+
     local HEADERS; HEADERS=$(s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}")
-    echo "${HEADERS}" | grep -qi "x-amz-meta-foreign: keepme"
+    if ! has_header "${HEADERS}" "x-amz-meta-foreign: keepme"; then
+        echo "The object does not have the x-amz-meta-foreign header after upload"
+        return 1
+    fi
 
     # List the parent so that readdir fills the stat cache from the listing.
     # shellcheck disable=SC2010
-    ls | grep -q "${TEST_DIR}"
+    if ! ls | grep -q "${TEST_DIR}"; then
+        echo "Not found ${TEST_DIR} directory"
+        return 1
+    fi
 
     # A metadata update on a directory backed by a "dir/" object must copy
     # the object in place, which keeps metadata set by other clients and
     # adds no metadata of its own except the changed values.  If the
     # listing poisoned the cached directory type, s3fs instead deletes the
     # "dir" key and recreates "dir/" from a full fresh header set.
-    chmod 750 "${TEST_DIR}"
-    get_permissions "${TEST_DIR}" | grep -q 750$
+    if ! chmod 750 "${TEST_DIR}"; then
+        echo "Failed to set 750 permission for ${TEST_DIR} directory"
+        return 1
+    fi
+    if ! get_permissions "${TEST_DIR}" | grep -q 750$; then
+        echo "Could not get the permission for ${TEST_DIR} directory"
+        return 1
+    fi
+
     HEADERS=$(s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}")
     # metadata from the other client survives
-    echo "${HEADERS}" | grep -qi "x-amz-meta-foreign: keepme"
+    if ! has_header "${HEADERS}" "x-amz-meta-foreign: keepme"; then
+        echo "The object does not have the x-amz-meta-foreign header after permission change"
+        return 1
+    fi
     # 16872 is 0750 with S_IFDIR
-    echo "${HEADERS}" | grep -qi "x-amz-meta-mode: 16872"
+    if ! has_header "${HEADERS}" "x-amz-meta-mode: 16872"; then
+        echo "The object does not have the \"x-amz-meta-mode: 16872\" header after permission change"
+        return 1
+    fi
     # recreating the directory object stamps time metadata that chmod on a
     # copied object never adds
-    if echo "${HEADERS}" | grep -qi "x-amz-meta-mtime"; then
-        echo "chmod recreated the ${OBJECT_NAME} object instead of copying it"
+    if has_header "${HEADERS}" "x-amz-meta-mtime"; then
+        echo "chmod recreated the ${OBJECT_NAME} object instead of copying it" 1>&2
         return 1
     fi
 

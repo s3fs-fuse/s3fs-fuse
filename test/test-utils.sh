@@ -422,6 +422,17 @@ function s3_cp() {
     rm -f "$TEMPNAME"
 }
 
+#
+# Checking header elements
+#
+# grep -q may exit before a line-buffered writer finishes, which kills the
+# writer with SIGPIPE and fails the pipeline under pipefail.  Feed it from
+# a here-string instead so there is no writer in the pipeline.
+#
+function has_header() {
+    grep -qi "^$2" <<< "$1"
+}
+
 function wait_for_port() {
     local PORT="$1"
     for _ in $(seq 300); do
