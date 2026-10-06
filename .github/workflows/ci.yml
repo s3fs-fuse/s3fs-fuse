@@ -64,6 +64,7 @@ jobs:
           - rockylinux/rockylinux:10
           - rockylinux/rockylinux:9
           - rockylinux/rockylinux:8
+          - fedora:45
           - fedora:44
           - fedora:43
           - opensuse/leap:16.0
