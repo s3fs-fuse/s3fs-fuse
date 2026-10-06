@@ -87,6 +87,9 @@ struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type
         #ifdef __APPLE__
            ts.tv_sec  = st.st_atime;
            ts.tv_nsec = st.st_atimespec.tv_nsec;
+        #elif defined(_AIX)
+           ts.tv_sec  = st.st_atim.tv_sec;
+           ts.tv_nsec = st.st_atim.tv_nsec;
         #else
            ts         = st.st_atim;
         #endif
@@ -94,6 +97,9 @@ struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type
         #ifdef __APPLE__
            ts.tv_sec  = st.st_mtime;
            ts.tv_nsec = st.st_mtimespec.tv_nsec;
+        #elif defined(_AIX)
+           ts.tv_sec  = st.st_mtim.tv_sec;
+           ts.tv_nsec = st.st_mtim.tv_nsec;
         #else
            ts         = st.st_mtim;
         #endif
@@ -101,6 +107,9 @@ struct timespec* set_stat_to_timespec(const struct stat& st, stat_time_type type
         #ifdef __APPLE__
            ts.tv_sec  = st.st_ctime;
            ts.tv_nsec = st.st_ctimespec.tv_nsec;
+        #elif defined(_AIX)
+           ts.tv_sec  = st.st_ctim.tv_sec;
+           ts.tv_nsec = st.st_ctim.tv_nsec;
         #else
            ts         = st.st_ctim;
         #endif
