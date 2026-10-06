@@ -98,11 +98,50 @@ static void test_valid_timespec()
     ASSERT_FALSE(valid_timespec(now));
 }
 
+static void assert_stat_timestamp(const struct stat& metadata, stat_time_type type, const struct timespec& expected)
+{
+    struct timespec actual = {};
+    ASSERT_TRUE(&actual == set_stat_to_timespec(metadata, type, actual));
+    ASSERT_EQUALS(expected.tv_sec, actual.tv_sec);
+    ASSERT_EQUALS(expected.tv_nsec, actual.tv_nsec);
+}
+
+// Verify that converting file metadata to FileTimes and back preserves access,
+// modification, and change times, including their nanosecond precision.
+static void test_stat_timestamp_conversion()
+{
+    const struct timespec access_time = {-315619140, 1};
+    const struct timespec modification_time = {0, 999999999};
+    const struct timespec change_time = {1700000000, 123456789};
+    struct stat metadata = {};
+
+    set_timespec_to_stat(metadata, stat_time_type::ATIME, access_time);
+    set_timespec_to_stat(metadata, stat_time_type::MTIME, modification_time);
+    set_timespec_to_stat(metadata, stat_time_type::CTIME, change_time);
+
+    assert_stat_timestamp(metadata, stat_time_type::ATIME, access_time);
+    assert_stat_timestamp(metadata, stat_time_type::MTIME, modification_time);
+    assert_stat_timestamp(metadata, stat_time_type::CTIME, change_time);
+
+    FileTimes file_times;
+    file_times.SetAll(metadata);
+    ASSERT_EQUALS(0, compare_timespec(access_time, file_times.atime()));
+    ASSERT_EQUALS(0, compare_timespec(modification_time, file_times.mtime()));
+    ASSERT_EQUALS(0, compare_timespec(change_time, file_times.ctime()));
+
+    struct stat restored_metadata = {};
+    file_times.ReflectFileTimes(restored_metadata);
+    assert_stat_timestamp(restored_metadata, stat_time_type::ATIME, access_time);
+    assert_stat_timestamp(restored_metadata, stat_time_type::MTIME, modification_time);
+    assert_stat_timestamp(restored_metadata, stat_time_type::CTIME, change_time);
+}
+
 int main(int argc, const char *argv[])
 {
     test_negative_times();
     test_missing_times();
     test_valid_timespec();
+    test_stat_timestamp_conversion();
 
     return 0;
 }
