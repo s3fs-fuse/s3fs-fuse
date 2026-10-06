@@ -205,7 +205,7 @@ bool S3fsCurl::DestroyCryptMutex()
 }
 
 // homegrown timeout mechanism
-int S3fsCurl::CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow)
+int S3fsCurl::CurlProgress(void *clientp, curl_progress_size dltotal, curl_progress_size dlnow, curl_progress_size ultotal, curl_progress_size ulnow)
 {
     CURL*      curl = static_cast<CURL*>(clientp);
     time_t     now = time(nullptr);

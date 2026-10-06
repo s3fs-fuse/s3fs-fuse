@@ -29,6 +29,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <type_traits>
 
 #include "common.h"
 #include "metaheader.h"
@@ -71,10 +72,16 @@
 //----------------------------------------------
 // Structure / Typedefs
 //----------------------------------------------
+#if LIBCURL_VERSION_NUM >= 0x073100
+using curl_progress_size = curl_off_t;
+#else
+using curl_progress_size = double;
+#endif
+
 struct curlprogress {
     time_t time;
-    double dl_progress;
-    double ul_progress;
+    curl_progress_size dl_progress;
+    curl_progress_size ul_progress;
 };
 using CurlUniquePtr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
@@ -207,7 +214,14 @@ class S3fsCurl
         static bool DestroyGlobalCurl();
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
-        static int CurlProgress(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
+        static int CurlProgress(void *clientp, curl_progress_size dltotal, curl_progress_size dlnow, curl_progress_size ultotal, curl_progress_size ulnow);
+
+#if LIBCURL_VERSION_NUM >= 0x073100
+        static_assert(std::is_same_v<decltype(&S3fsCurl::CurlProgress), curl_xferinfo_callback>, "Progress callback must match libcurl XFERINFO ABI");
+#else
+        static_assert(std::is_same_v<decltype(&S3fsCurl::CurlProgress), curl_progress_callback>, "Progress callback must match libcurl legacy ABI");
+#endif
+
         static std::string extractURI(const std::string& url);
 
         static bool LocateBundle();
