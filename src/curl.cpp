@@ -74,18 +74,6 @@ static constexpr char DEFAULT_MIME_FILE[]               = "/etc/mime.types";
 static constexpr char SPECIAL_DARWIN_MIME_FILE[]        = "/etc/apache2/mime.types";
 #endif
 
-// [NOTICE]
-// This symbol is for libcurl under 7.23.0
-#ifndef CURLSHE_NOT_BUILT_IN
-#define CURLSHE_NOT_BUILT_IN                        5
-#endif
-
-#if LIBCURL_VERSION_NUM >= 0x073100
-#define S3FS_CURLOPT_XFERINFOFUNCTION   CURLOPT_XFERINFOFUNCTION
-#else
-#define S3FS_CURLOPT_XFERINFOFUNCTION   CURLOPT_PROGRESSFUNCTION
-#endif
-
 // Wrappers to pass std::unique_ptr to raw pointer functions.  Undefine curl_easy_setopt to work around curl variadic argument macro.
 #undef curl_easy_setopt
 template<typename Arg> CURLcode curl_easy_setopt(const CurlUniquePtr& handle, CURLoption option, Arg arg) {
@@ -123,8 +111,6 @@ std::string      S3fsCurl::client_cert_type;
 std::string      S3fsCurl::client_priv_key;
 std::string      S3fsCurl::client_priv_key_type;
 std::string      S3fsCurl::client_key_password;
-
-std::atomic<bool> S3fsCurl::curl_warnings_once(false);
 
 // protected by curl_handles_lock
 std::map<const CURL*, curlprogress> S3fsCurl::curl_progress;
@@ -205,7 +191,7 @@ bool S3fsCurl::DestroyCryptMutex()
 }
 
 // homegrown timeout mechanism
-int S3fsCurl::CurlProgress(void *clientp, curl_progress_size dltotal, curl_progress_size dlnow, curl_progress_size ultotal, curl_progress_size ulnow)
+int S3fsCurl::CurlProgress(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
 {
     CURL*      curl = static_cast<CURL*>(clientp);
     time_t     now = time(nullptr);
@@ -1391,8 +1377,6 @@ S3fsCurl::~S3fsCurl()
 
 bool S3fsCurl::ResetHandle()
 {
-    bool run_once = curl_warnings_once.exchange(true);
-
     curl_easy_reset(hCurl.get());
 
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1)){
@@ -1407,21 +1391,22 @@ bool S3fsCurl::ResetHandle()
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOPROGRESS, 0)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_XFERINFOFUNCTION, S3fsCurl::CurlProgress)){
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_XFERINFOFUNCTION, S3fsCurl::CurlProgress)){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_PROGRESSDATA, hCurl.get())){
         return false;
     }
     // curl_easy_setopt(hCurl, CURLOPT_FORBID_REUSE, 1);
-    if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_TCP_KEEPALIVE, 1) && !run_once){
-        S3FS_PRN_WARN("The CURLOPT_TCP_KEEPALIVE option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.25.0 or later.");
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_TCP_KEEPALIVE, 1)){
+        return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_SSL_ENABLE_ALPN, 0) && !run_once){
-        S3FS_PRN_WARN("The CURLOPT_SSL_ENABLE_ALPN option could not be unset. S3 server does not support ALPN, then this option should be disabled to maximize performance. you need to use libcurl 7.36.0 or later.");
+    // S3 servers do not support ALPN, so disable it to maximize performance.
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_ENABLE_ALPN, 0)){
+        return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, S3FS_CURLOPT_KEEP_SENDING_ON_ERROR, 1) && !run_once){
-        S3FS_PRN_WARN("The S3FS_CURLOPT_KEEP_SENDING_ON_ERROR option could not be set. For maximize performance you need to enable this option and you should use libcurl 7.51.0 or later.");
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_KEEP_SENDING_ON_ERROR, 1)){
+        return false;
     }
     if(CURL_IPRESOLVE_WHATEVER != S3fsCurl::ipresolve_type){    // CURL_IPRESOLVE_WHATEVER is default, so not need to set.
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_IPRESOLVE, S3fsCurl::ipresolve_type)){
