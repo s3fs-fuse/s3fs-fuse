@@ -26,6 +26,7 @@
 #include <cerrno>
 #include <climits>
 #include <iomanip>
+#include <locale>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -63,8 +64,10 @@ std::string str(const struct timespec& value)
 const char* s3fs_strptime(const char* s, const char* f, struct tm* tm)
 {
     std::istringstream input(s);
-    // TODO: call to setlocale required?
-    input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
+    // Callers parse RFC 9110 and ISO 8601 dates, which use English names.
+    // The classic locale is therefore correct. Constructing a named locale from
+    // setlocale(LC_ALL, nullptr) throws on AIX and MinGW for composite names.
+    input.imbue(std::locale::classic());
     input >> std::get_time(tm, f);
     if (input.fail()) {
         return nullptr;

@@ -19,6 +19,7 @@
  */
 
 #include <cstdlib>
+#include <ctime>
 #include <string>
 
 #include "s3fs_logger.h"
@@ -297,6 +298,38 @@ void test_parse_xattrs()
     ASSERT_EQUALS(decoded.find("foo:bar")->second, "baz"s);
 }
 
+// RFC 9110 section 5.6.7 requires English weekday and month names in HTTP dates.
+// Verify that this HTTP format and S3 ISO timestamps parse to the same calendar fields.
+static void test_parse_dates()
+{
+    struct tm iso_date = {};
+    const char* iso_suffix = s3fs_strptime("2020-02-03T04:05:06Z", "%Y-%m-%dT%H:%M:%S", &iso_date);
+    ASSERT_STREQUALS("Z", iso_suffix);
+    ASSERT_EQUALS(120, iso_date.tm_year);
+    ASSERT_EQUALS(1, iso_date.tm_mon);
+    ASSERT_EQUALS(3, iso_date.tm_mday);
+    ASSERT_EQUALS(4, iso_date.tm_hour);
+    ASSERT_EQUALS(5, iso_date.tm_min);
+    ASSERT_EQUALS(6, iso_date.tm_sec);
+
+    struct tm http_date = {};
+    const char* http_suffix = s3fs_strptime("Mon, 03 Feb 2020 04:05:06 GMT trailing", "%a, %d %b %Y %H:%M:%S GMT", &http_date);
+    ASSERT_STREQUALS(" trailing", http_suffix);
+    ASSERT_EQUALS(iso_date.tm_year, http_date.tm_year);
+    ASSERT_EQUALS(iso_date.tm_mon, http_date.tm_mon);
+    ASSERT_EQUALS(iso_date.tm_mday, http_date.tm_mday);
+    ASSERT_EQUALS(iso_date.tm_hour, http_date.tm_hour);
+    ASSERT_EQUALS(iso_date.tm_min, http_date.tm_min);
+    ASSERT_EQUALS(iso_date.tm_sec, http_date.tm_sec);
+
+    struct tm invalid_date = {};
+    ASSERT_TRUE(s3fs_strptime("Mon, 03 Feb 2020 04:05:06 PST", "%a, %d %b %Y %H:%M:%S GMT", &invalid_date) == nullptr);
+
+    struct tm complete_date = {};
+    const char* http_end = s3fs_strptime("Mon, 03 Feb 2020 04:05:06 GMT", "%a, %d %b %Y %H:%M:%S GMT", &complete_date);
+    ASSERT_STREQUALS("", http_end);
+}
+
 int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
@@ -310,6 +343,7 @@ int main(int argc, const char *argv[])
     test_mask_sensitive_header();
     test_mask_sensitive_arg();
     test_parse_xattrs();
+    test_parse_dates();
 
     return 0;
 }
