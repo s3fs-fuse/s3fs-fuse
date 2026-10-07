@@ -378,7 +378,9 @@ time_t get_lastmodified(const char* s)
     if(!s){
         return -1;
     }
-    s3fs_strptime(s, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    // %Z was standardized for strptime in POSIX.1-2024; older systems may not support it.
+    // HTTP dates require GMT (RFC 9110 section 5.6.7), so matching it literally avoids %Z compatibility issues.
+    s3fs_strptime(s, "%a, %d %b %Y %H:%M:%S GMT", &tm);
     return timegm(&tm); // GMT
 }
 
