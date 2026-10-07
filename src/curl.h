@@ -21,7 +21,6 @@
 #ifndef S3FS_CURL_H_
 #define S3FS_CURL_H_
 
-#include <atomic>
 #include <cstdint>
 #include <curl/curl.h>
 #include <map>
@@ -37,51 +36,12 @@
 #include "types.h"
 
 //----------------------------------------------
-// Avoid dependency on libcurl version
-//----------------------------------------------
-// [NOTE]
-// The following symbols (enum) depend on the version of libcurl.
-//  CURLOPT_TCP_KEEPALIVE           7.25.0 and later
-//  CURLOPT_SSL_ENABLE_ALPN         7.36.0 and later
-//  CURLOPT_KEEP_SENDING_ON_ERROR   7.51.0 and later
-//
-// s3fs uses these, if you build s3fs with the old libcurl,
-// substitute the following symbols to avoid errors.
-// If the version of libcurl linked at runtime is old,
-// curl_easy_setopt results in an error(CURLE_UNKNOWN_OPTION) and
-// a message is output.
-//
-#if defined(HAVE_CURLOPT_TCP_KEEPALIVE) && (HAVE_CURLOPT_TCP_KEEPALIVE == 1)
-    #define   S3FS_CURLOPT_TCP_KEEPALIVE          CURLOPT_TCP_KEEPALIVE
-#else
-    #define   S3FS_CURLOPT_TCP_KEEPALIVE          static_cast<CURLoption>(213)
-#endif
-
-#if defined(HAVE_CURLOPT_SSL_ENABLE_ALPN) && (HAVE_CURLOPT_SSL_ENABLE_ALPN == 1)
-    #define   S3FS_CURLOPT_SSL_ENABLE_ALPN        CURLOPT_SSL_ENABLE_ALPN
-#else
-    #define   S3FS_CURLOPT_SSL_ENABLE_ALPN        static_cast<CURLoption>(226)
-#endif
-
-#if defined(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR) && (HAVE_CURLOPT_KEEP_SENDING_ON_ERROR == 1)
-    #define   S3FS_CURLOPT_KEEP_SENDING_ON_ERROR  CURLOPT_KEEP_SENDING_ON_ERROR
-#else
-    #define   S3FS_CURLOPT_KEEP_SENDING_ON_ERROR  static_cast<CURLoption>(245)
-#endif
-
-//----------------------------------------------
 // Structure / Typedefs
 //----------------------------------------------
-#if LIBCURL_VERSION_NUM >= 0x073100
-using curl_progress_size = curl_off_t;
-#else
-using curl_progress_size = double;
-#endif
-
 struct curlprogress {
-    time_t time;
-    curl_progress_size dl_progress;
-    curl_progress_size ul_progress;
+    time_t time = 0;
+    curl_off_t dl_progress = 0;
+    curl_off_t ul_progress = 0;
 };
 using CurlUniquePtr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
@@ -125,7 +85,6 @@ class S3fsCurl
         static constexpr char   S3FS_SSL_PRIVKEY_PASSWORD[] = "S3FS_SSL_PRIVKEY_PASSWORD";
 
         // class variables
-        static std::atomic<bool> curl_warnings_once;  // emit older curl warnings only once
         static std::mutex       curl_handles_lock;
         static struct callback_locks_t {
             std::mutex      dns;
@@ -214,13 +173,8 @@ class S3fsCurl
         static bool DestroyGlobalCurl();
         static bool InitCryptMutex();
         static bool DestroyCryptMutex();
-        static int CurlProgress(void *clientp, curl_progress_size dltotal, curl_progress_size dlnow, curl_progress_size ultotal, curl_progress_size ulnow);
-
-#if LIBCURL_VERSION_NUM >= 0x073100
+        static int CurlProgress(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);
         static_assert(std::is_same_v<decltype(&S3fsCurl::CurlProgress), curl_xferinfo_callback>, "Progress callback must match libcurl XFERINFO ABI");
-#else
-        static_assert(std::is_same_v<decltype(&S3fsCurl::CurlProgress), curl_progress_callback>, "Progress callback must match libcurl legacy ABI");
-#endif
 
         static std::string extractURI(const std::string& url);
 

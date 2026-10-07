@@ -238,7 +238,7 @@ AC_MSG_CHECKING([compile s3fs with])
 case "${auth_lib}" in
 openssl)
   AC_MSG_RESULT(OpenSSL)
-  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 libcrypto >= 1.1.1])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.61.1 libxml-2.0 >= 2.9 libcrypto >= 1.1.1])
 
   saved_CPPFLAGS="$CPPFLAGS"
   CPPFLAGS="$CPPFLAGS $DEPS_CFLAGS"
@@ -261,7 +261,7 @@ gnutls)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(gcrypt, gcry_control, [gnutls_nettle=0])])
   AS_IF([test $gnutls_nettle = 0],
     [
-      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 gnutls >= 2.12.0])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.61.1 libxml-2.0 >= 2.9 gnutls >= 2.12.0])
       LIBS="-lgnutls -lgcrypt $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(gcrypt)
@@ -275,7 +275,7 @@ nettle)
   AS_IF([test "$gnutls_nettle" = ""], [AC_CHECK_LIB(nettle, nettle_MD5Init, [gnutls_nettle=1])])
   AS_IF([test $gnutls_nettle = 1],
     [
-      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nettle >= 2.7.1])
+      PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.61.1 libxml-2.0 >= 2.9 nettle >= 2.7.1])
       LIBS="-lgnutls -lnettle $LIBS"
       AC_MSG_CHECKING([gnutls is build with])
       AC_MSG_RESULT(nettle)
@@ -284,7 +284,7 @@ nettle)
   ;;
 nss)
   AC_MSG_RESULT(NSS)
-  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.0 libxml-2.0 >= 2.9 nss >= 3.15.0])
+  PKG_CHECK_MODULES([DEPS], [fuse3 >= ${min_fuse_version} libcurl >= 7.61.1 libxml-2.0 >= 2.9 nss >= 3.15.0])
   ;;
 *)
   AC_MSG_ERROR([unknown ssl library type.])
@@ -326,51 +326,6 @@ AC_COMPILE_IFELSE(
      AC_MSG_RESULT(PTHREAD_MUTEX_RECURSIVE_NP)
     ],
     [AC_MSG_ERROR([do not have PTHREAD_MUTEX_RECURSIVE symbol])])
-  ]
-)
-
-dnl ----------------------------------------------
-dnl check CURLoption
-dnl ----------------------------------------------
-dnl CURLOPT_TCP_KEEPALIVE (is supported by 7.25.0 and later)
-AC_MSG_CHECKING([CURLOPT_TCP_KEEPALIVE])
-AC_COMPILE_IFELSE(
-  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
-                   [[CURLoption opt = CURLOPT_TCP_KEEPALIVE;]])
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_TCP_KEEPALIVE, 1, [Define to 1 if libcurl has CURLOPT_TCP_KEEPALIVE CURLoption])
-   AC_MSG_RESULT(yes)
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_TCP_KEEPALIVE, 0, [Define to 1 if libcurl has CURLOPT_TCP_KEEPALIVE CURLoption])
-   AC_MSG_RESULT(no)
-  ]
-)
-
-dnl CURLOPT_SSL_ENABLE_ALPN (is supported by 7.36.0 and later)
-AC_MSG_CHECKING([CURLOPT_SSL_ENABLE_ALPN])
-AC_COMPILE_IFELSE(
-  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
-                   [[CURLoption opt = CURLOPT_SSL_ENABLE_ALPN;]])
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_SSL_ENABLE_ALPN, 1, [Define to 1 if libcurl has CURLOPT_SSL_ENABLE_ALPN CURLoption])
-   AC_MSG_RESULT(yes)
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_SSL_ENABLE_ALPN, 0, [Define to 1 if libcurl has CURLOPT_SSL_ENABLE_ALPN CURLoption])
-   AC_MSG_RESULT(no)
-  ]
-)
-
-dnl CURLOPT_KEEP_SENDING_ON_ERROR (is supported by 7.51.0 and later)
-AC_MSG_CHECKING([CURLOPT_KEEP_SENDING_ON_ERROR])
-AC_COMPILE_IFELSE(
-  [AC_LANG_PROGRAM([[#include <curl/curl.h>]],
-                   [[CURLoption opt = CURLOPT_KEEP_SENDING_ON_ERROR;]])
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR, 1, [Define to 1 if libcurl has CURLOPT_KEEP_SENDING_ON_ERROR CURLoption])
-   AC_MSG_RESULT(yes)
-  ],
-  [AC_DEFINE(HAVE_CURLOPT_KEEP_SENDING_ON_ERROR, 0, [Define to 1 if libcurl has CURLOPT_KEEP_SENDING_ON_ERROR CURLoption])
-   AC_MSG_RESULT(no)
   ]
 )
 
