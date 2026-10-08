@@ -80,6 +80,27 @@ static void test_missing_times()
 }
 
 //
+// A malformed Last-Modified header is reported as -1 rather than as whatever
+// time the partially parsed fields happen to describe, so the overcheck
+// fallback in get_mtime() and friends omits the time instead of inventing one.
+//
+static void test_unparsable_lastmodified()
+{
+    ASSERT_EQUALS(static_cast<time_t>(1580702706), get_lastmodified("Mon, 03 Feb 2020 04:05:06 GMT"));
+    ASSERT_EQUALS(static_cast<time_t>(-1), get_lastmodified(static_cast<const char*>(nullptr)));
+    ASSERT_EQUALS(static_cast<time_t>(-1), get_lastmodified(""));
+    ASSERT_EQUALS(static_cast<time_t>(-1), get_lastmodified("Mon, 03 Feb 2020 04:05:06 PST"));
+    ASSERT_EQUALS(static_cast<time_t>(-1), get_lastmodified("Mon, 03 Feb 2020"));
+    ASSERT_EQUALS(static_cast<time_t>(-1), get_lastmodified("not a date"));
+
+    headers_t bad;
+    bad["Last-Modified"] = "not a date";
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_mtime(bad, true).tv_nsec);
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_ctime(bad, true).tv_nsec);
+    ASSERT_EQUALS(static_cast<long>(UTIME_OMIT), get_atime(bad, true).tv_nsec);
+}
+
+//
 // valid_timespec() rejects only the UTIME_OMIT/UTIME_NOW markers; a negative
 // number of seconds is an ordinary time.
 //
@@ -140,6 +161,7 @@ int main(int argc, const char *argv[])
 {
     test_negative_times();
     test_missing_times();
+    test_unparsable_lastmodified();
     test_valid_timespec();
     test_stat_timestamp_conversion();
 
