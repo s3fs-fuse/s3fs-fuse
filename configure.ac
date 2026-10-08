@@ -34,6 +34,7 @@ AC_CHECK_HEADERS([sys/xattr.h])
 AC_CHECK_HEADERS([attr/xattr.h])
 AC_CHECK_HEADERS([sys/extattr.h])
 AC_CHECK_FUNCS([fallocate])
+AC_STRUCT_DIRENT_D_TYPE
 
 CPP_VERSION=c++17
 AC_SUBST([CPP_VERSION])

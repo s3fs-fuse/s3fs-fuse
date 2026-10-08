@@ -25,6 +25,7 @@
 #include <climits>  // NOLINT(misc-include-cleaner)
 #include <unistd.h>
 #include <dirent.h>
+#include <fcntl.h>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
@@ -921,6 +922,24 @@ void FdManager::FreeReservedDiskSpace(off_t size)
     FdManager::free_disk_space -= size;
 }
 
+bool FdManager::IsDirectory(int directory_fd, const struct dirent& entry)
+{
+#ifdef HAVE_STRUCT_DIRENT_D_TYPE
+    if(DT_UNKNOWN != entry.d_type){
+        errno = 0;
+        return DT_DIR == entry.d_type;
+    }
+#endif
+
+    struct stat entry_stat = {};
+    if(0 != fstatat(directory_fd, entry.d_name, &entry_stat, AT_SYMLINK_NOFOLLOW)){
+        return false;
+    }
+
+    errno = 0;
+    return S_ISDIR(entry_stat.st_mode);
+}
+
 //
 // Inspect all files for stats file for cache file
 //
@@ -970,18 +989,35 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
         }
     });
 
+    const int directory_fd = dirfd(statsdir);
+    if(directory_fd < 0){
+        S3FS_PRN_ERR("Could not get descriptor for cache stats directory(%s) - errno(%d)", target_dir.c_str(), errno);
+        return false;
+    }
+
     // loop in directory of cache file's stats
     const struct dirent* pdirent = nullptr;
     while(nullptr != (pdirent = readdir(statsdir))){
-        if(DT_DIR == pdirent->d_type){
-            // found directory
-            if(0 == strcmp(pdirent->d_name, ".") || 0 == strcmp(pdirent->d_name, "..")){
-                continue;
-            }
+        if(0 == strcmp(pdirent->d_name, ".") || 0 == strcmp(pdirent->d_name, "..")){
+            continue;
+        }
 
+        std::string object_file_path = sub_path;
+        object_file_path       += pdirent->d_name;
+
+        const bool is_dir = IsDirectory(directory_fd, *pdirent);
+        if(0 != errno){
+            const int stat_error = errno;
+            ++total_file_cnt;
+            ++err_file_cnt;
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), "");
+            S3FS_PRN_CACHE(fp, CACHEDBG_FMT_CRIT_HEAD2 "Could not inspect cache stats entry - errno(%d)", stat_error);
+            continue;
+        }
+
+        if(is_dir){
             // reentrant for sub directory
-            std::string subdir_path = sub_path;
-            subdir_path       += pdirent->d_name;
+            std::string subdir_path = object_file_path;
             subdir_path       += '/';
             if(!RawCheckAllCache(fp, cache_stat_top_dir, subdir_path.c_str(), total_file_cnt, err_file_cnt, err_dir_cnt)){
                 // put error message for this dir.
@@ -996,8 +1032,6 @@ bool FdManager::RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const
             // make cache file path
             std::string strOpenedWarn;
             std::string cache_path;
-            std::string object_file_path = sub_path;
-            object_file_path       += pdirent->d_name;
             if(!FdManager::MakeCachePath(object_file_path.c_str(), cache_path, false, false) || cache_path.empty()){
                 ++err_file_cnt;
                 S3FS_PRN_CACHE(fp, CACHEDBG_FMT_FILE_PROB, object_file_path.c_str(), strOpenedWarn.c_str());
