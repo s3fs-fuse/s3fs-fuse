@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_H_
 #define S3FS_FDCACHE_H_
 
+#include <dirent.h>
 #include <mutex>
 #include <string>
 
@@ -54,6 +55,8 @@ class FdManager
       static off_t GetFreeDiskSpaceHasLock(const char* path) REQUIRES(FdManager::reserved_diskspace_lock);
       static off_t GetTotalDiskSpace(const char* path);
       static bool IsDir(const std::string& dir);
+      // Returns false on failure (errno is set by fstatat).
+      static bool IsDirEntry(int directory_fd, const struct dirent& entry, bool& is_dir);
       static int GetVfsStat(const char* path, struct statvfs* vfsbuf);
       static off_t GetEnsureFreeDiskSpaceHasLock() REQUIRES(FdManager::reserved_diskspace_lock);
 
