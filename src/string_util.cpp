@@ -69,10 +69,26 @@ const char* s3fs_strptime(const char* s, const char* f, struct tm* tm)
     // setlocale(LC_ALL, nullptr) throws on AIX and MinGW for composite names.
     input.imbue(std::locale::classic());
     input >> std::get_time(tm, f);
-    if (input.fail()) {
+    if(input.fail()){
         return nullptr;
     }
-    return s + input.tellg();
+    if(!input.eof()){
+        return s + input.tellg();
+    }
+
+    // The input ran out.  tellg() fails once eofbit is set, and libc++ does
+    // not set failbit when the input ends before the format does, so parse
+    // again with a sentinel appended to both to tell a complete match from a
+    // truncated one.
+    const std::string sentinel_input = std::string(s) + '\x01';
+    const std::string sentinel_format = std::string(f) + '\x01';
+    std::istringstream check(sentinel_input);
+    check.imbue(std::locale::classic());
+    check >> std::get_time(tm, sentinel_format.c_str());
+    if(check.fail()){
+        return nullptr;
+    }
+    return s + sentinel_input.size() - 1;
 }
 
 bool s3fs_strtoofft(off_t* value, const char* str, int base)
