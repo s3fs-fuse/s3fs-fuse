@@ -973,6 +973,14 @@ int FdEntity::Load(off_t start, off_t size, bool is_modified_flag)
 
     int result = 0;
 
+    // [NOTE]
+    // A detached entity must not read from its path(see Detach): the object
+    // there is the one which has been renamed over this file, so its bytes are
+    // not this file's.  Whatever was not loaded before the rename is gone with
+    // the object which held it, so fail instead of returning foreign data.
+    //
+    bool is_detached = IsDetached();
+
     // check loaded area & load
     fdpage_list_t unloaded_list;
     if(0 < pagelist.GetUnloadedPages(unloaded_list, start, size)){
@@ -986,6 +994,12 @@ int FdEntity::Load(off_t start, off_t size, bool is_modified_flag)
             if(iter->offset < size_orgmeta){
                 // original file size(on S3) is smaller than request.
                 need_load_size = (iter->next() <= size_orgmeta ? iter->bytes : (size_orgmeta - iter->offset));
+            }
+
+            if(0 < need_load_size && is_detached){
+                S3FS_PRN_ERR("could not load the detached file(%s), because another object has been renamed over it.", path.c_str());
+                result = -EIO;
+                break;
             }
 
             // download
@@ -1299,6 +1313,32 @@ int FdEntity::RowFlushHasLock(int fd, const char* tpath, bool force_sync)
         return 0;
     }
     PseudoFdInfo* pseudo_obj = miter->second.get();
+
+    // [NOTE]
+    // A detached entity has no name in the file system any more(see Detach), so
+    // uploading it to its own path would overwrite the object which was renamed
+    // over it.  Discard the data instead, and abort an in-flight multipart
+    // upload so that its parts are not stranded on the server.  An explicit
+    // target path is still honoured, because then the caller chooses where the
+    // data goes.
+    //
+    if(!tpath && IsDetached()){
+        S3FS_PRN_INFO("do not upload the detached file(%s), because another object has been renamed over it.", path.c_str());
+
+        if(pseudo_obj->IsUploading()){
+            if(auto upload_id = pseudo_obj->GetUploadId()){
+                int abort_result;
+                if(0 != (abort_result = abort_multipart_upload_request(path, *upload_id))){
+                    S3FS_PRN_ERR("failed to abort multipart upload for the detached file(%s) by errno(%d), but continue...", path.c_str(), abort_result);
+                }
+            }
+        }
+        pseudo_obj->ClearUploadInfo();
+        untreated_list.ClearAll();
+        pagelist.ClearAllModified();
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
+        return 0;
+    }
 
     int result;
     if(!force_sync && !pagelist.IsModified() && !IsDirtyMetadata()){
@@ -2488,6 +2528,15 @@ bool FdEntity::GetOrgMeta(headers_t& meta) const
 int FdEntity::UploadPendingHasLock(int fd)
 {
     int result;
+
+    // [NOTE]
+    // Pushing the pending headers of a detached entity would replace the
+    // metadata of the object which was renamed over its path(see Detach).
+    //
+    if(IsDetached()){
+        pending_status = pending_status_t::NO_UPDATE_PENDING;
+        return 0;
+    }
 
     if(pending_status_t::NO_UPDATE_PENDING == pending_status){
        // nothing to do

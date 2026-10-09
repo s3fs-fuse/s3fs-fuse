@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <utility>
+#include <vector>
 
 #include "fdcache.h"
 #include "fdcache_stat.h"
@@ -507,7 +508,7 @@ FdEntity* FdManager::GetFdEntityHasLock(const char* path, int& existfd, bool new
         // when the file is opened.
         if(!FdManager::IsCacheDir()){
             for(const auto& [entpath, entity] : fent){
-                if(entity && entity->IsOpen() && entity->GetROPath() == path){
+                if(entity && !entity->IsDetached() && entity->IsOpen() && entity->GetROPath() == path){
                     return entity.get();
                 }
             }
@@ -537,7 +538,7 @@ FdEntity* FdManager::Open(int& fd, const char* path, const headers_t* pmeta, off
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == path){
+            if(iter->second && !iter->second->IsDetached() && iter->second->IsOpen() && iter->second->GetPath() == path){
                 break;      // found opened fd in mapping
             }
         }
@@ -622,16 +623,24 @@ FdEntity* FdManager::GetExistFdEntity(const char* path, int existfd)
       if(iter->second && iter->second->FindPseudoFd(existfd)){
         return iter->second.get();
       }
-    } else {
-      // no matter use_cache is enabled or not, search from all entities to
-      // find the entity with the same path. And then compare the pseudo fd.
-      for(const auto& [entpath, entity] : fent) {
-        // GetROPath() holds ro_path_lock rather than fdent_lock.
-        // Therefore GetExistFdEntity does not contends with FdEntity::Read() / Write().
-        if(entity && (entity->GetROPath() == path)
-           && entity->FindPseudoFd(existfd)) {
-          return entity.get();
-        }
+    }
+
+    // no matter use_cache is enabled or not, search from all entities to
+    // find the entity with the same path. And then compare the pseudo fd.
+    //
+    // [NOTE]
+    // This search also runs when the key was found above but does not own the
+    // pseudo fd, because then the entity which does is registered under another
+    // key.  That is the case after another object has been renamed over the
+    // path: the entity which the caller still has open is detached and re-keyed
+    // by Rename, and only the pseudo fd identifies it.
+    //
+    for(const auto& [entpath, entity] : fent) {
+      // GetROPath() holds ro_path_lock rather than fdent_lock.
+      // Therefore GetExistFdEntity does not contends with FdEntity::Read() / Write().
+      if(entity && (entity->GetROPath() == path)
+         && entity->FindPseudoFd(existfd)) {
+        return entity.get();
       }
     }
 
@@ -703,7 +712,7 @@ int FdManager::GetPseudoFdCount(const char* path)
 
     // search from all entity.
     for(const auto& [entpath, entity] : fent){
-        if(entity && entity->GetPath() == path){
+        if(entity && !entity->IsDetached() && entity->GetPath() == path){
             // found the entity for the path
             return entity->GetOpenCount();
         }
@@ -726,7 +735,7 @@ void FdManager::Rename(const std::string &from, const std::string &to)
         // search a entity in all which opened the temporary file.
         //
         for(iter = fent.begin(); iter != fent.end(); ++iter){
-            if(iter->second && iter->second->IsOpen() && iter->second->GetPath() == from){
+            if(iter->second && !iter->second->IsDetached() && iter->second->IsOpen() && iter->second->GetPath() == from){
                 break;              // found opened fd in mapping
             }
         }
@@ -748,8 +757,61 @@ void FdManager::Rename(const std::string &from, const std::string &to)
             return;
         }
 
+        // [NOTE]
+        // The destination may be open too, and then another entity is already
+        // registered for it.  That entity must not be dropped here: with a cache
+        // directory the new key is the destination path, so assigning to it would
+        // release the last shared_ptr to the destination entity and destroy an
+        // object which other threads are still using through a raw pointer
+        // (AutoFdEntity holds FdEntity*).  Without a cache directory the new key
+        // is a temporary path instead, so the destination entity would survive
+        // but keep answering lookups for the destination path, and a later open
+        // could get the entity from before the rename.
+        //
+        // rename(2) replaces the destination, so detach the destination entity:
+        // it stays alive for whoever still has it open, but it is no longer
+        // reachable by path and its contents are no longer written back.
+        //
+        DetachEntitiesByPath(to, ent.get());
+
         // set new fd entity to map
         fent.insert_or_assign(fentmapkey, std::move(ent));
+    }
+}
+
+// [NOTE]
+// Detaches every entity which is registered for "path"(except "except_ent") and
+// moves it to a temporary key, so that no lookup by path can reach it again.
+// The entities are kept in the map, because the processes which still have them
+// open hold raw pointers to them and find them by their pseudo fd.
+//
+void FdManager::DetachEntitiesByPath(const std::string& path, const FdEntity* except_ent)
+{
+    // [NOTE]
+    // Collect the keys first, because the loop below inserts into the map.
+    //
+    std::vector<std::string> detachkeys;
+    for(const auto& [entpath, entity] : fent){
+        if(entity && entity.get() != except_ent && entity->GetROPath() == path){
+            detachkeys.push_back(entpath);
+        }
+    }
+
+    for(const auto& detachkey : detachkeys){
+        auto iter = fent.find(detachkey);
+        if(fent.cend() == iter || !iter->second){
+            continue;
+        }
+        S3FS_PRN_DBG("[path=%s][key=%s] detach the entity, because another object has been renamed over it.", path.c_str(), detachkey.c_str());
+
+        iter->second->Detach();
+
+        if(detachkey == path){
+            std::string tmppath;
+            FdManager::MakeRandomTempPath(path.c_str(), tmppath);
+            fent[tmppath] = std::move(iter->second);
+            fent.erase(iter);
+        }
     }
 }
 

@@ -59,6 +59,7 @@ class FdManager
 
       // Returns the number of open pseudo fd.
       int GetPseudoFdCount(const char* path) REQUIRES(fd_manager_lock);
+      void DetachEntitiesByPath(const std::string& path, const FdEntity* except_ent) REQUIRES(fd_manager_lock);
       bool UpdateEntityToTempPath() REQUIRES(fd_manager_lock);
       void CleanupCacheDirInternal(const std::string &path = "") REQUIRES(cache_cleanup_lock);
       bool RawCheckAllCache(FILE* fp, const char* cache_stat_top_dir, const char* sub_path, int& total_file_cnt, int& err_file_cnt, int& err_dir_cnt);

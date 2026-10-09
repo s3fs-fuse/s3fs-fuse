@@ -80,6 +80,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         FileTimes          timestamps     GUARDED_BY(fdent_data_lock);   // file timestamps(atime/ctime/mtime)
         mutable std::mutex ro_path_lock;                                 // for only the ro_path variable
         std::string        ro_path        GUARDED_BY(ro_path_lock);      // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
+        bool               is_detached    GUARDED_BY(ro_path_lock) = false;   // true after another object has been renamed over "path"(see Detach)
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -150,6 +151,23 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         std::string GetROPath() const {
             const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
             return ro_path;
+        }
+        // [NOTE]
+        // Detaching marks that another object has been renamed over this entity's
+        // path, so the entity no longer has a name in the file system.  It is kept
+        // alive for the processes which still have it open and can still be found
+        // by their pseudo fd, but it must not be found by a lookup by path, and its
+        // contents must not be written back: that would overwrite the object which
+        // was renamed in.  This mirrors rename(2), which discards the inode it
+        // replaces once the last descriptor on it is closed.
+        //
+        void Detach() {
+            const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
+            is_detached = true;
+        }
+        bool IsDetached() const {
+            const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
+            return is_detached;
         }
         [[nodiscard]] int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
 
