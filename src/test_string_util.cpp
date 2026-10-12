@@ -325,9 +325,20 @@ static void test_parse_dates()
     struct tm invalid_date = {};
     ASSERT_TRUE(s3fs_strptime("Mon, 03 Feb 2020 04:05:06 PST", "%a, %d %b %Y %H:%M:%S GMT", &invalid_date) == nullptr);
 
+    // A fully consumed input points at its terminator rather than one byte
+    // before the string, which is what tellg() yields once eofbit is set.
+    const char complete[] = "Mon, 03 Feb 2020 04:05:06 GMT";
     struct tm complete_date = {};
-    const char* http_end = s3fs_strptime("Mon, 03 Feb 2020 04:05:06 GMT", "%a, %d %b %Y %H:%M:%S GMT", &complete_date);
-    ASSERT_STREQUALS("", http_end);
+    const char* http_end = s3fs_strptime(complete, "%a, %d %b %Y %H:%M:%S GMT", &complete_date);
+    ASSERT_TRUE(http_end == complete + sizeof(complete) - 1);
+    ASSERT_EQUALS(4, complete_date.tm_hour);
+
+    // An input that ends before the format does is a failure, not a date
+    // with the missing fields left at zero.
+    struct tm truncated_date = {};
+    ASSERT_TRUE(s3fs_strptime("Mon, 03 Feb 2020", "%a, %d %b %Y %H:%M:%S GMT", &truncated_date) == nullptr);
+    ASSERT_TRUE(s3fs_strptime("Mon, 03 Feb 2020 04:05:06 GM", "%a, %d %b %Y %H:%M:%S GMT", &truncated_date) == nullptr);
+    ASSERT_TRUE(s3fs_strptime("", "%a, %d %b %Y %H:%M:%S GMT", &truncated_date) == nullptr);
 }
 
 int main(int argc, const char *argv[])
