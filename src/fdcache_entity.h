@@ -21,6 +21,7 @@
 #ifndef S3FS_FDCACHE_ENTITY_H_
 #define S3FS_FDCACHE_ENTITY_H_
 
+#include <atomic>
 #include <cstdint>
 #include <fcntl.h>
 #include <memory>
@@ -80,7 +81,7 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         FileTimes          timestamps     GUARDED_BY(fdent_data_lock);   // file timestamps(atime/ctime/mtime)
         mutable std::mutex ro_path_lock;                                 // for only the ro_path variable
         std::string        ro_path        GUARDED_BY(ro_path_lock);      // holds the same value as "path". this is used as a backup(read-only variable) by special functions only.
-        bool               is_detached    GUARDED_BY(ro_path_lock) = false;   // true after another object has been renamed over "path"(see Detach)
+        std::atomic<bool>  is_detached{false};                           // true after another object has been renamed over "path"(see Detach)
 
     private:
         static int FillFile(int fd, unsigned char byte, off_t size, off_t start);
@@ -161,13 +162,14 @@ class FdEntity : public std::enable_shared_from_this<FdEntity>
         // was renamed in.  This mirrors rename(2), which discards the inode it
         // replaces once the last descriptor on it is closed.
         //
+        // The flag is atomic so that it can be read without taking any lock of
+        // this entity, and set while FdManager holds only fd_manager_lock.
+        //
         void Detach() {
-            const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
-            is_detached = true;
+            is_detached.store(true);
         }
         bool IsDetached() const {
-            const std::lock_guard<std::mutex> ro_lock(ro_path_lock);
-            return is_detached;
+            return is_detached.load();
         }
         [[nodiscard]] int Open(const headers_t* pmeta, off_t size, const FileTimes& ts_times, int flags);
 

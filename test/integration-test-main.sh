@@ -280,6 +280,21 @@ function test_rename_onto_open_file {
     #
     s3_head "${TEST_BUCKET_1}/${OBJECT_NAME}" | grep -qiE '^Content-Length: 6[[:space:]]*$'
 
+    # The replaced file must not be written anywhere else either: the
+    # destination is the only object under its name, and no internal
+    # temporary path of s3fs reaches the bucket.
+    #
+    local KEYS; KEYS=$(s3_list_keys "${TEST_BUCKET_1}" "${OBJECT_NAME}")
+    if [ "${KEYS}" != "${OBJECT_NAME}" ]; then
+        echo "unexpected objects under ${OBJECT_NAME}: ${KEYS}"
+        return 1
+    fi
+    KEYS=$(s3_list_keys "${TEST_BUCKET_1}" " __S3FS_")
+    if [ -n "${KEYS}" ]; then
+        echo "unexpected objects with an s3fs temporary path: ${KEYS}"
+        return 1
+    fi
+
     rm_test_file "${ALT_TEST_TEXT_FILE}"
 }
 

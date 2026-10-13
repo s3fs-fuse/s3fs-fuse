@@ -1049,6 +1049,18 @@ int FdEntity::NoCacheLoadAndPost(PseudoFdInfo* pseudo_obj, off_t start, off_t si
     }
 
     // [NOTE]
+    // A detached entity must not use its path(see Detach): the cache files
+    // there now belong to the object which has been renamed over this file,
+    // and that object would also be downloaded into this file and uploaded
+    // over.  The detached data can only be kept locally, so report that there
+    // is no space left for it.
+    //
+    if(IsDetached()){
+        S3FS_PRN_ERR("could not free the cache space of the detached file(%s), because another object has been renamed over it.", path.c_str());
+        return -ENOSPC;
+    }
+
+    // [NOTE]
     // This method calling means that the cache file is never used no more.
     //
     if(!cachepath.empty()){
