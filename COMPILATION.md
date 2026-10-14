@@ -88,6 +88,10 @@ Keep in mind using the pre-built packages when available.
     make
     ```
 
+## Compilation on AIX
+
+See the [s3fs for AIX](https://github.com/hettica/aix-s3fs-fuse) project for build instructions.
+
 ## Compilation on Windows (using MSYS2)
 
 On Windows, use [MSYS2](https://www.msys2.org/) to compile for itself.

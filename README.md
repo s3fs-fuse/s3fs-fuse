@@ -1,7 +1,7 @@
 # s3fs
 
-s3fs allows Linux, macOS, and FreeBSD to mount an S3 bucket via [FUSE(Filesystem in Userspace)](https://github.com/libfuse/libfuse).  
-s3fs makes you operate files and directories in S3 bucket like a local file system.  
+s3fs allows Linux, macOS, FreeBSD, and AIX to mount an S3 bucket via [FUSE(Filesystem in Userspace)](https://github.com/libfuse/libfuse).
+s3fs makes you operate files and directories in S3 bucket like a local file system.
 s3fs preserves the native object format for files, allowing use of other tools like [AWS CLI](https://github.com/aws/aws-cli).  
 
 [![s3fs-fuse CI](https://github.com/s3fs-fuse/s3fs-fuse/actions/workflows/ci.yml/badge.svg)](https://github.com/s3fs-fuse/s3fs-fuse/actions/workflows/ci.yml)
@@ -26,6 +26,11 @@ s3fs preserves the native object format for files, allowing use of other tools l
 ## Installation
 
 Many systems provide pre-built packages:
+
+* AIX:
+
+  See the [s3fs for AIX](https://github.com/hettica/aix-s3fs-fuse) project for RPM build instructions and its [releases page](https://github.com/hettica/aix-s3fs-fuse/releases) for published packages.
+
 
 * Amazon Linux via EPEL:
 
