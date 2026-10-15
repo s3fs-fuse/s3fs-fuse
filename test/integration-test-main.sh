@@ -1373,6 +1373,27 @@ function test_update_time_touch() {
     rm_test_file
 }
 
+function test_update_time_touch_t() {
+    describe "Testing update time function touch -t..."
+
+    local t0=1000000000  # 9 September 2001
+    echo data > "${TEST_TEXT_FILE}"
+    local base_ctime; base_ctime=$(get_ctime "${TEST_TEXT_FILE}")
+
+    #
+    # touch -t -> set atime/mtime to the given time, update ctime to now
+    #
+    TZ=UTC touch -t 200109090146.40 "${TEST_TEXT_FILE}"
+    local atime; atime=$(get_atime "${TEST_TEXT_FILE}")
+    local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
+    local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
+    if [ "${atime%%.*}" != "${t0}" ] || [ "${mtime%%.*}" != "${t0}" ] || [ "${ctime%%.*}" -lt "${base_ctime%%.*}" ]; then
+       echo "touch -t expected atime/mtime: ${t0} == $atime == $mtime and ctime not older than $base_ctime: $ctime"
+       return 1
+    fi
+    rm_test_file
+}
+
 function test_update_time_touch_a() {
     describe "Testing update time function touch -a..."
 
@@ -3341,6 +3362,7 @@ function add_all_tests {
     add_tests test_update_time_chown
     add_tests test_update_time_xattr
     add_tests test_update_time_touch
+    add_tests test_update_time_touch_t
     if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         add_tests test_update_time_touch_a
     fi

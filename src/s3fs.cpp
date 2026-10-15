@@ -2755,7 +2755,7 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct f
     struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
-    FUSE_CTX_INFO("[path=%s][mtime=%s][ctime/atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
+    FUSE_CTX_INFO("[path=%s][mtime=%s][atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2777,7 +2777,9 @@ static int s3fs_utimens(const char* _path, const struct timespec ts[2], struct f
     set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
 
     struct timespec atime = handle_utimens_special_values(ts[0], now, ts_atime);
-    struct timespec ctime = handle_utimens_special_values(ts[0], now, ts_ctime);
+    // utimensat(2) always sets ctime to the current time, unless both
+    // timestamps are UTIME_OMIT; ctime is never taken from the arguments.
+    struct timespec ctime = (ts[0].tv_nsec == UTIME_OMIT && ts[1].tv_nsec == UTIME_OMIT) ? ts_ctime : now;
     struct timespec mtime = handle_utimens_special_values(ts[1], now, ts_mtime);
 
     if(S_ISDIR(stbuf.st_mode)){
@@ -2911,7 +2913,7 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], s
     struct stat newstbuf;
     objtype_t   ObjType = objtype_t::UNKNOWN;
 
-    FUSE_CTX_INFO1("[path=%s][mtime=%s][atime/ctime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
+    FUSE_CTX_INFO1("[path=%s][mtime=%s][atime=%s]", path, str(ts[1]).c_str(), str(ts[0]).c_str());
 
     if(0 != (result = check_parent_object_access(path, X_OK))){
         return result;
@@ -2933,7 +2935,9 @@ static int s3fs_utimens_nocopy(const char* _path, const struct timespec ts[2], s
     set_stat_to_timespec(stbuf, stat_time_type::MTIME, ts_mtime);
 
     struct timespec atime = handle_utimens_special_values(ts[0], now, ts_atime);
-    struct timespec ctime = handle_utimens_special_values(ts[0], now, ts_ctime);
+    // utimensat(2) always sets ctime to the current time, unless both
+    // timestamps are UTIME_OMIT; ctime is never taken from the arguments.
+    struct timespec ctime = (ts[0].tv_nsec == UTIME_OMIT && ts[1].tv_nsec == UTIME_OMIT) ? ts_ctime : now;
     struct timespec mtime = handle_utimens_special_values(ts[1], now, ts_mtime);
 
     // Get attributes
