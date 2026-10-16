@@ -480,18 +480,20 @@ void* multipart_put_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 
         if(CURLE_OK == curlCode){
             if(responseCode < 400){
-                // set etag for this part
-                {
+                // [NOTE]
+                // UploadPartCopy can return 200 with an error in the response
+                // body instead of the ETag, so retry if the ETag is missing.
+                //
+                auto etag = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag");
+                if(etag && !etag->empty()){
+                    // set etag for this part
                     const std::lock_guard<std::mutex> lock(*(pthparam->pthparam_lock));
-
-                    auto etag = simple_parse_xml(s3fscurl.GetBodyData().c_str(), s3fscurl.GetBodyData().size(), "ETag");
-                    if(!etag){
-                        S3FS_PRN_WARN("Put Head Request(%s->%s) could not parse ETag in response body.", pthparam->from.c_str(), pthparam->to.c_str());
-                    }
-                    pthparam->petag->etag = peeloff(std::move(etag).value_or(""));
+                    pthparam->petag->etag = peeloff(*std::move(etag));
+                    result = 0;
+                    break;
                 }
-                result = 0;
-                break;
+                S3FS_PRN_WARN("Put Head Request(%s->%s) could not parse ETag in response body.", pthparam->from.c_str(), pthparam->to.c_str());
+                result = -EIO;
 
             }else if(responseCode == 400){
                 // as possibly in multipart
