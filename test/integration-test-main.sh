@@ -3401,7 +3401,12 @@ function add_all_tests {
     # Requires the xattr handlers, which are registered only with use_xattr
     # (always passed by start_s3fs).  macOS has no setfacl/getfacl.
     #
-    if ! uname | grep -q Darwin && command -v setfacl >/dev/null 2>&1; then
+    # TODO: Ubuntu 26.10 uses uutils cp, whose cp -r copies POSIX ACLs.
+    # Re-enable after a release includes the fix from
+    # https://github.com/uutils/coreutils/pull/15398
+    #
+    if ! uname | grep -q Darwin && command -v setfacl >/dev/null 2>&1 &&
+       ! grep -qx 'VERSION_ID="26.10"' /etc/os-release 2>/dev/null; then
         add_tests test_posix_acl
     fi
 
