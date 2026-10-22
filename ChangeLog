@@ -1,6 +1,15 @@
 ChangeLog for S3FS
 ------------------
 
+Version 1.98 -- 07 Sep, 2026 (major changes only)
+#2861 - Switch macOS to FUSE 3 (libfuse3)
+#2895 - Require C++17
+#2845 - Change default signature type to v4-only
+#2931 - #2935 - Fix truncate(2) on a closed file and in the fallback path
+#2936 - #2952 - #2953 - Fix SSE-C on multipart copies and new-object metadata, and accept binary SSE-C keys
+#2876 - #2916 - Reduce HeadObject calls using ListObjects metadata
+#2959 - #2879 - #2962 - Improve timestamp handling and check execute permission with X_OK
+
 Version 1.97 -- 7 Dec, 2025 (major changes only)
 #2765 Do not honor -o nonempty when compiled with FUSE 3
 
