@@ -386,6 +386,20 @@ function s3_head() {
         --head "$S3_URL/$S3_PATH"
 }
 
+# Prints the keys under a prefix, one per line.  The keys are listed URL
+# encoded, so that a key with any byte is valid XML, and decoded here.
+function s3_list_keys() {
+    local S3_BUCKET=$1
+    local S3_PREFIX=$2
+    curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+        --cacert "$S3PROXY_CACERT_FILE" --fail --silent --get \
+        --data "list-type=2" --data "encoding-type=url" \
+        --data-urlencode "prefix=${S3_PREFIX}" \
+        "$S3_URL/$S3_BUCKET" \
+        | { grep -o '<Key>[^<]*</Key>' || true; } | sed -e 's/<Key>//' -e 's#</Key>##' \
+        | while read -r KEY; do printf '%b\n' "${KEY//%/\\x}"; done
+}
+
 function s3_mb() {
     local S3_BUCKET=$1
     curl --aws-sigv4 "aws:amz:$S3_ENDPOINT:s3" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
