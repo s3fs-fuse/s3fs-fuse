@@ -454,10 +454,12 @@ function wait_for_port() {
         then
             exec 3<&-  # Close for read
             exec 3>&-  # Close for write
-            break
+            return 0
         fi
         sleep 0.1
     done
+    echo "timeout waiting for port ${PORT}"
+    return 1
 }
 
 function s3fs_args() {
