@@ -41,7 +41,18 @@ permissions:
 #
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    # [NOTE]
+    # Pinned instead of using ubuntu-latest: on the Ubuntu 26.04 host
+    # image "fusermount3 -u" fails with EACCES when the integration test
+    # unmounts, although the container already runs with --privileged,
+    # --cap-add SYS_ADMIN and --device /dev/fuse.  Every test passes and
+    # only the unmount fails, which aborts the remaining flag matrix.
+    # Verified by re-running a green master build on the new image.
+    # Remove the pin once the unmount works again, or before 24.04 is
+    # retired.  The static-checks job mounts nothing and is left on
+    # ubuntu-latest so that the newer image keeps getting exercised.
+    #
+    runs-on: ubuntu-24.04
     #
     # build matrix for containers
     #
@@ -228,7 +239,8 @@ jobs:
           if-no-files-found: ignore
 
   MemoryTest:
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as the Linux job above.
+    runs-on: ubuntu-24.04
 
     #
     # build matrix for containers
