@@ -1720,11 +1720,11 @@ function test_update_directory_time_subdir() {
 
     local TIME_TEST_SUBDIR="${TEST_DIR}/testsubdir"
     local TIME_TEST_FILE_INDIR="${TEST_DIR}/testfile"
-    mk_test_dir
-    mkdir "${TIME_TEST_SUBDIR}"
-    touch "${TIME_TEST_FILE_INDIR}"
-    # TODO: remove sleep after improving AWS CLI speed
-    sleep 1
+    local t0=1000000000  # 9 September 2001
+    local OBJECT_PREFIX; OBJECT_PREFIX=$(basename "${PWD}")
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/${TEST_DIR}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/${TIME_TEST_SUBDIR}/" --header "Content-Type: application/x-directory" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}" < /dev/null
+    echo data | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/${TIME_TEST_FILE_INDIR}" --header "x-amz-meta-atime: ${t0}" --header "x-amz-meta-ctime: ${t0}" --header "x-amz-meta-mtime: ${t0}"
 
     local base_atime;    base_atime=$(get_atime "${TEST_DIR}")
     local base_ctime;    base_ctime=$(get_ctime "${TEST_DIR}")
