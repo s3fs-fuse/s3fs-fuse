@@ -195,7 +195,7 @@ function start_s3proxy {
         S3PROXY_PID=$!
 
         # wait for S3Proxy to start
-        wait_for_port 8080
+        wait_for_port 8080 || exit 1
     fi
 
     if [ -n "${CHAOS_HTTP_PROXY}" ] || [ -n "${CHAOS_HTTP_PROXY_OPT}" ]; then
@@ -211,7 +211,7 @@ function start_s3proxy {
         CHAOS_HTTP_PROXY_PID=$!
 
         # wait for Chaos HTTP Proxy to start
-        wait_for_port 1080
+        wait_for_port 1080 || exit 1
     fi
 
     if [ ! -d "pjd-pjdfstest-${PJDFSTEST_HASH:0:7}" ]; then
