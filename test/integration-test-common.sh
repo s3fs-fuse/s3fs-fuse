@@ -395,8 +395,24 @@ function stop_s3fs {
             retry 100 df "|" grep -q "${TEST_BUCKET_MOUNT_POINT_1}" "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
         fi
     else
+        # [NOTE]
+        # Prefer umount over "fusermount3 -u" when running as root, which is
+        # how the CI containers run.  Ubuntu 26.04 ships an AppArmor profile
+        # for fusermount3 which denies the unmount with EACCES, even in a
+        # privileged container, because the profile is attached to the binary
+        # by path.  Mounting is unaffected, since libfuse mounts with mount(2)
+        # from the process itself when it is root and never runs fusermount3,
+        # so the tests all pass and only the unmount fails.
+        #
+        # umount needs privileges which an ordinary user does not have, so
+        # they keep using fusermount3.
+        #
         if grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts; then
-            retry 100 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
+            if [ "$(id -u)" -eq 0 ]; then
+                retry 100 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" umount "${TEST_BUCKET_MOUNT_POINT_1}"
+            else
+                retry 100 grep -q "${TEST_BUCKET_MOUNT_POINT_1}" /proc/mounts "&&" fusermount3 -u "${TEST_BUCKET_MOUNT_POINT_1}"
+            fi
         fi
     fi
 }
