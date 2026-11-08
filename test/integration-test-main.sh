@@ -548,6 +548,53 @@ function test_rename_directory_after_list {
     rm -r "${TO_DIR_NAME}"
 }
 
+function test_rename_directory_without_subdir_object {
+    describe "Test renaming a directory whose subdirectory has no object ..."
+
+    # [NOTE]
+    # The objects are created with s3_cp like in
+    # test_rename_directory_after_list.  No object is created for the
+    # middle directory, so it exists only as a common prefix and the
+    # rename has to descend into a directory which the bucket does not
+    # name.  Listing the tree first stores a one-level list for every
+    # level in the listing cache, which the rename then consumes.
+    #
+    local DIR_NAME; DIR_NAME="dir_$(basename "${PWD}")_rename_no_subdir_object"
+    local TO_DIR_NAME; TO_DIR_NAME="${DIR_NAME}_renamed"
+    local OBJECT_PREFIX; OBJECT_PREFIX=$(basename "${PWD}")/"${DIR_NAME}"
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/" --header "Content-Type: application/x-directory" < /dev/null
+    echo direct | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file1"
+    s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/mid/deep/" --header "Content-Type: application/x-directory" < /dev/null
+    echo nested | s3_cp "${TEST_BUCKET_1}/${OBJECT_PREFIX}/mid/deep/file2"
+
+    ls -R "${DIR_NAME}" > /dev/null
+
+    mv "${DIR_NAME}" "${TO_DIR_NAME}"
+
+    cmp "${TO_DIR_NAME}/file1" <(echo direct)
+    cmp "${TO_DIR_NAME}/mid/deep/file2" <(echo nested)
+    if [ -e "${DIR_NAME}" ]; then
+        echo "${DIR_NAME} still exists after mv"
+        return 1
+    fi
+
+    # [NOTE]
+    # Check the objects as well as the mount point.  An object left
+    # behind under the old prefix is not necessarily visible there,
+    # because the rename removes the objects of the directories above it.
+    #
+    if s3_head "${TEST_BUCKET_1}/${OBJECT_PREFIX}/file1"; then
+        echo "${OBJECT_PREFIX}/file1 was left behind"
+        return 1
+    fi
+    if s3_head "${TEST_BUCKET_1}/${OBJECT_PREFIX}/mid/deep/file2"; then
+        echo "${OBJECT_PREFIX}/mid/deep/file2 was left behind"
+        return 1
+    fi
+
+    rm -r "${TO_DIR_NAME}"
+}
+
 function test_external_directory_creation {
     describe "Test external directory creation ..."
     local OBJECT_NAME; OBJECT_NAME=$(basename "${PWD}")/directory/"${TEST_TEXT_FILE}"
@@ -3348,6 +3395,7 @@ function add_all_tests {
     add_tests test_remove_nonempty_directory
     add_tests test_list_directory_after_failed_rmdir
     add_tests test_rename_directory_after_list
+    add_tests test_rename_directory_without_subdir_object
     add_tests test_external_directory_creation
     add_tests test_external_no_slash_directory_object
     add_tests test_chmod_listed_directory_keeps_metadata
