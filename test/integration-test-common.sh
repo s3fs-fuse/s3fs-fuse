@@ -125,12 +125,20 @@ fi
 function retry {
     local N="$1"
     shift
-    rc=0
+    local rc=0
     for _ in $(seq "${N}"); do
         echo "Trying: $*"
+        # [NOTE]
+        # These scripts run with "set -o errexit", so the command must not
+        # be evaluated as a plain simple command: when it failed the shell
+        # ended here, instead of the loop trying it again.  The retries
+        # therefore only worked where the caller suppressed errexit itself,
+        # such as the "|| exit 1" in start_s3fs, and not where retry was
+        # called on its own, as in stop_s3fs.
+        #
+        rc=0
         # shellcheck disable=SC2068,SC2294
-        eval $@
-        rc=$?
+        eval $@ || rc=$?
         if [ "${rc}" -eq 0 ]; then
             break
         fi
