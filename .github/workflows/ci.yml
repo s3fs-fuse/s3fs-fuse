@@ -170,7 +170,6 @@ jobs:
         run: |
           TAPS="$(brew --repository)/Library/Taps";
           if [ -e "$TAPS/caskroom/homebrew-cask" ]; then rm -rf "$TAPS/caskroom/homebrew-cask"; fi;
-          HOMEBREW_NO_AUTO_UPDATE=1 brew tap homebrew/homebrew-cask
           HOMEBREW_NO_AUTO_UPDATE=1 brew tap macos-fuse-t/homebrew-cask
 
       - name: Install fuse-t
