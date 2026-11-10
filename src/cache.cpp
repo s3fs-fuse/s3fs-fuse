@@ -34,7 +34,7 @@ std::mutex      StatCache::stat_cache_lock;
 //-------------------------------------------------------------------
 // Constructor/Destructor
 //-------------------------------------------------------------------
-StatCache::StatCache() : pMountPointDir(std::make_shared<DirStatCache>("/")), CacheSize(100'000)
+StatCache::StatCache() : pMountPointDir(DirStatCache::Create("/")), CacheSize(100'000)
 {
 }
 
