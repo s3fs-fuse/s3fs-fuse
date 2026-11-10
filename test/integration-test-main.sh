@@ -640,10 +640,12 @@ function test_chmod_listed_directory_keeps_metadata {
     fi
 
     # [NOTE]
-    # macos fuse-t mounts over NFS and hands s3fs permission-only modes(the
-    # S_IFDIR/S_IFREG type bits are stripped), so the copied directory object
-    # carries x-amz-meta-mode 488 rather than 16872 and the assertion below
-    # cannot match.  fuse-t is also run with "noattrcache", so the kernel
+    # FUSE-T hands s3fs permission-only modes in chmod (the S_IFDIR/S_IFREG
+    # type bits are stripped), so the copied directory object carries
+    # x-amz-meta-mode 488 rather than 16872 and the assertion below cannot
+    # match.
+    # https://github.com/macos-fuse-t/fuse-t/issues/133
+    # fuse-t is also run with "noattrcache", so the kernel
     # issues a getattr before the chmod that reloads the directory type
     # directly from a HEAD, healing the stat cache regardless of what the
     # listing stored.  The test therefore cannot probe the poisoned-type
@@ -723,15 +725,12 @@ function test_external_modification {
     # cache will be read out.
     # Therefore, we need to wait over 1 second here.
     #
-    # In particular, on MacOS, getattrs may be called after a file is
-    # uploaded(released).
-    # This extends the expiration date of the target file(1 sec by
-    # stat_cache_interval_expire option).
-    # Therefore, on MacOS, you need to add an additional 1 sec.
-    # (Verified on macos/fuse-t: with use_cache and only a 1 second
-    # wait, about 1 in 3 runs still read stale data, while 2 seconds
-    # is reliable.  This is a caching effect, not NFS timestamp
-    # granularity.)
+    # On MacOS, the NFS client can keep the old file size in its
+    # attribute cache, which the "noattrcache" option does not disable,
+    # and then reads only that many bytes even though s3fs fetched the
+    # new object.  Waiting an additional 1 sec usually, but not always,
+    # avoids this.
+    # https://github.com/macos-fuse-t/fuse-t/issues/134
     #
     sleep 1
     wait_ostype 1 "Darwin"
@@ -846,14 +845,10 @@ function test_update_metadata_external_small_object() {
     # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
     #
     # [FIXME]
-    # For macos, the xattrs value specified with the "--metadata" option cannot
-    # be set on the object. We confirmed this with the following versions:
-    #     aws-cli/2.27.35 Python/3.13.3 Darwin/22.6.0 exe/x86_64
-    # We also tried to run "aws s3api put-object", but the result was the same.
-    #
-    # Since xattrs cannot be set on objects uploaded with the aws command, this
-    # will be skipped for macos.
-    # If a solution is found in the future, we will test it on macos as well.
+    # FUSE-T does not pass extended attributes to the file system.  macOS
+    # keeps them in AppleDouble "._" files instead, so the xattr stored in
+    # the object metadata is not visible on macos.
+    # https://github.com/macos-fuse-t/fuse-t/issues/74
     #
     if ! uname | grep -q Darwin; then
         OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
@@ -931,14 +926,10 @@ function test_update_metadata_external_large_object() {
     # "%7B%22key%22%3A%22dmFsdWU%3D%22%7D" = {"key":"value"}
     #
     # [FIXME]
-    # For macos, the xattrs value specified with the "--metadata" option cannot
-    # be set on the object. We confirmed this with the following versions:
-    #     aws-cli/2.27.35 Python/3.13.3 Darwin/22.6.0 exe/x86_64
-    # We also tried to run "aws s3api put-object", but the result was the same.
-    #
-    # Since xattrs cannot be set on objects uploaded with the aws command, this
-    # will be skipped for macos.
-    # If a solution is found in the future, we will test it on macos as well.
+    # FUSE-T does not pass extended attributes to the file system.  macOS
+    # keeps them in AppleDouble "._" files instead, so the xattr stored in
+    # the object metadata is not visible on macos.
+    # https://github.com/macos-fuse-t/fuse-t/issues/74
     #
     if ! uname | grep -q Darwin; then
         OBJECT_NAME=$(basename "${PWD}")/"${TEST_RMXATTR_FILE}"
@@ -1053,7 +1044,7 @@ function test_multipart_mix {
     #     it makes no sense, but copying files is because it leaves no cache.
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local MODIFY_START_BLOCK=$((15*1024*1024/2/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${MODIFY_START_BLOCK}" conv=notrunc
@@ -1070,7 +1061,7 @@ function test_multipart_mix {
     #     modify directly(over file end offset)
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local OVER_FILE_BLOCK_POS=$((26*1024*1024/4))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${OVER_FILE_BLOCK_POS}" conv=notrunc
@@ -1086,7 +1077,7 @@ function test_multipart_mix {
     # (3) Writing from the 0th byte
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp "${BIG_FILE}" "${BIG_FILE}-mix"
 
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
     echo -n "0123456789ABCDEF" | dd of="${TEMP_DIR}/${BIG_FILE}-mix" bs=4 count=4 seek=0 conv=notrunc
@@ -1102,7 +1093,7 @@ function test_multipart_mix {
     #     modify directly(seek 1MB offset)
     #
     cp "${TEMP_DIR}/${BIG_FILE}" "${TEMP_DIR}/${BIG_FILE}-mix"
-    cp_avoid_xattr_err "${BIG_FILE}" "${BIG_FILE}-mix"
+    cp "${BIG_FILE}" "${BIG_FILE}-mix"
 
     local MODIFY_START_BLOCK=$((1*1024*1024))
     echo -n "0123456789ABCDEF" | dd of="${BIG_FILE}-mix" bs=4 count=4 seek="${MODIFY_START_BLOCK}" conv=notrunc
@@ -1203,7 +1194,8 @@ function test_hardlink {
 
     (
         # [NOTE]
-        # macos-fuse-t returns 'Input/output error'
+        # FUSE-T reports the ENOTSUP from s3fs_link as 'Input/output error'.
+        # https://github.com/macos-fuse-t/fuse-t/issues/132
         #
         set +o pipefail
         ln "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}" 2>&1 | grep -q -e 'Operation not supported' -e 'Not supported' -e 'Input/output error'
@@ -1287,7 +1279,7 @@ function test_mtime_file {
     mk_test_file
 
     #copy the test file with preserve mode
-    cp_avoid_xattr_err -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
+    cp -p "${TEST_TEXT_FILE}" "${ALT_TEST_TEXT_FILE}"
 
     local testmtime; testmtime=$(get_mtime "${TEST_TEXT_FILE}")
     local testctime; testctime=$(get_ctime "${TEST_TEXT_FILE}")
@@ -1372,19 +1364,14 @@ function test_update_time_chown() {
             return 1
         fi
     else
-        # [FIXME] macos fuse-t
-        # macos fuse-t doesn't update stat if UID doesn't change.
-        # There is a way to specify "uid=1000" with aws cli and use sudo when chown is executed, but the
-        # test is not finished.
-        # For now, we are just leaving the chown call with the same UID as the parameter.
-        # This test will be fixed in the future.
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" = "${mtime}" ]; then
-            if [ "${base_atime}" = "${atime}" ] && [ "${base_ctime}" = "${ctime}" ] && [ "${base_mtime}" = "${mtime}" ]; then
-                echo "[FIXME] Doing a temporary test bypass : same ctime $base_ctime = $ctime and same mtime: $base_mtime = $mtime and same atime: $base_atime = $atime"
-            else
-                echo "chown expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime != $mtime, atime: $base_atime != $atime"
-                return 1
-            fi
+        # [NOTE]
+        # FUSE-T drops chown to a user or group that has a macOS account,
+        # such as the current UID, so no time changes.
+        # https://github.com/macos-fuse-t/fuse-t/issues/130
+        #
+        if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" != "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+            echo "chown expected same ctime: $base_ctime == $ctime, mtime: $base_mtime == $mtime and atime: $base_atime == $atime"
+            return 1
         fi
     fi
     rm_test_file
@@ -1408,27 +1395,9 @@ function test_update_time_xattr() {
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
 
-    if ! uname | grep -q Darwin; then
-        if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-           echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
-           return 1
-        fi
-    else
-        # [FIXME] macos fuse-t
-        # On FUSE-T 1.0.x (libfuse2) atime+ctime were both updated by setxattr
-        # (https://github.com/macos-fuse-t/fuse-t/issues/87). On FUSE-T 1.2.x
-        # (libfuse3) the kernel-cached stat returned to userspace does not
-        # reflect the ctime bump, so all three timestamps appear unchanged.
-        # Permit either observed behavior for now.
-        #
-        if [ "${base_mtime}" != "${mtime}" ]; then
-           echo "set_xattr expected unchanged mtime: $base_mtime == $mtime"
-           return 1
-        fi
-        if [ "${base_atime}" != "${atime}" ] && [ "${base_ctime}" = "${ctime}" ]; then
-           echo "set_xattr expected updated ctime when atime is updated: $base_ctime != $ctime"
-           return 1
-        fi
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+       echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
     fi
 
     rm_test_file
@@ -1498,21 +1467,9 @@ function test_update_time_touch_a() {
     local ctime; ctime=$(get_ctime "${TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TEST_TEXT_FILE}")
 
-    if ! uname | grep -q Darwin; then
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
-            return 1
-        fi
-    else
-        # [macos] fuse-t
-        # atime/ctime are updated.  mtime depends on the macOS NFS client:
-        # older versions (e.g. macOS 14) update it while newer versions
-        # (e.g. macOS 26) preserve it like POSIX requires.
-        #
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime and atime: $base_atime != $atime"
-            return 1
-        fi
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+        echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+        return 1
     fi
     rm_test_file
 }
@@ -1555,7 +1512,7 @@ function test_update_time_cp_p() {
     # cp -p -> update ctime, not update atime/mtime
     #
     local TIME_TEST_TEXT_FILE=test-s3fs-time.txt
-    cp_avoid_xattr_err -p "${TEST_TEXT_FILE}" "${TIME_TEST_TEXT_FILE}"
+    cp -p "${TEST_TEXT_FILE}" "${TIME_TEST_TEXT_FILE}"
     local atime; atime=$(get_atime "${TIME_TEST_TEXT_FILE}")
     local ctime; ctime=$(get_ctime "${TIME_TEST_TEXT_FILE}")
     local mtime; mtime=$(get_mtime "${TIME_TEST_TEXT_FILE}")
@@ -1651,11 +1608,13 @@ function test_update_directory_time_chown {
            return 1
         fi
     else
-        # [macos] fuse-t
-        # atime/ctime/mtime are not updated.
+        # [NOTE]
+        # FUSE-T drops chown to a user or group that has a macOS account,
+        # such as the current UID, so no time changes.
+        # https://github.com/macos-fuse-t/fuse-t/issues/130
         #
         if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" != "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime == $ctime, atime: $base_atime == $atime and same mtime: $base_mtime == $mtime"
+            echo "chown expected same ctime: $base_ctime == $ctime, mtime: $base_mtime == $mtime and atime: $base_atime == $atime"
             return 1
         fi
     fi
@@ -1681,19 +1640,9 @@ function test_update_directory_time_set_xattr {
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
 
-    if ! uname | grep -q Darwin; then
-        if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-           echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
-           return 1
-        fi
-    else
-        # [macos] fuse-t
-        # atime/mtime are not updated.
-        #
-        if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-           echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
-           return 1
-        fi
+    if [ "${base_atime}" != "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+       echo "set_xattr expected updated ctime: $base_ctime != $ctime and same mtime: $base_mtime == $mtime, atime: $base_atime == $atime"
+       return 1
     fi
 
     rm -rf "${TEST_DIR}"
@@ -1742,21 +1691,9 @@ function test_update_directory_time_touch_a {
     local ctime; ctime=$(get_ctime "${TEST_DIR}")
     local mtime; mtime=$(get_mtime "${TEST_DIR}")
 
-    if ! uname | grep -q Darwin; then
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
-            return 1
-        fi
-    else
-        # [macos] fuse-t
-        # atime/ctime are updated.  mtime depends on the macOS NFS client:
-        # older versions (e.g. macOS 14) update it while newer versions
-        # (e.g. macOS 26) preserve it like POSIX requires.
-        #
-        if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ]; then
-            echo "touch with -a option expected updated ctime: $base_ctime != $ctime and atime: $base_atime != $atime"
-            return 1
-        fi
+    if [ "${base_atime}" = "${atime}" ] || [ "${base_ctime}" = "${ctime}" ] || [ "${base_mtime}" != "${mtime}" ]; then
+        echo "touch with -a option expected updated ctime: $base_ctime != $ctime, atime: $base_atime != $atime and same mtime: $base_mtime == $mtime"
+        return 1
     fi
 
     rm -rf "${TEST_DIR}"
@@ -1867,8 +1804,7 @@ function test_update_parent_directory_time_sub() {
     local TEST_PARENTDIR_DIR_MV="${TEST_PARENTDIR_PARENT}/testdir2"
 
     #
-    # Create file -> Darwin: Not update any
-    #             -> Others: Update parent directory's mtime/ctime
+    # Create file -> Update parent directory's mtime/ctime
     #
     local base_atime; base_atime=$(get_atime "${TEST_PARENTDIR_PARENT}")
     local base_ctime; base_ctime=$(get_ctime "${TEST_PARENTDIR_PARENT}")
@@ -2501,15 +2437,6 @@ function test_content_type() {
 # create more files than -o max_stat_cache_size
 function test_truncate_cache() {
     describe "Test make cache files over max cache file size ..."
-
-    # FIXME:
-    # On macos-fuse-t (libfuse3), readdir on directories with many small files
-    # returns duplicate/missing entries (e.g. "28 28 29 29" with 26, 27 absent),
-    # which causes the subsequent rm -rf to fail. Skip until FUSE-T fixes this.
-    #
-    if uname | grep -q Darwin; then
-        return 0
-    fi
 
     for dir in $(seq 2); do
         mkdir "${dir}"
@@ -3369,7 +3296,7 @@ function add_all_tests {
     else
         add_tests test_file_names_longer_than_posix
     fi
-    if ! s3fs_args | grep -q ensure_diskfree && ! uname | grep -q Darwin; then
+    if ! s3fs_args | grep -q ensure_diskfree; then
         add_tests test_clean_up_cache
     fi
     add_tests test_create_empty_file
@@ -3412,17 +3339,7 @@ function add_all_tests {
         add_tests test_multipart_copy_chmod
     fi
 
-    if ! uname | grep -q Darwin || ! s3fs_args | grep -q nocopyapi; then
-        # FIXME:
-        # If you specify the nocopyapi option with macos-fuse-t, the following error will
-        # occur when manipulating the xattr of the copied object:
-        #    "could not copy extended attributes to <file>: Result too large"
-        # As no solution has been found at this time, this test is bypassed on macos with
-        # nocopyapi.
-        # Please pay attention to future developments in macos-fuse-t.
-        #
-        add_tests test_multipart_mix
-    fi
+    add_tests test_multipart_mix
     if s3fs_args | grep -q max_dirty_data; then
         add_tests test_max_dirty_data_flush
     fi
@@ -3431,16 +3348,30 @@ function add_all_tests {
     add_tests test_special_characters
     add_tests test_hardlink
 
-    # TODO: Related Issue #2832
-    # The symlink test fails on macOS.
-    # This is a bug not caused by s3fs-fuse. Therefore, the test will be temporarily bypassed.
-    # This condition will be removed once the related issue is resolved.
+    # [NOTE]
+    # FUSE-T follows symlink creation with a chmod on the new link, which
+    # s3fs applies to the link object without the S_IFLNK bits, so the link
+    # becomes a regular file.  Related Issue #2832.
+    # https://github.com/macos-fuse-t/fuse-t/issues/129
+    # https://github.com/macos-fuse-t/fuse-t/issues/133
     #
     if ! uname | grep -q Darwin; then
         add_tests test_symlink
     fi
+    # [NOTE]
+    # macOS allows mknod(2) of a regular file only for the super-user, and
+    # the tests run as an ordinary user.
+    #
     if ! uname | grep -q Darwin; then
         add_tests test_mknod
+    fi
+    # [NOTE]
+    # FUSE-T does not pass extended attributes to the file system.  macOS
+    # keeps them in AppleDouble "._" files instead, so this test would not
+    # exercise the s3fs xattr handlers.
+    # https://github.com/macos-fuse-t/fuse-t/issues/74
+    #
+    if ! uname | grep -q Darwin; then
         add_tests test_extended_attributes
     fi
     add_tests test_mtime_file
@@ -3463,23 +3394,18 @@ function add_all_tests {
     if ! mount -t fuse.s3fs | grep "$TEST_BUCKET_MOUNT_POINT_1 " | grep -q -e noatime -e relatime ; then
         add_tests test_update_directory_time_touch_a
     fi
-    if ! uname | grep -q Darwin; then
-        # FIXME:
-        # These test fail in macos-fuse-t because mtime/ctime/atime are not updated.
-        # Currently, these are not an issue with s3fs, so we will bypass this test for macos.
-        # Please pay attention to future developments in macos-fuse-t.
-        #
-        add_tests test_update_directory_time_set_xattr
-        add_tests test_update_directory_time_subdir
-    fi
+    add_tests test_update_directory_time_set_xattr
+    add_tests test_update_directory_time_subdir
     add_tests test_update_chmod_opened_file
     if s3fs_args | grep -q update_parent_dir_stat; then
         if ! uname | grep -q Darwin; then
-            # FIXME:
-            # In macos-fuse-t, this test can sometimes succeed if the test waits for more
-            # than one second while it is processing.
-            # However, the results are currently unstable, thus this test is bypassed on macos.
-            # Please pay attention to future developments in macos-fuse-t.
+            # [NOTE]
+            # s3fs updates the parent directory times when the new file is
+            # flushed, after the macOS NFS client cached the directory
+            # attributes.  The "noattrcache" option does not disable that
+            # cache, so the mount root keeps the old times for several
+            # seconds.
+            # https://github.com/macos-fuse-t/fuse-t/issues/134
             #
             add_tests test_update_parent_directory_time
         fi
@@ -3518,7 +3444,7 @@ function add_all_tests {
     add_tests test_cr_filename
     add_tests test_write_data_with_skip
     add_tests test_not_boundary_writes
-    if s3fs_args | grep -q fake_diskfree && ! s3fs_args | grep -q streamupload && ! uname | grep -q Darwin; then
+    if s3fs_args | grep -q fake_diskfree && ! s3fs_args | grep -q streamupload; then
         add_tests test_ensurespace_evict_cache_file
         add_tests test_diskfull_fallback_upload
     fi

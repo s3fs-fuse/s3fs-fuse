@@ -285,7 +285,9 @@ function start_s3fs {
 
     # [NOTE]
     # For macos fuse-t, we need to specify the "noattrcache" option to
-    # disable NFS caching.
+    # disable the attribute cache in the FUSE-T NFS server.  It does not
+    # disable the attribute cache in the macOS NFS client yet.
+    # https://github.com/macos-fuse-t/fuse-t/issues/134
     #
     if [ "$(uname)" = "Darwin" ]; then
         local FUSE_T_ATTRCACHE_OPT="-o noattrcache"
