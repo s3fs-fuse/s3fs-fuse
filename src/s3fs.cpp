@@ -3619,6 +3619,11 @@ static int s3fs_release(const char* _path, struct fuse_file_info* fi)
         if(ent->IsModified()){
             if(0 != (result = ent->Flush(static_cast<int>(fi->fh), false))){
                 S3FS_PRN_ERR("failed to upload file contents for pseudo_fd(%llu) / path(%s) by result(%d)", (unsigned long long)(fi->fh), path, result);
+
+                // clear notruncate flag
+                std::string strpath = path;
+                StatCache::getStatCacheData()->ClearNoTruncateFlag(strpath);
+
                 return result;
             }
         }

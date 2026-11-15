@@ -439,8 +439,8 @@ static void all_type_add_get_remove(const std::string& parent, const std::shared
 //
 static void test_positive_level1_add_get_remove()
 {
-    std::string                   parent("/");
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
+    std::string parent("/");
+    auto        root = DirStatCache::Create();
 
     all_type_add_get_remove(parent, root);
 }
@@ -483,8 +483,8 @@ static void test_positive_level1_add_get_remove()
 //
 static void test_positive_level2_add_get_remove()
 {
-    std::string                   parent("/");
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
+    std::string parent("/");
+    auto        root = DirStatCache::Create();
 
     // add level 1 directories
     add_all_type_child_nodes(parent, root, false, false);
@@ -510,8 +510,8 @@ static void test_positive_level2_add_get_remove()
 //
 static void test_remove_not_empty_directory()
 {
-    std::string                   parent("/");
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
+    std::string parent("/");
+    auto        root = DirStatCache::Create();
 
     // Add all directory
     add_all_type_child_nodes(parent, root, false, false);
@@ -619,8 +619,8 @@ static void test_remove_not_empty_directory()
 //
 static void test_get_expired_caches()
 {
-    std::string                   parent("/");
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
+    std::string parent("/");
+    auto        root = DirStatCache::Create();
 
     // Add all type
     add_all_type_child_nodes(parent, root, true, true);
@@ -727,8 +727,8 @@ static void test_get_expired_caches()
 //
 static void test_get_notruncate_expired_caches()
 {
-    std::string                   parent("/");
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
+    std::string parent("/");
+    auto        root = DirStatCache::Create();
 
     // Add all type
     add_all_type_child_nodes(parent, root, true, true);
@@ -878,17 +878,56 @@ static void test_get_notruncate_expired_caches()
     //
     // Get level1 directories
     //
+    // [NOTE]
+    // Because a direct child element is marked as `notruncate`, the directory containing
+    // it has a non-zero `notruncate_cnt` value, which prevents it from being truncated.
+    //
     pnode = root->Find(parent + builtin_dir_norm, nullptr);
-    ASSERT_TRUE(nullptr == pnode);
+    ASSERT_TRUE(nullptr != pnode);
+    ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NORMAL), static_cast<int>(pnode->GetType()));
+    ASSERT_TRUE(pnode->Get(meta, st));
+    ASSERT_TRUE(pnode->Get() == (parent + builtin_dir_norm));
+    ASSERT_TRUE(S_ISDIR(st.st_mode));
+    meta_iter = meta.find("x-amz-meta-creationtype");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "builtin");
+    meta_iter = meta.find("Content-Type");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "application/x-directory");
 
     pnode = root->Find(parent + builtin_dir_noslash, nullptr);
-    ASSERT_TRUE(nullptr == pnode);
+    ASSERT_TRUE(nullptr != pnode);
+    ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_TERMINATE_SLASH), static_cast<int>(pnode->GetType()));
+    ASSERT_TRUE(pnode->Get(meta, st));
+    ASSERT_TRUE(pnode->Get() == (parent + builtin_dir_noslash));
+    ASSERT_TRUE(S_ISDIR(st.st_mode));
+    meta_iter = meta.find("x-amz-meta-creationtype");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "builtin");
+    meta_iter = meta.find("Content-Type");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "application/x-directory");
 
     pnode = root->Find(parent + builtin_dir_folder, nullptr);
-    ASSERT_TRUE(nullptr == pnode);
+    ASSERT_TRUE(nullptr != pnode);
+    ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_FOLDER_SUFFIX), static_cast<int>(pnode->GetType()));
+    ASSERT_TRUE(pnode->Get(meta, st));
+    ASSERT_TRUE(pnode->Get() == (parent + builtin_dir_folder));
+    ASSERT_TRUE(S_ISDIR(st.st_mode));
+    meta_iter = meta.find("x-amz-meta-creationtype");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "builtin");
+    meta_iter = meta.find("Content-Type");
+    ASSERT_TRUE(meta.cend() != meta_iter);
+    ASSERT_TRUE(meta_iter->second == "application/x-directory");
 
     pnode = root->Find(parent + builtin_dir_notexist, nullptr);
-    ASSERT_TRUE(nullptr == pnode);
+    ASSERT_TRUE(nullptr != pnode);
+    ASSERT_EQUALS(static_cast<int>(objtype_t::DIR_NOT_EXIST_OBJECT), static_cast<int>(pnode->GetType()));
+    ASSERT_TRUE(pnode->Get(st));
+    ASSERT_FALSE(pnode->Get(meta));
+    ASSERT_TRUE(S_ISDIR(st.st_mode));
+    ASSERT_TRUE(pnode->Get() == (parent + builtin_dir_notexist));
 
     //
     // Get level1 negative
@@ -942,8 +981,8 @@ static void test_common_prefix_type()
 //
 static void test_dir_subtype_heal()
 {
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
-    struct stat  st = make_dir_stat();
+    auto         root = DirStatCache::Create();
+    struct stat  st   = make_dir_stat();
     headers_t    meta;
     meta["Content-Type"]       = "application/x-directory";
     meta["x-amz-meta-foreign"] = "keepme";
@@ -985,8 +1024,8 @@ static void test_dir_subtype_heal()
 //
 static void test_nested_dir_subtype_heal()
 {
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
-    struct stat  st = make_dir_stat();
+    auto         root = DirStatCache::Create();
+    struct stat  st   = make_dir_stat();
 
     ASSERT_TRUE(root->Add("/dir/", &st, nullptr, objtype_t::DIR_NORMAL, false));
     ASSERT_TRUE(root->Add("/dir/sub/", &st, nullptr, objtype_t::DIR_NOT_TERMINATE_SLASH, false));
@@ -1005,8 +1044,8 @@ static void test_nested_dir_subtype_heal()
 //
 static void test_file_type_unchanged()
 {
-    std::shared_ptr<DirStatCache> root(std::make_shared<DirStatCache>("/"));
-    struct stat  st = make_file_stat();
+    auto         root = DirStatCache::Create();
+    struct stat  st   = make_file_stat();
 
     ASSERT_TRUE(root->Add("/file", &st, nullptr, objtype_t::FILE, false));
     std::shared_ptr<StatCacheNode> node = root->Find("/file");
