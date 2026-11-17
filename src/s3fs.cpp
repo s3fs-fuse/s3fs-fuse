@@ -1918,6 +1918,20 @@ static int rename_directory(const char* from, const char* to)
         S3FS_PRN_ERR("failed get child leaf list[path=%s], but continue...", basepath.c_str());
     }
 
+    // [NOTE]
+    // The names come from object keys, which can have "." and ".."
+    // components, such as "incoming/../../etc/passwd".  The paths made
+    // from them below would then name objects outside this directory and,
+    // with use_cache, cache files outside the cache directory.  Refuse the
+    // rename before anything is modified.
+    //
+    for(const auto& name : headlist){
+        if(has_dot_component(name)){
+            S3FS_PRN_ERR("object %s%s has a \".\" or \"..\" component, so %s cannot be renamed.", basepath.c_str(), name.c_str(), from);
+            return -EIO;
+        }
+    }
+
     // add hierarchized dir.
     S3ObjList::MakeHierarchizedList(headlist, false);
 

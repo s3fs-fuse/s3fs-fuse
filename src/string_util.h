@@ -117,6 +117,11 @@ std::string urlEncodePath(std::string_view s);
 std::string urlEncodeQuery(std::string_view s);
 std::string urlDecode(std::string_view s);
 
+// Returns true if one of the "/" separated components of path is "." or
+// "..".  Paths from the kernel never have one, but paths made from object
+// keys can.
+bool has_dot_component(std::string_view path);
+
 bool takeout_str_dquart(std::string& str);
 std::optional<std::string> get_keyword_value(const std::string& target, const char* keyword);
 
