@@ -4227,6 +4227,10 @@ static int s3fs_setxattr(const char* _path, const char* name, const char* value,
         S3FS_PRN_ERR("Wrong parameter: value(%p), size(%zu)", value, size);
         return 0;
     }
+    if(!is_valid_xattr_name(name)){
+        S3FS_PRN_ERR("xattr name(%s) has a character that can not be stored.", name);
+        return -EINVAL;
+    }
 
     WTF8_ENCODE(path)
     int         result;

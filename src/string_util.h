@@ -146,6 +146,7 @@ std::string mask_sensitive_header(const char* pheader, size_t length);
 std::string mask_sensitive_arg(const char* arg);
 
 // xattr parsing
+bool is_valid_xattr_name(std::string_view name);
 size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs);
 std::string raw_build_xattrs(const xattrs_t& xattrs);
 

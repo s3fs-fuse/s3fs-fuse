@@ -820,11 +820,23 @@ size_t parse_xattrs(const std::string& strxattrs, xattrs_t& xattrs)
     return xattrs.size();
 }
 
+// The stored form {"name":"base64",...} holds the name verbatim, and
+// parse_xattrs() splits it at every ',' and strips the '"', so a name with
+// either character would be read back as other attributes.
+bool is_valid_xattr_name(std::string_view name)
+{
+    return std::string_view::npos == name.find_first_of("\",");
+}
+
 std::string raw_build_xattrs(const xattrs_t& xattrs)
 {
     std::string strxattrs;
     bool        is_set = false;
     for(const auto& [key, value] : xattrs){
+        if(!is_valid_xattr_name(key)){
+            S3FS_PRN_ERR("xattr name(%s) can not be stored, so skip this.", key.c_str());
+            continue;
+        }
         if(is_set){
             strxattrs += ',';
         }else{

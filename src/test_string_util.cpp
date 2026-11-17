@@ -296,6 +296,18 @@ void test_parse_xattrs()
     parse_xattrs(encoded, decoded);
     ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
     ASSERT_EQUALS(decoded.find("foo:bar")->second, "baz"s);
+
+    // A name holding '"' or ',' must not be read back as other names.
+    ASSERT_TRUE(is_valid_xattr_name("user.foo:bar{}%"));
+    ASSERT_FALSE(is_valid_xattr_name(R"(user.foo"bar)"));
+    ASSERT_FALSE(is_valid_xattr_name("user.foo,bar"));
+    ASSERT_FALSE(is_valid_xattr_name(R"(user.x":"QQ==","security.capability)"));
+
+    encoded = raw_build_xattrs({ {"foo", "bar" }, {R"(user.x":"QQ==","security.capability)", "baz" } });
+    ASSERT_EQUALS(encoded, R"({"foo":"YmFy"})"s);
+    parse_xattrs(encoded, decoded);
+    ASSERT_EQUALS(decoded.size(), static_cast<size_t>(1));
+    ASSERT_EQUALS(decoded.find("foo")->second, "bar"s);
 }
 
 // RFC 9110 section 5.6.7 requires English weekday and month names in HTTP dates.
