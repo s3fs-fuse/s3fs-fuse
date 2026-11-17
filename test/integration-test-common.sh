@@ -332,6 +332,16 @@ function start_s3fs {
         export CACHE_AVAIL_AT_MOUNT
     fi
 
+    # [NOTE]
+    # The subshell below waits for s3fs and records its exit status in
+    # this file, which stop_s3fs checks.  s3fs runs in the background of
+    # a subshell, so this shell can not wait for it directly.  Without
+    # this, the errors that Valgrind and the sanitizers report by exit
+    # status, such as memory leaks found at exit, would go unnoticed.
+    #
+    S3FS_EXIT_STATUS_FILE="${PWD}/s3fs-exit-status"
+    rm -f "${S3FS_EXIT_STATUS_FILE}"
+
     # subshell with set -x to log exact invocation of s3fs-fuse
     # shellcheck disable=SC2086
     (
@@ -360,6 +370,10 @@ function start_s3fs {
             -f \
             "${@}" &
         echo $! >&3
+        { set +x; } 2>/dev/null
+        rc=0
+        wait $! || rc=$?
+        echo "${rc}" > "${S3FS_EXIT_STATUS_FILE}"
     ) 3>pid | awk '{print "s3fs: " $0; fflush()}' &
     # Poll for the pid file rather than sleeping a fixed second.
     for _ in $(seq 50); do
@@ -425,11 +439,30 @@ function stop_s3fs {
             fi
         fi
     fi
+
+    # Wait for s3fs to exit and check its exit status.  This is skipped
+    # when s3fs was not started or its status was already checked, as
+    # when the exit handler runs after the tests have stopped s3fs.
+    if [ -n "${S3FS_EXIT_STATUS_FILE:-}" ]; then
+        local EXIT_STATUS_FILE="${S3FS_EXIT_STATUS_FILE}"
+        unset S3FS_EXIT_STATUS_FILE
+
+        if ! retry "$(( ${RETRIES:=20} * 10 ))" test -s "${EXIT_STATUS_FILE}"; then
+            echo "s3fs did not exit after unmounting ${TEST_BUCKET_MOUNT_POINT_1}"
+            return 1
+        fi
+        local EXIT_STATUS; EXIT_STATUS=$(<"${EXIT_STATUS_FILE}")
+        rm -f "${EXIT_STATUS_FILE}"
+        if [ "${EXIT_STATUS}" -ne 0 ]; then
+            echo "s3fs exited with status ${EXIT_STATUS}"
+            return 1
+        fi
+    fi
 }
 
 # trap handlers do not stack.  If a test sets its own, the new handler should call common_exit_handler
 function common_exit_handler {
-    stop_s3fs
+    stop_s3fs || true
     stop_s3proxy
 }
 trap common_exit_handler EXIT
