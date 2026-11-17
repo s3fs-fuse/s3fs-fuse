@@ -1382,7 +1382,15 @@ bool S3fsCurl::ResetHandle()
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_NOSIGNAL, 1)){
         return false;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, true)){
+    // [NOTE]
+    // Redirects are not followed.  libcurl drops only the Authorization
+    // header when the Location names another host, so the session token,
+    // the SSE-C key and the request body would be sent to that host, in
+    // plaintext if the Location is http.  A 3xx response is an error(see
+    // RequestPerform), except that s3fs_check_service() switches to the
+    // region of an AWS endpoint that the bucket check is redirected to.
+    //
+    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_FOLLOWLOCATION, false)){
         return false;
     }
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_CONNECTTIMEOUT, S3fsCurl::connect_timeout)){
@@ -2040,8 +2048,11 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                 // Service response codes which are >= 300 && < 500
                 switch(responseCode){
                     case 301:
+                    case 302:
+                    case 303:
                     case 307:
-                        S3FS_PRN_ERR("HTTP response code 301(Moved Permanently: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", bodydata.c_str());
+                    case 308:
+                        S3FS_PRN_ERR("HTTP response code %ld(redirect, which is not followed: also happens when bucket's region is incorrect), returning EIO. Body Text: %s", responseCode, bodydata.c_str());
                         S3FS_PRN_ERR("The options of url and region may be useful for solving, please try to use both options.");
                         result = -EIO;
                         break;
@@ -3296,16 +3307,20 @@ int S3fsCurl::CheckBucket(const char* check_path, bool compat_dir, bool force_no
     if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback)){
         return -EIO;
     }
-    if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_UNRESTRICTED_AUTH, 1L)){
-        return -EIO;
-    }
     if(!S3fsCurl::AddUserAgent(hCurl)){                            // put User-Agent
         return -EIO;
     }
 
+    redirect_url.clear();
     int result = RequestPerform();
     if (result != 0) {
         S3FS_PRN_ERR("Check bucket failed, S3 response: %s", bodydata.c_str());
+
+        // The Location of a 3xx response, which is not followed.
+        char* predirect = nullptr;
+        if(CURLE_OK == curl_easy_getinfo(hCurl, CURLINFO_REDIRECT_URL, &predirect) && predirect){
+            redirect_url = predirect;
+        }
     }
     return result;
 }

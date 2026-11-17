@@ -138,6 +138,7 @@ class S3fsCurl
         std::string          bodydata;             // body data by WriteMemoryCallback
         std::string          headdata;             // header data by WriteMemoryCallback
         long                 LastResponseCode;
+        std::string          redirect_url;         // Location of a 3xx response to CheckBucket
         const unsigned char* postdata;             // use by post method and read callback function.
         off_t                postdata_remaining;   // use by post method and read callback function.
         filepart             partdata;             // use by multipart upload/get object callback
@@ -325,6 +326,7 @@ class S3fsCurl
         const std::string& GetHeadData() const { return headdata; }
         CURLcode GetCurlCode() const { return curlCode; }
         long GetLastResponseCode() const { return LastResponseCode; }
+        const std::string& GetRedirectUrl() const { return redirect_url; }
         bool SetUseAhbe(bool ahbe);
         bool EnableUseAhbe() { return SetUseAhbe(true); }
         bool DisableUseAhbe() { return SetUseAhbe(false); }

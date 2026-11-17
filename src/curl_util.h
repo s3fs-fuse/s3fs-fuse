@@ -51,6 +51,7 @@ bool get_object_sse_type(const char* path, sse_type_t& ssetype, std::string& sse
 std::optional<std::string> make_md5_from_binary(const char* pstr, size_t length);
 std::string url_to_host(std::string_view url);
 std::string get_bucket_host();
+std::optional<std::string> get_region_from_aws_url(std::string_view url, std::string_view scheme, std::string_view host_prefix);
 
 constexpr const char* getCurlDebugHead(curl_infotype type)
 {

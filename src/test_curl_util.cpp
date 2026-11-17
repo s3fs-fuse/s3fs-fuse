@@ -167,11 +167,40 @@ void test_make_md5_from_binary()
     ASSERT_FALSE(make_md5_from_binary(binary_key, 0).has_value());
 }
 
+void test_get_region_from_aws_url()
+{
+    // virtual-hosted style, both regional endpoint forms
+    ASSERT_STREQUALS("us-west-2", get_region_from_aws_url("https://bucket.s3-us-west-2.amazonaws.com/", "https://", "bucket.").value_or("").c_str());
+    ASSERT_STREQUALS("us-west-2", get_region_from_aws_url("https://bucket.s3.us-west-2.amazonaws.com/?prefix=a", "https://", "bucket.").value_or("").c_str());
+    ASSERT_STREQUALS("eu-west-1", get_region_from_aws_url("http://my.bucket.s3-eu-west-1.amazonaws.com", "http://", "my.bucket.").value_or("").c_str());
+
+    // path style
+    ASSERT_STREQUALS("ap-northeast-1", get_region_from_aws_url("https://s3-ap-northeast-1.amazonaws.com/bucket/", "https://", "").value_or("").c_str());
+
+    // another scheme, in particular a downgrade to http
+    ASSERT_FALSE(get_region_from_aws_url("http://bucket.s3-us-west-2.amazonaws.com/", "https://", "bucket.").has_value());
+
+    // another bucket, or another host
+    ASSERT_FALSE(get_region_from_aws_url("https://other.s3-us-west-2.amazonaws.com/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.example.com/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3-us-west-2.amazonaws.com.example.com/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3-x.example.com/.amazonaws.com", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3-user@example.com/.amazonaws.com", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3-us-west-2.amazonaws.com:8080/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://ec2-1-2-3-4.compute-1.amazonaws.com/", "https://", "").has_value());
+
+    // no region
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3.amazonaws.com/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("https://bucket.s3-.amazonaws.com/", "https://", "bucket.").has_value());
+    ASSERT_FALSE(get_region_from_aws_url("", "https://", "bucket.").has_value());
+}
+
 int main(int argc, const char *argv[])
 {
     test_sort_insert();
     test_slist_remove();
     test_make_md5_from_binary();
+    test_get_region_from_aws_url();
     return 0;
 }
 

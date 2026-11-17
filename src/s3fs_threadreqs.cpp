@@ -81,7 +81,7 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         }
 
         if(CURLE_OK == curlCode){
-            if(responseCode < 400){
+            if(responseCode < 300){
                 std::string bpath = mybasename(pthparam->path);
                 if(pthparam->use_wtf8){
                      bpath = s3fs_wtf8_decode(bpath);
@@ -298,7 +298,7 @@ void* list_bucket_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
 {
     auto* pthparam = static_cast<check_service_req_thparam*>(arg);
-    if(!pthparam || !(pthparam->presponseCode) || !(pthparam->presponseBody)){
+    if(!pthparam || !(pthparam->presponseCode) || !(pthparam->presponseBody) || !(pthparam->predirectUrl)){
         return reinterpret_cast<void*>(-EIO);
     }
     S3FS_PRN_INFO3("Check Service Request [path=%s][support compat dir=%s][force No SSE=%s]", pthparam->path.c_str(), (pthparam->support_compat_dir ? "true" : "false"), (pthparam->forceNoSSE ? "true" : "false"));
@@ -308,6 +308,7 @@ void* check_service_req_threadworker(S3fsCurl& s3fscurl, void* arg)
     pthparam->result = s3fscurl.CheckBucket(pthparam->path.c_str(), pthparam->support_compat_dir, pthparam->forceNoSSE);
 
     *(pthparam->presponseCode) = s3fscurl.GetLastResponseCode();
+    *(pthparam->predirectUrl)  = s3fscurl.GetRedirectUrl();
 
     // [NOTE]
     // A service check request is executed when s3fs starts.
@@ -606,7 +607,7 @@ void* parallel_get_object_req_threadworker(S3fsCurl& s3fscurl, void* arg)
         }
 
         if(CURLE_OK == curlCode){
-            if(responseCode < 400){
+            if(responseCode < 300){
                 // nothing to do
                 result = 0;
                 break;
@@ -871,7 +872,7 @@ int list_bucket_request(const std::string& strpath, const std::string& query, st
 //
 // Calls S3fsCurl::CheckBucket via check_service_req_threadworker
 //
-int check_service_request(const std::string& strpath, bool forceNoSSE, bool support_compat_dir, long& responseCode, std::string& responseBody)
+int check_service_request(const std::string& strpath, bool forceNoSSE, bool support_compat_dir, long& responseCode, std::string& responseBody, std::string& redirectUrl)
 {
     // parameter for thread worker
     check_service_req_thparam thargs;
@@ -880,6 +881,7 @@ int check_service_request(const std::string& strpath, bool forceNoSSE, bool supp
     thargs.support_compat_dir = support_compat_dir;
     thargs.presponseCode      = &responseCode;
     thargs.presponseBody      = &responseBody;
+    thargs.predirectUrl       = &redirectUrl;
     thargs.result             = 0;
 
     // make parameter for thread pool
