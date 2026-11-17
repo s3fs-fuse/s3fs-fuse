@@ -182,6 +182,13 @@ void ThreadPoolMan::Worker(ThreadPoolMan* psingleton, std::promise<int> promise)
         }
     }
 
+    // [NOTE]
+    // Destroy the curl handle before the curl share handle which it
+    // refers to: curl_share_cleanup() fails with CURLSHE_IN_USE and
+    // leaks the share handle while a curl handle is still attached.
+    //
+    s3fscurl.DestroyCurlHandle();
+
     if(!S3fsCurlShare::DestroyCurlShareHandleForThread()){
         S3FS_PRN_WARN("Failed to destroy curl share handle for this thread, but continue...");
     }
