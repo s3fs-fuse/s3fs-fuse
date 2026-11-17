@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cerrno>
+
 #include "s3fs_logger.h"
 #include "syncfiller.h"
 
@@ -32,33 +34,42 @@ SyncFiller::SyncFiller(void* buff, fuse_fill_dir_t filler) : filler_buff(buff), 
     }
 }
 
+// The first entry added for a name is kept.
+void SyncFiller::Fill(const std::string& name, const struct stat *stbuf)
+{
+    const std::lock_guard<std::mutex> lock(filler_lock);
+
+    if(stbuf){
+        entries.emplace(name, *stbuf);
+    }else{
+        entries.emplace(name, std::nullopt);
+    }
+}
+
+void SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
+{
+    const std::lock_guard<std::mutex> lock(filler_lock);
+
+    for(const auto& path : pathlist){
+        entries.emplace(path, std::nullopt);
+    }
+}
+
 //
 // See. prototype fuse_fill_dir_t in fuse.h
 //
-int SyncFiller::Fill(const std::string& name, const struct stat *stbuf, off_t off)
+int SyncFiller::Flush()
 {
     const std::lock_guard<std::mutex> lock(filler_lock);
 
-    int result = 0;
-    if(filled.insert(name).second){
-        result = filler_func(filler_buff, name.c_str(), stbuf, off, S3FS_FUSE_FILL_DIR_DEFAULTS);
-    }
-    return result;
-}
-
-int SyncFiller::SufficiencyFill(const std::vector<std::string>& pathlist)
-{
-    const std::lock_guard<std::mutex> lock(filler_lock);
-
-    int result = 0;
-    for(auto it = pathlist.cbegin(); it != pathlist.cend(); ++it) {
-        if(filled.insert(*it).second){
-            if(0 != filler_func(filler_buff, it->c_str(), nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS)){
-                result = 1;
-            }
+    for(const auto& [name, st] : entries){
+        // The non-seekable readdir filler only fails when it cannot allocate memory.
+        if(0 != filler_func(filler_buff, name.c_str(), st.has_value() ? &st.value() : nullptr, 0, S3FS_FUSE_FILL_DIR_DEFAULTS)){
+            return -ENOMEM;
         }
     }
-    return result;
+    entries.clear();
+    return 0;
 }
 
 /*
