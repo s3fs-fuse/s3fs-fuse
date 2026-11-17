@@ -453,6 +453,20 @@ function stop_s3fs {
         fi
         local EXIT_STATUS; EXIT_STATUS=$(<"${EXIT_STATUS_FILE}")
         rm -f "${EXIT_STATUS_FILE}"
+
+        # [NOTE]
+        # On FUSE-T, a file system started by fuse_main() never exits
+        # with status 0 when it is unmounted.  The session loop returns an
+        # error, which fuse_main() reports as status 8.  fuse_main() then
+        # restores the default SIGPIPE action and calls fuse_unmount(),
+        # which raises SIGPIPE, so s3fs is killed with status 141.  It
+        # exits with status 8 only if it ignores SIGPIPE.
+        #
+        if [ "$(uname)" = "Darwin" ]; then
+            case "${EXIT_STATUS}" in
+                8|141) EXIT_STATUS=0 ;;
+            esac
+        fi
         if [ "${EXIT_STATUS}" -ne 0 ]; then
             echo "s3fs exited with status ${EXIT_STATUS}"
             return 1
