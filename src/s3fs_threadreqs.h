@@ -113,6 +113,7 @@ struct check_service_req_thparam
     bool         support_compat_dir = false;
     long*        presponseCode      = nullptr;
     std::string* presponseBody      = nullptr;
+    std::string* predirectUrl       = nullptr;
     int          result             = 0;
 };
 
@@ -237,7 +238,7 @@ int delete_request(const std::string& strpath);
 int put_head_request(const std::string& strpath, const headers_t& meta, bool is_copy);
 int put_request(const std::string& strpath, const headers_t& meta, int fd, bool ahbe);
 int list_bucket_request(const std::string& strpath, const std::string& query, std::string& responseBody);
-int check_service_request(const std::string& strpath, bool forceNoSSE, bool support_compat_dir, long& responseCode, std::string& responseBody);
+int check_service_request(const std::string& strpath, bool forceNoSSE, bool support_compat_dir, long& responseCode, std::string& responseBody, std::string& redirectUrl);
 int pre_multipart_upload_request(const std::string& path, const headers_t& meta, std::string& upload_id);
 int multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5, Semaphore* psem, std::mutex* pthparam_lock, int* req_result);
 int await_multipart_upload_part_request(const std::string& path, int upload_fd, off_t start, off_t size, int part_num, const std::string& upload_id, etagpair* petag, bool is_copy, const std::string& srcssekeymd5);

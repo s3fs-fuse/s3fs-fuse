@@ -4890,6 +4890,32 @@ static std::optional<std::string> check_endpoint_error(const char* pbody, size_t
     return simple_parse_xml(pbody, len, "Endpoint");
 }
 
+//
+// Returns the region of the AWS endpoint that a 3xx response to the bucket
+// check redirects to, if s3fs may switch to it: as for the region error,
+// only when the url and region are the defaults and the signature is V4.
+//
+static std::optional<std::string> check_redirect_region(long responseCode, const std::string& redirectUrl)
+{
+    if(responseCode < 300 || 400 <= responseCode || redirectUrl.empty()){
+        return std::nullopt;
+    }
+    if(s3host != "http://s3.amazonaws.com" && s3host != "https://s3.amazonaws.com"){
+        return std::nullopt;
+    }
+    if(is_region_specified || S3fsCurl::GetSignatureType() != signature_type_t::V4_ONLY){
+        return std::nullopt;
+    }
+    std::string scheme      = is_prefix(s3host, "https://") ? "https://" : "http://";
+    std::string host_prefix = pathrequeststyle ? "" : S3fsCred::GetBucket() + ".";
+
+    auto redirectregion = get_region_from_aws_url(redirectUrl, scheme, host_prefix);
+    if(!redirectregion){
+        S3FS_PRN_ERR("The bucket check was redirected to %s, which is not an AWS S3 regional endpoint for this bucket.", redirectUrl.c_str());
+    }
+    return redirectregion;
+}
+
 static bool check_invalid_sse_arg_error(const char* pbody, size_t len)
 {
     if(!pbody){
@@ -4945,7 +4971,8 @@ static int s3fs_check_service()
     for(bool isLoop = true; isLoop; ){
         long        responseCode = S3fsCurl::S3FSCURL_RESPONSECODE_NOTSET;
         std::string responseBody;
-        if(0 > check_service_request(get_realpath("/"), forceNoSSE, support_compat_dir, responseCode, responseBody)){
+        std::string redirectUrl;
+        if(0 > check_service_request(get_realpath("/"), forceNoSSE, support_compat_dir, responseCode, responseBody, redirectUrl)){
             // check wrong region, and automatically switch region
             if(300 <= responseCode && responseCode < 500){
                 // check region error(for putting message or retrying)
@@ -4991,6 +5018,21 @@ static int s3fs_check_service()
                     }else{
                         S3FS_PRN_CRIT("The bucket region is not '%s'(default), it is correctly '%s'. You should specify region(%s) option.", region.c_str(), expectregion.c_str(), expectregion.c_str());
                         isLoop = false;
+                    }
+
+                }else if(auto redirectregion = check_redirect_region(responseCode, redirectUrl)){
+                    // [NOTE]
+                    // AWS answers with 307 for a newly created bucket until DNS is
+                    // updated.  Redirects are not followed(see ResetHandle), so take
+                    // the region from the Location and retry like the region error
+                    // above.  Only the default url and region can be changed.
+                    //
+                    S3FS_PRN_CRIT("The bucket check was redirected to region '%s', so retry to connect region '%s' for url(http(s)://s3-%s.amazonaws.com).", redirectregion->c_str(), redirectregion->c_str(), redirectregion->c_str());
+                    region = *redirectregion;
+                    if(s3host == "http://s3.amazonaws.com"){
+                        s3host = "http://s3-" + region + ".amazonaws.com";
+                    }else{
+                        s3host = "https://s3-" + region + ".amazonaws.com";
                     }
 
                 }else if(check_invalid_access(responseCode, responseBody.c_str(), responseBody.size(), invalidAccessCode)){

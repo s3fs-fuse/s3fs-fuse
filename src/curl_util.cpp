@@ -298,6 +298,44 @@ std::string get_bucket_host()
 }
 
 //
+// Returns the region if url is exactly an AWS S3 regional endpoint:
+//   <scheme><host_prefix>s3-<region>.amazonaws.com[/...]
+//   <scheme><host_prefix>s3.<region>.amazonaws.com[/...]
+// scheme is "http://" or "https://" and host_prefix is "<bucket>." for
+// virtual-hosted style requests or empty for path style requests.
+//
+std::optional<std::string> get_region_from_aws_url(std::string_view url, std::string_view scheme, std::string_view host_prefix)
+{
+    if(!is_prefix(url, scheme)){
+        return std::nullopt;
+    }
+    url.remove_prefix(scheme.size());
+
+    std::string_view host = url.substr(0, url.find_first_of("/?#"));
+    if(!is_prefix(host, host_prefix)){
+        return std::nullopt;
+    }
+    host.remove_prefix(host_prefix.size());
+
+    if(!is_prefix(host, "s3-") && !is_prefix(host, "s3.")){
+        return std::nullopt;
+    }
+    host.remove_prefix(3);
+
+    constexpr std::string_view suffix = ".amazonaws.com";
+    if(host.size() <= suffix.size() || host.substr(host.size() - suffix.size()) != suffix){
+        return std::nullopt;
+    }
+    host.remove_suffix(suffix.size());
+
+    // The rest must be a region name, so that no other host can match.
+    if(std::string_view::npos != host.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-")){
+        return std::nullopt;
+    }
+    return std::string(host);
+}
+
+//
 // compare ETag ignoring quotes and case
 //
 bool etag_equals(std::string_view s1, std::string_view s2)
