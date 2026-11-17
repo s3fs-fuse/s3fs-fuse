@@ -4824,7 +4824,19 @@ static std::optional<std::string> check_region_error(const char* pbody, size_t l
         return std::nullopt;
     }
 
-    return simple_parse_xml(pbody, len, "Region");
+    // [NOTE]
+    // The region comes from the response and is used to build the host
+    // name(s3-<region>.amazonaws.com) when retrying.  Reject anything that
+    // is not a region name, such as "attacker.example/", which would make
+    // the rest of the host name a path and send every later request to
+    // another host.
+    //
+    auto expectregion = simple_parse_xml(pbody, len, "Region");
+    if(expectregion && !is_valid_region_name(*expectregion)){
+        S3FS_PRN_CRIT("Ignoring invalid region(%s) in AuthorizationHeaderMalformed response.", expectregion->c_str());
+        return std::nullopt;
+    }
+    return expectregion;
 }
 
 //

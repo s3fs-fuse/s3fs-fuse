@@ -341,6 +341,26 @@ static void test_parse_dates()
     ASSERT_TRUE(s3fs_strptime("", "%a, %d %b %Y %H:%M:%S GMT", &truncated_date) == nullptr);
 }
 
+static void test_is_valid_region_name()
+{
+    ASSERT_TRUE(is_valid_region_name("us-east-1"));
+    ASSERT_TRUE(is_valid_region_name("ap-northeast-1"));
+    ASSERT_TRUE(is_valid_region_name("us-gov-west-1"));
+    ASSERT_TRUE(is_valid_region_name("EU"));
+
+    ASSERT_FALSE(is_valid_region_name(""));
+    ASSERT_FALSE(is_valid_region_name("attacker.example"));
+    ASSERT_FALSE(is_valid_region_name("attacker.example:8080/"));
+    ASSERT_FALSE(is_valid_region_name("x@attacker.example/"));
+    ASSERT_FALSE(is_valid_region_name("us-east-1/"));
+    ASSERT_FALSE(is_valid_region_name("us-east-1?"));
+    ASSERT_FALSE(is_valid_region_name("us-east-1#"));
+    ASSERT_FALSE(is_valid_region_name("us-east-1\\"));
+    ASSERT_FALSE(is_valid_region_name("us east 1"));
+    ASSERT_FALSE(is_valid_region_name("us-east-1\n"));
+    ASSERT_FALSE(is_valid_region_name("us_east_1"));
+}
+
 int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
@@ -355,6 +375,7 @@ int main(int argc, const char *argv[])
     test_mask_sensitive_arg();
     test_parse_xattrs();
     test_parse_dates();
+    test_is_valid_region_name();
 
     return 0;
 }

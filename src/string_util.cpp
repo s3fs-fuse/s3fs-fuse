@@ -163,6 +163,11 @@ std::string peeloff(std::string s)
     return s;
 }
 
+bool is_valid_region_name(std::string_view s)
+{
+    return !s.empty() && std::string_view::npos == s.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-");
+}
+
 //
 // Three url encode functions
 //
