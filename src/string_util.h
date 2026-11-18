@@ -95,6 +95,10 @@ std::string lower(std::string s);
 std::string upper(std::string s);
 std::string peeloff(std::string s);
 
+// Returns true if s is a non-empty string of ASCII letters, digits and
+// hyphens, which is safe to use as a label of a host name.
+bool is_valid_region_name(std::string_view s);
+
 //
 // Date string
 //
