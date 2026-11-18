@@ -322,6 +322,7 @@ bool S3ObjList::Remove(const std::string& strName)
 
     std::string strWitoutSlash;
     std::string strWithSlash;
+    std::string strFolderSuffix;
 
     if('/' == strName.back()){
         strWitoutSlash = strName.substr(0, strName.size() - 1);
@@ -330,10 +331,14 @@ bool S3ObjList::Remove(const std::string& strName)
         strWitoutSlash = strName;
         strWithSlash   = strName + '/';
     }
+    strFolderSuffix    = strWitoutSlash + "_$folder$";
+
     objects.erase(strWitoutSlash);
     objects.erase(strWithSlash);
+    objects.erase(strFolderSuffix);
     common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWitoutSlash), common_prefixes.end());
     common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWithSlash), common_prefixes.end());
+    common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strFolderSuffix), common_prefixes.end());
 
     return true;
 }
