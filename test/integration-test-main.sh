@@ -1257,6 +1257,13 @@ function test_extended_attributes {
     get_xattr key1 "${TEST_TEXT_FILE}" && return 1
     get_xattr key2 "${TEST_TEXT_FILE}" | grep -q '^value2$'
 
+    # refuse names with '"' or ',', which would be stored as other attributes
+    set_xattr 'key3":"dmFsdWUz","key4' value4 "${TEST_TEXT_FILE}" && return 1
+    set_xattr 'key3,key4' value4 "${TEST_TEXT_FILE}" && return 1
+    find_xattr key3 "${TEST_TEXT_FILE}" && return 1
+    find_xattr key4 "${TEST_TEXT_FILE}" && return 1
+    get_xattr key2 "${TEST_TEXT_FILE}" | grep -q '^value2$'
+
     rm_test_file
 }
 
