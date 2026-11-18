@@ -3011,49 +3011,49 @@ function test_not_boundary_writes {
     # Write in First boundary
     #
     # Write 0 - 3,145,727(3MB) : less than the multipart minimum size from the beginning
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=3072 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=3 bs=1048576 conv=notrunc
 
     # Write 0 - 7,340,031(7MB) : multipart exceeding the minimum size from the beginning
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=7168 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=7 bs=1048576 conv=notrunc
 
     # Write 0 - 12,582,911(12MB) : beyond the multipart size boundary from the beginning
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=12288 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=0 count=12 bs=1048576 conv=notrunc
 
     #
     # Write in First and second boundary
     #
     # Write 3,145,728 - 4,194,303(1MB) : less than the minimum multipart size from the middle of the first multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=1024 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3 count=1 bs=1048576 conv=notrunc
 
     # Write 3,145,728 - 9,437,183(6MB) : exceeding the minimum multipart size from the middle of the first multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=6144 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3 count=6 bs=1048576 conv=notrunc
 
     # Write 3,145,728 - 12,582,911(9MB) : beyond the multipart boundary from the middle of the first multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3072 count=9216 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=3 count=9 bs=1048576 conv=notrunc
 
     #
     # Write in Second boundary
     #
     # Write 12,582,912 - 14,680,063(2MB) : below the minimum multipart size from the middle of the multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=2048 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12 count=2 bs=1048576 conv=notrunc
 
     # Write 12,582,912 - 18,874,367(6MB) : data exceeding the minimum multipart size from the middle of the multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=6144 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12 count=6 bs=1048576 conv=notrunc
 
     # Write 12,582,912 - 23,068,671(10MB) : beyond the multipart boundary from the middle of the multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=10240 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12 count=10 bs=1048576 conv=notrunc
 
     # Write 12,582,912 - 26,214,399(13MB) : beyond the multipart boundary(last) from the middle of the multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12288 count=13312 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=12 count=13 bs=1048576 conv=notrunc
 
     #
     # Write in Last boundary
     #
     # Write 23,068,672 - 24,117,247(1MB) : below the minimum multipart size from the middle of the final multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22528 count=1024 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22 count=1 bs=1048576 conv=notrunc
 
     # Write 23,068,672 - 26,214,399(3MB) : beyond the multipart boundary(last) from the middle of the final multipart area
-    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22528 count=3072 bs=1024 conv=notrunc
+    dd if=/dev/zero of="${TEST_TEXT_FILE}" seek=22 count=3 bs=1048576 conv=notrunc
 
     rm_test_file
 }
