@@ -91,12 +91,7 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
                 struct stat stbuf;
                 if(convert_header_to_stat(pthparam->path, *(s3fscurl.GetResponseHeaders()), stbuf, false)){
                     // fill stat
-                    if(0 != pthparam->psyncfiller->Fill(bpath, &stbuf, 0)){
-                        S3FS_PRN_ERR("filler could not add entry(%s)", pthparam->path.c_str());
-                        if(0 == result){
-                            result = -ENOMEM;
-                        }
-                    }
+                    pthparam->psyncfiller->Fill(bpath, &stbuf);
 
                     // objet type
                     objtype_t ObjType = pthparam->objtype;
@@ -128,12 +123,7 @@ void* multi_head_req_threadworker(S3fsCurl& s3fscurl, void* arg)
                     }
                 }else{
                     S3FS_PRN_INFO2("Could not convert headers to stat[path=%s]", pthparam->path.c_str());
-                    if(0 != pthparam->psyncfiller->Fill(bpath, nullptr, 0)){
-                        S3FS_PRN_ERR("filler could not add entry(%s)", pthparam->path.c_str());
-                        if(0 == result){
-                            result = -ENOMEM;
-                        }
-                    }
+                    pthparam->psyncfiller->Fill(bpath, nullptr);
                 }
                 break;
 

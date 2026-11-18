@@ -3738,15 +3738,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
             if(use_wtf8){
                 bpath = s3fs_wtf8_decode(bpath);
             }
-            // [NOTE]
-            // The non-seekable readdir filler only fails when it cannot
-            // allocate memory, so give up on the whole listing.
-            //
-            if(0 != syncfiller.Fill(bpath, &st, 0)){
-                S3FS_PRN_ERR("filler could not add entry(%s), so abort readdir.", bpath.c_str());
-                sched_result = -ENOMEM;
-                break;
-            }
+            syncfiller.Fill(bpath, &st);
             continue;
         }
 
@@ -3784,10 +3776,7 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
     // as a path, so search for objects under that path.(a case of no dir object)
     //
     if(!support_compat_dir){
-        if(0 != syncfiller.SufficiencyFill(head.GetCommonPrefixes())){
-            S3FS_PRN_ERR("filler could not add entries, so abort readdir.");
-            return -ENOMEM;
-        }
+        syncfiller.SufficiencyFill(head.GetCommonPrefixes());
     }
     if(support_compat_dir && !notfound_list.empty()){      // [NOTE] not need to lock to access this here.
         // dummy header
@@ -3815,29 +3804,29 @@ static int readdir_multi_head(const std::string& strpath, const S3ObjList& head,
 
                 // Set stat structure
                 struct stat st;
-                int fill_result;
                 if(!convert_header_to_stat(dirpath, dummy_header, st, true)){       // forcedir=true
                     S3FS_PRN_ERR("failed convert headers to stat[path=%s], so fill empty stat.", dirpath.c_str());
-                    fill_result = syncfiller.Fill(bpath, nullptr, 0);
+                    syncfiller.Fill(bpath, nullptr);
                 }else{
                     // Add stat cache
                     if(!StatCache::getStatCacheData()->AddStat(dirpath, st, dummy_header, objtype_t::DIR_NOT_EXIST_OBJECT, false)){
                         S3FS_PRN_ERR("failed adding stat cache [path=%s], so fill empty stat.", dirpath.c_str());
-                        fill_result = syncfiller.Fill(bpath, nullptr, 0);
+                        syncfiller.Fill(bpath, nullptr);
                     }else{
-                        fill_result = syncfiller.Fill(bpath, &st, 0);
+                        syncfiller.Fill(bpath, &st);
                     }
-                }
-                if(0 != fill_result){
-                    S3FS_PRN_ERR("filler could not add entry(%s), so abort readdir.", bpath.c_str());
-                    return -ENOMEM;
                 }
             }else{
                 S3FS_PRN_WARN("%s object does not have any object under it(errno=%d),", reiter->c_str(), dir_result);
             }
         }
     }
-    return 0;
+
+    int result = syncfiller.Flush();
+    if(0 != result){
+        S3FS_PRN_ERR("filler could not add entries, so abort readdir.");
+    }
+    return result;
 }
 
 static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* info, enum fuse_readdir_flags)

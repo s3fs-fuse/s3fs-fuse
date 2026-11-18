@@ -21,10 +21,12 @@
 #ifndef SYNCFILLER_H_
 #define SYNCFILLER_H_
 
-#include <string>
+#include <map>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <vector>
-#include <set>
+#include <sys/stat.h>
 
 #include "s3fs.h"  // NOLINT(misc-include-cleaner)
 
@@ -32,16 +34,23 @@
 // class SyncFiller
 //----------------------------------------------
 //
-// A synchronous class that calls the fuse_fill_dir_t
-// function that processes the readdir data
+// Collects the entries of a readdir from several threads and passes
+// them to the fuse_fill_dir_t function in name order.
+//
+// [NOTE]
+// The order must not depend on which HEAD request finishes first.
+// FUSE-T calls readdir again for each NFS READDIR reply and takes the
+// entries after the position the previous reply ended at, so listings
+// in different orders lose and repeat entries.
+// See https://github.com/macos-fuse-t/fuse-t/issues/136
 //
 class SyncFiller
 {
     private:
-        mutable std::mutex      filler_lock;
-        void*                   filler_buff;
-        fuse_fill_dir_t         filler_func;
-        std::set<std::string>   filled;
+        mutable std::mutex                                  filler_lock;
+        void*                                               filler_buff;
+        fuse_fill_dir_t                                     filler_func;
+        std::map<std::string, std::optional<struct stat>>   entries;
 
     public:
         explicit SyncFiller(void* buff = nullptr, fuse_fill_dir_t filler = nullptr);
@@ -51,8 +60,9 @@ class SyncFiller
         SyncFiller& operator=(const SyncFiller&) = delete;
         SyncFiller& operator=(SyncFiller&&) = delete;
 
-        [[nodiscard]] int Fill(const std::string& name, const struct stat *stbuf, off_t off);
-        [[nodiscard]] int SufficiencyFill(const std::vector<std::string>& pathlist);
+        void Fill(const std::string& name, const struct stat *stbuf);
+        void SufficiencyFill(const std::vector<std::string>& pathlist);
+        [[nodiscard]] int Flush();
 };
 
 #endif // SYNCFILLER_H_
