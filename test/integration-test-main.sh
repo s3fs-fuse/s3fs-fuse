@@ -3246,6 +3246,31 @@ function test_pjdfstest_open() {
               ../../pjdfstest/tests/open/2[0-134].t
 }
 
+function test_pjdfstest_permission() {
+    describe "Testing the pjdfstest : permission checks for other users..."
+
+    # [NOTE]
+    # Other users must be able to search the mount point.  An earlier mount
+    # of the same bucket without allow_other may have stored its mode as
+    # 0700, so set it here and restore it afterwards.
+    #
+    local MOUNTPOINT_DIR; MOUNTPOINT_DIR=$(cd ..; pwd)
+    local MOUNTPOINT_MODE; MOUNTPOINT_MODE=$(get_permissions "${MOUNTPOINT_DIR}")
+    chmod 755 "${MOUNTPOINT_DIR}"
+
+    local rc=0
+    prove -rv ../../pjdfstest/tests/chown/07.t \
+              ../../pjdfstest/tests/mkfifo/06.t \
+              ../../pjdfstest/tests/mknod/06.t \
+              ../../pjdfstest/tests/open/06.t \
+              ../../pjdfstest/tests/rmdir/11.t \
+              ../../pjdfstest/tests/unlink/11.t \
+              ../../pjdfstest/tests/utimensat/07.t || rc=$?
+
+    chmod "${MOUNTPOINT_MODE}" "${MOUNTPOINT_DIR}"
+    return "${rc}"
+}
+
 function test_pjdfstest_posix_fallocate() {
     describe "Testing the pjdfstest : posix_fallocate..."
 
@@ -3473,6 +3498,13 @@ function add_all_tests {
         add_tests test_pjdfstest_link
         add_tests test_pjdfstest_mknod
         add_tests test_pjdfstest_open
+        # [NOTE]
+        # These tests use the mount as other users, who can reach it only
+        # with allow_other.
+        #
+        if s3fs_args | grep -q allow_other; then
+            add_tests test_pjdfstest_permission
+        fi
         add_tests test_pjdfstest_posix_fallocate
         add_tests test_pjdfstest_truncate
         # [NOTE]
