@@ -130,7 +130,10 @@ bool FdManager::DeleteCacheDirectory()
         return false;
     }
 
-    std::string mirror_path = FdManager::cache_dir + "/." + S3fsCred::GetBucket() + ".mirror";
+    std::string mirror_path;
+    if(!FdManager::MakeCachePath(nullptr, mirror_path, false, true)){
+        return false;
+    }
     if(!delete_files_in_dir(mirror_path.c_str(), true)){
         return false;
     }
@@ -188,12 +191,23 @@ bool FdManager::MakeCachePath(const char* path, std::string& cache_path, bool is
         resolved_path += ".mirror";
     }
 
-    if(is_create_dir){
-        int result;
-        if(0 != (result = mkdirp(resolved_path + (path == nullptr ? "" : mydirname(path)), 0700))){
-            S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
-            return false;
-        }
+    // [NOTE]
+    // The top directory is made and checked before anything is made or used
+    // in it, so that another user cannot redirect the cache files(see
+    // check_safe_dir_path).  If it does not exist and is not made, this
+    // fails, since there is nothing in it.
+    //
+    int result;
+    if(is_create_dir && 0 != (result = mkdirp(resolved_path, 0700))){
+        S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", resolved_path.c_str(), result);
+        return false;
+    }
+    if(0 != check_safe_dir_path(resolved_path)){
+        return false;
+    }
+    if(is_create_dir && nullptr != path && 0 != (result = mkdirp(resolved_path + mydirname(path), 0700))){
+        S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
+        return false;
     }
     if(!path || '\0' == path[0]){
         cache_path = resolved_path;
@@ -209,7 +223,16 @@ bool FdManager::CheckCacheTopDir()
         return true;
     }
     std::string toppath(FdManager::cache_dir + "/" + S3fsCred::GetBucket());
+    std::string mirrorpath(FdManager::cache_dir + "/." + S3fsCred::GetBucket() + ".mirror");
 
+    // [NOTE]
+    // The directories which exist are checked here, so that the mount fails
+    // instead of every open.  The others are checked when they are made.
+    //
+    int result;
+    if((0 != (result = check_safe_dir_path(toppath)) && -ENOENT != result) || (0 != (result = check_safe_dir_path(mirrorpath)) && -ENOENT != result)){
+        return false;
+    }
     return check_exist_dir_permission(toppath.c_str());
 }
 
@@ -904,6 +927,11 @@ void FdManager::CleanupCacheDir()
     //S3FS_PRN_DBG("cache cleanup requested");
 
     if(!FdManager::IsCacheDir()){
+        return;
+    }
+    // The directory is walked by name, see MakeCachePath().
+    std::string cache_path;
+    if(!FdManager::MakeCachePath(nullptr, cache_path, false)){
         return;
     }
 

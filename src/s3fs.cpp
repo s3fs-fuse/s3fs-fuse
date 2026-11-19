@@ -6310,7 +6310,7 @@ int main(int argc, char* argv[])
 
     // check cache dir permission
     if(!FdManager::CheckCacheDirExist() || !FdManager::CheckCacheTopDir() || !CacheFileStat::CheckCacheFileStatTopDir()){
-        S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories.");
+        S3FS_PRN_EXIT("could not allow cache directory permission, check permission of cache directories. They and the directories above them must be owned by root or the user running s3fs, and must not be writable by other users unless they have the sticky bit.");
         S3fsCurl::DestroyS3fsCurl();
         s3fs_destroy_global_ssl();
         exit(EXIT_FAILURE);

@@ -57,12 +57,21 @@ int CacheFileStat::MakeCacheFileStatPath(const char* path, std::string& sfile_pa
         return -EIO;
     }
 
-    if(is_create_dir){
-      int result;
-      if(0 != (result = mkdirp(top_path + mydirname(path), 0700))){
-          S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
-          return result;
-      }
+    // [NOTE]
+    // The top directory is made and checked before anything is made or used
+    // in it, see FdManager::MakeCachePath().
+    //
+    int result;
+    if(is_create_dir && 0 != (result = mkdirp(top_path, 0700))){
+        S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", top_path.c_str(), result);
+        return result;
+    }
+    if(0 != (result = check_safe_dir_path(top_path))){
+        return result;
+    }
+    if(is_create_dir && nullptr != path && 0 != (result = mkdirp(top_path + mydirname(path), 0700))){
+        S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
+        return result;
     }
     if(!path || '\0' == path[0]){
         sfile_path = top_path;
@@ -80,6 +89,13 @@ bool CacheFileStat::CheckCacheFileStatTopDir()
         return true;
     }
 
+    // [NOTE]
+    // If the directory does not exist, it is checked when it is made.
+    //
+    int result = check_safe_dir_path(top_path);
+    if(0 != result && -ENOENT != result){
+        return false;
+    }
     return check_exist_dir_permission(top_path.c_str());
 }
 
@@ -92,7 +108,9 @@ int CacheFileStat::DeleteCacheFileStat(const char* path)
     std::string sfile_path;
     int result;
     if(0 != (result = CacheFileStat::MakeCacheFileStatPath(path, sfile_path, false))){
-        S3FS_PRN_ERR("failed to create cache stat file path(%s)", path);
+        if(-ENOENT != result){
+            S3FS_PRN_ERR("failed to create cache stat file path(%s)", path);
+        }
         return result;
     }
     if(0 != unlink(sfile_path.c_str())){
@@ -118,6 +136,10 @@ bool CacheFileStat::DeleteCacheFileStatDirectory()
         S3FS_PRN_INFO("The path to cache top dir is empty, thus not need to remove it.");
         return true;
     }
+    // The directory is removed by name, see MakeCacheFileStatPath().
+    if(0 != check_safe_dir_path(top_path)){
+        return false;
+    }
     return delete_files_in_dir(top_path.c_str(), true);
 }
 
@@ -130,8 +152,10 @@ bool CacheFileStat::RenameCacheFileStat(const char* oldpath, const char* newpath
     // stat path
     std::string old_filestat;
     std::string new_filestat;
-    if(0 != CacheFileStat::MakeCacheFileStatPath(oldpath, old_filestat, false) || 0 != CacheFileStat::MakeCacheFileStatPath(newpath, new_filestat, false)){
-        return false;
+    int         result;
+    if(0 != (result = CacheFileStat::MakeCacheFileStatPath(oldpath, old_filestat, false)) || 0 != (result = CacheFileStat::MakeCacheFileStatPath(newpath, new_filestat, false))){
+        // if the directory does not exist, there is nothing to rename.
+        return -ENOENT == result;
     }
 
     // check new stat path
