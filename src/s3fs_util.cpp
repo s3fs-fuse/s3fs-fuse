@@ -23,6 +23,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <cerrno>
+#include <climits>  // NOLINT(misc-include-cleaner)
 #include <grp.h>
 #include <memory>
 #include <mutex>
@@ -292,6 +293,139 @@ bool check_exist_dir_permission(const char* dirpath)
         }
     }
     return true;
+}
+
+// Whether users other than the owner, and other than the members of the
+// effective group, can write to the directory.
+static bool is_writable_by_others(const struct stat& st, gid_t egid)
+{
+    return 0 != (st.st_mode & S_IWOTH) || (0 != (st.st_mode & S_IWGRP) && egid != st.st_gid);
+}
+
+// [NOTE]
+// s3fs makes, opens and removes the files in its cache directories by
+// name, so no user other than root and the effective user may be able to
+// replace the directory or anything on the path to it.  A user can rename
+// the entries of a directory which that user owns or can write to, unless
+// the directory has the sticky bit, like /tmp, which leaves each entry to
+// its owner.  So every directory and symbolic link on the path must be
+// owned by root or the effective user, and no directory may be writable by
+// others, or by a group other than the effective group, unless it has the
+// sticky bit.  The directory itself may not have even that, since s3fs
+// makes all the files in it.
+//
+// Returns 0 if the directory is safe, -ENOENT if it does not exist and
+// nothing on the path to it is unsafe, -EPERM if something is, or another
+// negative errno if the path could not be checked.
+//
+int check_safe_dir_path(const std::string& dirpath)
+{
+    static constexpr int MAX_SYMLINKS = 40;
+
+    if(dirpath.empty()){
+        return -EINVAL;
+    }
+
+    std::string rest(dirpath);                  // the part of the path which is not checked yet
+    if('/' != rest[0]){
+        char cwd[PATH_MAX];
+        if(nullptr == getcwd(cwd, sizeof(cwd))){
+            int result = -errno;
+            S3FS_PRN_ERR("could not get the current directory to check %s - errno(%d)", dirpath.c_str(), result);
+            return result;
+        }
+        rest.insert(0, "/");
+        rest.insert(0, cwd);
+    }
+
+    const uid_t euid     = geteuid();
+    const gid_t egid     = getegid();
+    std::string current("/");                   // the checked part of the path, without symbolic links
+    int         symlinks = 0;
+    struct stat st;
+    while(true){
+        if(0 != lstat(current.c_str(), &st)){
+            int result = -errno;
+            S3FS_PRN_ERR("could not get stats of %s on the path to %s - errno(%d)", current.c_str(), dirpath.c_str(), result);
+            return result;
+        }
+        if(!S_ISDIR(st.st_mode)){
+            S3FS_PRN_ERR("%s on the path to %s is not a directory.", current.c_str(), dirpath.c_str());
+            return -ENOTDIR;
+        }
+        if(0 != st.st_uid && euid != st.st_uid){
+            S3FS_PRN_ERR("%s on the path to %s is owned by another user(uid=%u).", current.c_str(), dirpath.c_str(), static_cast<unsigned int>(st.st_uid));
+            return -EPERM;
+        }
+        if(is_writable_by_others(st, egid) && 0 == (st.st_mode & S_ISVTX)){
+            S3FS_PRN_ERR("%s on the path to %s is writable by other users, and has no sticky bit.", current.c_str(), dirpath.c_str());
+            return -EPERM;
+        }
+
+        // next component
+        std::string::size_type start = rest.find_first_not_of('/');
+        if(std::string::npos == start){
+            break;
+        }
+        std::string::size_type end = rest.find('/', start);
+        std::string component      = rest.substr(start, (std::string::npos == end ? end : end - start));
+        rest.erase(0, end);
+        if("." == component){
+            continue;
+        }
+        if(".." == component){
+            current = mydirname(current);
+            continue;
+        }
+
+        std::string next(("/" == current ? "" : current) + "/" + component);
+        if(0 != lstat(next.c_str(), &st)){
+            int result = -errno;
+            if(-ENOENT == result){
+                S3FS_PRN_DBG("%s on the path to %s does not exist.", next.c_str(), dirpath.c_str());
+            }else{
+                S3FS_PRN_ERR("could not get stats of %s on the path to %s - errno(%d)", next.c_str(), dirpath.c_str(), result);
+            }
+            return result;
+        }
+        if(!S_ISLNK(st.st_mode)){
+            current = next;
+            continue;
+        }
+
+        // follow the symbolic link
+        if(0 != st.st_uid && euid != st.st_uid){
+            S3FS_PRN_ERR("symbolic link %s on the path to %s is owned by another user(uid=%u).", next.c_str(), dirpath.c_str(), static_cast<unsigned int>(st.st_uid));
+            return -EPERM;
+        }
+        if(MAX_SYMLINKS < ++symlinks){
+            S3FS_PRN_ERR("too many symbolic links on the path to %s.", dirpath.c_str());
+            return -ELOOP;
+        }
+        char    target[PATH_MAX];
+        ssize_t length = readlink(next.c_str(), target, sizeof(target));
+        if(-1 == length){
+            int result = -errno;
+            S3FS_PRN_ERR("could not read symbolic link %s on the path to %s - errno(%d)", next.c_str(), dirpath.c_str(), result);
+            return result;
+        }
+        if(sizeof(target) <= static_cast<size_t>(length)){
+            S3FS_PRN_ERR("symbolic link %s on the path to %s is too long.", next.c_str(), dirpath.c_str());
+            return -ENAMETOOLONG;
+        }
+        if('/' == target[0]){
+            current = "/";
+        }
+        rest.insert(0, "/");
+        rest.insert(0, target, static_cast<size_t>(length));
+    }
+
+    // the directory itself
+    if(is_writable_by_others(st, egid)){
+        S3FS_PRN_ERR("%s is writable by other users.", dirpath.c_str());
+        return -EPERM;
+    }
+    return 0;
 }
 
 bool delete_files_in_dir(const char* dir, bool is_remove_own)

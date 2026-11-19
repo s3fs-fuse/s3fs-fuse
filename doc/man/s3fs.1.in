@@ -75,6 +75,8 @@ local folder for temporary files.
 .TP
 \fB\-o\fR use_cache (default="" which means disabled)
 local folder to use for local file cache.
+Other users must not be able to replace the files in the cache, so this folder and each folder above it must be owned by root or the user running s3fs, and must not be writable by group or others, unless the group is that user's group or the folder has the sticky bit, like /tmp.
+In a folder like /tmp, another user can make the folders that s3fs makes in it first, which keeps s3fs from using the cache, so a folder of its own is better.
 .TP
 \fB\-o\fR check_cache_dir_exist (default is disable)
 If use_cache is set, check if the cache directory exists.

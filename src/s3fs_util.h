@@ -49,6 +49,7 @@ std::string mybasename(std::string path);
 [[nodiscard]] int mkdirp(const std::string& path, mode_t mode);
 std::string get_exist_directory_path(const std::string& path);
 [[nodiscard]] bool check_exist_dir_permission(const char* dirpath);
+[[nodiscard]] int check_safe_dir_path(const std::string& dirpath);
 bool delete_files_in_dir(const char* dir, bool is_remove_own);
 
 void print_launch_message(int argc, char** argv);

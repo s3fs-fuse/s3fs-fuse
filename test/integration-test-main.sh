@@ -2579,6 +2579,50 @@ function test_zero_cache_file_stat() {
     rm_test_file "${TEST_TEXT_FILE}"
 }
 
+function test_cache_dir_changeable_by_others() {
+    describe "Testing cache directory which other users can change ..."
+
+    # [NOTE]
+    # A user who owns the cache directory, or who can write to it while it
+    # has no sticky bit, can rename the directories which s3fs makes in it
+    # and put symbolic links in place of the cache files.  s3fs must not use
+    # the cache directory then, so creating a file fails.  The object may
+    # be created before that, so it is removed.
+    #
+    local CACHE_DIR_MODE; CACHE_DIR_MODE=$(get_permissions "${CACHE_DIR}")
+
+    chmod 0777 "${CACHE_DIR}"
+    if (echo "${TEST_TEXT}" > "${TEST_TEXT_FILE}") 2>/dev/null; then
+        chmod "${CACHE_DIR_MODE}" "${CACHE_DIR}"
+        echo "s3fs used a cache directory which other users can write to: ${CACHE_DIR}"
+        return 1
+    fi
+    rm_test_file
+
+    # With the sticky bit, like /tmp, the cache directory is used.
+    chmod 1777 "${CACHE_DIR}"
+    mk_test_file
+    chmod "${CACHE_DIR_MODE}" "${CACHE_DIR}"
+    rm_test_file
+
+    if [ "$(id -u)" -eq 0 ]; then
+        local CACHE_DIR_OWNER; CACHE_DIR_OWNER=$(get_user_and_group "${CACHE_DIR}")
+
+        chown 65534 "${CACHE_DIR}"
+        if (echo "${TEST_TEXT}" > "${TEST_TEXT_FILE}") 2>/dev/null; then
+            chown "${CACHE_DIR_OWNER}" "${CACHE_DIR}"
+            echo "s3fs used a cache directory which another user owns: ${CACHE_DIR}"
+            return 1
+        fi
+        chown "${CACHE_DIR_OWNER}" "${CACHE_DIR}"
+        rm_test_file
+    fi
+
+    # the cache directory is used again
+    mk_test_file
+    rm_test_file
+}
+
 function test_upload_sparsefile {
     describe "Testing upload sparse file ..."
 
@@ -3300,6 +3344,7 @@ function add_all_tests {
     if s3fs_args | grep -q use_cache; then
         add_tests test_cache_file_stat
         add_tests test_zero_cache_file_stat
+        add_tests test_cache_dir_changeable_by_others
     else
         add_tests test_file_names_longer_than_posix
     fi
