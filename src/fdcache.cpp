@@ -177,6 +177,11 @@ bool FdManager::MakeCachePath(const char* path, std::string& cache_path, bool is
         cache_path = "";
         return true;
     }
+    // A path with a "." or ".." component could name a file outside the cache directory.
+    if(nullptr != path && has_dot_component(path)){
+        S3FS_PRN_ERR("path(%s) has a \".\" or \"..\" component.", path);
+        return false;
+    }
 
     std::string resolved_path(FdManager::cache_dir);
     if(!is_mirror_path){

@@ -373,6 +373,27 @@ static void test_is_valid_region_name()
     ASSERT_FALSE(is_valid_region_name("us_east_1"));
 }
 
+static void test_has_dot_component()
+{
+    ASSERT_FALSE(has_dot_component(""));
+    ASSERT_FALSE(has_dot_component("/"));
+    ASSERT_FALSE(has_dot_component("//"));
+    ASSERT_FALSE(has_dot_component("/dir/file"));
+    ASSERT_FALSE(has_dot_component("/dir/"));
+    ASSERT_FALSE(has_dot_component("dir/file"));
+    ASSERT_FALSE(has_dot_component("/.hidden/..file/file../.../file.txt"));
+
+    ASSERT_TRUE(has_dot_component("."));
+    ASSERT_TRUE(has_dot_component(".."));
+    ASSERT_TRUE(has_dot_component("./file"));
+    ASSERT_TRUE(has_dot_component("../file"));
+    ASSERT_TRUE(has_dot_component("/dir/."));
+    ASSERT_TRUE(has_dot_component("/dir/.."));
+    ASSERT_TRUE(has_dot_component("/dir/../"));
+    ASSERT_TRUE(has_dot_component("/dir/./file"));
+    ASSERT_TRUE(has_dot_component("incoming/../../../../etc/passwd"));
+}
+
 int main(int argc, const char *argv[])
 {
     S3fsLog singletonLog;
@@ -388,6 +409,7 @@ int main(int argc, const char *argv[])
     test_parse_xattrs();
     test_parse_dates();
     test_is_valid_region_name();
+    test_has_dot_component();
 
     return 0;
 }
