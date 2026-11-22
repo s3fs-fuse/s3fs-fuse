@@ -56,10 +56,15 @@ int CacheFileStat::MakeCacheFileStatPath(const char* path, std::string& sfile_pa
         S3FS_PRN_ERR("The path to cache top dir is empty.");
         return -EIO;
     }
+    // A path with a "." or ".." component could name a file outside the cache directory.
+    if(nullptr != path && has_dot_component(path)){
+        S3FS_PRN_ERR("path(%s) has a \".\" or \"..\" component.", path);
+        return -EINVAL;
+    }
 
     if(is_create_dir){
       int result;
-      if(0 != (result = mkdirp(top_path + mydirname(path), 0700))){
+      if(0 != (result = mkdirp(top_path + mydirname(SAFESTRPTR(path)), 0700))){
           S3FS_PRN_ERR("failed to create dir(%s) by errno(%d).", path, result);
           return result;
       }

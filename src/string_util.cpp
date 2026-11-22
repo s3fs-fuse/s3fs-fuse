@@ -242,6 +242,21 @@ std::string urlDecode(std::string_view s)
     return result;
 }
 
+bool has_dot_component(std::string_view path)
+{
+    while(true){
+        std::string_view::size_type pos = path.find('/');
+        std::string_view component = path.substr(0, pos);
+        if(component == "." || component == ".."){
+            return true;
+        }
+        if(std::string_view::npos == pos){
+            return false;
+        }
+        path.remove_prefix(pos + 1);
+    }
+}
+
 bool takeout_str_dquart(std::string& str)
 {
     size_t pos;
