@@ -6258,6 +6258,20 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // [NOTE]
+    // With allow_other, other users can use the mount.  s3fs checks their
+    // access in its own handlers, but some operations never reach s3fs,
+    // such as opening a FIFO or connecting to a socket, and the handlers
+    // do not apply every rule, such as those of chown(2) and of the sticky
+    // bit.  So have the kernel check the owner and mode on every access.
+    //
+    if(allow_other && 0 != fuse_opt_insert_arg(&custom_args, 1, "-odefault_permissions")){
+        S3FS_PRN_EXIT("could not add the default_permissions option.");
+        S3fsCurl::DestroyS3fsCurl();
+        s3fs_destroy_global_ssl();
+        exit(EXIT_FAILURE);
+    }
+
     // print launch message
     print_launch_message(argc, argv);
 

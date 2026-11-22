@@ -47,6 +47,17 @@ chmod 600 /tmp/ssekey /tmp/ssekey.bin /tmp/ssekeymd5
 export CACHE_DIR
 export ENSURE_DISKFREE_SIZE
 export FAKE_FREE_DISK_SIZE
+# [NOTE]
+# With allow_other, other users can use the mount, as the pjdfstest
+# permission tests need, and s3fs specifies default_permissions.  An
+# ordinary user may specify allow_other only if /etc/fuse.conf permits it,
+# so it is added to one flag set only when the tests run as root, as on CI.
+#
+ALLOW_OTHER_OPT=""
+if [ "$(id -u)" -eq 0 ]; then
+    ALLOW_OTHER_OPT=" -o allow_other"
+fi
+
 if [ -n "${ALL_TESTS}" ]; then
     FLAGS=(
         "use_cache=${CACHE_DIR} -o ensure_diskfree=${ENSURE_DISKFREE_SIZE} -o fake_diskfree=${FAKE_FREE_DISK_SIZE} -o use_xattr -o update_parent_dir_stat -o max_dirty_data=50"  # max_dirty_data at its minimum to exercise mid-write flushes
@@ -56,7 +67,7 @@ if [ -n "${ALL_TESTS}" ]; then
         nocopyapi
         nomultipart
         sigv2
-        sigv4
+        "sigv4${ALLOW_OTHER_OPT}"
         "singlepart_copy_limit=10 -o multipart_copy_size=10"  # limit sizes to exercise multipart copy code paths
         use_sse
         use_sse=custom:/tmp/ssekey

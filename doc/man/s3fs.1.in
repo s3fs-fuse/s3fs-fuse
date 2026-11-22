@@ -499,9 +499,16 @@ It can be specified as year, month, day, hour, minute, second, and it is express
 For example, "1Y6M10D12h30m30s".
 .SH FUSE/MOUNT OPTIONS
 .TP
-Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync, async, dirsync). Filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user.
+Most of the generic mount options described in 'man mount' are supported (ro, rw, suid, nosuid, dev, nodev, exec, noexec, atime, noatime, sync, async, dirsync). When s3fs is run directly, filesystems are mounted with '\-onodev,nosuid' by default, which can only be overridden by a privileged user. A mount from /etc/fstab or by mount(8) is mounted with 'dev,suid' unless 'nodev,nosuid' is specified.
 .TP
 There are many FUSE specific mount options that can be specified. e.g. allow_other. See the FUSE README for the full set.
+.TP
+If allow_other is specified, s3fs also specifies default_permissions, so that the kernel checks the owner and mode of an object on every access by other users, as it does on a local filesystem. This includes opening a FIFO or connecting to a socket, which never reaches s3fs. These checks are stricter than the ones s3fs makes itself. For example, only the owner of a file can set its time stamps to a given time, and the user specified by the uid option needs the owner permission bits like any other owner. Unless set-user-ID programs or device files in the bucket are needed, also specify nosuid and nodev, e.g. in /etc/fstab:
+.RS
+.nf
+mybucket /path/to/mountpoint fuse.s3fs _netdev,allow_other,nosuid,nodev 0 0
+.fi
+.RE
 .SH SERVER URL/REQUEST STYLE
 Be careful when specifying the server endpoint(URL).
 .TP
