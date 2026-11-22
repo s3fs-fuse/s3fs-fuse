@@ -66,6 +66,22 @@ class s3fsXmlBufferParserError
         }
 
     public:
+        s3fsXmlBufferParserError() = default;
+        ~s3fsXmlBufferParserError()
+        {
+            // [NOTE]
+            // libxml2 keeps the pointer to error_buffer that
+            // SetXmlParseError() gives it, and writes each later error of
+            // this thread there.  Restore the default handler, so that
+            // libxml2 does not write to the buffer after it is gone.
+            //
+            xmlSetGenericErrorFunc(nullptr, nullptr);
+        }
+        s3fsXmlBufferParserError(const s3fsXmlBufferParserError&) = delete;
+        s3fsXmlBufferParserError(s3fsXmlBufferParserError&&) = delete;
+        s3fsXmlBufferParserError& operator=(const s3fsXmlBufferParserError&) = delete;
+        s3fsXmlBufferParserError& operator=(s3fsXmlBufferParserError&&) = delete;
+
         void SetXmlParseError()
         {
             error_buffer.fill(0);
