@@ -314,6 +314,14 @@ bool S3ObjList::HasName(const std::string& strName) const
     return false;
 }
 
+// [NOTE]
+// strName for this method is called with the leaf name.
+// (Do not call it with the "_$folder$" suffix attached.)
+//
+// Originally, S3ObjList holds the listbucket response as-is.
+// Going forward, removing a specific leaf is currently only
+// called by DirStatCache (RemoveChildInS3ObjListHasLock).
+//
 bool S3ObjList::Remove(const std::string& strName)
 {
     if(strName.empty()){
@@ -322,6 +330,7 @@ bool S3ObjList::Remove(const std::string& strName)
 
     std::string strWitoutSlash;
     std::string strWithSlash;
+    std::string strFolderSuffix;
 
     if('/' == strName.back()){
         strWitoutSlash = strName.substr(0, strName.size() - 1);
@@ -330,10 +339,22 @@ bool S3ObjList::Remove(const std::string& strName)
         strWitoutSlash = strName;
         strWithSlash   = strName + '/';
     }
+    strFolderSuffix    = strWitoutSlash + "_$folder$";
+
     objects.erase(strWitoutSlash);
     objects.erase(strWithSlash);
+    objects.erase(strFolderSuffix);
     common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWitoutSlash), common_prefixes.end());
     common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strWithSlash), common_prefixes.end());
+
+    // [NOTE]
+    // Normally, names with the "_$folder$" suffix should not appear in common_prefixes.
+    // However, if an object like "dir_$folder$/file" exists, "dir_$folder$" ends up in
+    // common_prefixes. In this case, it is recognized as "dir" rather than a directory
+    // named "dir_$folder$", so we attempt to delete "dir_$folder$" here to account for
+    // this case.
+    //
+    common_prefixes.erase(std::remove(common_prefixes.begin(), common_prefixes.end(), strFolderSuffix), common_prefixes.end());
 
     return true;
 }
