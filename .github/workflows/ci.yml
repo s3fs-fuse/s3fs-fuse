@@ -41,7 +41,14 @@ permissions:
 #
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    #
+    # [NOTE]
+    # The runner refuses to run JavaScript actions like actions/checkout in an
+    # Alpine container on anything but x86-64 because it only ships a musl
+    # node for that architecture, see actions/runner#801.  Run the Alpine
+    # container on x86-64 and everything else on the faster aarch64 runners.
+    #
+    runs-on: ${{ startsWith(matrix.container, 'alpine:') && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     #
     # build matrix for containers
     #
@@ -226,7 +233,7 @@ jobs:
           if-no-files-found: ignore
 
   MemoryTest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     #
     # build matrix for containers
